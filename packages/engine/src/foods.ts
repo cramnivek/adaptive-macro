@@ -33,8 +33,8 @@ export interface Food {
   /** Set when the food came from a remote database, for cache invalidation. */
   fetchedAt?: string;
   /**
-   * URLs a grounded lookup actually read to produce this food. Present only
-   * for `source: 'ai'` records that came from a web lookup; a photo or
+   * Domains a grounded lookup actually read to produce this food. Present
+   * only for `source: 'ai'` records that came from a web lookup; a photo or
    * description estimate has nothing to cite. Stored so a number's provenance
    * survives long after the lookup, rather than living only in the moment of
    * confirmation.
