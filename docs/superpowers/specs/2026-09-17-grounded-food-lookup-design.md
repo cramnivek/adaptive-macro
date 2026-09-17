@@ -53,9 +53,29 @@ Gemini, using Grounding with Google Search.
 - Google AI Pro additionally includes $10/month in Google Developer Program
   credits that can be applied to the Gemini API. The subscription itself does
   not include API usage; a separate AI Studio key is required.
-- Gemini 3 supports Grounding with Google Search **and** structured outputs in
-  the same request, so one call can search, read, and return schema-valid JSON
-  alongside the URLs it used. No two-pass workaround.
+- **Grounding and structured output cannot be combined when citations matter.**
+  Published material says Gemini 3 supports both in one request, and it does —
+  the request returns HTTP 200 and valid schema-conforming JSON. But the
+  `groundingMetadata` block is then absent. Measured directly on
+  `gemini-3.5-flash` and `gemini-3.8-flash`, identical prompt, only the
+  `responseSchema` differing:
+
+  | Request | `groundingMetadata` |
+  | --- | --- |
+  | `tools: [google_search]`, plain text | present, with chunks |
+  | `tools: [google_search]` + `responseSchema` | **absent** |
+
+  The citations are the feature, so the design takes two calls (below). The
+  behaviour is identical on both models, so it is an API property rather than a
+  model limitation.
+
+- Model: **`gemini-3.5-flash`**. `gemini-2.5-flash` returns 404 ("no longer
+  available to new users"); `gemini-3.8-flash` shows the same grounding
+  limitation and returned visibly worse sources on a head-to-head query.
+
+- **Grounding requires billing enabled on the project.** A fresh free-tier key
+  authenticates and serves plain generation, but any request carrying
+  `google_search` returns `429 RESOURCE_EXHAUSTED` until billing is active.
 
 ### Configuration boundary
 
@@ -90,14 +110,21 @@ hidden entirely when `foodLookup.enabled` is false.
 ## Data flow
 
 1. User taps "Look it up with AI" from a thin search result.
-2. App calls Gemini with the query string, the `foodCountry` setting (`ph`,
-   already in Settings — it tells the model which market's menu to look for),
-   the `google_search` tool, and a `responseSchema`.
-3. Gemini searches, reads pages, returns structured JSON plus
-   `groundingMetadata` containing the URLs used.
-4. App validates (see below), derives `per100g`, and builds a candidate `Food`.
-5. Confirmation sheet shows the numbers and the source domains.
-6. On confirm: `saveFood({ source: 'ai', sources, fetchedAt })`. On cancel:
+2. **Grounded call.** App calls Gemini with the query string, the `foodCountry`
+   setting (`ph`, already in Settings — it tells the model which market's menu
+   to look for), and the `google_search` tool. No `responseSchema`, for the
+   reason above. Gemini searches, reads pages, and returns prose plus
+   `groundingMetadata`.
+3. **Rejection gate.** No grounding chunks means the lookup failed. Stop here;
+   nothing is structured, nothing is shown, nothing is saved.
+4. **Structuring call.** App sends step 2's prose back to Gemini with no tools
+   and a `responseSchema`, which converts it to the field shape below. Only the
+   grounded call carries the per-query grounding fee; this one is tokens alone,
+   so the two-call design costs essentially the same as one.
+5. App validates (see below), derives `per100g`, and builds a candidate `Food`
+   carrying the source domains from step 2.
+6. Confirmation sheet shows the numbers and the source domains.
+7. On confirm: `saveFood({ source: 'ai', sources, fetchedAt })`. On cancel:
    nothing is written.
 
 Once saved, `searchLocalFoods` already ranks cached foods first, so the second
@@ -156,6 +183,13 @@ an additive migration, following the existing `MIGRATIONS` array and
 `PRAGMA user_version` pattern. `fetchedAt` is already in the type and is set —
 menus change, and a number from 2026 should be visibly from 2026.
 
+**What gets stored is the domain, not the URL.** Each grounding chunk's
+`web.uri` is a `vertexaisearch.cloud.google.com/grounding-api-redirect/…`
+wrapper around an opaque token, not the page's real address; the readable
+domain lives in `web.title` (e.g. `jollibeefoods.com`). Domains are stored
+because they are what the UI shows, they stay meaningful for as long as the
+food record does, and the redirect tokens do not.
+
 Source domains are shown **before** the save, on the confirmation sheet. Nothing
 is written until the user confirms with the evidence in front of them.
 
@@ -175,6 +209,24 @@ So: list the domains, no badge, no score. Simpler to build and more honest. If
 authority signalling is wanted later, the only version that works is a
 hand-maintained whitelist of brand domains, which should be adopted
 deliberately rather than inherited by default.
+
+Measured, five queries on `gemini-3.5-flash`, confirming the shape of the
+problem rather than assuming it:
+
+| Query | Sources returned |
+| --- | --- |
+| Jollibee Chickenjoy (PH) | jollibeefoods.com, jollibee.com, jollibeemenuupdates.com, jollibee-menu.com, scribd.com, facebook.com |
+| Jolly Spaghetti (PH) | jollibeefoods.com, jollibeegroup.com, jollibee.qa, reddit.com, facebook.com |
+| McDonald's Big Mac | mcdonalds.com, wikipedia.org, nutritionvalue.org, quora.com |
+| Starbucks latte | starbucks.com, starbucks.ie, fastfoodnutrition.org, fooducate.com |
+| Mang Inasal (PH) | reddit.com, greenwich.com.ph, themanginasalmenus.com, mynetdiary.com |
+
+Operator domains appear for four of five, so the feature is not hopeless. But
+they arrive *mixed with* lookalikes in the same result set —
+`jollibeefoods.com` beside `jollibeemenuupdates.com` — which is precisely the
+pair any brand-name-matching heuristic scores identically. The fifth row is the
+warning: a smaller local chain returned no operator source at all and pulled in
+`greenwich.com.ph`, a different restaurant brand entirely.
 
 ### Permanent marking
 

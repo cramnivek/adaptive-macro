@@ -4,7 +4,7 @@
 
 **Goal:** When a food search returns nothing usable, look the item up with a web-grounded Gemini call and offer it as a food the user can confirm and save.
 
-**Architecture:** One Gemini request carries the query, the user's country, the `google_search` tool and a `responseSchema`, returning per-portion nutrients plus the URLs it read. The app derives `per100g` itself, runs the engine's existing consistency check, shows the source domains, and only writes to the `foods` table on explicit confirmation. A response carrying no grounding URLs is treated as a failed lookup, never as an answer.
+**Architecture:** Two Gemini calls, because grounding and `responseSchema` are mutually exclusive in practice — asking for both returns valid JSON with the citations silently stripped. Call one carries the query, the user's country and the `google_search` tool, returning prose plus the domains it read. Call two reshapes that prose against a schema with no tools attached, so only the first is billed for grounding. The app derives `per100g` itself, runs the engine's existing consistency check, shows the source domains, and only writes to the `foods` table on explicit confirmation. A response carrying no grounding is treated as a failed lookup, never as an answer.
 
 **Tech Stack:** TypeScript, React Native / Expo (expo-router, expo-sqlite), vitest, zod v4, Gemini REST API (`generativelanguage.googleapis.com`).
 
@@ -236,6 +236,7 @@ The core of the feature. All parsing is pure and tested; only `lookupFood` touch
 - Test: `mobile/src/api/__tests__/gemini.test.ts` (create)
 - Create: `mobile/vitest.config.ts`
 - Modify: `mobile/package.json`
+- Modify: `packages/engine/src/foods.ts` — **doc comment only.** Task 1 documented `Food.sources` as holding "URLs", but what is actually stored is the source *domain* (`jollibeefoods.com`), because the grounding chunk's `uri` is an opaque redirect. Correct that one comment so the field's documentation matches its contents. Change no code there.
 
 **Interfaces:**
 - Consumes: `per100gFromPortion`, `Food`, `FoodPortion` from `@adaptive-macros/engine`; `FoodApiError` from `./http`.
@@ -291,25 +292,29 @@ Expected: completes; `npm run test --workspace @adaptive-macros/mobile` now
 resolves to vitest and reports no test files found, which is correct until
 Step 2 writes them.
 
-- [ ] **Step 1: Confirm the model id and response shape against the live API**
+- [ ] **Step 1: Confirmed API facts — no verification needed, use these verbatim**
 
-Do not guess the model string. With the user's key in `GEMINI_KEY`, run:
+These were measured directly against the live API before this task was
+dispatched. Do not re-derive them, and do not substitute values you remember.
 
-```bash
-curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_KEY" \
-  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const m=JSON.parse(s).models||[];m.filter(x=>/gemini-3/.test(x.name)).forEach(x=>console.log(x.name,'|',(x.supportedGenerationMethods||[]).join(',')))})"
-```
-
-Record the exact model name supporting `generateContent` and use it for `MODEL` below. Then capture one real grounded response to confirm the grounding-metadata path before writing the parser:
-
-```bash
-curl -s "https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent?key=$GEMINI_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"contents":[{"parts":[{"text":"Jollibee Chickenjoy nutrition per piece, Philippines"}]}],"tools":[{"google_search":{}}]}' \
-  > /tmp/gemini-raw.json; node -e "console.log(JSON.stringify(Object.keys(require('/tmp/gemini-raw.json').candidates[0]),null,2))"
-```
-
-Expected: `groundingMetadata` present among the candidate's keys. If the URI path differs from `groundingMetadata.groundingChunks[].web.uri`, adjust `extractSourceUrls` and its test to the shape actually returned. **The observed shape wins over this plan.**
+- Model: **`gemini-3.5-flash`**. (`gemini-2.5-flash` is 404 "no longer available
+  to new users"; `gemini-3.8-flash` has the same limitation below and returned
+  worse sources on a head-to-head query.)
+- Endpoint: `https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent?key=<KEY>`
+- Grounding is enabled with `tools: [{ google_search: {} }]`.
+- **Grounding and `responseSchema` are mutually exclusive in practice.** With
+  both set, the call returns HTTP 200 and valid JSON but `groundingMetadata` is
+  ABSENT. With `google_search` and no `responseSchema`, `groundingMetadata` is
+  present. Verified on both `gemini-3.5-flash` and `gemini-3.8-flash`. This is
+  why this task makes TWO calls.
+- Grounding metadata path: `candidates[0].groundingMetadata.groundingChunks[]`,
+  each chunk shaped `{ web: { uri, title } }`.
+- **`web.uri` is a `vertexaisearch.cloud.google.com/grounding-api-redirect/…`
+  redirect wrapper, not the real page URL. `web.title` holds the readable
+  domain** (e.g. `"jollibeefoods.com"`). Source display and storage use
+  `web.title`.
+- Real observed response text from the grounded call is prose, e.g. "Serving
+  Weight: 85 grams, Calories: 220 kcal, Protein: 20 grams" — not JSON.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -317,7 +322,7 @@ Create `mobile/src/api/__tests__/gemini.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { extractSourceUrls, sourceDomains, toCandidateFood } from '../gemini';
+import { sourceDomainsFrom, toCandidateFood } from '../gemini';
 
 const validRaw = {
   name: 'Chickenjoy',
@@ -333,99 +338,96 @@ const validRaw = {
 
 describe('toCandidateFood', () => {
   it('derives per100g and keeps both portions', () => {
-    const food = toCandidateFood(validRaw, ['https://example.com/a']);
+    const food = toCandidateFood(validRaw, ['jollibeefoods.com']);
     expect(food.per100g.kcal).toBeCloseTo(380);
     expect(food.source).toBe('ai');
-    expect(food.sources).toEqual(['https://example.com/a']);
+    expect(food.sources).toEqual(['jollibeefoods.com']);
     expect(food.portions[0]).toEqual({ label: '100 g', grams: 100 });
     expect(food.portions[1]).toEqual({ label: '1 piece', grams: 100 });
   });
 
   it('scales correctly when the portion is not 100 g', () => {
-    const food = toCandidateFood({ ...validRaw, portionGrams: 411, kcal: 610 }, ['https://x.dev']);
+    const food = toCandidateFood({ ...validRaw, portionGrams: 411, kcal: 610 }, ['x.dev']);
     expect(food.per100g.kcal).toBeCloseTo(148.42, 1);
   });
 
   it('rejects a missing name', () => {
-    expect(() => toCandidateFood({ ...validRaw, name: '' }, ['https://x.dev'])).toThrow();
+    expect(() => toCandidateFood({ ...validRaw, name: '' }, ['x.dev'])).toThrow();
   });
 
   it('rejects a non-positive portion weight', () => {
-    expect(() => toCandidateFood({ ...validRaw, portionGrams: 0 }, ['https://x.dev'])).toThrow();
+    expect(() => toCandidateFood({ ...validRaw, portionGrams: 0 }, ['x.dev'])).toThrow();
   });
 
   it('rejects garbage shapes', () => {
-    expect(() => toCandidateFood(null, ['https://x.dev'])).toThrow();
-    expect(() => toCandidateFood({ name: 'x' }, ['https://x.dev'])).toThrow();
-    expect(() => toCandidateFood({ ...validRaw, kcal: 'lots' }, ['https://x.dev'])).toThrow();
+    expect(() => toCandidateFood(null, ['x.dev'])).toThrow();
+    expect(() => toCandidateFood({ name: 'x' }, ['x.dev'])).toThrow();
+    expect(() => toCandidateFood({ ...validRaw, kcal: 'lots' }, ['x.dev'])).toThrow();
   });
 
   it('treats a missing fibre value as zero rather than failing', () => {
     const { fiberG, ...noFibre } = validRaw;
-    expect(toCandidateFood(noFibre, ['https://x.dev']).per100g.fiberG).toBe(0);
+    expect(toCandidateFood(noFibre, ['x.dev']).per100g.fiberG).toBe(0);
   });
 });
 
-describe('extractSourceUrls', () => {
-  it('pulls web uris out of grounding metadata', () => {
+/**
+ * The grounded call's chunk `uri` is an opaque vertexaisearch redirect; the
+ * readable domain is in `title`. These pin that, because reading `uri` instead
+ * would show every source as "vertexaisearch.cloud.google.com".
+ */
+describe('sourceDomainsFrom', () => {
+  it('reads domains from chunk titles, de-duplicated and in order', () => {
     const response = {
       candidates: [
         {
           groundingMetadata: {
             groundingChunks: [
-              { web: { uri: 'https://a.example/one' } },
-              { web: { uri: 'https://b.example/two' } },
+              { web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/AAA', title: 'jollibeefoods.com' } },
+              { web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/BBB', title: 'facebook.com' } },
+              { web: { uri: 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/CCC', title: 'jollibeefoods.com' } },
             ],
           },
         },
       ],
     };
-    expect(extractSourceUrls(response)).toEqual([
-      'https://a.example/one',
-      'https://b.example/two',
-    ]);
+    expect(sourceDomainsFrom(response)).toEqual(['jollibeefoods.com', 'facebook.com']);
   });
 
-  // The load-bearing case: a confident answer straight from the model's
-  // weights, with nothing behind it.
-  it('returns empty when the model did not ground', () => {
-    expect(extractSourceUrls({ candidates: [{ content: {} }] })).toEqual([]);
-    expect(extractSourceUrls({})).toEqual([]);
-    expect(extractSourceUrls(null)).toEqual([]);
+  // The load-bearing case: a confident answer with nothing behind it. This is
+  // exactly what a grounded call returns when it answers from its own weights,
+  // and what ANY call returns when responseSchema is set.
+  it('returns empty when the response carries no grounding', () => {
+    expect(sourceDomainsFrom({ candidates: [{ content: {} }] })).toEqual([]);
+    expect(sourceDomainsFrom({})).toEqual([]);
+    expect(sourceDomainsFrom(null)).toEqual([]);
   });
 
-  it('skips chunks with no uri and de-duplicates', () => {
+  it('skips chunks with no usable title', () => {
     const response = {
       candidates: [
         {
           groundingMetadata: {
             groundingChunks: [
-              { web: { uri: 'https://a.example/one' } },
+              { web: { uri: 'https://x/AAA', title: 'ok.example' } },
+              { web: { uri: 'https://x/BBB' } },
               { web: {} },
               {},
-              { web: { uri: 'https://a.example/one' } },
             ],
           },
         },
       ],
     };
-    expect(extractSourceUrls(response)).toEqual(['https://a.example/one']);
-  });
-});
-
-describe('sourceDomains', () => {
-  it('reduces urls to unique hostnames without www', () => {
-    expect(
-      sourceDomains([
-        'https://www.jollibeefoods.com/nutrition',
-        'https://jollibeefoods.com/menu',
-        'https://nutritionx.us/x',
-      ]),
-    ).toEqual(['jollibeefoods.com', 'nutritionx.us']);
+    expect(sourceDomainsFrom(response)).toEqual(['ok.example']);
   });
 
-  it('ignores unparseable urls instead of throwing', () => {
-    expect(sourceDomains(['not a url', 'https://ok.example/a'])).toEqual(['ok.example']);
+  it('normalises a leading www and surrounding whitespace', () => {
+    const response = {
+      candidates: [
+        { groundingMetadata: { groundingChunks: [{ web: { title: '  www.starbucks.com ' } }] } },
+      ],
+    };
+    expect(sourceDomainsFrom(response)).toEqual(['starbucks.com']);
   });
 });
 ```
@@ -447,23 +449,29 @@ import { type Food, type FoodPortion, per100gFromPortion } from '@adaptive-macro
  *
  * Search and Open Food Facts cover packaged goods; neither covers restaurant
  * menus, which is where this exists. Gemini searches the web, reads what it
- * finds, and returns the numbers a source actually states, along with the URLs
- * it read.
+ * finds, and reports the numbers a source actually states, along with the
+ * domains it read them from.
  *
  * Two rules hold this together. The model returns per-portion values and never
  * per-100 g, because that division is exact arithmetic the app can do itself.
- * And a response carrying no grounding URLs is a failure, not an answer — an
+ * And a response carrying no grounding is a failure, not an answer — an
  * ungrounded reply is the model's own guess wearing a web lookup's clothes,
  * which is the one outcome this feature must never present as sourced.
+ *
+ * It takes two calls because grounding and structured output are mutually
+ * exclusive: asking for a `responseSchema` alongside `google_search` returns
+ * perfectly valid JSON with the citations silently stripped out. So the first
+ * call searches and keeps the citations, and the second reshapes its prose
+ * with no tools attached. Only the first carries a grounding charge.
  */
 
-// Confirmed against the Models API during implementation; see the plan's Task 4
-// Step 1. Change here only, never inline at a call site.
-const MODEL = 'REPLACE_WITH_MODEL_CONFIRMED_IN_STEP_1';
+const MODEL = 'gemini-3.5-flash';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** Grounded search reads pages, so it is far slower than a database lookup. */
-const TIMEOUT_MS = 30_000;
+const GROUNDED_TIMEOUT_MS = 30_000;
+/** The structuring call does no I/O of its own and should be quick. */
+const STRUCTURE_TIMEOUT_MS = 15_000;
 
 export class GroundedLookupError extends Error {
   constructor(message: string) {
@@ -495,18 +503,98 @@ const RESPONSE_SCHEMA = {
   required: ['name', 'portionLabel', 'portionGrams', 'kcal', 'proteinG', 'carbsG', 'fatG'],
 } as const;
 
-const promptFor = (query: string, country: string) =>
+const searchPromptFor = (query: string, country: string) =>
   `Find published nutrition information for: ${query}\n\n` +
   `Market: ${country === 'world' ? 'any' : country.toUpperCase()}. Prefer the ` +
   `operator's or manufacturer's own published figures for that market, and ` +
-  `prefer a single named menu item or product over a combo or meal deal.\n\n` +
+  `prefer a single named menu item over a combo or meal deal.\n\n` +
   `Report the values exactly as the source states them, for one stated ` +
-  `serving. Give that serving's weight in grams. Do not convert to a 100 g ` +
-  `basis and do not average across sources. If you cannot find published ` +
-  `figures, say so rather than estimating.`;
+  `serving, and give that serving's weight in grams. Do not convert to a ` +
+  `100 g basis and do not average across sources. If you cannot find ` +
+  `published figures, say so plainly rather than estimating.`;
+
+const structurePromptFor = (text: string) =>
+  `Extract the nutrition figures from the text below into the required ` +
+  `fields. Use only what the text states — do not add, correct or estimate ` +
+  `anything. If it describes several variants, use the first one it presents ` +
+  `as the primary answer. Values are for one serving, not per 100 g.\n\n` +
+  `---\n${text}`;
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+const postJson = async (
+  model: string,
+  body: unknown,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<any> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') {
+      throw new GroundedLookupError('The lookup took too long. Try again.');
+    }
+    throw new GroundedLookupError('Could not reach Gemini. Check your connection.');
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (response.status === 400 || response.status === 403) {
+    throw new GroundedLookupError('That Gemini API key was rejected. Check it in Settings.');
+  }
+  // Grounding is metered separately and needs billing enabled on the project;
+  // without it every grounded call returns 429 while plain ones still succeed.
+  if (response.status === 429) {
+    throw new GroundedLookupError(
+      'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
+    );
+  }
+  if (!response.ok) {
+    throw new GroundedLookupError(`Gemini returned ${response.status}`);
+  }
+
+  return response.json();
+};
+
+/**
+ * The domains behind a grounded answer.
+ *
+ * Read from each chunk's `title`, not its `uri`: the uri is an opaque
+ * vertexaisearch redirect, so parsing it would label every source
+ * "vertexaisearch.cloud.google.com" and tell the user nothing.
+ */
+export const sourceDomainsFrom = (response: unknown): string[] => {
+  const chunks = (response as any)?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (!Array.isArray(chunks)) return [];
+
+  const domains: string[] = [];
+  for (const chunk of chunks) {
+    const title = chunk?.web?.title;
+    if (typeof title !== 'string') continue;
+    const domain = title.trim().replace(/^www\./, '');
+    if (domain && !domains.includes(domain)) domains.push(domain);
+  }
+  return domains;
+};
+
+const textOf = (response: unknown): string => {
+  const parts = (response as any)?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+  return parts
+    .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+    .join('')
+    .trim();
+};
 
 /**
  * Validates a model response and converts it into a Food.
@@ -545,9 +633,10 @@ export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
     portionGrams,
   );
 
-  const label = typeof r.portionLabel === 'string' && r.portionLabel.trim()
-    ? r.portionLabel.trim()
-    : '1 serving';
+  const label =
+    typeof r.portionLabel === 'string' && r.portionLabel.trim()
+      ? r.portionLabel.trim()
+      : '1 serving';
   const portions: FoodPortion[] = [
     { label: '100 g', grams: 100 },
     { label, grams: portionGrams },
@@ -565,39 +654,6 @@ export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
   };
 };
 
-/** Every distinct web URL the model actually read, in the order cited. */
-export const extractSourceUrls = (response: unknown): string[] => {
-  const chunks = (response as any)?.candidates?.[0]?.groundingMetadata?.groundingChunks;
-  if (!Array.isArray(chunks)) return [];
-
-  const urls: string[] = [];
-  for (const chunk of chunks) {
-    const uri = chunk?.web?.uri;
-    if (typeof uri === 'string' && uri && !urls.includes(uri)) urls.push(uri);
-  }
-  return urls;
-};
-
-/**
- * Hostnames for display.
- *
- * Shown without any authority badge, deliberately. Any cheap test for "is this
- * the brand's own site" marks an SEO aggregate like jollibeemenuupdates.com as
- * official, and a false badge is worse than none.
- */
-export const sourceDomains = (urls: string[]): string[] => {
-  const domains: string[] = [];
-  for (const url of urls) {
-    try {
-      const host = new URL(url).hostname.replace(/^www\./, '');
-      if (!domains.includes(host)) domains.push(host);
-    } catch {
-      // A citation we cannot parse is not worth failing the whole lookup over.
-    }
-  }
-  return domains;
-};
-
 export const lookupFood = async (
   query: string,
   country: string,
@@ -607,60 +663,43 @@ export const lookupFood = async (
     throw new GroundedLookupError('Add a Gemini API key in Settings to look foods up.');
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    response = await fetch(
-      `${ENDPOINT}/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptFor(query, country) }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: RESPONSE_SCHEMA,
-          },
-        }),
-      },
-    );
-  } catch (error) {
-    clearTimeout(timer);
-    if ((error as Error)?.name === 'AbortError') {
-      throw new GroundedLookupError('The lookup took too long. Try again.');
-    }
-    throw new GroundedLookupError('Could not reach Gemini. Check your connection.');
-  }
-  clearTimeout(timer);
-
-  if (response.status === 400 || response.status === 403) {
-    throw new GroundedLookupError('That Gemini API key was rejected. Check it in Settings.');
-  }
-  if (response.status === 429) {
-    throw new GroundedLookupError('Gemini rate limit or quota reached. Try again later.');
-  }
-  if (!response.ok) {
-    throw new GroundedLookupError(`Gemini returned ${response.status}`);
-  }
-
-  const body = await response.json();
+  // Call one: search the web and keep the citations.
+  const grounded = await postJson(
+    MODEL,
+    {
+      contents: [{ parts: [{ text: searchPromptFor(query, country) }] }],
+      tools: [{ google_search: {} }],
+    },
+    apiKey,
+    GROUNDED_TIMEOUT_MS,
+  );
 
   // Before anything else: if it did not search, it did not look anything up.
-  const sources = extractSourceUrls(body);
+  const sources = sourceDomainsFrom(grounded);
   if (sources.length === 0) throw new UngroundedResponseError();
 
-  const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== 'string') {
-    throw new GroundedLookupError('The lookup returned no usable data');
-  }
+  const prose = textOf(grounded);
+  if (!prose) throw new GroundedLookupError('The lookup returned no usable data');
 
+  // Call two: reshape that prose. No tools, so no grounding charge, and the
+  // schema is honoured because nothing is competing with it.
+  const structured = await postJson(
+    MODEL,
+    {
+      contents: [{ parts: [{ text: structurePromptFor(prose) }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: RESPONSE_SCHEMA,
+      },
+    },
+    apiKey,
+    STRUCTURE_TIMEOUT_MS,
+  );
+
+  const json = textOf(structured);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(json);
   } catch {
     throw new GroundedLookupError('The lookup returned malformed data');
   }
@@ -668,7 +707,6 @@ export const lookupFood = async (
   return toCandidateFood(parsed, sources);
 };
 ```
-
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `npm run test --workspace @adaptive-macros/mobile`
@@ -682,8 +720,8 @@ Expected: clean.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add mobile/src/api/gemini.ts mobile/src/api/__tests__/gemini.test.ts mobile/vitest.config.ts mobile/package.json package-lock.json
-git commit -m "feat(api): grounded food lookup via Gemini with source extraction"
+git add mobile/src/api/gemini.ts mobile/src/api/__tests__/gemini.test.ts mobile/vitest.config.ts mobile/package.json package-lock.json packages/engine/src/foods.ts
+git commit -m "feat(api): grounded food lookup via Gemini with source domains"
 ```
 
 ---
