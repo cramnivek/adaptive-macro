@@ -165,6 +165,49 @@ it, so a later reader can disagree with the bounds rather than guess at them.
 
 Per-100 g values are on any packet, or in USDA FoodData Central.
 
+## What has been measured
+
+qwen2.5:32b through Ollama, 8 meals x 3 reps per arm:
+
+| Prompt | Precise ok | Precise bias | Vague ok | Vague bias |
+|---|---|---|---|---|
+| Original app prompt | 15/15 | −2.54% | 3/9 | −10.85% |
+| Drop the anti-inflation line | 15/15 | −2.82% | 5/9 | −9.87% |
+| Add named-dish → commercial portion | 15/15 | −2.08% | **6/9** | **−6.25%** |
+
+The third won on both tiers and is now the app's prompt, so the default arm
+measures it. The `v4` and `v6` variants in the runner reproduce the other two.
+
+The hypothesis going in was that the prompt's own "do not inflate estimates to
+be safe" instruction was causing the undershoot. Measurement said otherwise:
+removing it helped less than adding a specific correction, and it cost a little
+accuracy on the precise tier. The problem was not the instruction but the
+absence of any guidance about what a *named dish* implies.
+
+### What is still unresolved
+
+**Fish and chips did not move.** 650 kcal under every prompt, identical across
+all three reps of each — that is not noise, it is the model holding a firm
+belief. Against this repo's 800 kcal floor it fails by 18.75%.
+
+That floor is the weakest bound in the set and deserves stating plainly.
+Deriving it independently: a pub cod fillet is 200–280 g battered and fried at
+~230 kcal/100 g (460–644 kcal), chips 250–350 g at ~190–250 kcal/100 g
+(475–875), giving 935–1519 for a full plate, and "ate most of it" at 75–100%
+gives roughly 700–1500. On that reasoning the floor should arguably be nearer
+700 than 800, which would make the miss smaller — though still a miss.
+
+**The bound has deliberately not been changed.** Adjusting ground truth after
+seeing a model's answer is how an eval stops being able to disagree with you.
+It is recorded here instead, and a run against a frontier model would settle it
+in one pass: if that model also lands under 800, the bound is wrong rather than
+the local model.
+
+One related detail worth knowing when reading the original 3/9: the bolognese
+case was passing at *exactly* the 500 kcal floor of its range. In-range scores
+full marks by design, so that pass was as marginal as it could be while still
+counting — consistent with the undershoot the bias figure shows.
+
 ## A caveat worth keeping in mind
 
 Eight cases is small. With a binary headline metric the noise floor is roughly

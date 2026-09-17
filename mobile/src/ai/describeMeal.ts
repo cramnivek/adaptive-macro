@@ -85,6 +85,8 @@ Portion sizes are the main source of error, so be explicit about them. When some
 
 Be accurate rather than cautious. Do not inflate estimates to be safe — a systematically high estimate corrupts the user's expenditure calculation over time, which is worse than an honest estimate that is sometimes low.
 
+When a dish is named rather than itemised — "fish and chips", "spaghetti bolognese", "a croissant" — assume a normal commercial or restaurant portion, which is usually larger than a home-cooked one. Do not default to the smallest plausible serving.
+
 Keep macros consistent with the calories you give: protein and carbohydrate are about 4 kcal per gram, fat about 9, so the macros should roughly account for the calorie figure.
 
 If the text does not describe food that was eaten, set notFood and return no items.`;

@@ -93,18 +93,27 @@ async function loadCases() {
  * is untouched while the question is settled.
  */
 const PROMPT_VARIANTS = {
-  // Drops the do-not-inflate instruction entirely, to see how much of the
-  // undershoot it accounts for.
+  // Drops the do-not-inflate instruction entirely. Kept as a control: it
+  // tested the original hypothesis that the instruction caused the undershoot,
+  // and measurement said it mostly did not (vague 5/9 against the baseline's
+  // 3/9, while precise bias got very slightly worse).
   v4: APP.SYSTEM_PROMPT.replace(
     /Be accurate rather than cautious\.[^]*?is sometimes low\.\n\n/,
     'Aim for the middle of the plausible range, not the low end. An estimate that is consistently low is as harmful as one that is consistently high, because it biases the calculation that depends on it.\n\n',
   ),
-  // Keeps the anti-inflation instruction but adds explicit guidance for the
-  // case that actually failed: composed restaurant dishes.
-  v5:
-    APP.SYSTEM_PROMPT +
-    '\n\nWhen a dish is named rather than itemised — "fish and chips", "spaghetti bolognese", "a croissant" — assume a normal commercial or restaurant portion, which is usually larger than a home-cooked one. Do not default to the smallest plausible serving.',
+
+  // The app's prompt as it stood before the named-dish guidance was promoted
+  // into it. Kept so the size of that gain stays re-measurable against any
+  // future prompt change, rather than being a number in a commit message.
+  v6: APP.SYSTEM_PROMPT.replace(
+    /When a dish is named rather than itemised[^]*?smallest plausible serving\.\n\n/,
+    '',
+  ),
 };
+
+// Note: what was tried as "v5" — keep the anti-inflation line, add explicit
+// guidance that a named dish implies a commercial portion — won on both tiers
+// and is now the app's own prompt, so the default arm measures it.
 
 const promptFor = (variant) => PROMPT_VARIANTS[variant] ?? APP.SYSTEM_PROMPT;
 
