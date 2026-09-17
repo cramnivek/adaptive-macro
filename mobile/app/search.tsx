@@ -1,4 +1,5 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
+import { isNutritionallyConsistent } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -12,7 +13,7 @@ import { radius, space, useTheme } from '../src/theme';
 const SOURCE_LABELS: Record<Food['source'], string> = {
   custom: 'Saved',
   recipe: 'Recipe',
-  ai: 'Claude',
+  ai: 'Estimate',
   usda: 'USDA',
   openfoodfacts: 'OFF',
 };
@@ -158,6 +159,16 @@ export default function SearchScreen() {
                 {Math.round(item.per100g.kcal)} kcal / 100 g · P {Math.round(item.per100g.proteinG)} · C{' '}
                 {Math.round(item.per100g.carbsG)} · F {Math.round(item.per100g.fatG)}
               </Text>
+              {item.source === 'ai' && (
+                <Text style={[styles.rowWarning, { color: colors.warning }]}>
+                  Estimated by a model, not looked up. Check it before trusting it.
+                </Text>
+              )}
+              {!isNutritionallyConsistent(item.per100g) && (
+                <Text style={[styles.rowWarning, { color: colors.warning }]}>
+                  Its macros do not add up to its calories — one of the two is wrong.
+                </Text>
+              )}
             </View>
             <Text style={[styles.badge, { color: colors.textFaint, borderColor: colors.border }]}>
               {SOURCE_LABELS[item.source]}
@@ -201,6 +212,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: '500' },
   rowMeta: { fontSize: 11, marginTop: 2 },
+  rowWarning: { fontSize: 11, marginTop: 3, lineHeight: 15 },
   badge: {
     fontSize: 10,
     borderWidth: StyleSheet.hairlineWidth,
