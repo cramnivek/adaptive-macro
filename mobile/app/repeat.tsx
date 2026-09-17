@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
-import { Button, TOUCH_TARGET } from '../src/components/Controls'
+import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { listLoggedDates, listLogEntries } from '../src/db';
 import { MEAL_LABELS, formatDate } from '../src/format';
 import { useApp } from '../src/state/AppStore';

@@ -11,7 +11,7 @@ import {
   estimateMeal,
 } from '../src/ai/describeMeal';
 import { Card } from '../src/components/Card';
-import { Button, Field, TOUCH_TARGET } from '../src/components/Controls'
+import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { addLogEntry, saveFood } from '../src/db';
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';

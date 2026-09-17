@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
-import { Button, Field, Stepper, TOUCH_TARGET } from '../src/components/Controls'
+import { Button, Field, Stepper, TOUCH_TARGET } from '../src/components/Controls';
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';
 import { radius, space, useTheme } from '../src/theme';

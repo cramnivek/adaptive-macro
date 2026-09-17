@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MEAL_LABELS } from '../format';
 import { radius, space, useTheme } from '../theme';
-import { Button, Stepper, TOUCH_TARGET } from './Controls'
+import { Button, Stepper, TOUCH_TARGET } from './Controls';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
