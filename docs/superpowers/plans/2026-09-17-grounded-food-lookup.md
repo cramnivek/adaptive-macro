@@ -239,13 +239,12 @@ The core of the feature. All parsing is pure and tested; only `lookupFood` touch
 - Modify: `packages/engine/src/foods.ts` — **doc comment only.** Task 1 documented `Food.sources` as holding "URLs", but what is actually stored is the source *domain* (`jollibeefoods.com`), because the grounding chunk's `uri` is an opaque redirect. Correct that one comment so the field's documentation matches its contents. Change no code there.
 
 **Interfaces:**
-- Consumes: `per100gFromPortion`, `Food`, `FoodPortion` from `@adaptive-macros/engine`; `FoodApiError` from `./http`.
+- Consumes: `per100gFromPortion`, `Food`, `FoodPortion` from `@adaptive-macros/engine`.
 - Produces:
   - `GroundedLookupError` (class, `name: 'GroundedLookupError'`)
   - `UngroundedResponseError` (class, `name: 'UngroundedResponseError'`)
   - `toCandidateFood(raw: unknown, sources: string[]): Food` — throws on unusable input
-  - `extractSourceUrls(response: unknown): string[]`
-  - `sourceDomains(urls: string[]): string[]`
+  - `sourceDomainsFrom(response: unknown): string[]` — reads `groundingChunks[].web.title`, since `web.uri` is an opaque redirect
   - `lookupFood(query: string, country: string, apiKey: string): Promise<Food>`
 
 - [ ] **Step 0: Add the test runner**
