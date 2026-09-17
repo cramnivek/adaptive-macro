@@ -26,6 +26,12 @@ other would invent precision the reference does not have.
 
 ## Running it
 
+Run every command **on one line**. The examples below are split for readability
+in bash only; PowerShell does not understand a trailing `\`, and pasting one
+produces a confusing `cjs/loader` error as Node tries to open a file called `\`.
+
+**bash / zsh**
+
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 
@@ -39,6 +45,16 @@ node --experimental-strip-types evals/meal-estimation/run-eval.mjs \
   --flow .claude/hillclimb/meal-estimation --variant v1 --model claude-sonnet-5
 node --experimental-strip-types evals/meal-estimation/run-eval.mjs \
   --flow .claude/hillclimb/meal-estimation --variant v2 --model claude-haiku-4-5
+```
+
+**PowerShell** — one line each, no continuations:
+
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+
+node --experimental-strip-types evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant baseline --model claude-opus-5 --approve-harness
+node --experimental-strip-types evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant v1 --model claude-sonnet-5
+node --experimental-strip-types evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant v2 --model claude-haiku-4-5
 ```
 
 Then build the report — it reads every variant directory at once:
@@ -61,6 +77,12 @@ truncation would look like a bad model rather than a harness fault.
 ollama pull qwen2.5:32b
 node --experimental-strip-types evals/meal-estimation/run-eval.mjs \
   --flow .claude/hillclimb/meal-estimation --variant v3 --model ollama:qwen2.5:32b --reps 3
+```
+
+PowerShell, one line:
+
+```powershell
+node --experimental-strip-types evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant v3 --model ollama:qwen2.5:32b --reps 3
 ```
 
 Set `OLLAMA_HOST` if the server is not on `http://127.0.0.1:11434`. Local runs
