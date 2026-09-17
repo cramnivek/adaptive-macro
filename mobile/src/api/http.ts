@@ -1,5 +1,5 @@
 /** Identifies the app to food databases; Open Food Facts requires one. */
-export const USER_AGENT = 'adaptive-macros/0.1 (https://github.com/cramnivek/adaptive-macros)';
+export const USER_AGENT = 'adaptive-macros/0.1 (https://github.com/cramnivek/adaptive-macro)';
 
 export class FoodApiError extends Error {
   constructor(
