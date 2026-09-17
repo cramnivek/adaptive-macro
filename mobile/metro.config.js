@@ -22,4 +22,13 @@ config.resolver.nodeModulesPaths = [
 // resolve the same package from two paths and bundle it twice.
 config.resolver.disableHierarchicalLookup = true;
 
+// On web, expo-sqlite is a WebAssembly build of SQLite. Metro treats an
+// unknown extension as a module to parse rather than a file to copy, so
+// without this the .wasm import fails to resolve and the web bundle dies.
+//
+// No cross-origin isolation headers are needed alongside it: the web build was
+// verified reading, writing and persisting across a reload on a page where
+// crossOriginIsolated was false and SharedArrayBuffer was undefined.
+config.resolver.assetExts.push('wasm');
+
 module.exports = config;

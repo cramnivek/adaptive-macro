@@ -192,8 +192,22 @@ trendRate(series, 14);      // actual kg/week over the last two weeks
 npm install
 npm test           # 51 tests, including ground-truth recovery of a known TDEE
 npm run typecheck  # engine and app
+npm run web        # runs in a browser at localhost:8081 — no phone needed
 npm start          # Expo dev server; open in Expo Go or a dev build
 ```
+
+### Trying it without a phone
+
+`npm run web` is the quickest way to see it. It runs the real app through
+React Native Web, and SQLite runs as WebAssembly in the browser, so logging and
+persistence behave the same as on device — data survives a reload and lives in
+that browser profile.
+
+Barcode scanning is the exception: it needs a native camera, so use Expo Go or
+a development build for that.
+
+If you add a package that ships a `.wasm` asset, note `metro.config.js` has to
+register the extension with Metro or the web bundle will fail to resolve it.
 
 The app is a workspace member and imports the engine directly from TypeScript
 source, so editing the engine hot-reloads the app. `mobile/metro.config.js`
@@ -204,9 +218,16 @@ carries the monorepo resolver setup that makes that work.
 The engine is complete and tested: 51 tests pass, including recovery of a known
 ground-truth TDEE from simulated noisy data.
 
-The app typechecks and bundles cleanly (`npx expo export`), but **has not yet
-been run on a real device or simulator** — that environment was not available
-where it was built. Expect the usual first-run shakeout before trusting it.
+The app has been run in a browser via React Native Web and driven end to end:
+all four tabs render, a weigh-in writes to SQLite and survives a page reload,
+and the console is clean. The targets it displays match the engine by hand —
+the default profile seeds 2740 kcal, and a 0.5 kg/week goal renders 2190 kcal
+with 144 g protein.
+
+Still **unverified**: any real iOS or Android device or simulator (none was
+available where it was built), barcode scanning (needs a native camera), and
+the charts against a real multi-week history — they render their empty state
+correctly, but no long dataset has been put through them yet.
 
 Not built yet: recipes and multi-ingredient foods, custom food entry, backup
 *import* (export works), and an onboarding flow — `settings.onboarded` exists
