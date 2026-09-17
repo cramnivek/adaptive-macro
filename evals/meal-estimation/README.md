@@ -51,18 +51,57 @@ open .claude/hillclimb/meal-estimation/report.html
 ## Testing a local model
 
 Any Ollama model can be an arm. It gets the identical system prompt, and
-Ollama's `format` parameter constrains it to the same JSON schema, so it is
-judged on nutrition knowledge rather than on whether it can emit valid JSON.
+Ollama's `format` parameter constrains generation to the same JSON schema, so
+it is judged on nutrition knowledge rather than on whether it can emit valid
+JSON. The runner also raises the context window to 8k, because Ollama's
+per-model default can be small enough to truncate the prompt — and a silent
+truncation would look like a bad model rather than a harness fault.
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull qwen2.5:32b
 node --experimental-strip-types evals/meal-estimation/run-eval.mjs \
-  --flow .claude/hillclimb/meal-estimation --variant v3 --model ollama:llama3.1:8b
+  --flow .claude/hillclimb/meal-estimation --variant v3 --model ollama:qwen2.5:32b --reps 3
 ```
 
 Set `OLLAMA_HOST` if the server is not on `http://127.0.0.1:11434`. Local runs
-cost nothing, so `--reps 3` is free there and worth it — a single rep cannot
-tell a bad model from an unlucky one.
+cost nothing, so `--reps 3` is free and worth it — one rep cannot distinguish a
+bad model from an unlucky one.
+
+### Which model
+
+What matters here is **factual recall of food composition**, not reasoning or
+instruction-following. The schema is enforced by the runtime, so a small model
+will still return well-formed JSON — it will just put wrong numbers in it. That
+makes size and training recency matter more than they would for a chat task.
+
+On 24 GB of VRAM, at 4-bit quantisation:
+
+| Model | Size on disk | Why |
+|---|---|---|
+| `qwen2.5:32b` | ~20 GB | Largest that fits comfortably. Strong general knowledge; the most likely to be competitive. |
+| `gemma2:27b` | ~16 GB | Different training mix, so a useful second opinion — if it and Qwen agree, that is evidence; if they disagree wildly, the task is harder than it looks. |
+| `mistral-small` | ~14 GB | Fast enough to iterate with, leaves headroom for a large context. |
+
+Tags move, so let `ollama pull` confirm them rather than trusting this table;
+the runner reports a missing model by name and tells you what to pull.
+
+Run two or three and compare. The point of the table is not that one of these
+is correct — it is that guessing is unnecessary when measuring costs nothing.
+
+### What to expect
+
+Worth setting expectations honestly before the download: a 32B open model is
+a few hundred times smaller than a frontier model, and nutrition figures are
+memorised facts rather than derivable ones. It is entirely plausible that the
+local model lands within tolerance on plain foods ("150 g chicken breast") and
+falls apart on composed dishes ("fish and chips at the pub"), because the first
+is one lookup and the second is a portion judgement plus several lookups.
+
+The `precise` and `vague` tiers in the report split exactly along that line, so
+the result will show which of those two happened rather than a single verdict.
+If the local model handles the precise tier and fails the vague one, a sensible
+outcome is to use it for most logging and reach for a hosted model only when
+the description is loose.
 
 ## Adding your own meals
 

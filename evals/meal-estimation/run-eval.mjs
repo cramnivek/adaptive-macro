@@ -92,7 +92,18 @@ async function runOllama(prompt, model) {
       // Anthropic path gets from structured outputs — so a local model is
       // judged on its nutrition knowledge, not on its JSON formatting.
       format: schema,
-      options: { temperature: 0 },
+      options: {
+        temperature: 0,
+        // Ollama defaults to a small context (2-4k depending on the model's
+        // Modelfile). The system prompt is ~300 tokens and the answer runs to
+        // a few hundred more, so the default is not obviously fatal — but a
+        // silent truncation would show up as a bad nutrition score rather than
+        // as an error, which would blame the model for a harness fault.
+        num_ctx: 8192,
+        // The grader reads totals, so a cut-off item list is a wrong answer
+        // rather than an error. Leave room for a long meal.
+        num_predict: 2048,
+      },
       messages: [
         { role: 'system', content: APP.SYSTEM_PROMPT },
         { role: 'user', content: prompt },
@@ -101,7 +112,15 @@ async function runOllama(prompt, model) {
   });
 
   if (!response.ok) {
-    throw new Error('Ollama returned ' + response.status + ': ' + (await response.text()));
+    const body = await response.text();
+    // 404 here almost always means the tag was never pulled, which is worth
+    // saying plainly rather than leaving as a bare status code.
+    if (response.status === 404) {
+      throw new Error(
+        `Ollama has no model '${model}'. Pull it first: ollama pull ${model}`,
+      );
+    }
+    throw new Error('Ollama returned ' + response.status + ': ' + body);
   }
 
   const body = await response.json();
