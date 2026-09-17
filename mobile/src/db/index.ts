@@ -260,6 +260,88 @@ export const addLogEntry = async (entry: LogEntry): Promise<void> => {
   );
 };
 
+/**
+ * Changes an existing entry's portion or meal.
+ *
+ * Nutrients are passed in already rescaled rather than recomputed here: the
+ * caller knows whether it still has the food's per-100 g basis (and can scale
+ * exactly) or only the stored totals (and must scale proportionally). Deciding
+ * that in the database layer would mean guessing.
+ */
+export const updateLogEntry = async (
+  id: string,
+  changes: { grams: number; meal: Meal; nutrients: Nutrients },
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE log_entries
+     SET grams = ?, meal = ?, kcal = ?, protein_g = ?, carbs_g = ?, fat_g = ?, fiber_g = ?
+     WHERE id = ?`,
+    changes.grams,
+    changes.meal,
+    changes.nutrients.kcal,
+    changes.nutrients.proteinG,
+    changes.nutrients.carbsG,
+    changes.nutrients.fatG,
+    changes.nutrients.fiberG ?? 0,
+    id,
+  );
+};
+
+/** Days that have at least one entry, most recent first, for the repeat picker. */
+export const listLoggedDates = async (limit = 30, excluding?: ISODate): Promise<ISODate[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ date: string }>(
+    `SELECT DISTINCT date FROM log_entries
+     WHERE date != ?
+     ORDER BY date DESC LIMIT ?`,
+    excluding ?? '',
+    limit,
+  );
+  return rows.map((row) => row.date);
+};
+
+/**
+ * Copies entries from one day onto another.
+ *
+ * New ids are generated rather than reusing the originals, so the copy is an
+ * independent entry — editing or deleting it must not touch the day it came
+ * from. Meals can be filtered so "repeat yesterday's breakfast" does not drag
+ * dinner along with it.
+ */
+export const copyEntriesToDay = async (
+  from: ISODate,
+  to: ISODate,
+  meals?: Meal[],
+): Promise<number> => {
+  const db = await getDb();
+  const source = await listLogEntries(from);
+  const wanted = meals?.length ? source.filter((entry) => meals.includes(entry.meal)) : source;
+
+  await db.withTransactionAsync(async () => {
+    for (const entry of wanted) {
+      await db.runAsync(
+        `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        to,
+        entry.foodId,
+        entry.foodName,
+        entry.grams,
+        entry.meal,
+        entry.nutrients.kcal,
+        entry.nutrients.proteinG,
+        entry.nutrients.carbsG,
+        entry.nutrients.fatG,
+        entry.nutrients.fiberG ?? 0,
+        new Date().toISOString(),
+      );
+    }
+  });
+
+  return wanted.length;
+};
+
 export const deleteLogEntry = async (id: string): Promise<void> => {
   const db = await getDb();
   await db.runAsync('DELETE FROM log_entries WHERE id = ?', id);

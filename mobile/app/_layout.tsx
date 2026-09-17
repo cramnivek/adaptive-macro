@@ -29,6 +29,26 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="quick-add"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Quick add',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
+            name="repeat"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Repeat a day',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
             name="describe"
             options={{
               presentation: 'modal',

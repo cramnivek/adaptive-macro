@@ -120,7 +120,9 @@ a single multiply everywhere instead of a per-food special case.
 Expo / React Native, four tabs:
 
 - **Today** — calorie ring and macro bars against the adaptive target, diary
-  grouped by meal, add by search or barcode.
+  grouped by meal, add by search, barcode or description. Tap an entry to
+  change its portion, quick-add bare calories for things no database has, or
+  copy a previous day's meals onto this one.
 - **Weight** — log a weigh-in, see raw readings as dots against the filtered
   trend line, 14-day rate.
 - **Trends** — expenditure over time with its uncertainty band, how confident
@@ -307,8 +309,10 @@ response and its parsing, which needs a real key — the environment this was
 built in has none and blocks the endpoint.
 
 Not built yet: recipes and multi-ingredient foods, editing or deleting a custom
-food once saved, backup *import* (export works), and an onboarding flow —
-`settings.onboarded` exists but nothing reads it yet.
+food once saved, backup *import* (export works), a weekly coached check-in that
+explains why the target moved (targets currently update continuously, which is
+noisier than it needs to be), and an onboarding flow — `settings.onboarded`
+exists but nothing reads it yet.
 
 ## License
 

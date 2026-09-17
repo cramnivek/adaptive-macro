@@ -2,9 +2,10 @@ import type { LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
 import { confirm } from '../../src/dialog';
@@ -17,8 +18,19 @@ const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 export default function TodayScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { selectedDate, setSelectedDate, entries, totals, program, removeEntry, usingSeedEstimate, ready } =
-    useApp();
+  const {
+    selectedDate,
+    setSelectedDate,
+    entries,
+    totals,
+    program,
+    removeEntry,
+    editEntry,
+    usingSeedEstimate,
+    ready,
+  } = useApp();
+
+  const [editing, setEditing] = useState<LogEntry | null>(null);
 
   const byMeal = useMemo(() => {
     const groups = new Map<Meal, LogEntry[]>(MEAL_ORDER.map((meal) => [meal, []]));
@@ -90,6 +102,23 @@ export default function TodayScreen() {
         </Pressable>
       )}
 
+      <View style={styles.dayActions}>
+        <Pressable
+          onPress={() => router.push({ pathname: '/quick-add', params: { meal: 'snack' } })}
+          style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Ionicons name="flash-outline" size={16} color={colors.text} />
+          <Text style={[styles.dayActionLabel, { color: colors.text }]}>Quick add</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/repeat')}
+          style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Ionicons name="repeat-outline" size={16} color={colors.text} />
+          <Text style={[styles.dayActionLabel, { color: colors.text }]}>Repeat a day</Text>
+        </Pressable>
+      </View>
+
       {MEAL_ORDER.map((meal) => {
         const mealEntries = byMeal.get(meal) ?? [];
         const mealKcal = mealEntries.reduce((sum, entry) => sum + entry.nutrients.kcal, 0);
@@ -128,6 +157,7 @@ export default function TodayScreen() {
             {mealEntries.map((entry) => (
               <Pressable
                 key={entry.id}
+                onPress={() => setEditing(entry)}
                 onLongPress={() => void confirmDelete(entry)}
                 style={({ pressed }) => [styles.entry, { opacity: pressed ? 0.6 : 1 }]}
               >
@@ -146,11 +176,25 @@ export default function TodayScreen() {
               </Pressable>
             ))}
             {mealEntries.length > 0 && (
-              <Text style={[styles.deleteHint, { color: colors.textFaint }]}>Hold an item to remove it</Text>
+              <Text style={[styles.deleteHint, { color: colors.textFaint }]}>
+                Tap an item to change the amount, hold to remove it
+              </Text>
             )}
           </Card>
         );
       })}
+      <EditEntrySheet
+        entry={editing}
+        onCancel={() => setEditing(null)}
+        onSave={(entry, grams, meal) => {
+          setEditing(null);
+          void editEntry(entry, grams, meal);
+        }}
+        onDelete={(entry) => {
+          setEditing(null);
+          void removeEntry(entry.id);
+        }}
+      />
     </Screen>
   );
 }
@@ -190,4 +234,16 @@ const styles = StyleSheet.create({
   entryMeta: { fontSize: 11, marginTop: 1 },
   entryKcal: { fontSize: 15, fontVariant: ['tabular-nums'] },
   deleteHint: { fontSize: 11, marginTop: space.xs, textAlign: 'center' },
+  dayActions: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  dayAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.xs,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  dayActionLabel: { fontSize: 13, fontWeight: '600' },
 });

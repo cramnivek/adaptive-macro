@@ -30,7 +30,30 @@ import React, {
   useState,
 } from 'react';
 import * as db from '../db';
+
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
+
+/**
+ * Rescales an entry's stored totals to a new portion.
+ *
+ * The fallback for when the underlying food is gone. A zero original portion
+ * carries no ratio to scale by, so the result is zeroed rather than infinite.
+ */
+const scaleFromTotals = (
+  nutrients: Nutrients,
+  fromGrams: number,
+  toGrams: number,
+): Nutrients => {
+  if (fromGrams <= 0) return { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 };
+  const factor = toGrams / fromGrams;
+  return {
+    kcal: nutrients.kcal * factor,
+    proteinG: nutrients.proteinG * factor,
+    carbsG: nutrients.carbsG * factor,
+    fatG: nutrients.fatG * factor,
+    fiberG: (nutrients.fiberG ?? 0) * factor,
+  };
+};
 
 interface AppState {
   ready: boolean;
@@ -45,6 +68,9 @@ interface AppState {
   totals: Nutrients;
   logFood: (food: Food, grams: number, meal: Meal) => Promise<void>;
   removeEntry: (id: string) => Promise<void>;
+  editEntry: (entry: LogEntry, grams: number, meal: Meal) => Promise<void>;
+  /** Copies a previous day's entries onto the selected day. Returns how many. */
+  copyDay: (from: ISODate, meals?: Meal[]) => Promise<number>;
 
   weights: db.WeightRow[];
   recordWeight: (date: ISODate, kg: number) => Promise<void>;
@@ -146,6 +172,38 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     [selectedDate, reloadDiary, reloadHistory],
   );
 
+  /**
+   * Applies a new portion to an existing entry.
+   *
+   * When the food is still cached the macros are recomputed from its per-100 g
+   * basis, which is exact. When it has been evicted, the stored totals are
+   * scaled by the ratio of new to old grams instead — less precise, but it
+   * keeps editing working rather than refusing on a food the app no longer has.
+   */
+  const editEntry = useCallback(
+    async (entry: LogEntry, grams: number, meal: Meal) => {
+      const food = await db.getFoodById(entry.foodId);
+      const nutrients = food
+        ? scaleNutrients(food.per100g, grams)
+        : scaleFromTotals(entry.nutrients, entry.grams, grams);
+
+      await db.updateLogEntry(entry.id, { grams, meal, nutrients });
+      await reloadDiary(selectedDate);
+      await reloadHistory();
+    },
+    [selectedDate, reloadDiary, reloadHistory],
+  );
+
+  const copyDay = useCallback(
+    async (from: ISODate, meals?: Meal[]) => {
+      const copied = await db.copyEntriesToDay(from, selectedDate, meals);
+      await reloadDiary(selectedDate);
+      await reloadHistory();
+      return copied;
+    },
+    [selectedDate, reloadDiary, reloadHistory],
+  );
+
   const removeEntry = useCallback(
     async (id: string) => {
       await db.deleteLogEntry(id);
@@ -240,6 +298,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     totals,
     logFood,
     removeEntry,
+    editEntry,
+    copyDay,
     weights,
     recordWeight,
     removeWeight,
