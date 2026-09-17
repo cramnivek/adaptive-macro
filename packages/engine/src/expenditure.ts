@@ -1,10 +1,12 @@
 import { diffDays, eachDay } from './dates';
 import {
+  type FilterStep,
   type GaussianState,
   type Matrix,
   diag,
   identity,
   predict,
+  rtsSmooth,
   updateScalar,
 } from './kalman';
 import type { DailyObservation, ISODate, Sex, UserProfile } from './types';
@@ -84,6 +86,18 @@ export interface ExpenditureModelOptions {
   initialExpenditureSdKcal: number;
   /** Expenditure is clamped to this floor so noise can never drive it absurd. */
   minExpenditureKcal: number;
+  /**
+   * How many standard deviations a scale reading may sit from the prediction
+   * before it is treated as suspect, in units of the innovation's own standard
+   * deviation. Beyond this the reading is downweighted rather than discarded,
+   * in proportion to how extreme it is.
+   *
+   * 3 is deliberately permissive. Real weight moves fast sometimes — a first
+   * week of glycogen depletion, a salty meal, a long flight — and those are
+   * signal, not error. What this catches is the reading that is simply wrong:
+   * weighing clothed, a different scale, someone else stepping on.
+   */
+  outlierSigma: number;
 }
 
 export const DEFAULT_MODEL_OPTIONS: Omit<ExpenditureModelOptions, 'initialExpenditureKcal'> = {
@@ -94,6 +108,7 @@ export const DEFAULT_MODEL_OPTIONS: Omit<ExpenditureModelOptions, 'initialExpend
   unloggedDayNoiseKg: 0.35,
   initialExpenditureSdKcal: 350,
   minExpenditureKcal: 800,
+  outlierSigma: 3,
 };
 
 export interface DailyEstimate {
@@ -107,12 +122,31 @@ export interface DailyEstimate {
   expenditureSdKcal: number;
   hasWeightObservation: boolean;
   hasIntakeObservation: boolean;
+  /**
+   * True when this day's scale reading sat far enough from the prediction to be
+   * downweighted. Surfaced so the UI can mark it rather than quietly discount
+   * a number the user can see they entered.
+   */
+  weightOutlier: boolean;
 }
 
 export interface ExpenditureResult {
-  /** One entry per calendar day between the first and last observation. */
+  /**
+   * One entry per calendar day, smoothed. This is what to display: every past
+   * day has been re-estimated knowing what came after it, so the trend does not
+   * lag and a change in expenditure sits where it actually happened.
+   */
   series: DailyEstimate[];
-  /** The most recent day's estimate, or null when there was nothing to run on. */
+  /**
+   * The same days as the forward filter saw them, using only data up to each
+   * day. Useful for asking "what would this have said at the time"; not what
+   * you want on a chart.
+   */
+  filtered: DailyEstimate[];
+  /**
+   * The most recent day. Identical in both passes, since nothing follows it —
+   * smoothing sharpens history, it does not change today's number.
+   */
   latest: DailyEstimate | null;
 }
 
@@ -131,7 +165,7 @@ export const estimateExpenditure = (
 ): ExpenditureResult => {
   const withWeight = observations.filter((o) => typeof o.weightKg === 'number');
   if (observations.length === 0 || withWeight.length === 0) {
-    return { series: [], latest: null };
+    return { series: [], filtered: [], latest: null };
   }
 
   const ascending = (a: { date: ISODate }, b: { date: ISODate }) => diffDays(b.date, a.date);
@@ -171,7 +205,8 @@ export const estimateExpenditure = (
     options.expenditureVolatilityKcal ** 2,
   ]);
 
-  const series: DailyEstimate[] = [];
+  const filtered: DailyEstimate[] = [];
+  const steps: FilterStep[] = [];
 
   for (let i = 0; i < days.length; i++) {
     const date = days[i];
@@ -179,13 +214,37 @@ export const estimateExpenditure = (
     const weightKg = observation?.weightKg;
     const intakeKcal = observation?.intakeKcal;
 
+    let isOutlier = false;
+
     if (typeof weightKg === 'number') {
-      state = updateScalar(state, WEIGHT_OBSERVATION_ROW, weightKg, measurementVariance);
+      // Measure the surprise before accepting the reading. The innovation
+      // variance already accounts for how uncertain the filter currently is,
+      // so early on — when it barely knows your weight — almost nothing counts
+      // as an outlier, which is the right way round.
+      const trial = updateScalar(state, WEIGHT_OBSERVATION_ROW, weightKg, measurementVariance);
+      const normalisedResidual = Math.abs(trial.innovation) / Math.sqrt(trial.innovationVariance);
+
+      if (normalisedResidual > options.outlierSigma) {
+        isOutlier = true;
+        // Inflate the measurement noise by the square of how far past the
+        // threshold it sits. The reading still moves the estimate, but by
+        // progressively less the more absurd it is, so a genuine fast change
+        // is absorbed over a few days instead of being thrown away.
+        const inflation = (normalisedResidual / options.outlierSigma) ** 2;
+        state = updateScalar(
+          state,
+          WEIGHT_OBSERVATION_ROW,
+          weightKg,
+          measurementVariance * inflation,
+        );
+      } else {
+        state = { x: trial.x, P: trial.P };
+      }
     }
 
     if (state.x[1] < options.minExpenditureKcal) state.x[1] = options.minExpenditureKcal;
 
-    series.push({
+    filtered.push({
       date,
       trendWeightKg: state.x[0],
       trendWeightSdKg: Math.sqrt(Math.max(state.P[0][0], 0)),
@@ -193,18 +252,39 @@ export const estimateExpenditure = (
       expenditureSdKcal: Math.sqrt(Math.max(state.P[1][1], 0)),
       hasWeightObservation: typeof weightKg === 'number',
       hasIntakeObservation: typeof intakeKcal === 'number',
+      weightOutlier: isOutlier,
     });
 
-    if (i === days.length - 1) break;
-
-    if (typeof intakeKcal === 'number') {
-      state = predict(state, loggedTransition, loggedProcessNoise, [intakeKcal / rho, 0]);
-    } else {
-      state = predict(state, identity(2), unloggedProcessNoise, [0, 0]);
+    if (i === days.length - 1) {
+      steps.push({ filtered: state });
+      break;
     }
+
+    const transition = typeof intakeKcal === 'number' ? loggedTransition : identity(2);
+    const processNoise =
+      typeof intakeKcal === 'number' ? loggedProcessNoise : unloggedProcessNoise;
+    const control = typeof intakeKcal === 'number' ? [intakeKcal / rho, 0] : [0, 0];
+
+    const predicted = predict(state, transition, processNoise, control);
+    steps.push({ filtered: state, predicted, F: transition });
+    state = predicted;
   }
 
-  return { series, latest: series[series.length - 1] ?? null };
+  // Backward pass: re-estimate every past day in light of what followed it.
+  const smoothedStates = rtsSmooth(steps);
+  const series = filtered.map((day, i) => {
+    const smoothed = smoothedStates[i];
+    if (!smoothed) return day;
+    return {
+      ...day,
+      trendWeightKg: smoothed.x[0],
+      trendWeightSdKg: Math.sqrt(Math.max(smoothed.P[0][0], 0)),
+      expenditureKcal: Math.max(smoothed.x[1], options.minExpenditureKcal),
+      expenditureSdKcal: Math.sqrt(Math.max(smoothed.P[1][1], 0)),
+    };
+  });
+
+  return { series, filtered, latest: series[series.length - 1] ?? null };
 };
 
 export type ActivityLevel =

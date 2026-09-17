@@ -24,12 +24,14 @@ export interface ChartScatter {
   points: ChartPoint[];
   color: string;
   radius?: number;
+  opacity?: number;
 }
 
 interface LineChartProps {
   series: ChartSeries[];
   band?: ChartBand;
-  scatter?: ChartScatter;
+  /** Point overlays, drawn in order. Several allow one set to be called out. */
+  scatter?: ChartScatter[];
   height?: number;
   formatY?: (value: number) => string;
   formatX?: (value: number) => string;
@@ -88,13 +90,13 @@ export const LineChart = ({
   const allY = [
     ...series.flatMap((s) => s.points.map((p) => p.y)),
     ...(band?.points.flatMap((p) => [p.lo, p.hi]) ?? []),
-    ...(scatter?.points.map((p) => p.y) ?? []),
+    ...(scatter?.flatMap((s) => s.points.map((p) => p.y)) ?? []),
     ...includeY,
     ...(referenceY ? [referenceY.value] : []),
   ];
   const allX = [
     ...series.flatMap((s) => s.points.map((p) => p.x)),
-    ...(scatter?.points.map((p) => p.x) ?? []),
+    ...(scatter?.flatMap((s) => s.points.map((p) => p.x)) ?? []),
   ];
 
   const hasData = allY.length >= 2 && allX.length >= 2;
@@ -176,16 +178,18 @@ export const LineChart = ({
             />
           )}
 
-          {scatter?.points.map((point) => (
-            <Circle
-              key={`dot-${point.x}-${point.y}`}
-              cx={toX(point.x)}
-              cy={toY(point.y)}
-              r={scatter.radius ?? 2}
-              fill={scatter.color}
-              opacity={0.55}
-            />
-          ))}
+          {scatter?.flatMap((layer, layerIndex) =>
+            layer.points.map((point) => (
+              <Circle
+                key={`dot-${layerIndex}-${point.x}-${point.y}`}
+                cx={toX(point.x)}
+                cy={toY(point.y)}
+                r={layer.radius ?? 2}
+                fill={layer.color}
+                opacity={layer.opacity ?? 0.55}
+              />
+            )),
+          )}
 
           {series.map((line, index) =>
             line.points.length > 1 ? (

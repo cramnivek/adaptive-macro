@@ -12,6 +12,7 @@ const series = (weights: number[]): DailyEstimate[] =>
     expenditureSdKcal: 60,
     hasWeightObservation: true,
     hasIntakeObservation: true,
+    weightOutlier: false,
   }));
 
 describe('trendRate', () => {
