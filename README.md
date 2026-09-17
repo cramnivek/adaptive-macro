@@ -67,6 +67,63 @@ differently:
 | No food logged that day | Transition becomes the identity and extra weight process noise is added. An unlogged day carries *no* information linking weight to energy, so the filter widens rather than assuming. |
 | Intake logged before any weigh-in | Dropped. With no scale anchor there is nothing to reconcile against. |
 
+### How accurate is it, really
+
+`packages/engine/test/sensitivity.test.ts` measures what happens when the
+model's assumptions are wrong, rather than only when they hold. Numbers below
+are from that suite, on a simulated 120-day history with a true expenditure of
+2800 kcal.
+
+**The energy density of tissue is the largest standing error.** 7700 kcal/kg
+assumes the weight you lose is mostly fat. Early in a diet it is substantially
+glycogen and its bound water, which is far cheaper. The bias is exactly
+`(rate of weight change) × (true density − assumed density)`:
+
+| If tissue is really… | Estimated expenditure | Error |
+|---|---|---|
+| 5000 kcal/kg (glycogen-heavy) | 3031 | **+231** |
+| 6000 kcal/kg | 2903 | +103 |
+| 7700 kcal/kg (assumed) | 2762 | −38 |
+| 9000 kcal/kg | 2690 | −110 |
+
+Crucially it **scales with how fast you are changing**. With tissue truly at
+6000: at maintenance the error is −38 kcal; at −0.35 kg/week it is +47; at
+−0.93 kg/week it is +188. Fast loss is when the estimate is least trustworthy,
+which is the opposite of most people's intuition.
+
+**Under-reporting your intake barely matters, which is the design working.**
+The same biased instrument sets the target and measures compliance, so the
+error cancels:
+
+| Under-logging | Estimated expenditure | Deficit actually achieved |
+|---|---|---|
+| 0% | 2762 | 538 |
+| 10% | 2532 | 542 |
+| 20% | 2303 | 546 |
+
+Every figure on screen is wrong by 20% in the last row, and the user still
+loses weight at the intended rate. No fixed-formula calculator can do that.
+
+**The stated uncertainty is optimistic when water weight persists.** The filter
+assumes each scale reading errs independently; real water and glycogen shifts
+last for days. With errors correlated at 0.8, the true error reaches twice the
+±80 kcal the app reports. The confidence figure is a lower bound, not a
+guarantee.
+
+**The cold start matters for about a month, not two weeks.** Seeds 1200 kcal
+apart, and what you would actually have been told on each day:
+
+| Seed | Day 7 | Day 14 | Day 28 | Day 60 |
+|---|---|---|---|---|
+| 2200 | 2123 | 2314 | 2547 | 2784 |
+| 2800 | 2617 | 2583 | 2625 | 2799 |
+| 3400 | 3111 | 2852 | 2703 | 2814 |
+
+For scale, the activity multiplier alone spans 2181–3453 kcal for the same
+person, so picking the wrong one is a ~1200 kcal error on day one. It is gone
+by two months and small by four weeks — but "about two weeks", which the app's
+own copy says, is optimistic. Trust the confidence indicator over the calendar.
+
 ### What it cannot do
 
 Stated plainly, because a confident wrong number is worse than a missing one:
