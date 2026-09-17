@@ -3,10 +3,12 @@ import { isNutritionallyConsistent } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { UngroundedResponseError, lookupFood } from '../src/api/gemini';
 import { searchFoods } from '../src/api/search';
 import { Button, Field } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
-import { getFoodById, listFrequentFoods } from '../src/db';
+import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
+import { getFoodById, listFrequentFoods, saveFood } from '../src/db';
 import { useApp } from '../src/state/AppStore';
 import { radius, space, useTheme } from '../src/theme';
 
@@ -31,6 +33,8 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [selected, setSelected] = useState<Food | null>(null);
+  const [candidate, setCandidate] = useState<Food | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
 
   // Every keystroke would fire three network searches, so a trailing debounce
   // waits for a pause in typing. The ref lets each new keystroke cancel the
@@ -90,6 +94,29 @@ export default function SearchScreen() {
   const shown = query.trim().length < 2 ? frequent : results;
   const showingFrequent = query.trim().length < 2;
 
+  // Three rather than zero: the case this exists for returned one irrelevant
+  // result, not an empty list.
+  const THIN_RESULT_COUNT = 3;
+  const canLookUp =
+    !showingFrequent && !loading && settings.foodLookup.enabled && shown.length < THIN_RESULT_COUNT;
+
+  const runLookup = useCallback(async () => {
+    setLookingUp(true);
+    setErrors([]);
+    try {
+      const food = await lookupFood(query.trim(), settings.foodCountry, settings.foodLookup.geminiApiKey);
+      setCandidate(food);
+    } catch (error) {
+      setErrors([
+        error instanceof UngroundedResponseError
+          ? 'Could not find published figures for that. Try a more specific name, or add it yourself.'
+          : (error as Error).message,
+      ]);
+    } finally {
+      setLookingUp(false);
+    }
+  }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.searchBar}>
@@ -139,6 +166,14 @@ export default function SearchScreen() {
                 variant="subtle"
                 onPress={() => router.push({ pathname: '/food-new', params: { meal } })}
               />
+              {canLookUp && (
+                <Button
+                  label={lookingUp ? 'Looking it up…' : 'Look it up with AI'}
+                  variant="subtle"
+                  disabled={lookingUp}
+                  onPress={() => void runLookup()}
+                />
+              )}
             </View>
           )
         }
@@ -182,6 +217,17 @@ export default function SearchScreen() {
         defaultMeal={meal}
         onCancel={() => setSelected(null)}
         onConfirm={(food, grams, chosenMeal) => void confirm(food, grams, chosenMeal)}
+      />
+
+      <LookupCandidateSheet
+        food={candidate}
+        onCancel={() => setCandidate(null)}
+        onSave={(food) =>
+          void saveFood(food).then(() => {
+            setCandidate(null);
+            setSelected(food);
+          })
+        }
       />
     </View>
   );
