@@ -262,6 +262,13 @@ export default function SettingsScreen() {
 
       <Card title="Food data">
         <Field
+          label="Food database country"
+          value={settings.foodCountry}
+          onChangeText={(foodCountry) => void updateSettings({ foodCountry })}
+          placeholder="world"
+          hint="A country code like ph, us, gb, jp — or 'world'. Open Food Facts keeps a separate view per country holding what is actually sold there, so local brands that are missing from the global view turn up in their own market's. Both are searched, local results first."
+        />
+        <Field
           label="USDA API key"
           value={settings.usdaApiKey}
           onChangeText={(usdaApiKey) => void updateSettings({ usdaApiKey })}

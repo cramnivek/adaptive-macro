@@ -65,7 +65,7 @@ export default function SearchScreen() {
 
     setLoading(true);
     debounce.current = setTimeout(async () => {
-      const found = await searchFoods(trimmed, settings.usdaApiKey);
+      const found = await searchFoods(trimmed, settings.usdaApiKey, settings.foodCountry);
       if (latestQuery.current !== trimmed) return;
       setResults(found.foods);
       setErrors(found.errors);
@@ -75,7 +75,7 @@ export default function SearchScreen() {
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
     };
-  }, [query, settings.usdaApiKey]);
+  }, [query, settings.usdaApiKey, settings.foodCountry]);
 
   const confirm = useCallback(
     async (food: Food, grams: number, chosenMeal: Meal) => {

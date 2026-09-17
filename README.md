@@ -161,7 +161,11 @@ contradict its own calorie target.
 Two free sources, no API of our own:
 
 - **[Open Food Facts](https://world.openfoodfacts.org/)** — ~3M packaged
-  products, barcode lookup by UPC/EAN. Crowd-sourced, so entries are often
+  products, barcode lookup by UPC/EAN. Searchable per country: set
+  `foodCountry` to `ph`, `jp`, `gb` and the local market's view is searched
+  first, which is where local brands live — the global view often misses them
+  entirely. Barcodes always resolve against the global view, since a barcode
+  identifies one product worldwide. Crowd-sourced, so entries are often
   internally inconsistent. `isNutritionallyConsistent()` cross-checks a food's
   stated calories against its own macros and flags suspects **to the user**
   rather than silently correcting them: the database might be right about

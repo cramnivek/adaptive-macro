@@ -1,7 +1,7 @@
 import type { Food } from '@adaptive-macros/engine';
 import { searchLocalFoods } from '../db';
 import { FoodApiError } from './http';
-import { searchOpenFoodFacts } from './openfoodfacts';
+import { DEFAULT_FOOD_COUNTRY, searchOpenFoodFacts } from './openfoodfacts';
 import { USDA_DEMO_KEY, searchUsda } from './usda';
 
 export interface SearchResults {
@@ -24,14 +24,27 @@ export interface SearchResults {
 export const searchFoods = async (
   query: string,
   usdaApiKey: string = USDA_DEMO_KEY,
+  country: string = DEFAULT_FOOD_COUNTRY,
 ): Promise<SearchResults> => {
   const trimmed = query.trim();
   if (trimmed.length < 2) return { foods: [], errors: [] };
 
-  const [local, usda, off] = await Promise.allSettled([
-    searchLocalFoods(trimmed),
-    searchUsda(trimmed, usdaApiKey),
-    searchOpenFoodFacts(trimmed),
+  const local = searchLocalFoods(trimmed);
+  const usda = searchUsda(trimmed, usdaApiKey);
+  // The country view first, then the global one. Both are queried because a
+  // country view is a subset: it finds the local brand, and world still covers
+  // anything imported or not yet tagged to that country.
+  const localMarket = searchOpenFoodFacts(trimmed, 20, country);
+  const worldMarket =
+    country === DEFAULT_FOOD_COUNTRY
+      ? Promise.resolve<Food[]>([])
+      : searchOpenFoodFacts(trimmed, 20, DEFAULT_FOOD_COUNTRY);
+
+  const [localResult, usdaResult, localMarketResult, worldResult] = await Promise.allSettled([
+    local,
+    usda,
+    localMarket,
+    worldMarket,
   ]);
 
   const errors: string[] = [];
@@ -51,9 +64,10 @@ export const searchFoods = async (
     errors.push(reason instanceof FoodApiError ? reason.message : 'A food source failed');
   };
 
-  collect(local);
-  collect(usda);
-  collect(off);
+  collect(localResult);
+  collect(usdaResult);
+  collect(localMarketResult);
+  collect(worldResult);
 
   return { foods, errors };
 };

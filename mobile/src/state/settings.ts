@@ -1,6 +1,7 @@
 import type { ActivityLevel, Goal, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { DEFAULT_OLLAMA_HOST } from '../ai/ollama';
+import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
 
 export type UnitSystem = 'metric' | 'imperial';
@@ -20,6 +21,11 @@ export interface AppSettings {
   scaleNoiseKg: number;
   expenditureVolatilityKcal: number;
   usdaApiKey: string;
+  /**
+   * Which Open Food Facts country view to search, or 'world'. Local brands are
+   * often absent from the global view and easy to find in their own market's.
+   */
+  foodCountry: string;
   /**
    * Which engine estimates a described meal. 'ollama' keeps everything on this
    * machine and costs nothing; 'anthropic' needs an API key and a billing
@@ -50,6 +56,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   scaleNoiseKg: DEFAULT_MODEL_OPTIONS.scaleNoiseKg,
   expenditureVolatilityKcal: DEFAULT_MODEL_OPTIONS.expenditureVolatilityKcal,
   usdaApiKey: USDA_DEMO_KEY,
+  foodCountry: DEFAULT_FOOD_COUNTRY,
   aiProvider: 'ollama',
   ollamaHost: DEFAULT_OLLAMA_HOST,
   ollamaModel: '',

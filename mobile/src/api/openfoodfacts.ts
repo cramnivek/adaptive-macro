@@ -1,8 +1,22 @@
 import type { Food, FoodPortion } from '@adaptive-macros/engine';
 import { fetchJson, isUsableNumber, kjToKcal } from './http';
 
-const BASE = 'https://world.openfoodfacts.org';
 const SOURCE = 'Open Food Facts';
+
+/**
+ * Open Food Facts serves a per-country view on its own subdomain, holding the
+ * products actually sold there. Searching `world` for a local brand buries it
+ * under the same name from other markets, or misses it entirely; searching
+ * `ph` finds what is on the shelf in front of you.
+ *
+ * The value is a country code as Open Food Facts uses it, or `world`.
+ */
+export const DEFAULT_FOOD_COUNTRY = 'world';
+
+const baseFor = (country: string) => {
+  const code = country.trim().toLowerCase() || DEFAULT_FOOD_COUNTRY;
+  return `https://${code}.openfoodfacts.org`;
+};
 
 interface OffNutriments {
   'energy-kcal_100g'?: number;
@@ -91,17 +105,26 @@ const toFood = (product: OffProduct): Food | null => {
   };
 };
 
-export const searchOpenFoodFacts = async (query: string, pageSize = 20): Promise<Food[]> => {
+export const searchOpenFoodFacts = async (
+  query: string,
+  pageSize = 20,
+  country: string = DEFAULT_FOOD_COUNTRY,
+): Promise<Food[]> => {
   const url =
-    `${BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
+    `${baseFor(country)}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
     `&search_simple=1&action=process&json=1&page_size=${pageSize}&fields=${FIELDS}`;
 
   const data = await fetchJson<{ products?: OffProduct[] }>(url, SOURCE);
   return (data.products ?? []).map(toFood).filter((food): food is Food => food !== null);
 };
 
+/**
+ * Barcodes are looked up against `world` regardless of the country setting: a
+ * barcode identifies one product globally, and the country views are subsets,
+ * so a local view can only lose a match that world would have found.
+ */
 export const lookupBarcode = async (barcode: string): Promise<Food | null> => {
-  const url = `${BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${FIELDS}`;
+  const url = `${baseFor('world')}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${FIELDS}`;
   const data = await fetchJson<{ status?: number; product?: OffProduct }>(url, SOURCE);
   if (data.status !== 1 || !data.product) return null;
   return toFood(data.product);
