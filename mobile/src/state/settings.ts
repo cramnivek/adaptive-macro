@@ -40,6 +40,17 @@ export interface AppSettings {
    * Stored only on this device and sent only to api.anthropic.com.
    */
   anthropicApiKey: string;
+  /**
+   * Web-grounded lookup for restaurant and chain food, which no packaged-goods
+   * database carries. Kept separate from `aiProvider` on purpose: that setting
+   * chooses who estimates a described meal, and the local model there is
+   * deliberate. Choosing a lookup provider must not quietly move meal
+   * estimation off it.
+   */
+  foodLookup: {
+    enabled: boolean;
+    geminiApiKey: string;
+  };
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
 }
@@ -61,6 +72,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ollamaHost: defaultOllamaHost(),
   ollamaModel: '',
   anthropicApiKey: '',
+  foodLookup: { enabled: false, geminiApiKey: '' },
   onboarded: false,
 };
 

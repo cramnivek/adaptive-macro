@@ -281,6 +281,25 @@ export default function SettingsScreen() {
         />
       </Card>
 
+      <Card title="Looking up restaurant food">
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          Chain and restaurant meals are not in the food databases. With a Gemini API key, searches
+          that come back empty can offer a web lookup, which shows you the sources it read before
+          you save anything. Grounded lookups are free up to a monthly allowance on Google's own
+          plans.
+        </Text>
+        <Field
+          label="Gemini API key"
+          value={settings.foodLookup.geminiApiKey}
+          onChangeText={(geminiApiKey) =>
+            void updateSettings({
+              foodLookup: { ...settings.foodLookup, geminiApiKey, enabled: geminiApiKey.trim().length > 0 },
+            })
+          }
+          placeholder="AIza…"
+        />
+      </Card>
+
       <Card title="Describing meals" subtitle="Write a meal in words and get macros back.">
         <Segmented
           label="Estimated by"
