@@ -32,6 +32,14 @@ export interface Food {
   portions: FoodPortion[];
   /** Set when the food came from a remote database, for cache invalidation. */
   fetchedAt?: string;
+  /**
+   * URLs a grounded lookup actually read to produce this food. Present only
+   * for `source: 'ai'` records that came from a web lookup; a photo or
+   * description estimate has nothing to cite. Stored so a number's provenance
+   * survives long after the lookup, rather than living only in the moment of
+   * confirmation.
+   */
+  sources?: string[];
 }
 
 export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -63,6 +71,29 @@ export const scaleNutrients = (per100g: Nutrients, grams: number): Nutrients => 
     carbsG: per100g.carbsG * factor,
     fatG: per100g.fatG * factor,
     fiberG: (per100g.fiberG ?? 0) * factor,
+  };
+};
+
+/**
+ * Converts nutrients stated for a portion into the per-100 g basis everything
+ * is stored in.
+ *
+ * The inverse of `scaleNutrients`. This exists because restaurant and menu
+ * data is published per serving — "1 piece, 380 kcal" — and doing the division
+ * here means no caller, and in particular no language model, is trusted with
+ * arithmetic the app can perform exactly.
+ */
+export const per100gFromPortion = (nutrients: Nutrients, grams: number): Nutrients => {
+  if (!Number.isFinite(grams) || grams <= 0) {
+    throw new Error(`portion weight must be a positive number of grams, got ${grams}`);
+  }
+  const factor = 100 / grams;
+  return {
+    kcal: nutrients.kcal * factor,
+    proteinG: nutrients.proteinG * factor,
+    carbsG: nutrients.carbsG * factor,
+    fatG: nutrients.fatG * factor,
+    fiberG: (nutrients.fiberG ?? 0) * factor,
   };
 };
 

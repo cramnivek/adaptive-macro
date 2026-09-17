@@ -3,6 +3,7 @@ import {
   EMPTY_NUTRIENTS,
   isNutritionallyConsistent,
   kcalFromMacros,
+  per100gFromPortion,
   remainingAgainst,
   scaleNutrients,
   sumNutrients,
@@ -21,6 +22,41 @@ describe('scaleNutrients', () => {
 
   it('returns zeros for a zero portion', () => {
     expect(scaleNutrients(oats, 0)).toEqual({ ...EMPTY_NUTRIENTS });
+  });
+});
+
+/**
+ * Restaurant food is published per portion ("1 piece, 380 kcal"), never per
+ * 100 g. These cover the conversion into the app's canonical basis, including
+ * the degenerate inputs a model can return.
+ */
+describe('per100gFromPortion', () => {
+  it('scales a portion up to a 100 g basis', () => {
+    const result = per100gFromPortion(
+      { kcal: 380, proteinG: 15, carbsG: 15, fatG: 21, fiberG: 1 },
+      200,
+    );
+    expect(result.kcal).toBeCloseTo(190);
+    expect(result.proteinG).toBeCloseTo(7.5);
+    expect(result.carbsG).toBeCloseTo(7.5);
+    expect(result.fatG).toBeCloseTo(10.5);
+    expect(result.fiberG).toBeCloseTo(0.5);
+  });
+
+  it('is the exact inverse of scaleNutrients', () => {
+    const per100g = { kcal: 190, proteinG: 7.5, carbsG: 7.5, fatG: 10.5, fiberG: 0.5 };
+    const portion = scaleNutrients(per100g, 411);
+    const recovered = per100gFromPortion(portion, 411);
+    expect(recovered.kcal).toBeCloseTo(per100g.kcal);
+    expect(recovered.proteinG).toBeCloseTo(per100g.proteinG);
+  });
+
+  // A model returning 0 g would otherwise produce Infinity and poison every
+  // later calculation silently.
+  it('throws on a non-positive portion weight', () => {
+    const n = { kcal: 100, proteinG: 1, carbsG: 1, fatG: 1, fiberG: 0 };
+    expect(() => per100gFromPortion(n, 0)).toThrow();
+    expect(() => per100gFromPortion(n, -5)).toThrow();
   });
 });
 
