@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
-import { Button, Field } from '../src/components/Controls';
+import { Button, Field, Stepper, TOUCH_TARGET } from '../src/components/Controls'
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';
 import { radius, space, useTheme } from '../src/theme';
@@ -122,17 +122,16 @@ export default function QuickAddScreen() {
             </Pressable>
           ))}
         </View>
-        <Field
+        <Stepper
           label="Calories"
           value={kcal}
           onChangeText={setKcal}
-          keyboardType="decimal-pad"
           suffix="kcal"
-          hint="Leave blank to work it out from the macros below."
+          hint="Leave at zero to work it out from the macros below."
         />
-        <Field label="Protein" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" suffix="g" />
-        <Field label="Carbs" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" suffix="g" />
-        <Field label="Fat" value={fat} onChangeText={setFat} keyboardType="decimal-pad" suffix="g" />
+        <Stepper label="Protein" value={protein} onChangeText={setProtein} suffix="g" />
+        <Stepper label="Carbs" value={carbs} onChangeText={setCarbs} suffix="g" />
+        <Stepper label="Fat" value={fat} onChangeText={setFat} suffix="g" />
 
         {impliedKcal !== null && impliedKcal > 0 && (
           <Text style={[styles.note, { color: colors.textFaint }]}>
@@ -160,6 +159,9 @@ const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: space.xxl },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   chip: {
+    // Tappable, so it has to clear the comfortable thumb minimum.
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,

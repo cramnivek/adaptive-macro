@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
@@ -202,6 +203,8 @@ export default function TodayScreen() {
 const styles = StyleSheet.create({
   dateNav: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   navButton: {
+    minHeight: TOUCH_TARGET,
+    minWidth: TOUCH_TARGET,
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.md,
@@ -222,10 +225,19 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
   mealActions: { flexDirection: 'row', gap: space.sm },
-  iconButton: { width: 30, height: 30, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
+  // hits reliably, and they are three adjacent targets on one row.
+  iconButton: {
+    width: TOUCH_TARGET,
+    height: TOUCH_TARGET,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   entry: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: TOUCH_TARGET,
     paddingVertical: space.sm,
     gap: space.md,
   },
@@ -237,6 +249,7 @@ const styles = StyleSheet.create({
   dayActions: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   dayAction: {
     flex: 1,
+    minHeight: TOUCH_TARGET,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

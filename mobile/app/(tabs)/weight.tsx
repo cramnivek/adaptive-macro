@@ -2,12 +2,19 @@ import { diffDays, todayISO } from '@adaptive-macros/engine';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
-import { Button, Field } from '../../src/components/Controls';
+import { Button, Stepper, TOUCH_TARGET } from '../../src/components/Controls';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
 import { confirm, notify } from '../../src/dialog';
-import { formatDate, formatRate, formatWeight, parseWeight, weightUnit } from '../../src/format';
+import {
+  displayWeight,
+  formatDate,
+  formatRate,
+  formatWeight,
+  parseWeight,
+  weightUnit,
+} from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { space, useTheme } from '../../src/theme';
 
@@ -15,8 +22,19 @@ export default function WeightScreen() {
   const { colors } = useTheme();
   const { settings, weights, recordWeight, removeWeight, series, latest, trend } = useApp();
   const [input, setInput] = useState('');
+  const [seededFrom, setSeededFrom] = useState<string | null>(null);
 
   const units = settings.units;
+
+  // Start from the current trend rather than an empty box. Tomorrow's weight is
+  // almost always within a kilo of today's, so the common case becomes a couple
+  // of taps instead of typing four characters on a keypad. Re-seeded whenever
+  // the trend moves, so it never offers a stale figure.
+  const suggestion = latest?.trendWeightKg ?? weights[weights.length - 1]?.kg ?? null;
+  if (suggestion !== null && seededFrom !== String(suggestion)) {
+    setSeededFrom(String(suggestion));
+    setInput(displayWeight(suggestion, units).toFixed(1));
+  }
 
   const save = async () => {
     const kg = parseWeight(input, units);
@@ -25,7 +43,7 @@ export default function WeightScreen() {
       return;
     }
     await recordWeight(todayISO(), kg);
-    setInput('');
+    setSeededFrom(null);
   };
 
   // Charts are plotted against days-since-first-entry rather than timestamps so
@@ -71,12 +89,12 @@ export default function WeightScreen() {
   return (
     <Screen title="Weight" subtitle="Daily readings, smoothed into a trend">
       <Card title="Log today's weight">
-        <Field
+        <Stepper
           label={`Weight (${weightUnit(units)})`}
           value={input}
           onChangeText={setInput}
-          keyboardType="decimal-pad"
-          placeholder={latest ? latest.trendWeightKg.toFixed(1) : '0.0'}
+          suffix={weightUnit(units)}
+          step={0.1}
           hint="Weigh at the same time each day — first thing, after the bathroom, before eating."
         />
         <Button label="Save weigh-in" onPress={() => void save()} />
@@ -153,6 +171,13 @@ const shiftDate = (origin: string, offsetDays: number): string =>
 
 const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', gap: space.md, marginBottom: space.md },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: space.sm },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    // Each row is long-pressable to delete, so it has to be a real target.
+    minHeight: TOUCH_TARGET,
+    paddingVertical: space.sm,
+  },
   rowValue: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
 });

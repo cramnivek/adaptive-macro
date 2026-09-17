@@ -11,7 +11,7 @@ import {
   estimateMeal,
 } from '../src/ai/describeMeal';
 import { Card } from '../src/components/Card';
-import { Button, Field } from '../src/components/Controls';
+import { Button, Field, TOUCH_TARGET } from '../src/components/Controls'
 import { addLogEntry, saveFood } from '../src/db';
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';
@@ -202,7 +202,9 @@ export default function DescribeScreen() {
           label="Description"
           value={text}
           onChangeText={setText}
+          multiline
           placeholder="two scrambled eggs in butter, sourdough toast, flat white"
+          hint="On a phone, the keyboard's microphone is far quicker than typing this."
         />
         <View style={styles.chips}>
           {MEALS.map((option) => (
@@ -380,6 +382,9 @@ const styles = StyleSheet.create({
   body: { fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   chip: {
+    // Tappable, so it has to clear the comfortable thumb minimum.
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,

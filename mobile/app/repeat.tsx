@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
-import { Button } from '../src/components/Controls';
+import { Button, TOUCH_TARGET } from '../src/components/Controls'
 import { listLoggedDates, listLogEntries } from '../src/db';
 import { MEAL_LABELS, formatDate } from '../src/format';
 import { useApp } from '../src/state/AppStore';
@@ -154,6 +154,9 @@ const styles = StyleSheet.create({
   body: { fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   chip: {
+    // Tappable, so it has to clear the comfortable thumb minimum.
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,

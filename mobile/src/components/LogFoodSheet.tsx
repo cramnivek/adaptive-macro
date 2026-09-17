@@ -5,7 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MEAL_LABELS } from '../format';
 import { radius, space, useTheme } from '../theme';
-import { Button, Field } from './Controls';
+import { Button, Stepper, TOUCH_TARGET } from './Controls'
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -86,13 +86,7 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
               ))}
             </View>
 
-            <Field
-              label="Amount"
-              value={grams}
-              onChangeText={setGrams}
-              keyboardType="decimal-pad"
-              suffix="g"
-            />
+            <Stepper label="Amount" value={grams} onChangeText={setGrams} suffix="g" />
 
             <View style={styles.chips}>
               {MEALS.map((option) => (
@@ -155,6 +149,9 @@ const styles = StyleSheet.create({
   warningText: { fontSize: 12, lineHeight: 17 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md, marginBottom: space.sm },
   chip: {
+    // Tappable, so it has to clear the comfortable thumb minimum.
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
