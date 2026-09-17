@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { exportBackup } from '../../src/db';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
+import { listOllamaModels } from '../../src/ai/ollama';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
@@ -64,6 +65,32 @@ export default function SettingsScreen() {
   // hundreds of inserts, long enough that an unchanged button reads as a
   // no-op and invites a second tap.
   const [busy, setBusy] = useState<string | null>(null);
+
+  // Populated by an explicit connection check rather than on mount: probing a
+  // local server the user may not be running would fail noisily on every visit
+  // to this screen.
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [probing, setProbing] = useState<string | null>(null);
+
+  const probeOllama = async () => {
+    setProbing('Checking…');
+    try {
+      const models = await listOllamaModels(settings.ollamaHost);
+      setOllamaModels(models);
+      notify(
+        models.length ? 'Ollama is reachable' : 'Ollama is reachable but has no models',
+        models.length ? `Models: ${models.join(', ')}` : 'Pull one with: ollama pull qwen2.5:32b',
+      );
+      // Save a keystroke when there is only one sensible answer.
+      if (models.length === 1 && !settings.ollamaModel) {
+        void updateSettings({ ollamaModel: models[0] });
+      }
+    } catch (error) {
+      notify('Could not reach Ollama', (error as Error).message);
+    } finally {
+      setProbing(null);
+    }
+  };
 
   const runBulk = async (label: string, work: () => Promise<void>) => {
     setBusy(label);
@@ -242,25 +269,69 @@ export default function SettingsScreen() {
         />
       </Card>
 
-      <Card title="Describing meals with Claude" subtitle="Optional, and off until you add a key.">
-        <Field
-          label="Anthropic API key"
-          value={settings.anthropicApiKey}
-          onChangeText={(anthropicApiKey) => void updateSettings({ anthropicApiKey })}
-          placeholder="sk-ant-..."
+      <Card title="Describing meals" subtitle="Write a meal in words and get macros back.">
+        <Segmented
+          label="Estimated by"
+          value={settings.aiProvider}
+          onChange={(aiProvider) => void updateSettings({ aiProvider })}
+          options={[
+            { value: 'ollama' as const, label: 'Local model' },
+            { value: 'anthropic' as const, label: 'Claude API' },
+          ]}
         />
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          Lets you write "two eggs, toast and butter, flat white" and get macros back instead of searching
-          for each item. Requests go straight from this device to api.anthropic.com and are billed to your
-          own account. On Claude Opus 5 that is roughly one to four cents a meal — about $2.60 a month if
-          you describe three meals a day. Get a key at console.anthropic.com; the screen shows what each
-          estimate actually cost.
-        </Text>
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          The key is stored unencrypted on this device, the same as the rest of your data, and is readable by
-          anyone who can open this browser profile or phone. Use a key you are willing to rotate, and do not
-          put one here on a shared machine.
-        </Text>
+
+        {settings.aiProvider === 'ollama' ? (
+          <>
+            <Field
+              label="Ollama address"
+              value={settings.ollamaHost}
+              onChangeText={(ollamaHost) => void updateSettings({ ollamaHost })}
+              placeholder="http://127.0.0.1:11434"
+            />
+            <Field
+              label="Model"
+              value={settings.ollamaModel}
+              onChangeText={(ollamaModel) => void updateSettings({ ollamaModel })}
+              placeholder="qwen2.5:32b"
+              hint={ollamaModels.length ? `On this server: ${ollamaModels.join(', ')}` : undefined}
+            />
+            <Button
+              label={probing ?? 'Check connection'}
+              variant="subtle"
+              disabled={probing !== null}
+              onPress={() => void probeOllama()}
+            />
+            <Text style={[styles.note, { color: colors.textFaint }]}>
+              Runs entirely on your own machine. Nothing leaves it, there is no key and no cost. On this
+              project's eval, qwen2.5:32b got every precisely-described meal right with a −2.5% calorie
+              bias, and underestimated loosely-described ones like "fish and chips at the pub" — so weigh
+              what you can, and check the numbers when you cannot.
+            </Text>
+            <Text style={[styles.note, { color: colors.textFaint }]}>
+              In the browser, Ollama must be started with OLLAMA_ORIGINS set (for example
+              OLLAMA_ORIGINS=* ) or it will refuse the request as cross-origin. Expect 10–45 seconds per
+              estimate on a 32B model.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Field
+              label="Anthropic API key"
+              value={settings.anthropicApiKey}
+              onChangeText={(anthropicApiKey) => void updateSettings({ anthropicApiKey })}
+              placeholder="sk-ant-..."
+            />
+            <Text style={[styles.note, { color: colors.textFaint }]}>
+              Requests go straight from this device to api.anthropic.com, billed to your own account. On
+              Claude Opus 5 that is roughly one to four cents a meal. The screen shows what each estimate
+              actually cost.
+            </Text>
+            <Text style={[styles.note, { color: colors.textFaint }]}>
+              The key is stored unencrypted on this device, the same as the rest of your data, and is
+              readable by anyone who can open this browser profile or phone.
+            </Text>
+          </>
+        )}
       </Card>
 
       <Card

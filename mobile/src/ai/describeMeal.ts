@@ -176,10 +176,41 @@ export const estimateCostUsd = (
   );
 };
 
+/**
+ * Estimates a meal using whichever engine the user configured.
+ *
+ * The screen calls this rather than either provider directly, so switching
+ * between a local model and the hosted one is a settings change and nothing
+ * else in the app has to know which ran.
+ */
+export const estimateMeal = async (
+  description: string,
+  config: {
+    provider: 'ollama' | 'anthropic';
+    anthropicApiKey: string;
+    ollamaHost: string;
+    ollamaModel: string;
+  },
+): Promise<DescribeResult> => {
+  if (config.provider === 'ollama') {
+    const { describeMealWithOllama } = await import('./ollama');
+    return describeMealWithOllama(description, config.ollamaHost, config.ollamaModel);
+  }
+  return describeMeal(description, config.anthropicApiKey);
+};
+
 /** Maps a friendly message onto the SDK's typed errors. */
 export const describeErrorMessage = (error: unknown): string => {
   if (error instanceof MissingApiKeyError) {
     return 'Add your Anthropic API key in Settings to use this.';
+  }
+  // Named rather than instanceof-checked: importing the Ollama module here
+  // would pull it into every bundle that only ever uses the hosted path.
+  if (error instanceof Error && error.name === 'OllamaUnreachableError') {
+    return `${error.message}. Start Ollama, and if this is the web build make sure it was started with OLLAMA_ORIGINS set so the browser is allowed to call it.`;
+  }
+  if (error instanceof Error && error.name === 'OllamaModelMissingError') {
+    return `${error.message}. Pick one in Settings, or pull it with: ollama pull <model>`;
   }
   if (error instanceof Anthropic.AuthenticationError) {
     return 'That API key was rejected. Check it in Settings.';

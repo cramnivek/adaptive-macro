@@ -1,14 +1,14 @@
 import type { Food, Meal, Nutrients } from '@adaptive-macros/engine';
 import { roundTo } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   type EstimatedItem,
   type MealEstimate,
   describeErrorMessage,
-  describeMeal,
   estimateCostUsd,
+  estimateMeal,
 } from '../src/ai/describeMeal';
 import { Card } from '../src/components/Card';
 import { Button, Field } from '../src/components/Controls';
@@ -61,6 +61,18 @@ export default function DescribeScreen() {
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [costUsd, setCostUsd] = useState<number | null>(null);
+  const [ranOn, setRanOn] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  // A local 32B model takes 10-45 seconds. Without a visible clock that reads
+  // as a hang, and the user taps again or gives up on the feature.
+  useEffect(() => {
+    if (!busy) return;
+    setElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   const run = async () => {
     if (!text.trim()) return;
@@ -70,9 +82,19 @@ export default function DescribeScreen() {
     setDrafts([]);
 
     try {
-      const result = await describeMeal(text, settings.anthropicApiKey);
+      const result = await estimateMeal(text, {
+        provider: settings.aiProvider,
+        anthropicApiKey: settings.anthropicApiKey,
+        ollamaHost: settings.ollamaHost,
+        ollamaModel: settings.ollamaModel,
+      });
       setEstimate(result.estimate);
-      setCostUsd(estimateCostUsd(result.usage, result.model));
+      setRanOn(result.model);
+      // A local model has no per-request price, so there is no cost to show —
+      // deliberately not a "$0.0000", which would read as a failed lookup.
+      setCostUsd(
+        settings.aiProvider === 'anthropic' ? estimateCostUsd(result.usage, result.model) : null,
+      );
       setDrafts(
         result.estimate.items.map((item) => ({ item, grams: item.grams, included: true })),
       );
@@ -152,7 +174,10 @@ export default function DescribeScreen() {
   const confidenceColor = (confidence: EstimatedItem['confidence']) =>
     confidence === 'high' ? colors.positive : confidence === 'medium' ? colors.warning : colors.danger;
 
-  const hasKey = settings.anthropicApiKey.trim().length > 0;
+  const usingLocal = settings.aiProvider === 'ollama';
+  const ready = usingLocal
+    ? settings.ollamaModel.trim().length > 0
+    : settings.anthropicApiKey.trim().length > 0;
 
   return (
     <ScrollView
@@ -160,11 +185,12 @@ export default function DescribeScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      {!hasKey && (
-        <Card title="Needs your Anthropic API key">
+      {!ready && (
+        <Card title={usingLocal ? 'Pick a local model first' : 'Needs your Anthropic API key'}>
           <Text style={[styles.body, { color: colors.textMuted }]}>
-            This describes a meal to Claude and gets macros back. It runs on your own API key, billed to
-            you — one to four cents a meal on the model it currently uses. Add one in Settings.
+            {usingLocal
+              ? 'Describe a meal in words and get macros back, estimated by a model running on your own machine — no key, no cost, nothing leaves the device. Choose which model in Settings.'
+              : 'This describes a meal to Claude and gets macros back, billed to your own API key at roughly one to four cents a meal. Add a key in Settings, or switch to a local model there instead.'}
           </Text>
           <View style={{ height: space.md }} />
           <Button label="Open Settings" onPress={() => router.replace('/settings')} />
@@ -198,13 +224,22 @@ export default function DescribeScreen() {
           ))}
         </View>
         <Button
-          label={busy ? 'Estimating…' : 'Estimate macros'}
-          disabled={busy || !text.trim() || !hasKey}
+          label={busy ? `Estimating… ${elapsed}s` : 'Estimate macros'}
+          disabled={busy || !text.trim() || !ready}
           onPress={() => void run()}
         />
       </Card>
 
-      {busy && !estimate && <ActivityIndicator color={colors.accent} style={{ marginBottom: space.lg }} />}
+      {busy && !estimate && (
+        <Card>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={[styles.body, { color: colors.textMuted, textAlign: 'center', marginTop: space.md }]}>
+            {usingLocal
+              ? `Running ${settings.ollamaModel} on this machine — a large local model usually takes 10 to 45 seconds.`
+              : 'Asking Claude…'}
+          </Text>
+        </Card>
+      )}
 
       {error && (
         <Card title="That did not work">
@@ -314,10 +349,16 @@ export default function DescribeScreen() {
               P {Math.round(totals.proteinG)} g · C {Math.round(totals.carbsG)} g · F{' '}
               {Math.round(totals.fatG)} g
             </Text>
-            {costUsd !== null && (
+            {costUsd !== null ? (
               <Text style={[styles.cost, { color: colors.textFaint }]}>
-                This estimate cost about ${costUsd.toFixed(4)} of API usage.
+                Estimated by {ranOn} — about ${costUsd.toFixed(4)} of API usage.
               </Text>
+            ) : (
+              ranOn && (
+                <Text style={[styles.cost, { color: colors.textFaint }]}>
+                  Estimated by {ranOn}, on this machine. No cost.
+                </Text>
+              )
             )}
             <View style={{ height: space.md }} />
             <Button

@@ -1,5 +1,6 @@
 import type { ActivityLevel, Goal, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
+import { DEFAULT_OLLAMA_HOST } from '../ai/ollama';
 import { USDA_DEMO_KEY } from '../api/usda';
 
 export type UnitSystem = 'metric' | 'imperial';
@@ -19,6 +20,15 @@ export interface AppSettings {
   scaleNoiseKg: number;
   expenditureVolatilityKcal: number;
   usdaApiKey: string;
+  /**
+   * Which engine estimates a described meal. 'ollama' keeps everything on this
+   * machine and costs nothing; 'anthropic' needs an API key and a billing
+   * relationship. Local is the default because it requires neither.
+   */
+  aiProvider: 'ollama' | 'anthropic';
+  ollamaHost: string;
+  /** Empty until a model is chosen; the picker reads what the server has. */
+  ollamaModel: string;
   /**
    * The user's own Anthropic API key, for describing meals in plain language.
    * Stored only on this device and sent only to api.anthropic.com.
@@ -40,6 +50,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   scaleNoiseKg: DEFAULT_MODEL_OPTIONS.scaleNoiseKg,
   expenditureVolatilityKcal: DEFAULT_MODEL_OPTIONS.expenditureVolatilityKcal,
   usdaApiKey: USDA_DEMO_KEY,
+  aiProvider: 'ollama',
+  ollamaHost: DEFAULT_OLLAMA_HOST,
+  ollamaModel: '',
   anthropicApiKey: '',
   onboarded: false,
 };

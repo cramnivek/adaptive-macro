@@ -132,9 +132,14 @@ Expo / React Native, four tabs:
   expenditure estimate have something to show before you have logged that long.
 
 Meals can also be described in plain words — "two scrambled eggs in butter,
-sourdough toast, flat white" — and Claude estimates the macros. Searching a
+sourdough toast, flat white" — and a model estimates the macros. Searching a
 database for every component of a real meal is the slowest part of tracking and
 the reason people stop.
+
+**This runs on a local model by default**, through Ollama, so it needs no API
+key, costs nothing and sends nothing off the machine. A hosted Claude model is
+available as an alternative for anyone who wants it. Which one is a setting;
+nothing else in the app knows which ran.
 
 The estimate is presented as Claude's, not as fact. Every item carries the
 assumption behind it and a confidence, portions are editable before anything is
@@ -142,10 +147,36 @@ logged, and the app never quietly adjusts the numbers afterwards. The API cost
 of each estimate is shown. It runs on your own Anthropic API key, entered in
 Settings and stored on the device — so it is off until you add one.
 
-On Claude Opus 5 a meal costs roughly 1.4–4p of API usage depending on how much
-it has to work out, which is about $2.60 a month at three meals a day. Cheaper
-models are a fraction of that, and `evals/meal-estimation/` measures whether
-they are accurate enough to use.
+### What the eval found
+
+`evals/meal-estimation/` measures this rather than leaving it to instinct.
+Measured on qwen2.5:32b through Ollama, 8 meals × 3 reps:
+
+| Tier | Calories right | Mean bias |
+|---|---|---|
+| Precise — exact quantities given | 15/15 | −2.5% |
+| Vague — "fish and chips at the pub" | 3/9 | −10.9% |
+
+So a local model is genuinely good at weighed food and underestimates composed
+restaurant dishes, undershooting every rep of both failures.
+
+The bias *pattern* matters more than its size here, and this is specific to how
+the estimator works. A **consistent** logging bias cancels out completely: if
+intake is always under-reported by X, the filter infers an expenditure X lower,
+sets a target X lower, and the user — logging with the same biased instrument —
+still lands on the intended deficit. What does not cancel is a bias that
+*varies*, because it depends on how the meal happened to be phrased rather than
+on anything real. −2.5% on precise and −11% on vague is exactly that kind of
+inconsistency.
+
+Two caveats on the numbers. There is no frontier-model control run, so a vague
+case failing could mean the model undershot or that this repo's plausible range
+is set too high — the fish-and-chips lower bound is the one most open to that
+challenge. And 8 cases leaves a noise floor around ±20 points, so treat a
+one-case difference as a tie.
+
+On Claude Opus 5, for comparison, a meal costs roughly 1.4–4p of API usage,
+about $2.60 a month at three meals a day.
 
 Foods the databases do not carry — homemade, local, sold loose — can be entered
 by hand, per 100 g or per serving. If the calories you type disagree with the

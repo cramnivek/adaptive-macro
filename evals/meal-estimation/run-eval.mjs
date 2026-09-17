@@ -78,8 +78,38 @@ async function loadCases() {
   }));
 }
 
+/**
+ * System prompt per variant.
+ *
+ * The app's own prompt is the default and what every model arm is measured on.
+ * The alternatives exist to test a specific hypothesis raised by the first
+ * local run: qwen2.5:32b undershot every vague meal, and the app's prompt
+ * contains an explicit instruction not to overestimate. That instruction was
+ * written to protect the expenditure estimate from inflation, but it may simply
+ * have pushed the model low — in which case the fix is a prompt change, not a
+ * different model.
+ *
+ * Keeping the variants here rather than editing describeMeal.ts means the app
+ * is untouched while the question is settled.
+ */
+const PROMPT_VARIANTS = {
+  // Drops the do-not-inflate instruction entirely, to see how much of the
+  // undershoot it accounts for.
+  v4: APP.SYSTEM_PROMPT.replace(
+    /Be accurate rather than cautious\.[^]*?is sometimes low\.\n\n/,
+    'Aim for the middle of the plausible range, not the low end. An estimate that is consistently low is as harmful as one that is consistently high, because it biases the calculation that depends on it.\n\n',
+  ),
+  // Keeps the anti-inflation instruction but adds explicit guidance for the
+  // case that actually failed: composed restaurant dishes.
+  v5:
+    APP.SYSTEM_PROMPT +
+    '\n\nWhen a dish is named rather than itemised — "fish and chips", "spaghetti bolognese", "a croissant" — assume a normal commercial or restaurant portion, which is usually larger than a home-cooked one. Do not default to the smallest plausible serving.',
+};
+
+const promptFor = (variant) => PROMPT_VARIANTS[variant] ?? APP.SYSTEM_PROMPT;
+
 /** Calls a local Ollama model with the same system prompt and output schema. */
-async function runOllama(prompt, model) {
+async function runOllama(prompt, model, systemPrompt) {
   const schema = z.toJSONSchema(APP.MealEstimateSchema);
 
   const response = await fetch(OLLAMA_HOST + '/api/chat', {
@@ -105,7 +135,7 @@ async function runOllama(prompt, model) {
         num_predict: 2048,
       },
       messages: [
-        { role: 'system', content: APP.SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
     }),
@@ -151,7 +181,7 @@ async function runCase(input, ctx) {
   const isLocal = ctx.model.startsWith('ollama:');
 
   const result = isLocal
-    ? await runOllama(input.prompt, ctx.model.slice('ollama:'.length))
+    ? await runOllama(input.prompt, ctx.model.slice('ollama:'.length), promptFor(ctx.variant))
     : await APP.describeMeal(input.prompt, process.env.ANTHROPIC_API_KEY ?? '', ctx.model);
 
   const totals = result.estimate.items.reduce(
@@ -176,7 +206,7 @@ async function runCase(input, ctx) {
     },
     stop_reason: result.raw.stopReason,
     transcript: [
-      { role: 'system', content: APP.SYSTEM_PROMPT },
+      { role: 'system', content: promptFor(ctx.variant) },
       { role: 'user', content: input.prompt },
       { role: 'assistant', content: JSON.stringify(result.estimate, null, 2) },
     ],
