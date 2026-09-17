@@ -88,15 +88,35 @@ const postJson = async (
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response: Response;
   try {
-    response = await fetch(`${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    const response = await fetch(`${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+    if (response.status === 400 || response.status === 403) {
+      throw new GroundedLookupError('That Gemini API key was rejected. Check it in Settings.');
+    }
+    // Grounding is metered separately and needs billing enabled on the project;
+    // without it every grounded call returns 429 while plain ones still succeed.
+    if (response.status === 429) {
+      throw new GroundedLookupError(
+        'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
+      );
+    }
+    if (!response.ok) {
+      throw new GroundedLookupError(`Gemini returned ${response.status}`);
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      throw new GroundedLookupError('Gemini returned a malformed response');
+    }
   } catch (error) {
+    if (error instanceof GroundedLookupError) throw error;
     if ((error as Error)?.name === 'AbortError') {
       throw new GroundedLookupError('The lookup took too long. Try again.');
     }
@@ -104,22 +124,6 @@ const postJson = async (
   } finally {
     clearTimeout(timer);
   }
-
-  if (response.status === 400 || response.status === 403) {
-    throw new GroundedLookupError('That Gemini API key was rejected. Check it in Settings.');
-  }
-  // Grounding is metered separately and needs billing enabled on the project;
-  // without it every grounded call returns 429 while plain ones still succeed.
-  if (response.status === 429) {
-    throw new GroundedLookupError(
-      'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
-    );
-  }
-  if (!response.ok) {
-    throw new GroundedLookupError(`Gemini returned ${response.status}`);
-  }
-
-  return response.json();
 };
 
 /**
