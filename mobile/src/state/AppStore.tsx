@@ -50,6 +50,9 @@ interface AppState {
   recordWeight: (date: ISODate, kg: number) => Promise<void>;
   removeWeight: (date: ISODate) => Promise<void>;
 
+  /** Re-reads everything, for bulk writes made outside the store's own helpers. */
+  refreshAll: () => Promise<void>;
+
   /** Full filtered history, oldest first. Empty until a first weigh-in exists. */
   series: DailyEstimate[];
   latest: DailyEstimate | null;
@@ -108,6 +111,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (ready) void reloadDiary(selectedDate);
   }, [ready, selectedDate, reloadDiary]);
+
+  const refreshAll = useCallback(async () => {
+    await reloadHistory();
+    await reloadDiary(selectedDate);
+  }, [reloadHistory, reloadDiary, selectedDate]);
 
   const updateSettings = useCallback(
     async (patch: Partial<AppSettings>) => {
@@ -235,6 +243,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     weights,
     recordWeight,
     removeWeight,
+    refreshAll,
     series,
     latest,
     trend,

@@ -3,14 +3,15 @@ import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine'
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { exportBackup } from '../../src/db';
+import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
 import { weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { useTheme } from '../../src/theme';
+import { space, useTheme } from '../../src/theme';
 
 /**
  * A numeric setting that edits as free text and only commits on blur.
@@ -55,8 +56,48 @@ const NumberSetting = ({
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, refreshAll } = useApp();
   const metric = settings.units === 'metric';
+
+  // Holds the label to show while a bulk write runs. Seeding four months is
+  // hundreds of inserts, long enough that an unchanged button reads as a
+  // no-op and invites a second tap.
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const runBulk = async (label: string, work: () => Promise<void>) => {
+    setBusy(label);
+    try {
+      await work();
+      await refreshAll();
+    } catch (error) {
+      Alert.alert('That did not work', (error as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const loadDemo = () =>
+    runBulk('Generating…', async () => {
+      const days = await seedDemoData();
+      Alert.alert('Demo history loaded', `${days} days of weigh-ins and meals added.`);
+    });
+
+  const removeDemo = () => runBulk('Removing…', clearDemoData);
+
+  const confirmEraseAll = () => {
+    Alert.alert(
+      'Erase everything?',
+      'Deletes every food log, weigh-in and cached food on this device. Your settings are kept. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Erase',
+          style: 'destructive',
+          onPress: () => void runBulk('Erasing…', clearAllData),
+        },
+      ],
+    );
+  };
 
   const exportData = async () => {
     try {
@@ -241,6 +282,36 @@ export default function SettingsScreen() {
           phone. Keep one somewhere safe.
         </Text>
       </Card>
+
+      {__DEV__ && (
+        <Card title="Demo data" subtitle="Development builds only — absent from a release build.">
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+            Generates four months of synthetic weigh-ins and meals so the charts and the expenditure
+            estimate have something to show before you have logged that long yourself. Expenditure drifts
+            down across the period the way it does in a sustained deficit, and the scale gets skipped in
+            places so the uncertainty band has gaps to widen over.
+          </Text>
+          <Button
+            label={busy ?? 'Load demo history'}
+            disabled={busy !== null}
+            onPress={() => void loadDemo()}
+          />
+          <View style={{ height: space.sm }} />
+          <Button
+            label="Remove demo data"
+            variant="subtle"
+            disabled={busy !== null}
+            onPress={() => void removeDemo()}
+          />
+          <View style={{ height: space.sm }} />
+          <Button
+            label="Erase everything"
+            variant="danger"
+            disabled={busy !== null}
+            onPress={confirmEraseAll}
+          />
+        </Card>
+      )}
     </Screen>
   );
 }

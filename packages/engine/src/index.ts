@@ -6,3 +6,4 @@ export * from './expenditure';
 export * from './trend';
 export * from './targets';
 export * from './foods';
+export * from './simulate';

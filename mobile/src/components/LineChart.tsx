@@ -46,7 +46,14 @@ const niceTicks = (min: number, max: number, count: number): number[] => {
   const rawStep = (max - min) / count;
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const normalised = rawStep / magnitude;
-  const step = (normalised >= 5 ? 10 : normalised >= 2 ? 5 : normalised >= 1 ? 2 : 1) * magnitude;
+
+  // Snap to whichever of 1/2/5/10 is nearest, using the geometric midpoints
+  // between them rather than the values themselves. Rounding up at the plain
+  // values sends a step of 2.2 to 5, which on a 9 kg weight range leaves the
+  // chart with a single gridline.
+  const step =
+    (normalised < Math.SQRT2 ? 1 : normalised < Math.sqrt(10) ? 2 : normalised < Math.sqrt(50) ? 5 : 10) *
+    magnitude;
 
   const ticks: number[] = [];
   for (let tick = Math.ceil(min / step) * step; tick <= max + step * 0.001; tick += step) {
