@@ -1,3 +1,5 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import * as z from 'zod/v4';
 import {
   type DescribeResult,
@@ -19,7 +21,32 @@ import {
  * cost and with nothing leaving the machine.
  */
 
-export const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
+const OLLAMA_PORT = 11434;
+const LOOPBACK_OLLAMA_HOST = `http://127.0.0.1:${OLLAMA_PORT}`;
+
+/**
+ * Where to look for Ollama before the user points it somewhere else.
+ *
+ * On a desktop browser the server is on the same machine, so loopback is
+ * right. On a phone running Expo Go it is not: 127.0.0.1 is the phone, which
+ * has no Ollama on it. The machine serving this bundle over the LAN is almost
+ * certainly the one running the model, so its address is taken from the dev
+ * server's own host URI rather than asking the user to go and find it.
+ *
+ * Only a bare IPv4 literal is trusted. A tunnel gives an ngrok-style hostname
+ * and a production build gives nothing at all; in both cases the dev host is
+ * not the model host, so the guess is dropped rather than pointed somewhere
+ * wrong.
+ */
+export const defaultOllamaHost = (): string => {
+  if (Platform.OS === 'web') return LOOPBACK_OLLAMA_HOST;
+
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  const host = hostUri?.split(':')[0];
+  if (!host || !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return LOOPBACK_OLLAMA_HOST;
+
+  return `http://${host}:${OLLAMA_PORT}`;
+};
 
 export class OllamaUnreachableError extends Error {
   constructor(host: string) {

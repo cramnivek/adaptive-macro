@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { exportBackup } from '../../src/db';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
-import { listOllamaModels } from '../../src/ai/ollama';
+import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
@@ -71,6 +71,11 @@ export default function SettingsScreen() {
   // to this screen.
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [probing, setProbing] = useState<string | null>(null);
+
+  // On a phone this resolves to the machine serving the bundle over the LAN;
+  // in a browser it is loopback. Read fresh on every render so a changed dev
+  // server address shows up without restarting the app.
+  const detectedOllamaHost = defaultOllamaHost();
 
   const probeOllama = async () => {
     setProbing('Checking…');
@@ -295,6 +300,20 @@ export default function SettingsScreen() {
               onChangeText={(ollamaHost) => void updateSettings({ ollamaHost })}
               placeholder="http://127.0.0.1:11434"
             />
+            {/*
+              On a phone the right address is the dev machine's LAN IP, and that
+              IP changes whenever its DHCP lease does — at which point the
+              address saved here is silently stale. Offering the freshly
+              detected one turns a confusing "could not reach Ollama" into one
+              tap.
+            */}
+            {detectedOllamaHost !== settings.ollamaHost && (
+              <Button
+                label={`Use this session's computer (${detectedOllamaHost})`}
+                variant="subtle"
+                onPress={() => void updateSettings({ ollamaHost: detectedOllamaHost })}
+              />
+            )}
             <Field
               label="Model"
               value={settings.ollamaModel}

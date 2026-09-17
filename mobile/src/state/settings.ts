@@ -1,6 +1,6 @@
 import type { ActivityLevel, Goal, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
-import { DEFAULT_OLLAMA_HOST } from '../ai/ollama';
+import { defaultOllamaHost } from '../ai/ollama';
 import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
 
@@ -58,7 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   usdaApiKey: USDA_DEMO_KEY,
   foodCountry: DEFAULT_FOOD_COUNTRY,
   aiProvider: 'ollama',
-  ollamaHost: DEFAULT_OLLAMA_HOST,
+  ollamaHost: defaultOllamaHost(),
   ollamaModel: '',
   anthropicApiKey: '',
   onboarded: false,

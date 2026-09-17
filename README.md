@@ -308,11 +308,43 @@ trendRate(series, 14);      // actual kg/week over the last two weeks
 
 ```bash
 npm install
-npm test           # 51 tests, including ground-truth recovery of a known TDEE
+npm test           # 70 tests, including ground-truth recovery of a known TDEE
 npm run typecheck  # engine and app
 npm run web        # runs in a browser at localhost:8081 — no phone needed
 npm start          # Expo dev server; open in Expo Go or a dev build
 ```
+
+### On a phone, over your own network
+
+No build and no developer account needed — Expo Go loads the JavaScript from
+your computer over the LAN.
+
+1. Install **Expo Go** from the App Store or Play Store.
+2. Put the phone and the computer on the same Wi-Fi. A guest network or one
+   with client isolation will not work; the phone has to be able to reach the
+   computer directly.
+3. `npm start` on the computer, then scan the QR code — iOS with the Camera
+   app, Android from inside Expo Go.
+
+Everything works there, barcode scanning included. The database is the phone's
+own, separate from the browser's.
+
+**To use the local model from the phone**, Ollama needs to accept connections
+from off the machine, which it does not by default:
+
+```powershell
+# PowerShell, on the computer running Ollama
+$env:OLLAMA_HOST = "0.0.0.0:11434"
+ollama serve
+```
+
+The app then finds it by itself: with no saved address it points at whichever
+machine served the bundle, which is the same machine running Ollama. If the
+address ever goes stale — a new DHCP lease gives the computer a different IP —
+Settings shows a button with the freshly detected one.
+
+Windows Firewall will prompt the first time; allow it on private networks. If
+it was dismissed, port 11434 has to be opened by hand.
 
 ### Trying it without a phone
 
@@ -333,8 +365,11 @@ carries the monorepo resolver setup that makes that work.
 
 ## Status
 
-The engine is complete and tested: 51 tests pass, including recovery of a known
+The engine is complete and tested: 70 tests pass, including recovery of a known
 ground-truth TDEE from simulated noisy data.
+
+All three platforms bundle: `expo export` succeeds for web, iOS and Android.
+The Android and iOS bundles have been built but not yet run on a device.
 
 The app has been run in a browser via React Native Web and driven end to end:
 all four tabs render, a weigh-in writes to SQLite and survives a page reload,

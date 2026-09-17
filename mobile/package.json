@@ -6,6 +6,7 @@
     "@adaptive-macros/engine": "*",
     "@anthropic-ai/sdk": "^0.126.0",
     "@expo/metro-runtime": "~57.0.15",
+    "@expo/ui": "~57.0.18",
     "@expo/vector-icons": "^15.1.1",
     "expo": "~57.0.23",
     "expo-camera": "~57.0.5",
