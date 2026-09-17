@@ -12,6 +12,7 @@ import { radius, space, useTheme } from '../src/theme';
 const SOURCE_LABELS: Record<Food['source'], string> = {
   custom: 'Saved',
   recipe: 'Recipe',
+  ai: 'Claude',
   usda: 'USDA',
   openfoodfacts: 'OFF',
 };

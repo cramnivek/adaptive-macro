@@ -19,6 +19,11 @@ export interface AppSettings {
   scaleNoiseKg: number;
   expenditureVolatilityKcal: number;
   usdaApiKey: string;
+  /**
+   * The user's own Anthropic API key, for describing meals in plain language.
+   * Stored only on this device and sent only to api.anthropic.com.
+   */
+  anthropicApiKey: string;
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
 }
@@ -35,6 +40,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   scaleNoiseKg: DEFAULT_MODEL_OPTIONS.scaleNoiseKg,
   expenditureVolatilityKcal: DEFAULT_MODEL_OPTIONS.expenditureVolatilityKcal,
   usdaApiKey: USDA_DEMO_KEY,
+  anthropicApiKey: '',
   onboarded: false,
 };
 

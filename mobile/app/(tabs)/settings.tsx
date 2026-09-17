@@ -242,6 +242,25 @@ export default function SettingsScreen() {
         />
       </Card>
 
+      <Card title="Describing meals with Claude" subtitle="Optional, and off until you add a key.">
+        <Field
+          label="Anthropic API key"
+          value={settings.anthropicApiKey}
+          onChangeText={(anthropicApiKey) => void updateSettings({ anthropicApiKey })}
+          placeholder="sk-ant-..."
+        />
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          Lets you write "two eggs, toast and butter, flat white" and get macros back instead of searching
+          for each item. Requests go straight from this device to api.anthropic.com and are billed to your
+          own account — roughly a tenth of a cent per meal. Get a key at console.anthropic.com.
+        </Text>
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          The key is stored unencrypted on this device, the same as the rest of your data, and is readable by
+          anyone who can open this browser profile or phone. Use a key you are willing to rotate, and do not
+          put one here on a shared machine.
+        </Text>
+      </Card>
+
       <Card
         title="Model tuning"
         subtitle="Defaults are sensible. Change these only if you know why you are changing them."

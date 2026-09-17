@@ -1,7 +1,13 @@
 import type { ISODate, Nutrients } from './types';
 import { KCAL_PER_G, roundTo } from './units';
 
-export type FoodSource = 'openfoodfacts' | 'usda' | 'custom' | 'recipe';
+export type FoodSource =
+  | 'openfoodfacts'
+  | 'usda'
+  | 'custom'
+  | 'recipe'
+  /** Estimated by Claude from a description, then confirmed by the user. */
+  | 'ai';
 
 /** A named amount, so the user can log "1 slice" instead of weighing it. */
 export interface FoodPortion {

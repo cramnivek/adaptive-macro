@@ -102,14 +102,23 @@ export default function TodayScreen() {
             right={
               <View style={styles.mealActions}>
                 <Pressable
+                  onPress={() => router.push({ pathname: '/describe', params: { meal } })}
+                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+                  accessibilityLabel={`Describe ${MEAL_LABELS[meal]} in words`}
+                >
+                  <Ionicons name="sparkles-outline" size={17} color={colors.text} />
+                </Pressable>
+                <Pressable
                   onPress={() => router.push({ pathname: '/scan', params: { meal } })}
                   style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+                  accessibilityLabel={`Scan a barcode for ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="barcode-outline" size={18} color={colors.text} />
                 </Pressable>
                 <Pressable
                   onPress={() => router.push({ pathname: '/search', params: { meal } })}
                   style={[styles.iconButton, { backgroundColor: colors.accent }]}
+                  accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="add" size={18} color="#FFFFFF" />
                 </Pressable>
@@ -169,7 +178,7 @@ const styles = StyleSheet.create({
   },
   bannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
   mealActions: { flexDirection: 'row', gap: space.sm },
-  iconButton: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 30, height: 30, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   entry: {
     flexDirection: 'row',
     alignItems: 'center',

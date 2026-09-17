@@ -15,5 +15,8 @@
     "android": "npm run android --workspace @adaptive-macros/mobile",
     "web": "npm run web --workspace @adaptive-macros/mobile"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "overrides": {
+    "react-dom": "19.2.3"
+  }
 }

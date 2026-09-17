@@ -131,6 +131,18 @@ Expo / React Native, four tabs:
   that generates four months of synthetic history, so the charts and the
   expenditure estimate have something to show before you have logged that long.
 
+Meals can also be described in plain words — "two scrambled eggs in butter,
+sourdough toast, flat white" — and Claude estimates the macros. Searching a
+database for every component of a real meal is the slowest part of tracking and
+the reason people stop.
+
+The estimate is presented as Claude's, not as fact. Every item carries the
+assumption behind it and a confidence, portions are editable before anything is
+logged, and the app never quietly adjusts the numbers afterwards. The API cost
+of each estimate is shown. It runs on your own Anthropic API key, entered in
+Settings and stored on the device — so it is off until you add one, and costs
+roughly a tenth of a cent per meal.
+
 Foods the databases do not carry — homemade, local, sold loose — can be entered
 by hand, per 100 g or per serving. If the calories you type disagree with the
 macros you type by more than 15%, it says so and offers the implied figure,
@@ -245,6 +257,19 @@ camera.
 Known web-only limitation: SQLite runs on OPFS, which permits a single
 connection, so the app expects one tab. Opening a second tab against the same
 browser profile will fail to open the database. On a device this does not apply.
+
+The Claude call goes straight from the device to api.anthropic.com, which means
+the key lives in the client. That is a deliberate trade for a local-first app
+with no server: it is your key, on your device, and it never goes anywhere else.
+It is stored unencrypted alongside the rest of the data, so anyone who can open
+that browser profile or phone can read it. Use a key you are willing to rotate,
+and do not put one in on a shared machine. **This is not a pattern to copy into
+anything you distribute** — a key shipped inside a product is a key given away.
+
+Verified: the request is constructed and sent (`POST /v1/messages`), and every
+failure path maps to a readable message. **Not** verified: a successful
+response and its parsing, which needs a real key — the environment this was
+built in has none and blocks the endpoint.
 
 Not built yet: recipes and multi-ingredient foods, editing or deleting a custom
 food once saved, backup *import* (export works), and an onboarding flow —

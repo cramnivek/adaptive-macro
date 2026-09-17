@@ -29,6 +29,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="describe"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Describe a meal',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
             name="food-new"
             options={{
               presentation: 'modal',
