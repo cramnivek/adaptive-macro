@@ -1,0 +1,14 @@
+{
+  "name": "adaptive-macros",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-first nutrition tracker with an adaptive TDEE engine",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace @adaptive-macros/engine",
+    "typecheck": "npm run typecheck --workspace @adaptive-macros/engine"
+  },
+  "license": "MIT"
+}
