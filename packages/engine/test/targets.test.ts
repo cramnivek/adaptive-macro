@@ -4,8 +4,8 @@ import {
   buildProgram,
   calorieTarget,
   macroTargets,
-} from '../src/targets.js';
-import { KCAL_PER_G, KCAL_PER_KG_TISSUE } from '../src/units.js';
+} from '../src/targets';
+import { KCAL_PER_G, KCAL_PER_KG_TISSUE } from '../src/units';
 
 describe('calorieTarget', () => {
   it('converts a goal rate into a deficit via tissue energy density', () => {

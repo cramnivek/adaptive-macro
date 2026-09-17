@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "description": "Local-first nutrition tracker with an adaptive TDEE engine",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "mobile"
   ],
   "scripts": {
     "test": "npm run test --workspace @adaptive-macros/engine",
-    "typecheck": "npm run typecheck --workspace @adaptive-macros/engine"
+    "typecheck": "npm run typecheck --workspace @adaptive-macros/engine && npm run typecheck --workspace @adaptive-macros/mobile",
+    "start": "npm run start --workspace @adaptive-macros/mobile",
+    "ios": "npm run ios --workspace @adaptive-macros/mobile",
+    "android": "npm run android --workspace @adaptive-macros/mobile"
   },
   "license": "MIT"
 }

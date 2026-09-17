@@ -1,5 +1,5 @@
-import type { ISODate, Nutrients } from './types.js';
-import { KCAL_PER_G, roundTo } from './units.js';
+import type { ISODate, Nutrients } from './types';
+import { KCAL_PER_G, roundTo } from './units';
 
 export type FoodSource = 'openfoodfacts' | 'usda' | 'custom' | 'recipe';
 

@@ -1,4 +1,4 @@
-import { diffDays, eachDay } from './dates.js';
+import { diffDays, eachDay } from './dates';
 import {
   type GaussianState,
   type Matrix,
@@ -6,9 +6,9 @@ import {
   identity,
   predict,
   updateScalar,
-} from './kalman.js';
-import type { DailyObservation, ISODate, Sex, UserProfile } from './types.js';
-import { KCAL_PER_KG_TISSUE } from './units.js';
+} from './kalman';
+import type { DailyObservation, ISODate, Sex, UserProfile } from './types';
+import { KCAL_PER_KG_TISSUE } from './units';
 
 /**
  * ADAPTIVE EXPENDITURE MODEL

@@ -1,5 +1,5 @@
-import { addDays } from '../src/dates.js';
-import type { DailyObservation } from '../src/types.js';
+import { addDays } from '../src/dates';
+import type { DailyObservation } from '../src/types';
 
 /**
  * mulberry32 — small, fast, seeded PRNG. Tests need repeatable "noise", and

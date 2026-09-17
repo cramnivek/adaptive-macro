@@ -6,9 +6,9 @@ import {
   remainingAgainst,
   scaleNutrients,
   sumNutrients,
-} from '../src/foods.js';
-import { kgToLb, lbToKg, roundTo } from '../src/units.js';
-import { addDays, diffDays, eachDay, isValidISODate, todayISO } from '../src/dates.js';
+} from '../src/foods';
+import { kgToLb, lbToKg, roundTo } from '../src/units';
+import { addDays, diffDays, eachDay, isValidISODate, todayISO } from '../src/dates';
 
 const oats = { kcal: 379, proteinG: 13.2, carbsG: 67.7, fatG: 6.5, fiberG: 10.1 };
 

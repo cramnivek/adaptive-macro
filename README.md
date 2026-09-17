@@ -115,6 +115,24 @@ Two free sources, no API of our own:
 Everything is normalised to a per-100 g basis on the way in, so portion maths is
 a single multiply everywhere instead of a per-food special case.
 
+## The app
+
+Expo / React Native, four tabs:
+
+- **Today** — calorie ring and macro bars against the adaptive target, diary
+  grouped by meal, add by search or barcode.
+- **Weight** — log a weigh-in, see raw readings as dots against the filtered
+  trend line, 14-day rate.
+- **Trends** — expenditure over time with its uncertainty band, how confident
+  the estimate currently is, goal projection, and a plain-English explanation of
+  where the number comes from.
+- **Settings** — profile, goal and rate, macro policy, units, USDA key, model
+  tuning knobs, and JSON export.
+
+Storage is SQLite on the device, migrated on `PRAGMA user_version`. There is no
+account and no server, so the JSON export is the only backup and the only path
+to a new phone.
+
 ## Layout
 
 ```
@@ -125,6 +143,13 @@ packages/engine/     Pure TypeScript. No React Native, no I/O, fully tested.
   src/targets.ts       Calorie and macro target maths
   src/foods.ts         Food model, portion scaling, consistency checks
   src/dates.ts         DST-safe calendar day arithmetic
+
+mobile/              Expo app (SDK 57, expo-router, React Native 0.86)
+  app/                 Routes: tabs, food search modal, barcode scanner modal
+  src/db/              SQLite schema, migrations and queries
+  src/api/             Open Food Facts and USDA clients
+  src/state/           Settings and the store that re-runs the filter
+  src/components/      Chart, macro rings and bars, form controls
 ```
 
 The engine is deliberately free of app dependencies — it is testable against
@@ -165,13 +190,27 @@ trendRate(series, 14);      // actual kg/week over the last two weeks
 
 ```bash
 npm install
-npm test         # 51 tests, including ground-truth recovery of a known TDEE
-npm run typecheck
+npm test           # 51 tests, including ground-truth recovery of a known TDEE
+npm run typecheck  # engine and app
+npm start          # Expo dev server; open in Expo Go or a dev build
 ```
+
+The app is a workspace member and imports the engine directly from TypeScript
+source, so editing the engine hot-reloads the app. `mobile/metro.config.js`
+carries the monorepo resolver setup that makes that work.
 
 ## Status
 
-The engine is complete and tested. The Expo app is in progress.
+The engine is complete and tested: 51 tests pass, including recovery of a known
+ground-truth TDEE from simulated noisy data.
+
+The app typechecks and bundles cleanly (`npx expo export`), but **has not yet
+been run on a real device or simulator** — that environment was not available
+where it was built. Expect the usual first-run shakeout before trusting it.
+
+Not built yet: recipes and multi-ingredient foods, custom food entry, backup
+*import* (export works), and an onboarding flow — `settings.onboarded` exists
+but nothing reads it yet.
 
 ## License
 

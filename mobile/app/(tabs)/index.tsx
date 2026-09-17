@@ -1,0 +1,180 @@
+import type { LogEntry, Meal } from '@adaptive-macros/engine';
+import { addDays, todayISO } from '@adaptive-macros/engine';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Card } from '../../src/components/Card';
+import { MacroSummary } from '../../src/components/MacroProgress';
+import { Screen } from '../../src/components/Screen';
+import { MEAL_LABELS, formatDateLong } from '../../src/format';
+import { useApp } from '../../src/state/AppStore';
+import { radius, space, useTheme } from '../../src/theme';
+
+const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+export default function TodayScreen() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const { selectedDate, setSelectedDate, entries, totals, program, removeEntry, usingSeedEstimate, ready } =
+    useApp();
+
+  const byMeal = useMemo(() => {
+    const groups = new Map<Meal, LogEntry[]>(MEAL_ORDER.map((meal) => [meal, []]));
+    for (const entry of entries) groups.get(entry.meal)?.push(entry);
+    return groups;
+  }, [entries]);
+
+  const confirmDelete = (entry: LogEntry) => {
+    Alert.alert('Remove entry', `Remove ${entry.foodName} from ${MEAL_LABELS[entry.meal]}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => void removeEntry(entry.id) },
+    ]);
+  };
+
+  const isToday = selectedDate === todayISO();
+
+  return (
+    <Screen title="Today" subtitle={formatDateLong(selectedDate)}>
+      <View style={styles.dateNav}>
+        <Pressable
+          onPress={() => setSelectedDate(addDays(selectedDate, -1))}
+          style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Pressable>
+        <Pressable
+          onPress={() => setSelectedDate(todayISO())}
+          style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontWeight: '600' }}>
+            {isToday ? 'Today' : 'Jump to today'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSelectedDate(addDays(selectedDate, 1))}
+          // Logging into the future would feed the estimator days that have not
+          // happened yet, so forward navigation stops at today.
+          disabled={isToday}
+          style={[
+            styles.navButton,
+            { backgroundColor: colors.surface, borderColor: colors.border, opacity: isToday ? 0.35 : 1 },
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={18} color={colors.text} />
+        </Pressable>
+      </View>
+
+      <Card>
+        <MacroSummary consumed={totals} target={program.macros} />
+        <Text style={[styles.targetLine, { color: colors.textMuted }]}>
+          Target {program.calories.kcal} kcal
+          {program.calories.adjustmentKcal !== 0 &&
+            ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
+        </Text>
+      </Card>
+
+      {ready && usingSeedEstimate && (
+        <Pressable onPress={() => router.push('/trends')}>
+          <View style={[styles.banner, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
+            <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+            <Text style={[styles.bannerText, { color: colors.textMuted }]}>
+              This target still comes from a formula estimate. Log weight and food daily for about two weeks
+              and it will be measured from your own data.
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
+      {MEAL_ORDER.map((meal) => {
+        const mealEntries = byMeal.get(meal) ?? [];
+        const mealKcal = mealEntries.reduce((sum, entry) => sum + entry.nutrients.kcal, 0);
+
+        return (
+          <Card
+            key={meal}
+            title={MEAL_LABELS[meal]}
+            subtitle={mealEntries.length ? `${Math.round(mealKcal)} kcal` : 'Nothing logged'}
+            right={
+              <View style={styles.mealActions}>
+                <Pressable
+                  onPress={() => router.push({ pathname: '/scan', params: { meal } })}
+                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+                >
+                  <Ionicons name="barcode-outline" size={18} color={colors.text} />
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push({ pathname: '/search', params: { meal } })}
+                  style={[styles.iconButton, { backgroundColor: colors.accent }]}
+                >
+                  <Ionicons name="add" size={18} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            }
+          >
+            {mealEntries.map((entry) => (
+              <Pressable
+                key={entry.id}
+                onLongPress={() => confirmDelete(entry)}
+                style={({ pressed }) => [styles.entry, { opacity: pressed ? 0.6 : 1 }]}
+              >
+                <View style={styles.entryText}>
+                  <Text style={[styles.entryName, { color: colors.text }]} numberOfLines={1}>
+                    {entry.foodName}
+                  </Text>
+                  <Text style={[styles.entryMeta, { color: colors.textFaint }]}>
+                    {Math.round(entry.grams)} g · P {Math.round(entry.nutrients.proteinG)} ·
+                    {' '}C {Math.round(entry.nutrients.carbsG)} · F {Math.round(entry.nutrients.fatG)}
+                  </Text>
+                </View>
+                <Text style={[styles.entryKcal, { color: colors.textMuted }]}>
+                  {Math.round(entry.nutrients.kcal)}
+                </Text>
+              </Pressable>
+            ))}
+            {mealEntries.length > 0 && (
+              <Text style={[styles.deleteHint, { color: colors.textFaint }]}>Hold an item to remove it</Text>
+            )}
+          </Card>
+        );
+      })}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  dateNav: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
+  navButton: {
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navToday: { flex: 1 },
+  targetLine: { fontSize: 12, marginTop: space.lg, textAlign: 'center' },
+  banner: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'flex-start',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: space.md,
+    marginBottom: space.md,
+  },
+  bannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  mealActions: { flexDirection: 'row', gap: space.sm },
+  iconButton: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  entry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.sm,
+    gap: space.md,
+  },
+  entryText: { flex: 1 },
+  entryName: { fontSize: 15, fontWeight: '500' },
+  entryMeta: { fontSize: 11, marginTop: 1 },
+  entryKcal: { fontSize: 15, fontVariant: ['tabular-nums'] },
+  deleteHint: { fontSize: 11, marginTop: space.xs, textAlign: 'center' },
+});

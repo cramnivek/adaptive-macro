@@ -1,6 +1,6 @@
-import { diffDays } from './dates.js';
-import type { DailyEstimate } from './expenditure.js';
-import type { ISODate } from './types.js';
+import { diffDays } from './dates';
+import type { DailyEstimate } from './expenditure';
+import type { ISODate } from './types';
 
 export interface TrendSummary {
   /** How many days of trend actually went into the fit. */

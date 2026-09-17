@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addDays } from '../src/dates.js';
-import type { DailyEstimate } from '../src/expenditure.js';
-import { daysToTarget, projectedDate, trendRate } from '../src/trend.js';
+import { addDays } from '../src/dates';
+import type { DailyEstimate } from '../src/expenditure';
+import { daysToTarget, projectedDate, trendRate } from '../src/trend';
 
 const series = (weights: number[]): DailyEstimate[] =>
   weights.map((kg, i) => ({

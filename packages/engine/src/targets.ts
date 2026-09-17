@@ -1,5 +1,5 @@
-import type { Goal, Nutrients } from './types.js';
-import { KCAL_PER_G, KCAL_PER_KG_TISSUE, roundTo } from './units.js';
+import type { Goal, Nutrients } from './types';
+import { KCAL_PER_G, KCAL_PER_KG_TISSUE, roundTo } from './units';
 
 export interface TargetOptions {
   kcalPerKgTissue: number;

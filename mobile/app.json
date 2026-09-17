@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Adaptive Macros",
+    "slug": "adaptive-macros",
+    "scheme": "adaptivemacros",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cramnivek.adaptivemacros",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan barcodes on food packaging to look up nutrition information."
+      }
+    },
+    "android": {
+      "package": "com.cramnivek.adaptivemacros",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1220",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.CAMERA"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan barcodes on food packaging to look up nutrition information."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

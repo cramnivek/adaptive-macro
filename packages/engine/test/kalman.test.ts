@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diag, identity, matMul, predict, transpose, updateScalar } from '../src/kalman.js';
+import { diag, identity, matMul, predict, transpose, updateScalar } from '../src/kalman';
 
 describe('matrix helpers', () => {
   it('multiplies and transposes', () => {

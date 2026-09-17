@@ -6,9 +6,9 @@ import {
   expenditureConfidence,
   mifflinStJeorBmr,
   seedExpenditure,
-} from '../src/expenditure.js';
-import { KCAL_PER_KG_TISSUE } from '../src/units.js';
-import { rmse, simulate } from './helpers.js';
+} from '../src/expenditure';
+import { KCAL_PER_KG_TISSUE } from '../src/units';
+import { rmse, simulate } from './helpers';
 
 const options = (initialExpenditureKcal: number): ExpenditureModelOptions => ({
   ...DEFAULT_MODEL_OPTIONS,
