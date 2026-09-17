@@ -140,8 +140,12 @@ The estimate is presented as Claude's, not as fact. Every item carries the
 assumption behind it and a confidence, portions are editable before anything is
 logged, and the app never quietly adjusts the numbers afterwards. The API cost
 of each estimate is shown. It runs on your own Anthropic API key, entered in
-Settings and stored on the device — so it is off until you add one, and costs
-roughly a tenth of a cent per meal.
+Settings and stored on the device — so it is off until you add one.
+
+On Claude Opus 5 a meal costs roughly 1.4–4p of API usage depending on how much
+it has to work out, which is about $2.60 a month at three meals a day. Cheaper
+models are a fraction of that, and `evals/meal-estimation/` measures whether
+they are accurate enough to use.
 
 Foods the databases do not carry — homemade, local, sold loose — can be entered
 by hand, per 100 g or per serving. If the calories you type disagree with the

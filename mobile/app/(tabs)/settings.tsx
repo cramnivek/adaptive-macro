@@ -252,7 +252,9 @@ export default function SettingsScreen() {
         <Text style={[styles.note, { color: colors.textFaint }]}>
           Lets you write "two eggs, toast and butter, flat white" and get macros back instead of searching
           for each item. Requests go straight from this device to api.anthropic.com and are billed to your
-          own account — roughly a tenth of a cent per meal. Get a key at console.anthropic.com.
+          own account. On Claude Opus 5 that is roughly one to four cents a meal — about $2.60 a month if
+          you describe three meals a day. Get a key at console.anthropic.com; the screen shows what each
+          estimate actually cost.
         </Text>
         <Text style={[styles.note, { color: colors.textFaint }]}>
           The key is stored unencrypted on this device, the same as the rest of your data, and is readable by

@@ -1,0 +1,87 @@
+[
+  {
+    "id": "eggs-toast-butter",
+    "tier": "precise",
+    "prompt": "2 large eggs (100 g total without shell) scrambled with 10 g salted butter, and 60 g of white sourdough toast",
+    "components": [
+      { "food": "Egg, whole, raw", "grams": 100, "per100g": { "kcal": 143, "proteinG": 12.6, "carbsG": 0.72, "fatG": 9.51 } },
+      { "food": "Butter, salted", "grams": 10, "per100g": { "kcal": 717, "proteinG": 0.85, "carbsG": 0.06, "fatG": 81.11 } },
+      { "food": "Bread, white wheat", "grams": 60, "per100g": { "kcal": 270, "proteinG": 9.0, "carbsG": 49.0, "fatG": 3.3 } }
+    ]
+  },
+  {
+    "id": "chicken-rice-broccoli",
+    "tier": "precise",
+    "prompt": "150 g grilled skinless chicken breast with 200 g cooked white rice and 100 g steamed broccoli",
+    "components": [
+      { "food": "Chicken breast, cooked, skinless", "grams": 150, "per100g": { "kcal": 165, "proteinG": 31.0, "carbsG": 0, "fatG": 3.6 } },
+      { "food": "Rice, white, cooked", "grams": 200, "per100g": { "kcal": 130, "proteinG": 2.69, "carbsG": 28.2, "fatG": 0.28 } },
+      { "food": "Broccoli, steamed", "grams": 100, "per100g": { "kcal": 35, "proteinG": 2.38, "carbsG": 7.18, "fatG": 0.41 } }
+    ]
+  },
+  {
+    "id": "oats-milk-banana",
+    "tier": "precise",
+    "prompt": "60 g of rolled oats made with 250 ml semi-skimmed milk, plus a 120 g banana",
+    "components": [
+      { "food": "Oats, rolled, dry", "grams": 60, "per100g": { "kcal": 379, "proteinG": 13.2, "carbsG": 67.7, "fatG": 6.52 } },
+      { "food": "Milk, semi-skimmed", "grams": 250, "per100g": { "kcal": 50, "proteinG": 3.4, "carbsG": 4.8, "fatG": 1.8 } },
+      { "food": "Banana, peeled", "grams": 120, "per100g": { "kcal": 89, "proteinG": 1.09, "carbsG": 22.8, "fatG": 0.33 } }
+    ]
+  },
+  {
+    "id": "salmon-potatoes-oil",
+    "tier": "precise",
+    "prompt": "180 g baked salmon fillet, 250 g boiled new potatoes, and 15 g of olive oil over the lot",
+    "components": [
+      { "food": "Salmon, cooked", "grams": 180, "per100g": { "kcal": 206, "proteinG": 22.1, "carbsG": 0, "fatG": 12.35 } },
+      { "food": "Potatoes, boiled", "grams": 250, "per100g": { "kcal": 87, "proteinG": 1.87, "carbsG": 20.1, "fatG": 0.1 } },
+      { "food": "Olive oil", "grams": 15, "per100g": { "kcal": 884, "proteinG": 0, "carbsG": 0, "fatG": 100 } }
+    ]
+  },
+  {
+    "id": "whey-almonds",
+    "tier": "precise",
+    "prompt": "30 g whey protein isolate shaken with 300 ml water, and 40 g of almonds",
+    "components": [
+      { "food": "Whey protein isolate", "grams": 30, "per100g": { "kcal": 370, "proteinG": 85, "carbsG": 5, "fatG": 1 } },
+      { "food": "Almonds, raw", "grams": 40, "per100g": { "kcal": 579, "proteinG": 21.2, "carbsG": 21.6, "fatG": 49.9 } }
+    ]
+  },
+  {
+    "id": "vague-bolognese",
+    "tier": "vague",
+    "prompt": "a bowl of spaghetti bolognese",
+    "expectedRange": {
+      "kcal": [500, 800],
+      "proteinG": [24, 46],
+      "carbsG": [55, 95],
+      "fatG": [14, 32]
+    },
+    "rangeBasis": "A home-style bowl is roughly 350-450 g finished dish: 150-220 g cooked pasta plus 150-250 g meat sauce. Bounds span a lean mince sauce at the low end and a generous oily one at the high end."
+  },
+  {
+    "id": "vague-flat-white-croissant",
+    "tier": "vague",
+    "prompt": "a flat white and a butter croissant",
+    "expectedRange": {
+      "kcal": [290, 450],
+      "proteinG": [7, 16],
+      "carbsG": [26, 46],
+      "fatG": [14, 28]
+    },
+    "rangeBasis": "Flat white is 150-200 ml whole milk, about 100-130 kcal. A butter croissant runs 50-80 g at roughly 400 kcal/100 g. Bounds are the small and large ends of both."
+  },
+  {
+    "id": "vague-fish-and-chips",
+    "tier": "vague",
+    "prompt": "fish and chips at the pub, ate most of it",
+    "expectedRange": {
+      "kcal": [800, 1450],
+      "proteinG": [32, 62],
+      "carbsG": [75, 145],
+      "fatG": [38, 85]
+    },
+    "rangeBasis": "Pub portions vary enormously: 150-250 g battered fish and 200-350 g chips. 'Most of it' is taken as 75-100% eaten. Deliberately wide because the honest answer here is wide."
+  }
+]

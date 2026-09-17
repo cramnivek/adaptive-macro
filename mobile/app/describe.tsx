@@ -72,7 +72,7 @@ export default function DescribeScreen() {
     try {
       const result = await describeMeal(text, settings.anthropicApiKey);
       setEstimate(result.estimate);
-      setCostUsd(estimateCostUsd(result.usage));
+      setCostUsd(estimateCostUsd(result.usage, result.model));
       setDrafts(
         result.estimate.items.map((item) => ({ item, grams: item.grams, included: true })),
       );
@@ -164,7 +164,7 @@ export default function DescribeScreen() {
         <Card title="Needs your Anthropic API key">
           <Text style={[styles.body, { color: colors.textMuted }]}>
             This describes a meal to Claude and gets macros back. It runs on your own API key, billed to
-            you — roughly a tenth of a cent per meal. Add one in Settings.
+            you — one to four cents a meal on the model it currently uses. Add one in Settings.
           </Text>
           <View style={{ height: space.md }} />
           <Button label="Open Settings" onPress={() => router.replace('/settings')} />

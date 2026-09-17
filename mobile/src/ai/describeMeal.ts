@@ -16,7 +16,20 @@ import * as z from 'zod/v4';
  * afterwards — an estimate the user cannot inspect is worse than no estimate.
  */
 
-const MODEL = 'claude-opus-5';
+export const DEFAULT_MODEL = 'claude-opus-5';
+
+/**
+ * List prices in US dollars per million tokens, per model.
+ *
+ * Keyed by model so the displayed cost cannot drift from the model actually
+ * used — a single hardcoded pair silently misprices the moment anything else
+ * is called, which is exactly what happens when the eval sweeps models.
+ */
+export const MODEL_PRICING: Record<string, { inPerMTok: number; outPerMTok: number }> = {
+  'claude-opus-5': { inPerMTok: 5, outPerMTok: 25 },
+  'claude-sonnet-5': { inPerMTok: 2, outPerMTok: 10 },
+  'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 },
+};
 
 /** One component of the meal, as Claude read it. */
 const EstimatedItemSchema = z.object({
@@ -43,7 +56,7 @@ const EstimatedItemSchema = z.object({
     ),
 });
 
-const MealEstimateSchema = z.object({
+export const MealEstimateSchema = z.object({
   items: z.array(EstimatedItemSchema),
   /**
    * Claude's own note about what it could not determine, shown verbatim. This
@@ -64,7 +77,7 @@ const MealEstimateSchema = z.object({
 export type EstimatedItem = z.infer<typeof EstimatedItemSchema>;
 export type MealEstimate = z.infer<typeof MealEstimateSchema>;
 
-const SYSTEM_PROMPT = `You estimate the nutrition of meals people describe in their own words, for a food logging app.
+export const SYSTEM_PROMPT = `You estimate the nutrition of meals people describe in their own words, for a food logging app.
 
 Break the description into individual foods. For each, estimate the portion actually eaten in grams, then the calories and macros for that portion — not per 100 g.
 
@@ -97,18 +110,23 @@ export interface DescribeResult {
   estimate: MealEstimate;
   /** Input and output tokens, so the cost of a request can be shown honestly. */
   usage: { inputTokens: number; outputTokens: number };
+  /** The model the API reports having served, not the one requested. */
+  model: string;
+  /** Raw response, for anything that needs the transcript (the eval does). */
+  raw: { stopReason: string | null; text: string };
 }
 
 export const describeMeal = async (
   description: string,
   apiKey: string,
+  model: string = DEFAULT_MODEL,
 ): Promise<DescribeResult> => {
   if (!apiKey.trim()) throw new MissingApiKeyError();
 
   const client = buildClient(apiKey.trim());
 
   const response = await client.messages.parse({
-    model: MODEL,
+    model,
     max_tokens: 4000,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: description.trim() }],
@@ -127,18 +145,36 @@ export const describeMeal = async (
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     },
+    model: response.model,
+    raw: {
+      stopReason: response.stop_reason,
+      text: response.content
+        .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+        .map((block) => block.text)
+        .join(''),
+    },
   };
 };
 
 /**
- * Rough cost of one estimate, in US dollars, at Claude Opus 5 list prices
- * ($5 per million input tokens, $25 per million output).
+ * Cost of one estimate in US dollars, at the given model's list price.
  *
- * Shown so the user can see what they are spending rather than guess. It is an
- * estimate of list price and ignores any discount or cached input.
+ * Shown so the user can see what they are spending rather than guess. It is
+ * list price and ignores any discount or cached input. An unknown model
+ * returns null rather than a number from the wrong price list — a plausible
+ * wrong figure is worse than an absent one.
  */
-export const estimateCostUsd = (usage: DescribeResult['usage']): number =>
-  (usage.inputTokens / 1_000_000) * 5 + (usage.outputTokens / 1_000_000) * 25;
+export const estimateCostUsd = (
+  usage: DescribeResult['usage'],
+  model: string = DEFAULT_MODEL,
+): number | null => {
+  const price = MODEL_PRICING[model];
+  if (!price) return null;
+  return (
+    (usage.inputTokens / 1_000_000) * price.inPerMTok +
+    (usage.outputTokens / 1_000_000) * price.outPerMTok
+  );
+};
 
 /** Maps a friendly message onto the SDK's typed errors. */
 export const describeErrorMessage = (error: unknown): string => {
