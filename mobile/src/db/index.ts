@@ -110,6 +110,7 @@ interface FoodRow {
   fiber_g: number;
   portions: string;
   fetched_at: string | null;
+  sources: string | null;
 }
 
 const rowToFood = (row: FoodRow): Food => ({
@@ -127,6 +128,7 @@ const rowToFood = (row: FoodRow): Food => ({
   },
   portions: JSON.parse(row.portions) as FoodPortion[],
   fetchedAt: row.fetched_at ?? undefined,
+  sources: row.sources ? (JSON.parse(row.sources) as string[]) : undefined,
 });
 
 /**
@@ -137,13 +139,13 @@ const rowToFood = (row: FoodRow): Food => ({
 export const saveFood = async (food: Food): Promise<void> => {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at, sources)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, brand = excluded.brand, barcode = excluded.barcode,
        kcal = excluded.kcal, protein_g = excluded.protein_g, carbs_g = excluded.carbs_g,
        fat_g = excluded.fat_g, fiber_g = excluded.fiber_g, portions = excluded.portions,
-       fetched_at = excluded.fetched_at`,
+       fetched_at = excluded.fetched_at, sources = excluded.sources`,
     food.id,
     food.name,
     food.brand ?? null,
@@ -156,6 +158,7 @@ export const saveFood = async (food: Food): Promise<void> => {
     food.per100g.fiberG ?? 0,
     JSON.stringify(food.portions),
     food.fetchedAt ?? new Date().toISOString(),
+    food.sources?.length ? JSON.stringify(food.sources) : null,
   );
 };
 

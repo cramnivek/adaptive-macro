@@ -54,4 +54,8 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_log_date ON log_entries (date);
   `,
+  // v2 — provenance for grounded lookups
+  `
+  ALTER TABLE foods ADD COLUMN sources TEXT;
+  `,
 ];
