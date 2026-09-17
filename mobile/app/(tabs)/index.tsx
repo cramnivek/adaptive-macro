@@ -3,10 +3,11 @@ import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
+import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { radius, space, useTheme } from '../../src/theme';
@@ -25,11 +26,14 @@ export default function TodayScreen() {
     return groups;
   }, [entries]);
 
-  const confirmDelete = (entry: LogEntry) => {
-    Alert.alert('Remove entry', `Remove ${entry.foodName} from ${MEAL_LABELS[entry.meal]}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => void removeEntry(entry.id) },
-    ]);
+  const confirmDelete = async (entry: LogEntry) => {
+    const ok = await confirm({
+      title: 'Remove entry',
+      message: `Remove ${entry.foodName} from ${MEAL_LABELS[entry.meal]}?`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (ok) await removeEntry(entry.id);
   };
 
   const isToday = selectedDate === todayISO();
@@ -115,7 +119,7 @@ export default function TodayScreen() {
             {mealEntries.map((entry) => (
               <Pressable
                 key={entry.id}
-                onLongPress={() => confirmDelete(entry)}
+                onLongPress={() => void confirmDelete(entry)}
                 style={({ pressed }) => [styles.entry, { opacity: pressed ? 0.6 : 1 }]}
               >
                 <View style={styles.entryText}>

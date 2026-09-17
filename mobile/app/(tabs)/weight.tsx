@@ -1,11 +1,12 @@
 import { diffDays, todayISO } from '@adaptive-macros/engine';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { Button, Field } from '../../src/components/Controls';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
+import { confirm, notify } from '../../src/dialog';
 import { formatDate, formatRate, formatWeight, parseWeight, weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { space, useTheme } from '../../src/theme';
@@ -20,7 +21,7 @@ export default function WeightScreen() {
   const save = async () => {
     const kg = parseWeight(input, units);
     if (kg === null) {
-      Alert.alert('Enter a weight', `Type a number in ${weightUnit(units)}.`);
+      notify('Enter a weight', `Type a number in ${weightUnit(units)}.`);
       return;
     }
     await recordWeight(todayISO(), kg);
@@ -44,11 +45,14 @@ export default function WeightScreen() {
 
   const recent = useMemo(() => [...weights].reverse().slice(0, 14), [weights]);
 
-  const confirmDelete = (date: string) => {
-    Alert.alert('Remove weigh-in', `Delete the reading from ${formatDate(date)}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => void removeWeight(date) },
-    ]);
+  const confirmDelete = async (date: string) => {
+    const ok = await confirm({
+      title: 'Remove weigh-in',
+      message: `Delete the reading from ${formatDate(date)}?`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (ok) await removeWeight(date);
   };
 
   return (
@@ -97,7 +101,7 @@ export default function WeightScreen() {
         {recent.map((row) => (
           <Pressable
             key={row.date}
-            onLongPress={() => confirmDelete(row.date)}
+            onLongPress={() => void confirmDelete(row.date)}
             style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}
           >
             <Text style={{ color: colors.textMuted, fontSize: 14 }}>{formatDate(row.date)}</Text>

@@ -3,12 +3,13 @@ import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine'
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { exportBackup } from '../../src/db';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
+import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { space, useTheme } from '../../src/theme';
@@ -70,7 +71,7 @@ export default function SettingsScreen() {
       await work();
       await refreshAll();
     } catch (error) {
-      Alert.alert('That did not work', (error as Error).message);
+      notify('That did not work', (error as Error).message);
     } finally {
       setBusy(null);
     }
@@ -79,24 +80,20 @@ export default function SettingsScreen() {
   const loadDemo = () =>
     runBulk('Generating…', async () => {
       const days = await seedDemoData();
-      Alert.alert('Demo history loaded', `${days} days of weigh-ins and meals added.`);
+      notify('Demo history loaded', `${days} days of weigh-ins and meals added.`);
     });
 
   const removeDemo = () => runBulk('Removing…', clearDemoData);
 
-  const confirmEraseAll = () => {
-    Alert.alert(
-      'Erase everything?',
-      'Deletes every food log, weigh-in and cached food on this device. Your settings are kept. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Erase',
-          style: 'destructive',
-          onPress: () => void runBulk('Erasing…', clearAllData),
-        },
-      ],
-    );
+  const confirmEraseAll = async () => {
+    const ok = await confirm({
+      title: 'Erase everything?',
+      message:
+        'Deletes every food log, weigh-in and cached food on this device. Your settings are kept. This cannot be undone.',
+      confirmLabel: 'Erase',
+      destructive: true,
+    });
+    if (ok) await runBulk('Erasing…', clearAllData);
   };
 
   const exportData = async () => {
@@ -106,7 +103,7 @@ export default function SettingsScreen() {
       await FileSystem.writeAsStringAsync(uri, JSON.stringify(backup, null, 2));
 
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Export saved', `Written to ${uri}`);
+        notify('Export saved', `Written to ${uri}`);
         return;
       }
       await Sharing.shareAsync(uri, {
@@ -114,7 +111,7 @@ export default function SettingsScreen() {
         dialogTitle: 'Export your data',
       });
     } catch (error) {
-      Alert.alert('Export failed', (error as Error).message);
+      notify('Export failed', (error as Error).message);
     }
   };
 
@@ -308,7 +305,7 @@ export default function SettingsScreen() {
             label="Erase everything"
             variant="danger"
             disabled={busy !== null}
-            onPress={confirmEraseAll}
+            onPress={() => void confirmEraseAll()}
           />
         </Card>
       )}

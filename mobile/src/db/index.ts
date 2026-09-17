@@ -159,6 +159,17 @@ export const saveFood = async (food: Food): Promise<void> => {
   );
 };
 
+export const getFoodById = async (id: string): Promise<Food | null> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<FoodRow>('SELECT * FROM foods WHERE id = ?', id);
+  return row ? rowToFood(row) : null;
+};
+
+export const deleteFood = async (id: string): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM foods WHERE id = ?', id);
+};
+
 export const findFoodByBarcode = async (barcode: string): Promise<Food | null> => {
   const db = await getDb();
   const row = await db.getFirstAsync<FoodRow>('SELECT * FROM foods WHERE barcode = ?', barcode);

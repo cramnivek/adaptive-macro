@@ -3,9 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { searchFoods } from '../src/api/search';
-import { Field } from '../src/components/Controls';
+import { Button, Field } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
-import { listFrequentFoods } from '../src/db';
+import { getFoodById, listFrequentFoods } from '../src/db';
 import { useApp } from '../src/state/AppStore';
 import { radius, space, useTheme } from '../src/theme';
 
@@ -19,7 +19,7 @@ const SOURCE_LABELS: Record<Food['source'], string> = {
 export default function SearchScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ meal?: string }>();
+  const params = useLocalSearchParams<{ meal?: string; justCreated?: string }>();
   const meal = (params.meal as Meal) ?? 'snack';
 
   const { settings, logFood } = useApp();
@@ -40,6 +40,15 @@ export default function SearchScreen() {
   useEffect(() => {
     void listFrequentFoods().then(setFrequent);
   }, []);
+
+  // Arriving back from the create screen: open the portion sheet straight away
+  // for the food just made, rather than making the user search for it.
+  useEffect(() => {
+    if (!params.justCreated) return;
+    void getFoodById(params.justCreated).then((food) => {
+      if (food) setSelected(food);
+    });
+  }, [params.justCreated]);
 
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
@@ -113,8 +122,22 @@ export default function SearchScreen() {
             <Text style={[styles.empty, { color: colors.textFaint }]}>
               {showingFrequent
                 ? 'Search for a food, or scan a barcode from the Today tab.'
-                : 'Nothing found. Try a shorter or more general term.'}
+                : 'Nothing found. Try a shorter or more general term, or add it yourself.'}
             </Text>
+          )
+        }
+        ListFooterComponent={
+          loading ? null : (
+            <View style={styles.footer}>
+              <Text style={[styles.footerNote, { color: colors.textFaint }]}>
+                Homemade, local or sold loose? The databases will not have it.
+              </Text>
+              <Button
+                label="Create a food"
+                variant="subtle"
+                onPress={() => router.push({ pathname: '/food-new', params: { meal } })}
+              />
+            </View>
           )
         }
         renderItem={({ item }) => (
@@ -185,4 +208,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   empty: { fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
+  footer: { marginTop: space.lg, gap: space.sm },
+  footerNote: { fontSize: 12, textAlign: 'center' },
 });

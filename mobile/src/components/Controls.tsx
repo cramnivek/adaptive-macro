@@ -71,6 +71,11 @@ export const Field = ({
           keyboardType={keyboardType}
           placeholder={placeholder}
           placeholderTextColor={colors.textFaint}
+          // The visible label lives in a sibling Text, so without this the
+          // input is announced as unlabelled and the hint never reaches a
+          // screen reader.
+          accessibilityLabel={label}
+          accessibilityHint={hint}
           style={[styles.input, { color: colors.text }]}
         />
         {suffix && <Text style={[styles.suffix, { color: colors.textFaint }]}>{suffix}</Text>}

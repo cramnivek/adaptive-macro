@@ -127,7 +127,15 @@ Expo / React Native, four tabs:
   the estimate currently is, goal projection, and a plain-English explanation of
   where the number comes from.
 - **Settings** — profile, goal and rate, macro policy, units, USDA key, model
-  tuning knobs, and JSON export.
+  tuning knobs, and JSON export. Development builds also get a demo-data card
+  that generates four months of synthetic history, so the charts and the
+  expenditure estimate have something to show before you have logged that long.
+
+Foods the databases do not carry — homemade, local, sold loose — can be entered
+by hand, per 100 g or per serving. If the calories you type disagree with the
+macros you type by more than 15%, it says so and offers the implied figure,
+but never applies it for you: the label might be right and a macro mistyped,
+and guessing which would invent a number.
 
 Storage is SQLite on the device, migrated on `PRAGMA user_version`. There is no
 account and no server, so the JSON export is the only backup and the only path
@@ -224,14 +232,23 @@ and the console is clean. The targets it displays match the engine by hand —
 the default profile seeds 2740 kcal, and a 0.5 kg/week goal renders 2190 kcal
 with 144 g protein.
 
-Still **unverified**: any real iOS or Android device or simulator (none was
-available where it was built), barcode scanning (needs a native camera), and
-the charts against a real multi-week history — they render their empty state
-correctly, but no long dataset has been put through them yet.
+The charts have since been driven against four months of seeded history and
+screenshotted: the weight trend renders as a filtered line through the raw
+readings, and expenditure renders with its uncertainty band. Creating a custom
+food, logging it and finding it again by search were each exercised end to end
+in the browser.
 
-Not built yet: recipes and multi-ingredient foods, custom food entry, backup
-*import* (export works), and an onboarding flow — `settings.onboarded` exists
-but nothing reads it yet.
+Still **unverified**: any real iOS or Android device or simulator (none was
+available where it was built) and barcode scanning, which needs a native
+camera.
+
+Known web-only limitation: SQLite runs on OPFS, which permits a single
+connection, so the app expects one tab. Opening a second tab against the same
+browser profile will fail to open the database. On a device this does not apply.
+
+Not built yet: recipes and multi-ingredient foods, editing or deleting a custom
+food once saved, backup *import* (export works), and an onboarding flow —
+`settings.onboarded` exists but nothing reads it yet.
 
 ## License
 
