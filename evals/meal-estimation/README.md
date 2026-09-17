@@ -67,6 +67,21 @@ Set `OLLAMA_HOST` if the server is not on `http://127.0.0.1:11434`. Local runs
 cost nothing, so `--reps 3` is free and worth it — one rep cannot distinguish a
 bad model from an unlucky one.
 
+### Check it works first
+
+Before the full eval, run one meal and look at the answer:
+
+```bash
+node --experimental-strip-types evals/meal-estimation/smoke.mjs ollama:qwen2.5:32b
+```
+
+It prints the items, the assumptions, the total against a known reference, the
+time taken, and whether the macros actually account for the calories the model
+stated. The eval reports a score; a bad score looks the same whether the model
+is wrong about food or the server never received the prompt. This tells them
+apart in about ten seconds, and names the fix for the common setup failures
+(server not running, model not pulled).
+
 ### Which model
 
 What matters here is **factual recall of food composition**, not reasoning or
