@@ -41,7 +41,19 @@ export default function SearchScreen() {
   // pending one rather than queueing another.
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Responses can land out of order; only the newest query is allowed to write.
+  // The lookup below reuses this same ref: it takes 10-30s and the field stays
+  // editable throughout, so a result for an abandoned query must not surface.
   const latestQuery = useRef('');
+  // A lookup can still be in flight when the user navigates away (saving a
+  // food calls router.back(); "Create a food" pushes a new screen). Without
+  // this, its eventual resolution would set state on an unmounted screen.
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     void listFrequentFoods().then(setFrequent);
@@ -101,19 +113,25 @@ export default function SearchScreen() {
     !showingFrequent && !loading && settings.foodLookup.enabled && shown.length < THIN_RESULT_COUNT;
 
   const runLookup = useCallback(async () => {
+    const trimmed = query.trim();
     setLookingUp(true);
     setErrors([]);
     try {
-      const food = await lookupFood(query.trim(), settings.foodCountry, settings.foodLookup.geminiApiKey);
+      const food = await lookupFood(trimmed, settings.foodCountry, settings.foodLookup.geminiApiKey);
+      // The user may have retyped the query, or left the screen, while this
+      // was in flight. Either way, a result for what they searched a moment
+      // ago has nothing to do with what is on screen now.
+      if (!mounted.current || latestQuery.current !== trimmed) return;
       setCandidate(food);
     } catch (error) {
+      if (!mounted.current || latestQuery.current !== trimmed) return;
       setErrors([
         error instanceof UngroundedResponseError
           ? 'Could not find published figures for that. Try a more specific name, or add it yourself.'
           : (error as Error).message,
       ]);
     } finally {
-      setLookingUp(false);
+      if (mounted.current) setLookingUp(false);
     }
   }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
 
