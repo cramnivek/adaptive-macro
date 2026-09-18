@@ -1,0 +1,51 @@
+[
+  {
+    "id": "chickenjoy-thigh-1pc",
+    "query": "Jollibee Chickenjoy Thigh, 1 piece",
+    "country": "us",
+    "reference": { "kcal": 380, "proteinG": 27, "carbsG": 5, "fatG": 28 },
+    "referenceSource": "https://jollibee-prod-media.s3.us-west-2.amazonaws.com/JB_USA_Nutrition_Facts_2025_101525_f94493117b.pdf"
+  },
+  {
+    "id": "jollibee-spaghetti-regular",
+    "query": "Jollibee Spaghetti, regular",
+    "country": "us",
+    "reference": { "kcal": 610, "proteinG": 23, "carbsG": 76, "fatG": 23 },
+    "referenceSource": "https://jollibee-prod-media.s3.us-west-2.amazonaws.com/JB_USA_Nutrition_Facts_2025_101525_f94493117b.pdf"
+  },
+  {
+    "id": "innout-double-double-onion",
+    "query": "In-N-Out Double-Double with onion",
+    "country": "us",
+    "reference": { "kcal": 610, "proteinG": 34, "carbsG": 42, "fatG": 34 },
+    "referenceSource": "https://www.in-n-out.com/docs/default-source/downloads/nutrition_info.pdf"
+  },
+  {
+    "id": "culvers-butterburger-original-single",
+    "query": "Culver's ButterBurger The Original, single",
+    "country": "us",
+    "reference": { "kcal": 390, "proteinG": 20, "carbsG": 39, "fatG": 19 },
+    "referenceSource": "https://cdn.culvers.com/page-content/menu/nutrition-guide.pdf"
+  },
+  {
+    "id": "kfc-uk-original-recipe-thigh",
+    "query": "KFC Original Recipe chicken thigh",
+    "country": "gb",
+    "reference": { "kcal": 285, "proteinG": 19.2, "carbsG": 8.1, "fatG": 19.4 },
+    "referenceSource": "https://brand-uk.assets.kfc.co.uk/2021-01/nutrition-05012021.pdf"
+  },
+  {
+    "id": "whataburger-patty-melt",
+    "query": "Whataburger Patty Melt",
+    "country": "us",
+    "reference": { "kcal": 940, "proteinG": 49, "carbsG": 45, "fatG": 61 },
+    "referenceSource": "https://wbimageserver.whataburger.com/Nutrition.pdf"
+  },
+  {
+    "id": "chick-fil-a-chicken-sandwich",
+    "query": "Chick-fil-A Chicken Sandwich",
+    "country": "us",
+    "reference": { "kcal": 420, "proteinG": 29, "carbsG": 41, "fatG": 18 },
+    "referenceSource": "https://www.chick-fil-a.com/menu/entrees/chick-fil-a-chicken-sandwich"
+  }
+]
