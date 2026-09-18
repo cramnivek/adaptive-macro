@@ -2,7 +2,13 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "noUnusedLocals": true
+    "noUnusedLocals": true,
+    // The engine package declares "type": "module" and is consumed from source,
+    // so its internal imports carry explicit .ts extensions to stay resolvable
+    // by plain Node (the eval runners import it directly). Typechecking those
+    // sources through the import needs this flag; Expo's base already sets the
+    // noEmit it requires.
+    "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   "exclude": ["node_modules"]

@@ -1,5 +1,5 @@
-import { addDays } from './dates';
-import type { DailyObservation, ISODate } from './types';
+import { addDays } from './dates.ts';
+import type { DailyObservation, ISODate } from './types.ts';
 
 /**
  * Synthetic history generation.

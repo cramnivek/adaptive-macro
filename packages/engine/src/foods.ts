@@ -1,5 +1,5 @@
-import type { ISODate, Nutrients } from './types';
-import { KCAL_PER_G, roundTo } from './units';
+import type { ISODate, Nutrients } from './types.ts';
+import { KCAL_PER_G, roundTo } from './units.ts';
 
 export type FoodSource =
   | 'openfoodfacts'

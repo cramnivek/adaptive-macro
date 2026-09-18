@@ -1,4 +1,4 @@
-import type { ISODate } from './types';
+import type { ISODate } from './types.ts';
 
 const MS_PER_DAY = 86_400_000;
 

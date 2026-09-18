@@ -1,4 +1,4 @@
-import { diffDays, eachDay } from './dates';
+import { diffDays, eachDay } from './dates.ts';
 import {
   type FilterStep,
   type GaussianState,
@@ -8,9 +8,9 @@ import {
   predict,
   rtsSmooth,
   updateScalar,
-} from './kalman';
-import type { DailyObservation, ISODate, Sex, UserProfile } from './types';
-import { KCAL_PER_KG_TISSUE } from './units';
+} from './kalman.ts';
+import type { DailyObservation, ISODate, Sex, UserProfile } from './types.ts';
+import { KCAL_PER_KG_TISSUE } from './units.ts';
 
 /**
  * ADAPTIVE EXPENDITURE MODEL
