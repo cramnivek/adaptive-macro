@@ -15,7 +15,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
@@ -41,6 +41,18 @@ const getApp = () => (appPromise ??= import('../../mobile/src/api/gemini.ts'));
  */
 const KCAL_TOLERANCE_PCT = 10;
 
+/**
+ * Macros get a looser bar than calories, and a floor underneath it.
+ *
+ * Operators publish macros rounded to whole grams, and prep varies more in a
+ * macro split than in a calorie total, so 10% would fail on rounding alone. The
+ * absolute floor matters more than the percentage: a reference of 3 g carbs is
+ * 33% wrong the moment it is off by one, which says nothing useful. Below the
+ * floor, a gram or two of disagreement is noise rather than a finding.
+ */
+const MACRO_TOLERANCE_PCT = 20;
+const MACRO_TOLERANCE_FLOOR_G = 2;
+
 async function loadCases() {
   const raw = JSON.parse(readFileSync(join(HERE, 'cases.json'), 'utf8'));
   return raw.map((c) => ({
@@ -54,21 +66,69 @@ async function loadCases() {
 }
 
 /**
- * Scores one lookup against its reference. Only kcal is judged pass/fail -
- * protein/carbs/fat ride along in the row for inspection, but the product
- * decision this eval exists to inform is about calories, and grading four
- * correlated macros as independent pass/fails would overstate how much
- * evidence a single case provides.
+ * Scores one lookup against its reference, on calories and on macros.
+ *
+ * Macros are judged as ONE combined pass/fail rather than three. They are
+ * correlated — they are what the calorie figure is built from — so scoring
+ * them independently would treat a single wrong lookup as three findings and
+ * overstate how much evidence one case provides. The per-macro grams and
+ * percentages ride along for inspection.
+ *
+ * Macros earn their own verdict because this app's targets are stated in
+ * grams, and protein in particular drives the target the user actually eats
+ * to. A lookup that gets calories right by way of a wrong macro split is not
+ * a good result here, and calorie-only grading cannot see that.
  *
  * `result.portions` is always `[{label:'100 g',grams:100}, {label:<portion>,
  * grams:<n>}]` per gemini.ts's contract, so the non-100g entry is the portion
  * the reference was written for.
  */
+const MACRO_KEYS = ['proteinG', 'carbsG', 'fatG'];
+
+function gradeMacros(result, reference, portionGrams) {
+  const perMacro = {};
+  let absErrorSum = 0;
+  let graded = 0;
+  let allOk = true;
+
+  for (const key of MACRO_KEYS) {
+    const expected = reference[key];
+    // A reference without this macro cannot judge it either way; skip rather
+    // than score a missing figure as a perfect or a failing one.
+    if (typeof expected !== 'number') {
+      perMacro[key] = null;
+      continue;
+    }
+    const actual = (result.per100g[key] * portionGrams) / 100;
+    const diffG = actual - expected;
+    const tolerance = Math.max(MACRO_TOLERANCE_FLOOR_G, (MACRO_TOLERANCE_PCT / 100) * expected);
+    const ok = Math.abs(diffG) <= tolerance;
+    if (!ok) allOk = false;
+    absErrorSum += Math.abs(diffG);
+    graded += 1;
+    perMacro[key] = {
+      actual_g: actual,
+      reference_g: expected,
+      diff_g: diffG,
+      bias_pct: expected === 0 ? null : (diffG / expected) * 100,
+      ok: ok ? 1 : 0,
+    };
+  }
+
+  return {
+    macros_ok: graded > 0 && allOk ? 1 : 0,
+    macros_graded: graded,
+    macro_mae_g: graded > 0 ? absErrorSum / graded : null,
+    macro_detail: perMacro,
+  };
+}
+
 function grade(result, reference) {
   const portion = result.portions.find((p) => p.grams !== 100) ?? result.portions[0];
   const kcalForPortion = (result.per100g.kcal * portion.grams) / 100;
   const errPct = ((kcalForPortion - reference.kcal) / reference.kcal) * 100;
   return {
+    ...gradeMacros(result, reference, portion.grams),
     // No `grounded` field here: every row that reaches grade() came from a
     // successful lookupFood() call, which already guarantees sources is
     // non-empty, so a boolean re-deriving that would always read true and
@@ -276,7 +336,15 @@ async function main() {
               hardness: c.hardness,
               model: args.model,
               ungrounded: true,
-              grade: { kcal_ok: 0, kcal_bias_pct: null, source_domains: [] },
+              grade: {
+                kcal_ok: 0,
+                kcal_bias_pct: null,
+                macros_ok: 0,
+                macros_graded: 0,
+                macro_mae_g: null,
+                macro_detail: {},
+                source_domains: [],
+              },
               reference: c.reference,
               reference_source: c.referenceSource,
               food_name: null,
@@ -320,9 +388,13 @@ async function main() {
   process.exit(failed ? 1 : 0);
 }
 
-// Guarded so a future selftest can import loadCases/grade without spending
-// anything just by importing this file (see evals/meal-estimation/selftest.mjs
-// for the pattern this follows).
-if (!process.env.EVAL_IMPORT_ONLY) main();
+// Run only when executed directly, never on import.
+//
+// This was an opt-OUT guard keyed on an env var, which meant importing this
+// file to reuse grade() spent real API calls unless the importer happened to
+// know the magic variable. A default that costs money when you forget it is
+// the wrong way round; the direct-run check has no such trap.
+const invokedAs = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (invokedAs === import.meta.url) main();
 
 export { grade, loadCases };
