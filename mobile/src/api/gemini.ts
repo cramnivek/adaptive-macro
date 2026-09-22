@@ -24,8 +24,17 @@ import { type Food, type FoodPortion, per100gFromPortion } from '@adaptive-macro
 const MODEL = 'gemini-3.5-flash';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-/** Grounded search reads pages, so it is far slower than a database lookup. */
-const GROUNDED_TIMEOUT_MS = 30_000;
+/**
+ * Grounded search reads pages, so it is far slower than a database lookup.
+ *
+ * 90s rather than 30s because the eval showed 30 was cutting off the lookups
+ * that needed the most work: 4 of 14 runs timed out, and the hardest case — UK
+ * figures published only inside a PDF leaflet — never completed in two
+ * attempts, while every lookup that did finish was exact. The failure mode was
+ * a missing answer, not a wrong one, so the ceiling was patience rather than
+ * capability.
+ */
+const GROUNDED_TIMEOUT_MS = 90_000;
 /** The structuring call does no I/O of its own and should be quick. */
 const STRUCTURE_TIMEOUT_MS = 15_000;
 
