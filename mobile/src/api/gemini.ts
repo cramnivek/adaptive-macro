@@ -46,15 +46,28 @@ export class GroundedLookupError extends Error {
 }
 
 export class UngroundedResponseError extends Error {
-  constructor() {
-    super('The model answered without citing any web source');
+  constructor(message = 'The model answered without citing any web source') {
+    super(message);
     this.name = 'UngroundedResponseError';
   }
 }
 
+/**
+ * `found` closes a gap the grounding gate cannot: grounding proves a search
+ * happened, not that the numbers that follow came from what was found. The
+ * search call can search, read nothing usable, and still say so in prose —
+ * that response still carries grounding chunks, so it clears the
+ * `sources.length === 0` gate below. Call two then hits a schema that
+ * requires kcal/protein/carbs/fat, and would otherwise force the model to
+ * invent them for an item it just said it could not find. `found` lets the
+ * model report that outcome instead of papering over it, and `lookupFood`
+ * treats `found: false` as a rejection before the numeric fields are ever
+ * trusted.
+ */
 const RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
+    found: { type: 'boolean' },
     name: { type: 'string' },
     brand: { type: 'string', nullable: true },
     portionLabel: { type: 'string' },
@@ -65,7 +78,7 @@ const RESPONSE_SCHEMA = {
     fatG: { type: 'number' },
     fiberG: { type: 'number', nullable: true },
   },
-  required: ['name', 'portionLabel', 'portionGrams', 'kcal', 'proteinG', 'carbsG', 'fatG'],
+  required: ['found', 'name', 'portionLabel', 'portionGrams', 'kcal', 'proteinG', 'carbsG', 'fatG'],
 } as const;
 
 const searchPromptFor = (query: string, country: string) =>
@@ -83,6 +96,10 @@ const structurePromptFor = (text: string) =>
   `fields. Use only what the text states — do not add, correct or estimate ` +
   `anything. If it describes several variants, use the first one it presents ` +
   `as the primary answer. Values are for one serving, not per 100 g.\n\n` +
+  `Set "found" to true only if the text states published nutrition figures ` +
+  `for the item. Set it to false if the text says it could not find any, or ` +
+  `otherwise does not state actual figures — in that case the numeric fields ` +
+  `are meaningless, so fill them with 0.\n\n` +
   `---\n${text}`;
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -271,6 +288,13 @@ export const lookupFood = async (
     parsed = JSON.parse(json);
   } catch {
     throw new GroundedLookupError('The lookup returned malformed data');
+  }
+
+  // See the comment on RESPONSE_SCHEMA: grounding only proves a search
+  // happened, not that these numbers came from it. This is the check that
+  // actually enforces that distinction.
+  if ((parsed as { found?: unknown })?.found === false) {
+    throw new UngroundedResponseError('No published nutrition figures were found for that item');
   }
 
   return toCandidateFood(parsed, sources);

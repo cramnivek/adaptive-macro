@@ -149,6 +149,7 @@ describe('lookupFood', () => {
   };
 
   const structuredRaw = {
+    found: true,
     name: 'Chickenjoy',
     brand: 'Jollibee',
     portionLabel: '1 piece',
@@ -204,6 +205,54 @@ describe('lookupFood', () => {
     // call would still resolve the promise's rejection above, but only this
     // catches it actually skipping the second request.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects with UngroundedResponseError when the structuring call reports found: false', async () => {
+    // Grounded, so it clears the sources gate — but the model said in prose it
+    // could not find anything, and the structuring call is required to be
+    // honest about that via `found` rather than inventing numbers to satisfy
+    // the schema. This is the case FIX 1 exists for.
+    const notFoundStructured = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  found: false,
+                  name: 'Chickenjoy',
+                  portionLabel: '',
+                  portionGrams: 0,
+                  kcal: 0,
+                  proteinG: 0,
+                  carbsG: 0,
+                  fatG: 0,
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, groundedResponse))
+      .mockResolvedValueOnce(jsonResponse(200, notFoundStructured));
+
+    await expect(lookupFood('chickenjoy', 'ph', 'test-key')).rejects.toBeInstanceOf(
+      UngroundedResponseError,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves normally when the structuring call reports found: true with valid figures', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, groundedResponse))
+      .mockResolvedValueOnce(jsonResponse(200, structuredResponse));
+
+    const food = await lookupFood('chickenjoy', 'ph', 'test-key');
+
+    expect(food.name).toBe('Chickenjoy');
+    expect(food.per100g.kcal).toBeCloseTo(150);
   });
 
   it('sends google_search with no schema first, and a schema with no tools second', async () => {
