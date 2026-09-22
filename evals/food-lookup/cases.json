@@ -46,5 +46,44 @@
       "fatG": 18
     },
     "referenceSource": "https://www.chick-fil-a.com/menu/entrees/chick-fil-a-chicken-sandwich"
+  },
+  {
+    "id": "dominos-au-pepperoni-slice",
+    "query": "Domino's Australia Pepperoni pizza (Value Range), 1 slice, Classic Crust",
+    "country": "au",
+    "reference": {
+      "kcal": 137,
+      "proteinG": 6,
+      "carbsG": 16.4,
+      "fatG": 5.1
+    },
+    "referenceSource": "https://www.dominos.com.au/menu/nutritional-information/",
+    "hardness": "AU-market pizza chain; the name 'Pepperoni' is shared by two different price-tier pizzas on this page (Value Range vs Mega Topped Range) with different per-slice calories, so the model must pick the correct tier and crust."
+  },
+  {
+    "id": "nandos-au-half-chicken",
+    "query": "Nando's Australia, Half PERi-PERi Chicken",
+    "country": "au",
+    "reference": {
+      "kcal": 715,
+      "proteinG": 108,
+      "carbsG": 1.1,
+      "fatG": 30.8
+    },
+    "referenceSource": "https://www.nandos.com.au/menu-item/half-chicken",
+    "hardness": "Nando's Australia is a small regional market for the brand; its nutrition page ranks far below Nando's UK/South Africa results and generic calorie-tracker sites for this query."
+  },
+  {
+    "id": "kfc-uk-original-recipe-rib",
+    "query": "KFC UK, Original Recipe Chicken, Rib",
+    "country": "uk",
+    "reference": {
+      "kcal": 265,
+      "proteinG": 14.1,
+      "carbsG": 7.7,
+      "fatG": 9.9
+    },
+    "referenceSource": "https://brand-uk.assets.kfc.co.uk/drupal/production/2025-02/KFC4662~49854_W2_25_ALG_S1.pdf",
+    "hardness": "UK-only figures published solely inside a printable allergen/nutrition PDF, not a crawlable page; US KFC results dominate this query, and 'Rib' is an uncommon piece name the model must match to the right table row."
   }
 ]
