@@ -25,13 +25,11 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 // source directly.
 //
 // Loaded lazily, not at module top level: gemini.ts imports
-// @adaptive-macros/engine, whose src/index.ts re-exports its siblings with
-// extensionless specifiers ('./types', not './types.ts'). Metro and tsc
-// resolve that; node's native loader under --experimental-strip-types does
-// not, and throws ERR_MODULE_NOT_FOUND. That's a real problem for an actual
-// run, but --help and --dry-run don't need APP at all, and shouldn't fail on
-// a resolution bug in a package they never touch. See task-6-report.md for
-// the fix this needs before a live run will work.
+// @adaptive-macros/engine, and that import used to fail under node's native
+// loader (extensionless internal specifiers, which Metro and tsc resolve but
+// node's ESM loader does not) — fixed in f754deb by adding explicit .ts
+// extensions. Kept lazy anyway: --help and --dry-run don't need APP at all,
+// and shouldn't pay for importing a package they never touch.
 let appPromise;
 const getApp = () => (appPromise ??= import('../../mobile/src/api/gemini.ts'));
 
@@ -51,6 +49,7 @@ async function loadCases() {
     country: c.country,
     reference: c.reference,
     referenceSource: c.referenceSource,
+    hardness: c.hardness,
   }));
 }
 
@@ -70,7 +69,11 @@ function grade(result, reference) {
   const kcalForPortion = (result.per100g.kcal * portion.grams) / 100;
   const errPct = ((kcalForPortion - reference.kcal) / reference.kcal) * 100;
   return {
-    grounded: (result.sources ?? []).length > 0,
+    // No `grounded` field here: every row that reaches grade() came from a
+    // successful lookupFood() call, which already guarantees sources is
+    // non-empty, so a boolean re-deriving that would always read true and
+    // measure nothing. Whether grounding failed to happen at all is the
+    // `ungrounded: true` rows below, not a field on this one.
     kcal_ok: Math.abs(errPct) <= KCAL_TOLERANCE_PCT ? 1 : 0,
     kcal_bias_pct: errPct,
     kcal_for_portion: kcalForPortion,
@@ -187,10 +190,8 @@ async function main() {
     process.exit(2);
   }
 
-  // First real touch of gemini.ts. If the engine package's extensionless
-  // imports haven't been fixed (see the getApp comment above), this is where
-  // it throws - after validation and the key check, so a broken checkout
-  // fails fast rather than mid-run.
+  // First real touch of gemini.ts, after validation and the key check, so a
+  // broken checkout fails fast rather than mid-run.
   const APP = await getApp();
 
   mkdirSync(HERE, { recursive: true });
@@ -246,6 +247,7 @@ async function main() {
             rep,
             query: c.query,
             country: c.country,
+            hardness: c.hardness,
             model: args.model,
             ungrounded: false,
             grade: g,
@@ -271,9 +273,10 @@ async function main() {
               rep,
               query: c.query,
               country: c.country,
+              hardness: c.hardness,
               model: args.model,
               ungrounded: true,
-              grade: { grounded: false, kcal_ok: 0, kcal_bias_pct: null, source_domains: [] },
+              grade: { kcal_ok: 0, kcal_bias_pct: null, source_domains: [] },
               reference: c.reference,
               reference_source: c.referenceSource,
               food_name: null,

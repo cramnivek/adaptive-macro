@@ -35,6 +35,18 @@ export default function SearchScreen() {
   const [selected, setSelected] = useState<Food | null>(null);
   const [candidate, setCandidate] = useState<Food | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
+  const [lookupElapsed, setLookupElapsed] = useState(0);
+
+  // The grounded lookup can take up to 90s. Without a visible clock that reads
+  // as a hang, and the user taps again or gives up on the feature. Mirrors the
+  // same counter on the describe screen.
+  useEffect(() => {
+    if (!lookingUp) return;
+    setLookupElapsed(0);
+    const started = Date.now();
+    const timer = setInterval(() => setLookupElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    return () => clearInterval(timer);
+  }, [lookingUp]);
 
   // Every keystroke would fire three network searches, so a trailing debounce
   // waits for a pause in typing. The ref lets each new keystroke cancel the
@@ -186,7 +198,7 @@ export default function SearchScreen() {
               />
               {canLookUp && (
                 <Button
-                  label={lookingUp ? 'Looking it up…' : 'Look it up with AI'}
+                  label={lookingUp ? `Looking it up… ${lookupElapsed}s` : 'Look it up with AI'}
                   variant="subtle"
                   disabled={lookingUp}
                   onPress={() => void runLookup()}
@@ -241,10 +253,12 @@ export default function SearchScreen() {
         food={candidate}
         onCancel={() => setCandidate(null)}
         onSave={(food) =>
-          void saveFood(food).then(() => {
-            setCandidate(null);
-            setSelected(food);
-          })
+          void saveFood(food)
+            .then(() => {
+              setCandidate(null);
+              setSelected(food);
+            })
+            .catch(() => setErrors(['Could not save that food. Try again.']))
         }
       />
     </View>

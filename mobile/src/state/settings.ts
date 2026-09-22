@@ -81,14 +81,15 @@ export const SETTINGS_KEY = 'app.settings';
 /**
  * Merges stored settings over the defaults.
  *
- * Shallow-merging the top level would drop new fields inside `profile` and
- * `goal` when the app adds them, so those two are merged a level deeper. Any
- * key absent from storage keeps its default, which is what makes adding a
- * setting a non-breaking change for existing installs.
+ * Shallow-merging the top level would drop new fields inside `profile`,
+ * `goal` and `foodLookup` when the app adds them, so those three are merged a
+ * level deeper. Any key absent from storage keeps its default, which is what
+ * makes adding a setting a non-breaking change for existing installs.
  */
 export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings => ({
   ...DEFAULT_SETTINGS,
   ...stored,
   profile: { ...DEFAULT_SETTINGS.profile, ...stored?.profile },
   goal: { ...DEFAULT_SETTINGS.goal, ...stored?.goal },
+  foodLookup: { ...DEFAULT_SETTINGS.foodLookup, ...stored?.foodLookup },
 });
