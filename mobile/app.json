@@ -2,6 +2,7 @@
   "expo": {
     "name": "Adaptive Macros",
     "slug": "adaptive-macros",
+    "owner": "zeldrich",
     "scheme": "adaptivemacros",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -24,6 +25,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": ["android.permission.CAMERA"],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -41,6 +43,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1feb7a8d-afb9-479d-8e29-821bb5be74c6"
+      }
     }
   }
 }
