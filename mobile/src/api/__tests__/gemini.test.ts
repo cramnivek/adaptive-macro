@@ -255,6 +255,53 @@ describe('lookupFood', () => {
     expect(food.per100g.kcal).toBeCloseTo(150);
   });
 
+  /**
+   * Observed on a real device: a lookup returned 220 kcal with P0/C0/F0 and was
+   * offered for saving. Calories come from macros, so an all-zero split under a
+   * real calorie figure is not something a source published — it is the
+   * structuring step filling required fields it had nothing to fill them with.
+   * `found` catches the model admitting it found nothing; this catches the case
+   * where it does not admit it.
+   */
+  it('rejects a found: true response whose macros are all zero under real calories', async () => {
+    const zeroMacros = { ...structuredRaw, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, groundedResponse))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          candidates: [{ content: { parts: [{ text: JSON.stringify(zeroMacros) }] } }],
+        }),
+      );
+
+    await expect(lookupFood('chickenjoy', 'ph', 'test-key')).rejects.toThrow();
+  });
+
+  /**
+   * The guard above must not swallow drinks and other genuinely empty items,
+   * where every macro really is zero and the calorie figure is near zero too.
+   */
+  it('still accepts an all-zero macro split when the calories are near zero too', async () => {
+    const blackCoffee = {
+      ...structuredRaw,
+      name: 'Black coffee',
+      kcal: 2,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: 0,
+      fiberG: 0,
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, groundedResponse))
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          candidates: [{ content: { parts: [{ text: JSON.stringify(blackCoffee) }] } }],
+        }),
+      );
+
+    const food = await lookupFood('black coffee', 'ph', 'test-key');
+    expect(food.name).toBe('Black coffee');
+  });
+
   it('sends google_search with no schema first, and a schema with no tools second', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, groundedResponse))

@@ -38,6 +38,15 @@ const GROUNDED_TIMEOUT_MS = 90_000;
 /** The structuring call does no I/O of its own and should be quick. */
 const STRUCTURE_TIMEOUT_MS = 15_000;
 
+/**
+ * Above this, a food with no macros at all is not a real figure.
+ *
+ * 20 kcal sits above anything genuinely macro-free that someone would log — a
+ * black coffee, a tea, a diet drink — and far below a portion of food, so the
+ * guard it backs never fires on the honest cases.
+ */
+const ZERO_MACRO_KCAL_FLOOR = 20;
+
 export class GroundedLookupError extends Error {
   constructor(message: string) {
     super(message);
@@ -205,6 +214,22 @@ export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
     if (!isFiniteNumber(r[key]) || (r[key] as number) < 0) {
       throw new GroundedLookupError(`The lookup returned no usable ${key} value`);
     }
+  }
+
+  // Calories are made of macros, so an all-zero split under a real calorie
+  // figure describes nothing that exists. It is what the structuring step
+  // produces when the source text gave it a calorie count and no macros: the
+  // schema requires the fields, so it fills them with zeros. Observed on a real
+  // lookup that offered "220 kcal, P0 C0 F0" for saving.
+  //
+  // The floor keeps genuinely empty items — black coffee, tea, diet drinks —
+  // out of the guard, since for those the zeros are the truth and the calorie
+  // figure is near zero to match.
+  const macrosAllZero = r.proteinG === 0 && r.carbsG === 0 && r.fatG === 0;
+  if (macrosAllZero && (r.kcal as number) > ZERO_MACRO_KCAL_FLOOR) {
+    throw new GroundedLookupError(
+      'The lookup returned calories with no macros, which no source states. Try a more specific name, or add it yourself.',
+    );
   }
 
   const portionGrams = r.portionGrams;
