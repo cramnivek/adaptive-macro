@@ -61,7 +61,12 @@ export const searchFoods = async (
       return;
     }
     const reason = result.reason;
-    errors.push(reason instanceof FoodApiError ? reason.message : 'A food source failed');
+    const message = reason instanceof FoodApiError ? reason.message : 'A food source failed';
+    // Two sources can fail identically — a country view and the world view are
+    // both Open Food Facts, so an outage there yields the same sentence twice.
+    // Telling the user once is the honest report, and the screen keys these by
+    // their text.
+    if (!errors.includes(message)) errors.push(message);
   };
 
   collect(localResult);
