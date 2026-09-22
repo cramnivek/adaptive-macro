@@ -293,7 +293,11 @@ export const lookupFood = async (
   // See the comment on RESPONSE_SCHEMA: grounding only proves a search
   // happened, not that these numbers came from it. This is the check that
   // actually enforces that distinction.
-  if ((parsed as { found?: unknown })?.found === false) {
+  // Anything but an explicit `true` is a rejection, not just an explicit
+  // `false`: a response that omits the field entirely is exactly as unproven
+  // as one that denies it, and this gate is the last thing standing between a
+  // model's guess and the user's diary.
+  if ((parsed as { found?: unknown })?.found !== true) {
     throw new UngroundedResponseError('No published nutrition figures were found for that item');
   }
 
