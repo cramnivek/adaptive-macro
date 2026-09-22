@@ -30,7 +30,10 @@ interface OffNutriments {
 interface OffProduct {
   code?: string;
   product_name?: string;
-  brands?: string;
+  // The legacy endpoint returns brands as one comma-separated string; the
+  // newer Search-a-licious endpoint returns an array. Both endpoints feed
+  // the same product shape into toFood, so both are accepted here.
+  brands?: string | string[];
   quantity?: string;
   serving_size?: string;
   serving_quantity?: number | string;
@@ -39,6 +42,12 @@ interface OffProduct {
 
 const FIELDS =
   'code,product_name,brands,quantity,serving_size,serving_quantity,nutriments';
+
+/** First brand, regardless of which shape the endpoint gave it to us in. */
+const firstBrand = (brands: OffProduct['brands']): string | undefined => {
+  const raw = Array.isArray(brands) ? brands[0] : brands?.split(',')[0];
+  return raw?.trim() || undefined;
+};
 
 /**
  * Builds the portion list for a product.
@@ -88,7 +97,7 @@ const toFood = (product: OffProduct): Food | null => {
   return {
     id: `off:${product.code}`,
     name,
-    brand: product.brands?.split(',')[0]?.trim() || undefined,
+    brand: firstBrand(product.brands),
     barcode: product.code,
     source: 'openfoodfacts',
     per100g: {
@@ -105,10 +114,36 @@ const toFood = (product: OffProduct): Food | null => {
   };
 };
 
-export const searchOpenFoodFacts = async (
+const SEARCH_A_LICIOUS_URL = 'https://search.openfoodfacts.org/search';
+
+/**
+ * Search-a-licious is Open Food Facts' newer search index. Unlike
+ * `cgi/search.pl` below, it has been consistently available in testing, so it
+ * is tried first.
+ *
+ * It is one global index with no per-country subdomains. It does accept a
+ * `countries_tags:"en:<country name>"` filter, but the app's `foodCountry`
+ * setting stores ISO-style codes like `ph`, not names, and building a
+ * code-to-name table just to file this filter is scope creep this migration
+ * doesn't need. So this call is always global, and the country-specific view
+ * is left to the legacy fallback below, when it's reachable.
+ *
+ * It also does not return `serving_size`, `serving_quantity` or `quantity`,
+ * even when asked for via `fields` — confirmed against the live API, not an
+ * oversight here. Foods found this way therefore only ever get the generic
+ * 100 g portion; foods from the legacy fallback can still carry a named
+ * serving. That asymmetry is accepted rather than worked around.
+ */
+const searchSearchALicious = async (query: string, pageSize: number): Promise<Food[]> => {
+  const url = `${SEARCH_A_LICIOUS_URL}?q=${encodeURIComponent(query)}&page_size=${pageSize}`;
+  const data = await fetchJson<{ hits?: OffProduct[] }>(url, SOURCE);
+  return (data.hits ?? []).map(toFood).filter((food): food is Food => food !== null);
+};
+
+const searchLegacy = async (
   query: string,
-  pageSize = 20,
-  country: string = DEFAULT_FOOD_COUNTRY,
+  pageSize: number,
+  country: string,
 ): Promise<Food[]> => {
   const url =
     `${baseFor(country)}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
@@ -116,6 +151,31 @@ export const searchOpenFoodFacts = async (
 
   const data = await fetchJson<{ products?: OffProduct[] }>(url, SOURCE);
   return (data.products ?? []).map(toFood).filter((food): food is Food => food !== null);
+};
+
+/**
+ * `cgi/search.pl` is intermittent — measured directly, the same URL returns
+ * 503 and then 200 seconds apart. That looks like transient load rather than
+ * the endpoint being actually down, so it's worth one retry before treating
+ * it as failed.
+ */
+export const searchOpenFoodFacts = async (
+  query: string,
+  pageSize = 20,
+  country: string = DEFAULT_FOOD_COUNTRY,
+): Promise<Food[]> => {
+  try {
+    const hits = await searchSearchALicious(query, pageSize);
+    if (hits.length > 0) return hits;
+  } catch {
+    // Falls through to the legacy endpoint below.
+  }
+
+  try {
+    return await searchLegacy(query, pageSize, country);
+  } catch {
+    return await searchLegacy(query, pageSize, country);
+  }
 };
 
 /**
