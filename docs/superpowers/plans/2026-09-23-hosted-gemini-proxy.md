@@ -2,20 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A fresh install looks up food and describes meals with no API key, by routing Gemini calls through an EAS-hosted proxy that holds the key server-side.
+**Goal:** A fresh install looks up food and describes meals with no API key, by routing Gemini calls through a hosted proxy that holds the key server-side.
 
-**Architecture:** One Expo Router API route deployed to EAS Hosting acts as a thin passthrough — it checks a shared token, checks the model against an allowlist, attaches the Gemini key from the server environment, and forwards the body unchanged. The client picks its route at call time: a key in Settings goes direct to Google, no key goes through the proxy. All existing response validation stays client-side where its tests are.
+**Architecture:** One small Node service on Google Cloud Run acts as a thin passthrough — it checks a shared token, checks the model against an allowlist, attaches the Gemini key from the server environment, and forwards the body unchanged. The client picks its route at call time: a key in Settings goes direct to Google, no key goes through the proxy. All existing response validation stays client-side where its tests are.
 
-**Tech Stack:** Expo SDK 57, expo-router 57 API routes (`+api.ts`), EAS Hosting (Cloudflare Workers), vitest 2, TypeScript 6, zod 3 (via `zod/v4`).
+**Tech Stack:** Expo SDK 57, Node 20+ on Google Cloud Run, vitest 2, TypeScript 6, zod 3 (via `zod/v4`).
+
+> **Task 1 was implemented against EAS Hosting and that host does not work.** It was deployed and measured: Google returns `400 FAILED_PRECONDITION: User location is not supported for the API use` for every call from it, grounded and ungrounded, 3 of 3, while identical calls from a dev machine return 200. The worker egress reported `loc=PH` — the same country as the working machine — so it is the Cloudflare anycast IP being refused, not a region. Task 1's handler is unaffected and keeps its tests; Task 2 moves it to Cloud Run and removes the EAS route.
 
 ## Global Constraints
 
-- Proxy logic lives in `mobile/src/server/`, never in `app/api/*+api.ts`. `mobile/vitest.config.ts` includes only `src/**/__tests__/**/*.test.ts`; logic in `app/` would be untestable. Route files are wrappers only.
-- The Gemini key is an EAS environment variable of type **sensitive**, never **secret**. Secret-type variables cannot deploy to EAS Hosting — they are build-time only — and would fail at `eas deploy`.
-- The Gemini key is never prefixed `EXPO_PUBLIC_`, never written to a file in the repo, and never printed by a command in this plan.
+- From Task 2 on, proxy logic lives in `services/gemini-proxy/src/`. It must stay a pure `(Request, ProxyEnv) => Promise<Response>` with the HTTP adapter kept separate — this code has already changed hosts once, and that portability is what made the move cheap.
+- The Gemini key is a server-side environment variable on Cloud Run. It is never prefixed `EXPO_PUBLIC_` (that prefix inlines a value into the client bundle), never written to a file in the repo, and never printed by a command in this plan.
+- The app sends the shared token as `EXPO_PUBLIC_PROXY_TOKEN`; the service reads it as `PROXY_TOKEN`. Same value, two names — the prefix is meaningful only on the client.
 - `MODEL` stays `gemini-3.5-flash`. `GROUNDED_TIMEOUT_MS` stays `90_000` and `STRUCTURE_TIMEOUT_MS` stays `15_000`.
 - A key present in Settings always wins over the proxy. This is the fallback path and must never be removed.
-- Run mobile tests with `npm run test --workspace @adaptive-macros/mobile`. Root `npm test` runs engine only until Task 1 fixes it.
+- Run a single workspace's tests with `npm run test --workspace @adaptive-macros/<name>`. Root `npm test` covers engine and mobile from Task 1, and the proxy service from Task 2.
+- `expo export` does not clean `dist/`, so a deleted route redeploys from stale output. `rm -rf dist` before any export whose purpose is to remove something.
 - Commit after every task. Do not push until the whole plan is green.
 
 ---
@@ -281,93 +284,430 @@ Claude-Session: https://claude.ai/code/session_01JjdynanDTyc2RBmpafgjLt"
 
 ---
 
-### Task 2: Deploy and verify the runtime assumption
+### Task 2: Port the handler to a Cloud Run service
 
 **Files:**
-- Modify: `mobile/src/server/geminiProxy.ts` (only if the timeout assumption fails)
+- Create: `services/gemini-proxy/package.json`
+- Create: `services/gemini-proxy/tsconfig.json`
+- Create: `services/gemini-proxy/src/geminiProxy.ts` (moved from `mobile/src/server/geminiProxy.ts`)
+- Create: `services/gemini-proxy/src/index.ts`
+- Create: `services/gemini-proxy/src/__tests__/geminiProxy.test.ts` (moved from `mobile/src/server/__tests__/geminiProxy.test.ts`)
+- Create: `services/gemini-proxy/src/__tests__/index.test.ts`
+- Create: `services/gemini-proxy/vitest.config.ts`
+- Create: `services/gemini-proxy/.gcloudignore`
+- Delete: `mobile/app/api/gemini+api.ts`
+- Delete: `mobile/src/server/` (both files, moved above)
+- Modify: `mobile/app.json` (remove `web.output`)
+- Modify: `package.json` (root — workspaces and test script)
 
 **Interfaces:**
-- Consumes: `handleGeminiProxy` from Task 1.
-- Produces: the deployed base URL, used as `PROXY_BASE` in Task 3.
+- Consumes: `handleGeminiProxy(request, env)` and `ProxyEnv` from Task 1, moved unchanged.
+- Produces: a deployable service. `toNodeHandler` is internal to `index.ts`.
 
-This task is manual and has no unit test. Its deliverable is a verified URL.
+**Why this task exists.** Task 1 put the handler on EAS Hosting. That was deployed and measured, and Google rejects every call from it with `400 FAILED_PRECONDITION: User location is not supported for the API use` — 3 of 3 attempts, grounded and ungrounded alike, while the same calls from a dev machine return 200. The worker's egress reported `loc=PH`, the same country as the working machine, so it is not a region problem: Google refuses the Cloudflare anycast IP itself. No EAS region fixes that. The handler is sound and its six tests still pass; only its host changes.
 
-- [ ] **Step 1: Confirm the environment variables exist**
+- [ ] **Step 1: Create the service workspace**
 
-These are created by the user in the Expo dashboard, not by any command here — the values must not pass through a terminal or a transcript.
+Create `services/gemini-proxy/package.json`:
 
-At https://expo.dev/accounts/zeldrich/projects/adaptive-macros/environment-variables, confirm both exist for `production` **and** `development`:
-
-| Name | Type | Value |
-|---|---|---|
-| `GEMINI_API_KEY` | Sensitive | the rotated Gemini key |
-| `EXPO_PUBLIC_PROXY_TOKEN` | Sensitive | a random string, 32+ chars |
-
-If `EXPO_PUBLIC_PROXY_TOKEN` does not exist yet, generate a value locally and paste it into the dashboard:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+```json
+{
+  "name": "@adaptive-macros/gemini-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vitest": "^2.1.8"
+  }
+}
 ```
 
-- [ ] **Step 2: Pull them for local use**
+`build` and `start` are the two scripts Google Cloud buildpacks look for on a `--source` deploy, so no Dockerfile is needed.
 
-```bash
-cd mobile && npx eas env:pull --environment development
+Create `services/gemini-proxy/tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/__tests__/**"]
+}
 ```
 
-Expected: writes `.env.local`. Confirm `mobile/.gitignore` covers `.env*.local`; add it if not, and commit that line on its own.
+Create `services/gemini-proxy/vitest.config.ts`:
 
-- [ ] **Step 3: Verify the route locally before deploying**
+```ts
+import { defineConfig } from 'vitest/config';
 
-```bash
-cd mobile && npx expo
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/__tests__/**/*.test.ts'],
+  },
+});
 ```
 
-In a second terminal, check that the token gate works, using a wrong token first:
+Create `services/gemini-proxy/.gcloudignore`:
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8081/api/gemini \
-  -H "Content-Type: application/json" -H "x-proxy-token: wrong" \
-  -H "x-gemini-model: gemini-3.5-flash" -d '{"contents":[]}'
+```
+node_modules/
+dist/
+src/**/__tests__/
 ```
 
-Expected: `401`.
-
-- [ ] **Step 4: Deploy**
+- [ ] **Step 2: Move the handler and its tests, unchanged**
 
 ```bash
-cd mobile && npx expo export --platform web && npx eas deploy --environment production
+cd /c/Users/marca/adaptive-macro
+mkdir -p services/gemini-proxy/src/__tests__
+git mv mobile/src/server/geminiProxy.ts services/gemini-proxy/src/geminiProxy.ts
+git mv mobile/src/server/__tests__/geminiProxy.test.ts services/gemini-proxy/src/__tests__/geminiProxy.test.ts
 ```
 
-Record the URL it prints. That is `PROXY_BASE` for Task 3.
+Change nothing inside either file except one thing: the doc comment in `geminiProxy.ts` currently explains that it lives under `src/` because mobile's vitest only collects `src/**/__tests__/**`. That reason no longer applies. Replace that final paragraph with:
 
-- [ ] **Step 5: Verify the 90-second assumption against the real deployment**
+```
+ * Lives in its own service rather than in the app because Google refuses
+ * requests from EAS Hosting's Cloudflare egress — `FAILED_PRECONDITION: User
+ * location is not supported`, on every call, from an IP whose reported country
+ * is the same one that works directly. Cloud Run gives an attributable egress
+ * on Google's own network instead.
+```
 
-This is the one assumption in the spec that the design cannot settle, and the failure mode is precisely the slow grounded lookups the timeout was raised from 30s to 90s to accommodate. Send a real grounded request and time it.
+The import in the test file (`from '../geminiProxy'`) is still correct after the move.
 
-Substitute the deployed URL and the real token:
+- [ ] **Step 3: Write the failing adapter test**
+
+Create `services/gemini-proxy/src/__tests__/index.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { toNodeHandler } from '../index';
+
+// A minimal stand-in for node:http's ServerResponse, recording what was written.
+const fakeRes = () => {
+  const chunks: Buffer[] = [];
+  return {
+    statusCode: 0,
+    headers: {} as Record<string, string>,
+    body: () => Buffer.concat(chunks).toString(),
+    writeHead(status: number, headers: Record<string, string>) {
+      this.statusCode = status;
+      this.headers = headers;
+    },
+    end(chunk?: Buffer) {
+      if (chunk) chunks.push(chunk);
+    },
+  };
+};
+
+// A stand-in for IncomingMessage: an async-iterable carrying the body.
+const fakeReq = (method: string, url: string, headers: Record<string, string>, body?: string) => ({
+  method,
+  url,
+  headers,
+  async *[Symbol.asyncIterator]() {
+    if (body) yield Buffer.from(body);
+  },
+});
+
+describe('toNodeHandler', () => {
+  it('passes method, path, headers and body through to the handler', async () => {
+    let seen: Request | undefined;
+    const handler = toNodeHandler(async (request) => {
+      seen = request;
+      return new Response('ok', { status: 200 });
+    });
+
+    const res = fakeRes();
+    await handler(
+      fakeReq('POST', '/api/gemini', { 'x-proxy-token': 'tok', 'content-type': 'application/json' }, '{"a":1}') as any,
+      res as any,
+    );
+
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/api/gemini');
+    expect(seen?.headers.get('x-proxy-token')).toBe('tok');
+    expect(await seen?.text()).toBe('{"a":1}');
+  });
+
+  it('writes the handler status and body back to the response', async () => {
+    const handler = toNodeHandler(async () =>
+      Response.json({ error: 'Unauthorized' }, { status: 401 }),
+    );
+
+    const res = fakeRes();
+    await handler(fakeReq('POST', '/api/gemini', {}) as any, res as any);
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body())).toEqual({ error: 'Unauthorized' });
+  });
+
+  // Cloud Run sends an unsolicited GET / health probe. Letting that reach the
+  // handler would answer 401 and could be read as the service being broken.
+  it('answers a health probe on GET / without invoking the handler', async () => {
+    let called = false;
+    const handler = toNodeHandler(async () => {
+      called = true;
+      return new Response('nope', { status: 500 });
+    });
+
+    const res = fakeRes();
+    await handler(fakeReq('GET', '/', {}) as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(called).toBe(false);
+  });
+
+  // A handler that throws must not hang the connection or leak a stack trace.
+  it('turns an unexpected handler error into a 500 without leaking detail', async () => {
+    const handler = toNodeHandler(async () => {
+      throw new Error('boom: secret-key-abc');
+    });
+
+    const res = fakeRes();
+    await handler(fakeReq('POST', '/api/gemini', {}) as any, res as any);
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body()).not.toContain('secret-key-abc');
+  });
+});
+```
+
+- [ ] **Step 4: Run it to verify it fails**
+
+Run: `cd /c/Users/marca/adaptive-macro && npm run test --workspace @adaptive-macros/gemini-proxy`
+Expected: FAIL — `Failed to resolve import "../index"`.
+
+- [ ] **Step 5: Write the adapter and entrypoint**
+
+Create `services/gemini-proxy/src/index.ts`:
+
+```ts
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { type ProxyEnv, handleGeminiProxy } from './geminiProxy.js';
+
+/**
+ * Adapts a Web-standard handler onto node:http.
+ *
+ * The handler is written against `Request`/`Response` because that is what it
+ * was first deployed on, and keeping that shape means the proxy is portable to
+ * any runtime — which is not hypothetical: it already moved hosts once.
+ */
+export const toNodeHandler =
+  (handler: (request: Request) => Promise<Response>) =>
+  async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    // Cloud Run probes GET / to decide the container is live. Answering here
+    // keeps that out of the handler, which would reject it as an unauthorized
+    // request and make a healthy service look broken.
+    if (req.method === 'GET' && req.url === '/') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(Buffer.from('ok'));
+      return;
+    }
+
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+
+      const request = new Request(`https://proxy.invalid${req.url ?? '/'}`, {
+        method: req.method,
+        headers: req.headers as Record<string, string>,
+        body: chunks.length ? Buffer.concat(chunks) : undefined,
+      });
+
+      const response = await handler(request);
+      const body = Buffer.from(await response.arrayBuffer());
+
+      res.writeHead(response.status, Object.fromEntries(response.headers));
+      res.end(body);
+    } catch {
+      // Deliberately opaque. An exception here can carry a key in its message,
+      // and the caller can do nothing with the detail either way.
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(Buffer.from(JSON.stringify({ error: 'Proxy failed' })));
+    }
+  };
+
+const env: ProxyEnv = {
+  geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+  proxyToken: process.env.PROXY_TOKEN ?? '',
+};
+
+const port = Number(process.env.PORT ?? 8080);
+
+createServer(toNodeHandler((request) => handleGeminiProxy(request, env))).listen(port);
+```
+
+Note the variable is `PROXY_TOKEN` here, not `EXPO_PUBLIC_PROXY_TOKEN`. The `EXPO_PUBLIC_` prefix exists to inline a value into the client bundle; on the server it is meaningless and would only suggest this service ships something to a client. The app keeps sending `EXPO_PUBLIC_PROXY_TOKEN`; both must hold the same value.
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run: `cd /c/Users/marca/adaptive-macro && npm install && npm run test --workspace @adaptive-macros/gemini-proxy`
+Expected: PASS, 10 tests (6 moved + 4 new).
+
+- [ ] **Step 7: Remove the EAS Hosting route**
 
 ```bash
-time curl -s -o /tmp/grounded.json -w "%{http_code}\n" -X POST <PROXY_BASE>/api/gemini \
+cd /c/Users/marca/adaptive-macro
+git rm mobile/app/api/gemini+api.ts
+rmdir mobile/app/api mobile/src/server/__tests__ mobile/src/server 2>/dev/null || true
+```
+
+In `mobile/app.json`, remove the `"output": "server"` line so the `web` block returns to:
+
+```json
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+```
+
+That line existed only to enable API routes. Leaving it would keep building a server bundle for a route that no longer exists.
+
+- [ ] **Step 8: Register the workspace and the tests**
+
+In the root `package.json`, add the services glob to `workspaces`:
+
+```json
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "mobile"
+  ],
+```
+
+And extend `test` so the moved tests still run:
+
+```json
+    "test": "npm run test --workspace @adaptive-macros/engine && npm run test --workspace @adaptive-macros/mobile && npm run test --workspace @adaptive-macros/gemini-proxy",
+```
+
+- [ ] **Step 9: Verify the whole suite**
+
+Run: `cd /c/Users/marca/adaptive-macro && npm install && npm test && npm run typecheck && npm run typecheck --workspace @adaptive-macros/gemini-proxy`
+Expected: all PASS. Mobile's suite is now 19 tests (the 6 proxy tests moved out).
+
+- [ ] **Step 10: Verify the service against the real Gemini API, locally**
+
+This is the step that proves the port. Run it from the dev machine, whose IP Google accepts — that is exactly what makes this a valid check.
+
+`mobile/.env.local` already holds both values. Start the service with them:
+
+```bash
+cd /c/Users/marca/adaptive-macro/services/gemini-proxy
+npm run build
+GEMINI_API_KEY=$(grep '^GEMINI_API_KEY=' ../../mobile/.env.local | cut -d= -f2- | tr -d '\r"') \
+PROXY_TOKEN=$(grep '^EXPO_PUBLIC_PROXY_TOKEN=' ../../mobile/.env.local | cut -d= -f2- | tr -d '\r"') \
+PORT=8080 npm start &
+```
+
+Then, substituting the same token, confirm all four behaviours. **Never echo either value.**
+
+```bash
+TOKEN=$(grep '^EXPO_PUBLIC_PROXY_TOKEN=' /c/Users/marca/adaptive-macro/mobile/.env.local | cut -d= -f2- | tr -d '\r"')
+curl -s -o /dev/null -w "health: %{http_code}\n" http://localhost:8080/
+curl -s -o /dev/null -w "no token: %{http_code}\n" -X POST http://localhost:8080/api/gemini \
+  -H "Content-Type: application/json" -H "x-gemini-model: gemini-3.5-flash" -d '{"contents":[]}'
+curl -s -o /dev/null -w "bad model: %{http_code}\n" -X POST http://localhost:8080/api/gemini \
+  -H "Content-Type: application/json" -H "x-proxy-token: $TOKEN" -H "x-gemini-model: nope" -d '{"contents":[]}'
+curl -s -m 60 -X POST http://localhost:8080/api/gemini \
+  -H "Content-Type: application/json" -H "x-proxy-token: $TOKEN" \
+  -H "x-gemini-model: gemini-3.5-flash" -d '{"contents":[{"parts":[{"text":"Say OK"}]}]}' \
+  | head -c 200
+```
+
+Expected: `health: 200`, `no token: 401`, `bad model: 400`, and a real Gemini response on the last one — **not** `FAILED_PRECONDITION`. Stop the background service afterwards.
+
+If the last call returns `FAILED_PRECONDITION` from the dev machine, stop and report: that would mean the key itself is geo-restricted rather than the host, and the whole Cloud Run plan needs rethinking before any deploy.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add -A services mobile package.json
+git commit -m "refactor(proxy): move the Gemini proxy to a Cloud Run service
+
+EAS Hosting cannot reach the Gemini API. Every call from the deployed
+worker returned 400 FAILED_PRECONDITION 'User location is not supported',
+grounded and ungrounded alike, 3 of 3, while the same calls from a dev
+machine returned 200. The worker egress reported loc=PH -- the same
+country as the working machine -- so this is not a region problem:
+Google refuses the Cloudflare anycast IP itself, and no EAS region
+changes that.
+
+The handler is unchanged. It was already a pure Request -> Response, so
+the port is an HTTP adapter plus a health-probe branch for Cloud Run.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01JjdynanDTyc2RBmpafgjLt"
+```
+
+---
+
+### Task 2D: Deploy to Cloud Run
+
+**Files:** none. The deliverable is a verified URL, used as `PROXY_BASE` in Task 3.
+
+This task is manual and needs an interactive Google login, so it is the controller's to run with the human partner, not a subagent's.
+
+- [ ] **Step 1: Install the CLI and authenticate**
+
+`gcloud` is not installed on this machine. Install it, then the human partner runs the login themselves — it opens a browser and must not be automated:
+
+```
+gcloud auth login
+gcloud config set project <the Food Tracker project id>
+```
+
+- [ ] **Step 2: Deploy**
+
+```bash
+cd /c/Users/marca/adaptive-macro/services/gemini-proxy
+gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
+  --allow-unauthenticated --timeout 120 \
+  --set-env-vars "GEMINI_API_KEY=...,PROXY_TOKEN=..."
+```
+
+`--allow-unauthenticated` is correct here: the app is anonymous and the shared token is the gate. `--timeout 120` clears the 90s grounded call with margin. Prefer `--set-secrets` over `--set-env-vars` if Secret Manager is already set up on the project.
+
+- [ ] **Step 3: Verify the deployment**
+
+Repeat Step 10's four checks against the deployed URL, then run one real **grounded** call and time it:
+
+```bash
+time curl -s -m 150 -o /tmp/grounded.json -w "%{http_code}\n" -X POST <URL>/api/gemini \
   -H "Content-Type: application/json" -H "x-proxy-token: <token>" \
   -H "x-gemini-model: gemini-3.5-flash" \
   -d '{"contents":[{"parts":[{"text":"Find published nutrition information for a KFC UK Original Recipe Rib"}]}],"tools":[{"google_search":{}}]}'
 ```
 
-Expected: `200`, and `groundingMetadata` present in `/tmp/grounded.json`.
+Expected: `200`, `groundingChunks` present, and a wall-clock time under 90s. This finally answers the question the EAS deployment never reached.
 
-**If it returns a gateway error or is cut short:** stop and report the wall-clock time before proceeding. The proxy path cannot carry grounded lookups under that limit, and the spec's Limitations section needs correcting rather than the timeout quietly lowered. Do not continue to Task 3 on the assumption it works.
+If it returns `FAILED_PRECONDITION`, Cloud Run's egress is refused too and the fallback is Vertex AI — stop and report rather than trying other hosts.
 
-- [ ] **Step 6: Commit only if something changed**
+- [ ] **Step 4: Record the URL**
 
-If Steps 1–5 produced no file changes, there is nothing to commit. If `.gitignore` changed:
-
-```bash
-git add mobile/.gitignore
-git commit -m "chore: ignore pulled EAS environment files"
-```
-
----
+Record the service URL. That is `PROXY_BASE` for Task 3, Step 5.
 
 ### Task 3: Client routing — direct or proxy
 

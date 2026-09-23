@@ -31,19 +31,40 @@ configuration.
 
 ## Shape
 
-One API route, `mobile/app/api/gemini+api.ts`, deployed to EAS Hosting, whose
-free tier (100,000 requests, 1 GB storage per month) is far above what this
-needs.
+One small service on **Google Cloud Run**, whose free tier (2M requests per
+month) is far above what this needs.
 
 It is a **thin passthrough**: the app sends the Gemini request body it would
 otherwise have sent to Google, and the proxy attaches the key from a
 server-side environment variable and forwards it.
 
-That variable must be created with EAS's **sensitive** type, not **secret**.
-Secret-type variables cannot be deployed to EAS Hosting at all — they are
-build-time only — so a key stored as a secret would fail at `eas deploy` rather
-than at runtime. Sensitive is masked in the dashboard and in logs and is
-readable by the deployed route through `process.env`.
+### Why not EAS Hosting
+
+An earlier draft put this on EAS Hosting as an Expo Router API route, because
+the project already deploys there and the free tier was ample. That was
+deployed and measured, and it does not work:
+
+| Call | Result |
+|---|---|
+| Direct from a dev machine, ungrounded | 200 |
+| Direct from a dev machine, grounded | 200, correctly cited |
+| Through the deployed EAS route, ungrounded | 400 `FAILED_PRECONDITION` |
+| Through the deployed EAS route, grounded | 400, immediately |
+
+The error is `User location is not supported for the API use`, on 3 of 3
+attempts, for every call rather than only grounded ones.
+
+It is not a region problem. A temporary diagnostic route reported the worker's
+egress as `colo=HKG loc=PH ip=2a06:98c0:3600::103` — the same country as the
+dev machine, which succeeds. Google is refusing the address itself: a
+Cloudflare anycast IP it cannot attribute to a permitted consumer location for
+`generativelanguage.googleapis.com`. No EAS Hosting region can fix that,
+because what is rejected is the IP's ownership rather than where it sits.
+
+Cloud Run replaces it because it gives an attributable egress on Google's own
+network in a region chosen explicitly. The handler itself is unchanged: it is a
+pure `(Request, ProxyEnv) => Promise<Response>`, so the port is an HTTP
+adapter, not a rewrite.
 
 This is deliberate. The two-call orchestration, the grounding gate, the `found`
 check and the zero-macro floor in `mobile/src/api/gemini.ts` are tested and
@@ -85,10 +106,9 @@ billing account at once — including the author's own use. A per-day cap stops
 the proxy before the balance is gone, which is the outcome worth buying.
 Grounded lookups are the expensive calls, so that is where it earns its keep.
 
-EAS Hosting runs on Cloudflare Workers but is managed, so this design assumes
-no KV or Durable Objects and therefore no server-side counters. If bindings
-turn out to be available, per-install limits become possible; nothing here
-depends on that.
+The service keeps no state, so there are no server-side counters. Cloud Run
+could hold state, but nothing here needs it, and per-install limits are not
+worth a datastore until the proxy is public.
 
 ## Fallback
 
@@ -166,12 +186,14 @@ new arm, reported per tier and split by `precise`/`vague` like the others.
 can use the proxy until the token is rotated, bounded by the daily cap. Play
 Integrity attestation is the fix and is out of scope here.
 
-**Grounded calls may exceed a Workers wall-clock limit.** The grounded timeout
-is 90s, chosen because 30s was cutting off the hardest lookups. Workers meter
-CPU time rather than wall time and a proxy awaiting a fetch uses almost none,
-so this is expected to be fine — but it is an assumption to verify against a
-real deployment before relying on it, because the failure mode is exactly the
-slow lookups the 90s was raised to accommodate.
+**The 90-second grounded call is still unverified against a deployment.** The
+timeout is 90s because 30s was cutting off the hardest lookups. The EAS
+deployment never reached this question — every call failed at the geo gate
+before any work started — so it carries over unanswered to Cloud Run, whose
+request timeout defaults to 300s and is configurable up to 60 minutes. That
+default is comfortably above 90s, but it should still be confirmed with a real
+grounded call rather than assumed, because the failure mode is exactly the slow
+lookups the timeout was raised to accommodate.
 
 **The author pays for every non-BYO-key user.** Acceptable at one user,
 bounded by the cap, and the reason the cap is not optional.
