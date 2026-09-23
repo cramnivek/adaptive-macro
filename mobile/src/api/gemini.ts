@@ -25,6 +25,51 @@ const MODEL = 'gemini-3.5-flash';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
+ * Where the app talks to Gemini when the user has supplied no key of their own.
+ *
+ * Set per environment so the route can be exercised against a local dev server
+ * without deploying.
+ */
+// TODO(Task 2D): replace with the deployed Cloud Run URL.
+const PROXY_BASE = process.env.EXPO_PUBLIC_API_BASE ?? '<PROXY_BASE from Task 2>';
+const PROXY_TOKEN = process.env.EXPO_PUBLIC_PROXY_TOKEN ?? '';
+
+export interface GeminiRoute {
+  url: string;
+  headers: Record<string, string>;
+  viaProxy: boolean;
+}
+
+/**
+ * Chooses between the user's own key and the hosted proxy.
+ *
+ * A key in Settings always wins. That keeps bring-your-own-key users off the
+ * shared quota, and makes a proxy outage degrade to "enter a key" rather than
+ * to a broken feature.
+ */
+export const routeFor = (model: string, apiKey: string): GeminiRoute => {
+  const key = apiKey.trim();
+
+  if (key) {
+    return {
+      url: `${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(key)}`,
+      headers: { 'Content-Type': 'application/json' },
+      viaProxy: false,
+    };
+  }
+
+  return {
+    url: `${PROXY_BASE}/api/gemini`,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-proxy-token': PROXY_TOKEN,
+      'x-gemini-model': model,
+    },
+    viaProxy: true,
+  };
+};
+
+/**
  * Grounded search reads pages, so it is far slower than a database lookup.
  *
  * 90s rather than 30s because the eval showed 30 was cutting off the lookups
@@ -122,23 +167,39 @@ const postJson = async (
 ): Promise<any> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const route = routeFor(model, apiKey);
 
   try {
-    const response = await fetch(`${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    const response = await fetch(route.url, {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: route.headers,
       body: JSON.stringify(body),
     });
 
+    // Same status, different cause. On the direct path the user's own key was
+    // rejected and they can fix it; on the proxy path the key is the author's
+    // and "check it in Settings" would send them looking for a field that is
+    // empty on purpose.
     if (response.status === 400 || response.status === 403) {
-      throw new GroundedLookupError('That Gemini API key was rejected. Check it in Settings.');
+      throw new GroundedLookupError(
+        route.viaProxy
+          ? 'The lookup service is unavailable. Try again later, or add your own Gemini API key in Settings.'
+          : 'That Gemini API key was rejected. Check it in Settings.',
+      );
+    }
+    if (response.status === 401) {
+      throw new GroundedLookupError(
+        'This build cannot reach the lookup service. Add your own Gemini API key in Settings.',
+      );
     }
     // Grounding is metered separately and needs billing enabled on the project;
     // without it every grounded call returns 429 while plain ones still succeed.
     if (response.status === 429) {
       throw new GroundedLookupError(
-        'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
+        route.viaProxy
+          ? 'The shared lookup allowance is used up for now. Try again later, or add your own Gemini API key in Settings.'
+          : 'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
       );
     }
     if (!response.ok) {
@@ -270,10 +331,6 @@ export const lookupFood = async (
   country: string,
   apiKey: string,
 ): Promise<Food> => {
-  if (!apiKey.trim()) {
-    throw new GroundedLookupError('Add a Gemini API key in Settings to look foods up.');
-  }
-
   // Call one: search the web and keep the citations.
   const grounded = await postJson(
     MODEL,

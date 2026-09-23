@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GroundedLookupError, UngroundedResponseError, lookupFood, sourceDomainsFrom, toCandidateFood } from '../gemini';
+import { GroundedLookupError, UngroundedResponseError, lookupFood, routeFor, sourceDomainsFrom, toCandidateFood } from '../gemini';
 
 const validRaw = {
   name: 'Chickenjoy',
@@ -318,11 +318,18 @@ describe('lookupFood', () => {
     expect(secondBody.tools).toBeUndefined();
   });
 
-  it('rejects with GroundedLookupError before any fetch when the api key is empty', async () => {
-    await expect(lookupFood('chickenjoy', 'ph', '   ')).rejects.toBeInstanceOf(
-      GroundedLookupError,
-    );
-    expect(fetchMock).not.toHaveBeenCalled();
+  // Superseded by the proxy routing: a whitespace-only key used to be rejected
+  // before any fetch. It now means "use the proxy", so it reaches fetch the
+  // same as any other proxy-routed call, via the grounded/structured pair above.
+  it('routes a whitespace-only key through the proxy rather than rejecting it before any fetch', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, groundedResponse))
+      .mockResolvedValueOnce(jsonResponse(200, structuredResponse));
+
+    const food = await lookupFood('chickenjoy', 'ph', '   ');
+
+    expect(food.name).toBe('Chickenjoy');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces a malformed body from the structuring call as GroundedLookupError', async () => {
@@ -340,5 +347,51 @@ describe('lookupFood', () => {
     await expect(lookupFood('chickenjoy', 'ph', 'test-key')).rejects.toBeInstanceOf(
       GroundedLookupError,
     );
+  });
+});
+
+describe('routeFor', () => {
+  it('goes direct to Google when a key is set, carrying the key in the query', () => {
+    const route = routeFor('gemini-3.5-flash', 'AIzaUserKey');
+
+    expect(route.viaProxy).toBe(false);
+    expect(route.url).toContain('generativelanguage.googleapis.com');
+    expect(route.url).toContain('key=AIzaUserKey');
+    expect(route.headers['x-proxy-token']).toBeUndefined();
+  });
+
+  it('goes through the proxy when no key is set, naming the model in a header', () => {
+    const route = routeFor('gemini-3.5-flash', '');
+
+    expect(route.viaProxy).toBe(true);
+    expect(route.url).toContain('/api/gemini');
+    expect(route.url).not.toContain('generativelanguage.googleapis.com');
+    expect(route.headers['x-gemini-model']).toBe('gemini-3.5-flash');
+  });
+
+  it('treats a whitespace-only key as absent', () => {
+    expect(routeFor('gemini-3.5-flash', '   ').viaProxy).toBe(true);
+  });
+
+  // The key never leaves the device on the proxy path. If it did, the whole
+  // reason for the proxy would be inverted.
+  it('never sends a user key to the proxy', () => {
+    const route = routeFor('gemini-3.5-flash', '');
+
+    expect(JSON.stringify(route)).not.toContain('AIza');
+  });
+});
+
+describe('lookupFood without a key', () => {
+  // Before the proxy, an empty key threw "Add a Gemini API key in Settings".
+  // That instruction is now wrong, so the guard must be gone.
+  it('does not reject an empty key out of hand', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ candidates: [] }), { status: 200 }),
+    ));
+
+    await expect(lookupFood('chickenjoy', 'ph', '')).rejects.toThrow(UngroundedResponseError);
+
+    vi.unstubAllGlobals();
   });
 });
