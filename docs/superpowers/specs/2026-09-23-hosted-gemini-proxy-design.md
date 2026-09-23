@@ -78,9 +78,10 @@ LLM for anyone holding the shared secret, and an allowlist is the difference
 between them burning the quota on cheap calls and burning it on expensive ones.
 The path is restricted to `:generateContent`.
 
-The app finds the proxy through `EXPO_PUBLIC_API_BASE`, set per environment —
-the deployed hosting URL for release builds, the local dev server otherwise, so
-the route can be exercised without deploying.
+The app finds the proxy through a hardcoded default pointing at the deployed
+Cloud Run URL, in `mobile/src/api/gemini.ts`, with `EXPO_PUBLIC_API_BASE` as an
+optional override. There is no local route to exercise any more — every build
+talks to the deployed service unless that variable is set.
 
 ## Authentication and spend
 
@@ -186,14 +187,13 @@ new arm, reported per tier and split by `precise`/`vague` like the others.
 can use the proxy until the token is rotated, bounded by the daily cap. Play
 Integrity attestation is the fix and is out of scope here.
 
-**The 90-second grounded call is still unverified against a deployment.** The
+**The 90-second grounded call has been verified against the deployment.** The
 timeout is 90s because 30s was cutting off the hardest lookups. The EAS
 deployment never reached this question — every call failed at the geo gate
-before any work started — so it carries over unanswered to Cloud Run, whose
-request timeout defaults to 300s and is configurable up to 60 minutes. That
-default is comfortably above 90s, but it should still be confirmed with a real
-grounded call rather than assumed, because the failure mode is exactly the slow
-lookups the timeout was raised to accommodate.
+before any work started — so it carried over unanswered to Cloud Run, which
+was deployed with `--timeout 120`, comfortably above the 90s client timeout. A
+real grounded call through the deployed service returned 200 in 17 seconds,
+citing the operator's own site, closing the question.
 
 **The author pays for every non-BYO-key user.** Acceptable at one user,
 bounded by the cap, and the reason the cap is not optional.

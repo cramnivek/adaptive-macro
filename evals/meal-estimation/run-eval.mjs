@@ -250,8 +250,13 @@ async function runCase(input, ctx) {
   return {
     output: totals,
     estimate: result.estimate,
-    // For a hosted path this is the model the API says it served, so the
-    // harness can catch a silent substitution that would void the comparison.
+    // The substitution check below is real for Claude: describeMeal.ts returns
+    // response.model, the model the API says it actually served. It is nominal
+    // for Gemini: geminiDescribe.ts returns its own hardcoded MODEL constant,
+    // not anything read from the response, so this can never catch Google
+    // serving a different model than requested. Making it real would mean
+    // reading payload.modelVersion instead, but that can return a dated
+    // variant string and risks spurious failures here — left for later.
     model: isLocal ? ctx.model : result.model,
     usage: {
       input_tokens: result.usage.inputTokens,

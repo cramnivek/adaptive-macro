@@ -17,3 +17,4 @@ coverage/
 .claude/hillclimb/**/report.html
 .claude/hillclimb/**/trajectory/
 evals/**/results*.jsonl
+evals/**/errors.jsonl

@@ -293,7 +293,7 @@ export default function SettingsScreen() {
           value={settings.foodLookup.geminiApiKey}
           onChangeText={(geminiApiKey) =>
             void updateSettings({
-              foodLookup: { ...settings.foodLookup, geminiApiKey, enabled: geminiApiKey.trim().length > 0 },
+              foodLookup: { ...settings.foodLookup, geminiApiKey },
             })
           }
           placeholder="AIza…"

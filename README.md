@@ -308,7 +308,7 @@ trendRate(series, 14);      // actual kg/week over the last two weeks
 
 ```bash
 npm install
-npm test           # 70 tests, including ground-truth recovery of a known TDEE
+npm test           # 118 tests, including ground-truth recovery of a known TDEE
 npm run typecheck  # engine and app
 npm run web        # runs in a browser at localhost:8081 — no phone needed
 npm start          # Expo dev server; open in Expo Go or a dev build
@@ -365,7 +365,7 @@ carries the monorepo resolver setup that makes that work.
 
 ## Status
 
-The engine is complete and tested: 70 tests pass, including recovery of a known
+The engine is complete and tested: 118 tests pass, including recovery of a known
 ground-truth TDEE from simulated noisy data.
 
 All three platforms bundle: `expo export` succeeds for web, iOS and Android.

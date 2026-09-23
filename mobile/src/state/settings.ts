@@ -51,7 +51,6 @@ export interface AppSettings {
    * estimation off it.
    */
   foodLookup: {
-    enabled: boolean;
     geminiApiKey: string;
   };
   /** False until the profile has been filled in at least once. */
@@ -75,7 +74,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ollamaHost: defaultOllamaHost(),
   ollamaModel: '',
   anthropicApiKey: '',
-  foodLookup: { enabled: false, geminiApiKey: '' },
+  foodLookup: { geminiApiKey: '' },
   onboarded: false,
 };
 

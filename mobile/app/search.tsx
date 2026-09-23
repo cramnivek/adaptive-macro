@@ -121,8 +121,10 @@ export default function SearchScreen() {
   // Three rather than zero: the case this exists for returned one irrelevant
   // result, not an empty list.
   const THIN_RESULT_COUNT = 3;
-  const canLookUp =
-    !showingFrequent && !loading && settings.foodLookup.enabled && shown.length < THIN_RESULT_COUNT;
+  // The offer no longer depends on configuration — it routes through the
+  // shared proxy by default, so thin results are the only gate. A user's own
+  // Gemini key (if set) is just an alternate credential the lookup call uses.
+  const canLookUp = !showingFrequent && !loading && shown.length < THIN_RESULT_COUNT;
 
   const runLookup = useCallback(async () => {
     const trimmed = query.trim();
