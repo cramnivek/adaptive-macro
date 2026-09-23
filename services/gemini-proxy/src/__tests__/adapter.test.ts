@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toNodeHandler } from '../index';
+import { toNodeHandler } from '../adapter';
 
 // A minimal stand-in for node:http's ServerResponse, recording what was written.
 const fakeRes = () => {
