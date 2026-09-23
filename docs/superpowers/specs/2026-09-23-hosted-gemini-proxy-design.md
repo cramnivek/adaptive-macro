@@ -16,11 +16,8 @@ author, and it is already friction for the author.
 
 ## Goals
 
-A fresh install should be able to look up a food with no configuration, and
-should describe a meal with no configuration provided Gemini earns the default
-on the eval. If it does not, the describe path keeps its current defaults and
-this goal is met for lookup only — stated plainly rather than assumed, because
-that measurement has not been run yet.
+A fresh install should be able to look up a food and describe a meal with no
+configuration.
 
 ## Non-goals
 
@@ -40,7 +37,13 @@ needs.
 
 It is a **thin passthrough**: the app sends the Gemini request body it would
 otherwise have sent to Google, and the proxy attaches the key from a
-server-side secret and forwards it.
+server-side environment variable and forwards it.
+
+That variable must be created with EAS's **sensitive** type, not **secret**.
+Secret-type variables cannot be deployed to EAS Hosting at all — they are
+build-time only — so a key stored as a secret would fail at `eas deploy` rather
+than at runtime. Sensitive is masked in the dashboard and in logs and is
+readable by the deployed route through `process.env`.
 
 This is deliberate. The two-call orchestration, the grounding gate, the `found`
 check and the zero-macro floor in `mobile/src/api/gemini.ts` are tested and
@@ -69,9 +72,18 @@ hiding it. What it buys is that the URL alone is not enough, and that it can be
 rotated without users touching anything.
 
 **A hard quota cap** on `generativelanguage.googleapis.com` in Google Cloud,
-requests per day, set in the console. This bounds the worst case to a chosen
-number no matter what happens to the secret. Grounded lookups are the expensive
-calls, so this is where it earns its keep.
+requests per day, set in the console.
+
+Spend is in fact already bounded, and more tightly than the cap would bound it:
+the billing account is on Prepay with auto-reload off, and at a $0 balance
+every key on the account returns HTTP 402 and stops. The exposure is the
+credit balance, not the tier cap.
+
+The quota cap therefore protects availability rather than spend. Credit
+exhaustion fails silently, with no warning, and takes down every project on the
+billing account at once — including the author's own use. A per-day cap stops
+the proxy before the balance is gone, which is the outcome worth buying.
+Grounded lookups are the expensive calls, so that is where it earns its keep.
 
 EAS Hosting runs on Cloudflare Workers but is managed, so this design assumes
 no KV or Durable Objects and therefore no server-side counters. If bindings
@@ -92,15 +104,23 @@ rather than to a broken feature.
 `aiProvider` gains `'gemini'`, routed through the proxy. `'ollama'` and
 `'anthropic'` are unchanged.
 
-**Gemini becomes the default only if the eval says it should.** The
-meal-estimation eval already scores providers by tier and splits `precise` from
-`vague`. A Gemini arm is added and run before the default moves. If it scores
-worse than the current local model, it does not become the default and this
-spec is wrong about that part — the point of having the eval is that this
-question is answered by measurement rather than by convenience.
+**Gemini becomes the default unconditionally**, and the standalone loopback
+defect is fixed as a side effect once the default provider needs no local
+server.
 
-The standalone loopback defect is fixed as a side effect once the default
-provider needs no local server, but only if the default actually moves.
+An earlier draft gated this on the meal-estimation eval: Gemini would take the
+default only by outscoring local qwen. That gate asked the wrong question. It
+compared accuracy between a provider that runs for every user and one that
+requires the user's own PC to be running Ollama on a reachable address. A
+provider that does not exist for a user cannot be that user's default at any
+score. Availability dominates, so the default moves regardless.
+
+The eval is still run, with a Gemini arm reported per tier and split by
+`precise`/`vague` like the others. It no longer decides the default; it tells
+us how much accuracy the hosted path costs, which is worth knowing and is the
+kind of thing that silently degrades unmeasured. A large regression is a reason
+to change the prompt or the model, not a reason to default to a provider most
+users cannot run.
 
 ## Meal description via Gemini
 
