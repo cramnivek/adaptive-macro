@@ -188,7 +188,8 @@ export const estimateCostUsd = (
 export const estimateMeal = async (
   description: string,
   config: {
-    provider: 'ollama' | 'anthropic';
+    provider: 'gemini' | 'ollama' | 'anthropic';
+    geminiApiKey: string;
     anthropicApiKey: string;
     ollamaHost: string;
     ollamaModel: string;
@@ -198,7 +199,11 @@ export const estimateMeal = async (
     const { describeMealWithOllama } = await import('./ollama');
     return describeMealWithOllama(description, config.ollamaHost, config.ollamaModel);
   }
-  return describeMeal(description, config.anthropicApiKey);
+  if (config.provider === 'anthropic') {
+    return describeMeal(description, config.anthropicApiKey);
+  }
+  const { describeMealWithGemini } = await import('./geminiDescribe');
+  return describeMealWithGemini(description, config.geminiApiKey);
 };
 
 /** Maps a friendly message onto the SDK's typed errors. */
