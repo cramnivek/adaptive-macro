@@ -30,7 +30,10 @@
   "harness_paths": [
     "evals/meal-estimation/run-eval.mjs",
     "evals/meal-estimation/cases.json",
-    "mobile/src/ai/describeMeal.ts"
+    "mobile/src/ai/describeMeal.ts",
+    "mobile/src/ai/geminiDescribe.ts",
+    "mobile/src/api/gemini.ts",
+    "evals/meal-estimation/ts-relative-imports-loader.mjs"
   ],
   "prices": {
     "claude-opus-5": {
@@ -47,5 +50,5 @@
     }
   },
   "metrics_md": "`kcal_ok` is the headline: for a precisely-specified meal, within 15% of the reference computed from its per-100 g components; for a vague one, anywhere inside the plausible range. `kcal_bias_pct` is signed and is the number that matters most over time — a model that is consistently high corrupts the expenditure estimate in one direction, which is worse than one that is noisy but centred. `macro_mae_g` is the mean absolute error across protein, carbs and fat in grams.",
-  "harness_sha": "cda288fe81bd6b34f18f1028cf6949fe3106bff533e967927504f89f5680b6e4"
+  "harness_sha": "b180f70c13f93f866cc1da4fe826cf4f14dea6626c70075642bdeafadb8d172b"
 }

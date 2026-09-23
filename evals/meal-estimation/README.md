@@ -192,13 +192,26 @@ node --experimental-strip-types --import 'data:text/javascript,import { register
 
 ### Result: Gemini vs. the local model
 
-8 meals × 3 reps, both on the app's current prompt (the `v5` row above), so
-the only variable is the provider:
+8 meals × 3 reps. `v7`'s traces are byte-for-byte identical to the
+`SYSTEM_PROMPT` committed in `describeMeal.ts` today — verified directly
+against `.claude/hillclimb/meal-estimation/v7/traces/*.json`. `v5`'s traces
+are **not**: they carry the same seven paragraphs, word for word, but with
+the "When a dish is named rather than itemised…" paragraph last (7th) rather
+than in its committed position (5th, right after the anti-inflation
+instruction). No commit has ever put that paragraph last, so `v5` does not
+correspond to any prompt state this repo has actually shipped — it is a
+content-equivalent but differently-ordered variant. The comparison below is
+therefore Gemini on the exact current prompt versus qwen on that reordered
+variant, not a byte-exact controlled comparison. The difference is almost
+certainly small (a reordered instruction list, not a changed one), but it is
+a real confound, not a nitpick, and a byte-exact qwen re-run — which this
+task has not done, since it needs a local Ollama server — would be needed to
+remove it entirely.
 
 | Arm | Precise ok | Precise bias | Vague ok | Vague bias |
 |---|---|---|---|---|
-| `v5` — qwen2.5:32b (local, free) | 15/15 | −2.08% | 6/9 | −6.25% |
-| `v7` — gemini-3.5-flash (hosted, this app's default) | 15/15 | **−1.66%** | **9/9** | **0.00%** |
+| `v5` — qwen2.5:32b (local, free; prompt reordered, see above) | 15/15 | −2.08% | 6/9 | −6.25% |
+| `v7` — gemini-3.5-flash (hosted, this app's default; prompt verified byte-exact) | 15/15 | **−1.66%** | **9/9** | **0.00%** |
 
 Gemini is not a regression — it is a clear improvement on both tiers, and it
 resolves the local model's worst known failure: `vague-fish-and-chips`, which
