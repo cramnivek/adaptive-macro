@@ -1,21 +1,51 @@
 {
   "flow": "meal-estimation",
   "metrics": [
-    { "id": "kcal_ok", "label": "kcal right", "kind": "binary" },
-    { "id": "kcal_err_pct", "label": "kcal err %", "kind": "float" },
-    { "id": "kcal_bias_pct", "label": "kcal bias %", "kind": "float" },
-    { "id": "macro_mae_g", "label": "macro MAE g", "kind": "float" }
+    {
+      "id": "kcal_ok",
+      "label": "kcal right",
+      "kind": "binary"
+    },
+    {
+      "id": "kcal_err_pct",
+      "label": "kcal err %",
+      "kind": "float"
+    },
+    {
+      "id": "kcal_bias_pct",
+      "label": "kcal bias %",
+      "kind": "float"
+    },
+    {
+      "id": "macro_mae_g",
+      "label": "macro MAE g",
+      "kind": "float"
+    }
   ],
-  "perf_fields": ["latency_s", "items", "usage"],
+  "perf_fields": [
+    "latency_s",
+    "items",
+    "usage"
+  ],
   "harness_paths": [
     "evals/meal-estimation/run-eval.mjs",
     "evals/meal-estimation/cases.json",
     "mobile/src/ai/describeMeal.ts"
   ],
   "prices": {
-    "claude-opus-5": { "in": 5, "out": 25 },
-    "claude-sonnet-5": { "in": 2, "out": 10 },
-    "claude-haiku-4-5": { "in": 1, "out": 5 }
+    "claude-opus-5": {
+      "in": 5,
+      "out": 25
+    },
+    "claude-sonnet-5": {
+      "in": 2,
+      "out": 10
+    },
+    "claude-haiku-4-5": {
+      "in": 1,
+      "out": 5
+    }
   },
-  "metrics_md": "`kcal_ok` is the headline: for a precisely-specified meal, within 15% of the reference computed from its per-100 g components; for a vague one, anywhere inside the plausible range. `kcal_bias_pct` is signed and is the number that matters most over time — a model that is consistently high corrupts the expenditure estimate in one direction, which is worse than one that is noisy but centred. `macro_mae_g` is the mean absolute error across protein, carbs and fat in grams."
+  "metrics_md": "`kcal_ok` is the headline: for a precisely-specified meal, within 15% of the reference computed from its per-100 g components; for a vague one, anywhere inside the plausible range. `kcal_bias_pct` is signed and is the number that matters most over time — a model that is consistently high corrupts the expenditure estimate in one direction, which is worse than one that is noisy but centred. `macro_mae_g` is the mean absolute error across protein, carbs and fat in grams.",
+  "harness_sha": "cda288fe81bd6b34f18f1028cf6949fe3106bff533e967927504f89f5680b6e4"
 }

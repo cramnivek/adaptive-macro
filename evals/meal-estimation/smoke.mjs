@@ -7,9 +7,18 @@
 //
 //   node --experimental-strip-types evals/meal-estimation/smoke.mjs ollama:qwen2.5:32b
 //   node --experimental-strip-types evals/meal-estimation/smoke.mjs claude-opus-5
+//
+// The Gemini arm needs the loader that lets node resolve geminiDescribe.ts's
+// extensionless import of api/gemini.ts (see run-eval.mjs and README):
+//   node --experimental-strip-types --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./evals/meal-estimation/ts-relative-imports-loader.mjs", pathToFileURL("./"));' evals/meal-estimation/smoke.mjs gemini-3.5-flash
 
 const APP = await import('../../mobile/src/ai/describeMeal.ts');
 const z = await import('zod/v4');
+
+// Lazy, and only needed (with the loader flag above) for the Gemini arm - see
+// the comment on the same pattern in run-eval.mjs.
+let geminiPromise;
+const getGemini = () => (geminiPromise ??= import('../../mobile/src/ai/geminiDescribe.ts'));
 
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
 const model = process.argv[2] ?? 'ollama:qwen2.5:32b';
@@ -58,7 +67,18 @@ console.log(`meal:   ${MEAL}\n`);
 const started = Date.now();
 const result = model.startsWith('ollama:')
   ? await runOllama(model.slice('ollama:'.length))
-  : await APP.describeMeal(MEAL, process.env.ANTHROPIC_API_KEY ?? '', model);
+  : model.startsWith('gemini')
+    ? await (async () => {
+        const apiKey = process.env.GEMINI_API_KEY ?? '';
+        if (!apiKey.trim()) {
+          throw new Error(
+            'GEMINI_API_KEY is not set. This calls Gemini directly with that key, never through the proxy.',
+          );
+        }
+        const GEMINI = await getGemini();
+        return GEMINI.describeMealWithGemini(MEAL, apiKey);
+      })()
+    : await APP.describeMeal(MEAL, process.env.ANTHROPIC_API_KEY ?? '', model);
 const seconds = (Date.now() - started) / 1000;
 
 const totals = result.estimate.items.reduce(

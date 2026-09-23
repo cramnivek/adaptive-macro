@@ -140,6 +140,79 @@ If the local model handles the precise tier and fails the vague one, a sensible
 outcome is to use it for most logging and reach for a hosted model only when
 the description is loose.
 
+## Testing the hosted Gemini path
+
+The app's default meal-description provider is Gemini, called through
+`mobile/src/ai/geminiDescribe.ts` (`describeMealWithGemini`) rather than
+through `describeMeal.ts`. It shares `SYSTEM_PROMPT` with the Claude path
+verbatim, so this arm measures the provider, not a different prompt. The
+default moved to Gemini on availability grounds — Ollama needs the user's own
+PC reachable from their phone, which cannot be anyone else's default — so this
+arm does not gate that choice. It measures what the move costs in accuracy,
+which is worth knowing regardless.
+
+The eval must bill your own key directly and never go through the deployed
+proxy, so it needs `GEMINI_API_KEY` in the environment (not `ANTHROPIC_API_KEY`,
+and not the proxy's token). `routeFor` (`mobile/src/api/gemini.ts`) treats any
+non-empty key as bring-your-own and skips the proxy entirely — that's the
+whole mechanism, and it's why the key must be present rather than left for the
+app to fall back on the shared allowance.
+
+`geminiDescribe.ts` imports `../api/gemini` with no file extension, which
+Metro (the app's real bundler) resolves but node's own ESM loader does not.
+Rather than touch that import — the app is otherwise finished and out of
+scope here — `ts-relative-imports-loader.mjs` in this directory is a small
+node loader hook that retries a failed relative resolution with `.ts`
+appended, registered with `--import`. Only the Gemini arm needs it; the
+Ollama and Claude arms are unaffected either way.
+
+**bash / zsh**
+
+```bash
+export GEMINI_API_KEY=AIza...
+
+node --experimental-strip-types --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./evals/meal-estimation/ts-relative-imports-loader.mjs", pathToFileURL("./"));' \
+  evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant v7 --model gemini-3.5-flash --reps 3 --approve-harness
+```
+
+**PowerShell** — one line:
+
+```powershell
+$env:GEMINI_API_KEY = "AIza..."
+node --experimental-strip-types --import "data:text/javascript,import { register } from `"node:module`"; import { pathToFileURL } from `"node:url`"; register(`"./evals/meal-estimation/ts-relative-imports-loader.mjs`", pathToFileURL(`"./`"));" evals/meal-estimation/run-eval.mjs --flow .claude/hillclimb/meal-estimation --variant v7 --model gemini-3.5-flash --reps 3 --approve-harness
+```
+
+Check it works first, same idea as the Ollama smoke check above — this bills
+your key for one call, not the whole set:
+
+```bash
+node --experimental-strip-types --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("./evals/meal-estimation/ts-relative-imports-loader.mjs", pathToFileURL("./"));' \
+  evals/meal-estimation/smoke.mjs gemini-3.5-flash
+```
+
+### Result: Gemini vs. the local model
+
+8 meals × 3 reps, both on the app's current prompt (the `v5` row above), so
+the only variable is the provider:
+
+| Arm | Precise ok | Precise bias | Vague ok | Vague bias |
+|---|---|---|---|---|
+| `v5` — qwen2.5:32b (local, free) | 15/15 | −2.08% | 6/9 | −6.25% |
+| `v7` — gemini-3.5-flash (hosted, this app's default) | 15/15 | **−1.66%** | **9/9** | **0.00%** |
+
+Gemini is not a regression — it is a clear improvement on both tiers, and it
+resolves the local model's worst known failure: `vague-fish-and-chips`, which
+qwen landed on 650 kcal every single time (18.75% under this repo's 800 kcal
+floor), Gemini put at 980–1105 kcal across its three reps, comfortably inside
+the 800–1450 range. Nothing here argues for a prompt or model change; the
+default already made on availability grounds also happens to be the more
+accurate one.
+
+The usual small-n caveat applies (see below) — 8 cases is not a lot — but a
+9/9 clean sweep on the tier the local model struggled with, on top of a
+tighter precise-tier bias, is a large enough gap that it is very unlikely to
+be noise.
+
 ## Adding your own meals
 
 The eight cases here are a seed, not a claim about what you eat. The eval is

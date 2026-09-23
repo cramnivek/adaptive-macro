@@ -37,6 +37,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const APP = await import('../../mobile/src/ai/describeMeal.ts');
 const z = await import('zod/v4');
 
+// The app's Gemini entry point, imported the same way as APP so the eval
+// measures what the hosted default actually does rather than a
+// reimplementation of it.
+//
+// Loaded lazily, not at module top level: geminiDescribe.ts imports
+// '../api/gemini' with no extension, which Metro resolves but node's ESM
+// loader does not - running the Gemini arm needs the loader in
+// ts-relative-imports-loader.mjs (see README). The other arms should not be
+// made to pay for that, or need that flag, just because this file exists.
+let geminiPromise;
+const getGemini = () => (geminiPromise ??= import('../../mobile/src/ai/geminiDescribe.ts'));
+
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
 /** Tolerance for a precisely-specified meal: inside this counts as right. */
@@ -181,17 +193,42 @@ async function runOllama(prompt, model, systemPrompt) {
 }
 
 /**
+ * Calls Gemini directly with this eval's own key, never through the deployed
+ * proxy.
+ *
+ * `routeFor` (mobile/src/api/gemini.ts) treats a non-empty key as
+ * bring-your-own and skips the proxy entirely - passing GEMINI_API_KEY here,
+ * rather than leaving it unset, is what keeps a run from billing the shared
+ * allowance or being shaped by proxy behaviour.
+ */
+async function runGemini(prompt) {
+  const apiKey = process.env.GEMINI_API_KEY ?? '';
+  if (!apiKey.trim()) {
+    throw new Error(
+      'GEMINI_API_KEY is not set. The Gemini arm bills that key directly and must never fall through to the proxy.',
+    );
+  }
+  const GEMINI = await getGemini();
+  return GEMINI.describeMealWithGemini(prompt, apiKey);
+}
+
+/**
  * Runs one meal description through whichever provider the model id names.
  *
- * `--model ollama:<tag>` routes to a local server; anything else goes through
- * the app's own describeMeal, which is the code the product actually runs.
+ * `--model ollama:<tag>` routes to a local server; `--model gemini-3.5-flash`
+ * routes to the app's Gemini path (direct-key only, see runGemini); anything
+ * else goes through the app's own describeMeal, which is the code the
+ * product actually runs.
  */
 async function runCase(input, ctx) {
   const isLocal = ctx.model.startsWith('ollama:');
+  const isGemini = ctx.model.startsWith('gemini');
 
   const result = isLocal
     ? await runOllama(input.prompt, ctx.model.slice('ollama:'.length), promptFor(ctx.variant))
-    : await APP.describeMeal(input.prompt, process.env.ANTHROPIC_API_KEY ?? '', ctx.model);
+    : isGemini
+      ? await runGemini(input.prompt)
+      : await APP.describeMeal(input.prompt, process.env.ANTHROPIC_API_KEY ?? '', ctx.model);
 
   const totals = result.estimate.items.reduce(
     (sum, item) => ({
@@ -203,10 +240,17 @@ async function runCase(input, ctx) {
     { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
 
+  // What actually went into the request: promptFor(ctx.variant) only applies
+  // to the Ollama path, which is the one arm that takes an overridden system
+  // prompt as an argument. Both hosted paths (Claude, Gemini) always run the
+  // app's own SYSTEM_PROMPT regardless of --variant, so logging anything else
+  // for them would misrepresent what was actually sent.
+  const systemPromptUsed = isLocal ? promptFor(ctx.variant) : APP.SYSTEM_PROMPT;
+
   return {
     output: totals,
     estimate: result.estimate,
-    // For the hosted path this is the model the API says it served, so the
+    // For a hosted path this is the model the API says it served, so the
     // harness can catch a silent substitution that would void the comparison.
     model: isLocal ? ctx.model : result.model,
     usage: {
@@ -215,7 +259,7 @@ async function runCase(input, ctx) {
     },
     stop_reason: result.raw.stopReason,
     transcript: [
-      { role: 'system', content: promptFor(ctx.variant) },
+      { role: 'system', content: systemPromptUsed },
       { role: 'user', content: input.prompt },
       { role: 'assistant', content: JSON.stringify(result.estimate, null, 2) },
     ],
