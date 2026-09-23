@@ -73,10 +73,23 @@ describe('describeMealWithGemini', () => {
 
   // Gemini's responseSchema is a hint, not a guarantee. zod is what actually
   // decides whether a response reaches the diary, exactly as it does for Claude.
-  it('rejects a response that satisfies no schema', async () => {
+  it('rejects a response that satisfies no schema, with a message a person can read', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => geminiResponse({ items: 'lots', notes: 5 })));
 
-    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow();
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow(
+      'Gemini replied in a form this app could not read. Try rephrasing.',
+    );
+  });
+
+  // A ZodError's message is a JSON dump of validation issues. Surfacing it
+  // would put that dump straight on the describe screen.
+  it('does not leak zod validation detail into the error message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => geminiResponse({ items: 'lots', notes: 5 })));
+
+    const error = await describeMealWithGemini('two scrambled eggs', '').catch((e) => e);
+
+    expect(error.message).not.toContain('invalid_type');
+    expect(error.message).not.toContain('[');
   });
 
   it('rejects malformed JSON rather than returning half a meal', async () => {

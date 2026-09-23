@@ -1,5 +1,5 @@
 import { routeFor } from '../api/gemini';
-import { type DescribeResult, MealEstimateSchema, SYSTEM_PROMPT } from './describeMeal';
+import { type DescribeResult, type MealEstimate, MealEstimateSchema, SYSTEM_PROMPT } from './describeMeal';
 
 /**
  * Meal estimation through Gemini.
@@ -105,9 +105,16 @@ export const describeMealWithGemini = async (
     throw new Error('Gemini replied in a form this app could not read. Try rephrasing.');
   }
 
-  // zod, not Gemini, is the boundary. Same rule as the Claude path: a response
-  // that does not validate is rejected rather than half-read into the diary.
-  const estimate = MealEstimateSchema.parse(parsed);
+  // zod, not Gemini, is the boundary. A ZodError's message is a JSON dump of
+  // validation issues, so it is translated here rather than shown: the Claude
+  // path answers a schema mismatch with a sentence, and both providers should
+  // fail the same way.
+  let estimate: MealEstimate;
+  try {
+    estimate = MealEstimateSchema.parse(parsed);
+  } catch {
+    throw new Error('Gemini replied in a form this app could not read. Try rephrasing.');
+  }
 
   const usage = payload?.usageMetadata ?? {};
   return {
