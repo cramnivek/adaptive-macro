@@ -283,10 +283,10 @@ export default function SettingsScreen() {
 
       <Card title="Looking up restaurant food">
         <Text style={[styles.note, { color: colors.textFaint }]}>
-          Chain and restaurant meals are not in the food databases. With a Gemini API key, searches
-          that come back empty can offer a web lookup, which shows you the sources it read before
-          you save anything. Grounded lookups are free up to a monthly allowance on Google's own
-          plans.
+          Chain and restaurant meals are not in the food databases, so searches that come
+          back empty can offer a web lookup, which shows you the sources it read before you
+          save anything. This works with no setup. Add your own Gemini API key to use your
+          own allowance instead, for both lookups and meal estimates.
         </Text>
         <Field
           label="Gemini API key"
@@ -306,10 +306,19 @@ export default function SettingsScreen() {
           value={settings.aiProvider}
           onChange={(aiProvider) => void updateSettings({ aiProvider })}
           options={[
+            { value: 'gemini' as const, label: 'Gemini' },
             { value: 'ollama' as const, label: 'Local model' },
             { value: 'anthropic' as const, label: 'Claude API' },
           ]}
         />
+
+        {settings.aiProvider === 'gemini' && (
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            Works with no setup. Estimates run on a shared allowance, so they may be
+            unavailable if it runs out — adding your own Gemini API key above uses that
+            instead, for both meal estimates and restaurant lookups.
+          </Text>
+        )}
 
         {settings.aiProvider === 'ollama' ? (
           <>

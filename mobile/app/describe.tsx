@@ -84,6 +84,7 @@ export default function DescribeScreen() {
     try {
       const result = await estimateMeal(text, {
         provider: settings.aiProvider,
+        geminiApiKey: settings.foodLookup.geminiApiKey,
         anthropicApiKey: settings.anthropicApiKey,
         ollamaHost: settings.ollamaHost,
         ollamaModel: settings.ollamaModel,
@@ -175,9 +176,12 @@ export default function DescribeScreen() {
     confidence === 'high' ? colors.positive : confidence === 'medium' ? colors.warning : colors.danger;
 
   const usingLocal = settings.aiProvider === 'ollama';
-  const ready = usingLocal
-    ? settings.ollamaModel.trim().length > 0
-    : settings.anthropicApiKey.trim().length > 0;
+  const ready =
+    settings.aiProvider === 'gemini'
+      ? true
+      : usingLocal
+        ? settings.ollamaModel.trim().length > 0
+        : settings.anthropicApiKey.trim().length > 0;
 
   return (
     <ScrollView

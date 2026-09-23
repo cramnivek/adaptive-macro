@@ -27,11 +27,14 @@ export interface AppSettings {
    */
   foodCountry: string;
   /**
-   * Which engine estimates a described meal. 'ollama' keeps everything on this
-   * machine and costs nothing; 'anthropic' needs an API key and a billing
-   * relationship. Local is the default because it requires neither.
+   * Which engine estimates a described meal.
+   *
+   * 'gemini' is the default because it is the only one that works on a fresh
+   * install: 'ollama' needs the user's own machine running a server the phone
+   * can reach, and 'anthropic' needs a key. Both stay available — local is
+   * free and private, and the key path keeps anyone off the shared allowance.
    */
-  aiProvider: 'ollama' | 'anthropic';
+  aiProvider: 'gemini' | 'ollama' | 'anthropic';
   ollamaHost: string;
   /** Empty until a model is chosen; the picker reads what the server has. */
   ollamaModel: string;
@@ -68,7 +71,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   expenditureVolatilityKcal: DEFAULT_MODEL_OPTIONS.expenditureVolatilityKcal,
   usdaApiKey: USDA_DEMO_KEY,
   foodCountry: DEFAULT_FOOD_COUNTRY,
-  aiProvider: 'ollama',
+  aiProvider: 'gemini',
   ollamaHost: defaultOllamaHost(),
   ollamaModel: '',
   anthropicApiKey: '',
