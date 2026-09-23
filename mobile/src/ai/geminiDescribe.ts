@@ -55,6 +55,12 @@ const MEAL_RESPONSE_SCHEMA = {
   required: ['items', 'notes', 'notFood'],
 } as const;
 
+/**
+ * Marks an error this module raised on purpose, so the transport catch below
+ * re-throws it rather than relabelling it as a connection failure.
+ */
+class DescribeResponseError extends Error {}
+
 const textOf = (response: unknown): string => {
   const parts = (response as any)?.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) return '';
@@ -89,9 +95,17 @@ export const describeMealWithGemini = async (
     });
 
     if (!response.ok) {
-      throw new Error(`The estimate service returned ${response.status}.`);
+      throw new DescribeResponseError(`The estimate service returned ${response.status}.`);
     }
     payload = await response.json();
+  } catch (error) {
+    if (error instanceof DescribeResponseError) throw error;
+    // The timeout exists to bound a slow estimate; saying so is more use than
+    // an AbortError, which names the mechanism rather than the problem.
+    if ((error as Error)?.name === 'AbortError') {
+      throw new Error('The estimate took too long. Try again.');
+    }
+    throw new Error('Could not reach the estimate service. Check your connection.');
   } finally {
     clearTimeout(timer);
   }

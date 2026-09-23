@@ -113,4 +113,34 @@ describe('describeMealWithGemini', () => {
     expect(result.estimate.notFood).toBe(true);
     expect(result.estimate.items).toHaveLength(0);
   });
+
+  it('reports a timeout as a sentence rather than an AbortError', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    }));
+
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow(
+      'The estimate took too long. Try again.',
+    );
+  });
+
+  it('reports an unreachable service as a sentence rather than a raw fetch error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }));
+
+    const error = await describeMealWithGemini('two scrambled eggs', '').catch((e) => e);
+
+    expect(error.message).toBe('Could not reach the estimate service. Check your connection.');
+  });
+
+  it('still reports an HTTP status rather than relabelling it a connection failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 503 })));
+
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow(
+      'The estimate service returned 503.',
+    );
+  });
 });
