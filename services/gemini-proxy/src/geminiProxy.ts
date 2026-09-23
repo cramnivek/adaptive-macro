@@ -7,9 +7,11 @@
  * they are tested. Duplicating them here would leave those tests pointing at a
  * copy that no longer runs.
  *
- * Lives under `src/` rather than in the route file because vitest only collects
- * `src/**‍/__tests__/**`, and an untested open relay on a billing key is not
- * something to ship.
+ * Lives in its own service rather than in the app because Google refuses
+ * requests from EAS Hosting's Cloudflare egress — `FAILED_PRECONDITION: User
+ * location is not supported`, on every call, from an IP whose reported country
+ * is the same one that works directly. Cloud Run gives an attributable egress
+ * on Google's own network instead.
  */
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
