@@ -30,8 +30,7 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * Set per environment so the route can be exercised against a local dev server
  * without deploying.
  */
-// TODO(Task 2D): replace with the deployed Cloud Run URL.
-const PROXY_BASE = process.env.EXPO_PUBLIC_API_BASE ?? '<PROXY_BASE from Task 2>';
+const PROXY_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'https://gemini-proxy-297164004726.asia-southeast1.run.app';
 const PROXY_TOKEN = process.env.EXPO_PUBLIC_PROXY_TOKEN ?? '';
 
 export interface GeminiRoute {
