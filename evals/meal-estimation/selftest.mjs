@@ -4,7 +4,6 @@
 // feed it the reference answers and it must score 100%; feed it rubbish and it
 // must score 0%. A grader that cannot fail is the most expensive kind of bug,
 // because every model looks fine.
-process.env.EVAL_IMPORT_ONLY = '1';
 const { loadCases, gradeCase } = await import('./run-eval.mjs');
 
 const cases = await loadCases();

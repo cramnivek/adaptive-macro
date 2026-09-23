@@ -29,7 +29,7 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // The app's real entry point, imported rather than reimplemented so the eval
 // exercises the same prompt, schema and parsing the product uses. Needs
@@ -632,8 +632,14 @@ async function main() {
   process.exit(fail ? 1 : 0);
 }
 
-// Guarded so the self-test can import loadCases/gradeCase without kicking off
-// a paid run just by importing this file.
-if (!process.env.EVAL_IMPORT_ONLY) main();
+// Run only when executed directly, never on import.
+//
+// This used to be an opt-OUT guard keyed on an env var, which meant importing
+// this file to reuse gradeCase/loadCases spent a real paid run unless the
+// importer happened to know the magic variable — the sibling food-lookup eval
+// had exactly this bug. A default that costs money when you forget it is the
+// wrong way round; the direct-run check below has no such trap.
+const invokedAs = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (invokedAs === import.meta.url) main();
 
 export { gradeCase, loadCases, referenceFrom };
