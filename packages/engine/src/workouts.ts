@@ -77,3 +77,68 @@ export const effectiveLoadKg = (
  */
 export const isWorkingSet = (set: Pick<WorkoutSet, 'setType'>): boolean =>
   set.setType !== 'warmup';
+
+/** A set paired with the date of the session it belongs to. */
+export interface DatedSet {
+  date: ISODate;
+  set: WorkoutSet;
+}
+
+export interface ProgressionPoint {
+  date: ISODate;
+  /** Effective load of the heaviest working set that day. */
+  heaviestWorkingSetKg: number;
+  /** Sum of effective load × reps across that day's working sets. */
+  workingVolumeKg: number;
+  /** True when this day beat every earlier one. A tie is not a record. */
+  isRecord: boolean;
+}
+
+/**
+ * One exercise's progression over time, one point per session date.
+ *
+ * Both figures are computed on effective load, so bodyweight work counts for
+ * what it actually moved. Warmups are excluded, and so is any set that cannot
+ * be scored — a session left with nothing usable produces no point at all
+ * rather than a zero, which would read as a session where the weight
+ * collapsed.
+ *
+ * `bodyweightByDate` is supplied by the caller from the expenditure series'
+ * `trendWeightKg`. Taking it as a parameter is what keeps this module free of
+ * the filter and testable on its own.
+ */
+export const progressionFor = (
+  sets: DatedSet[],
+  bodyweightByDate: ReadonlyMap<ISODate, number>,
+): ProgressionPoint[] => {
+  const byDate = new Map<ISODate, { heaviest: number; volume: number }>();
+
+  for (const { date, set } of sets) {
+    if (!isWorkingSet(set)) continue;
+    if (set.reps === null) continue;
+
+    const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
+    if (load === null) continue;
+
+    const day = byDate.get(date) ?? { heaviest: 0, volume: 0 };
+    day.heaviest = Math.max(day.heaviest, load);
+    day.volume += load * set.reps;
+    byDate.set(date, day);
+  }
+
+  // Sorted before the record pass, because "beats everything before it" is a
+  // statement about chronology rather than about input order.
+  const ordered = [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  let best = 0;
+  return ordered.map(([date, day]) => {
+    const isRecord = day.heaviest > best;
+    if (isRecord) best = day.heaviest;
+    return {
+      date,
+      heaviestWorkingSetKg: day.heaviest,
+      workingVolumeKg: day.volume,
+      isRecord,
+    };
+  });
+};
