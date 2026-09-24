@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { join, normalize, resolve, sep } from 'node:path';
 
 /**
@@ -54,13 +54,20 @@ export const serveStatic = async (
   // Normalise first, then confirm the result is still inside the root. Checking
   // the raw string for '..' is the version of this that keeps getting bypassed;
   // comparing resolved absolute paths is the version that holds.
-  const root = resolve(webRoot);
+  const root = await realpath(resolve(webRoot)).catch(() => resolve(webRoot));
   const target = resolve(join(root, normalize(decoded)));
   if (target !== root && !target.startsWith(root + sep)) return null;
 
   try {
     const info = await stat(target);
     if (!info.isFile()) return null;
+
+    // The check above validates the requested path; this validates where that
+    // path actually leads. A symlink inside the web root pointing outside it
+    // would satisfy the first check and defeat the purpose of it.
+    const real = await realpath(target);
+    if (real !== root && !real.startsWith(root + sep)) return null;
+
     const body = await readFile(target);
     return new Response(new Uint8Array(body), {
       status: 200,

@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -59,6 +59,20 @@ describe('serveStatic', () => {
 
   it('does not serve a directory as if it were a file', async () => {
     expect(await serveStatic('/_expo', root)).toBeNull();
+  });
+
+  // stat() follows symlinks, so the requested path can look safe while the
+  // file it resolves to is not. Flagged independently by a code review and an
+  // automated scan; not reachable in today's build, which is not a guarantee.
+  it('refuses a symlink that points outside the web root', async () => {
+    const link = join(root, 'escape-link.txt');
+    try {
+      symlinkSync(join(root, '..', 'outside-secret.txt'), link);
+    } catch {
+      return; // Windows needs privileges for symlinks; skip rather than fail.
+    }
+
+    expect(await serveStatic('/escape-link.txt', root)).toBeNull();
   });
 
   // Content-hashed bundles may be cached forever; index.html must not be, or
