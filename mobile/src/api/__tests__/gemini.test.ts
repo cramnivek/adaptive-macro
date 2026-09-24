@@ -351,6 +351,10 @@ describe('lookupFood', () => {
 });
 
 describe('routeFor', () => {
+  // This block stubs document to exercise the browser branch; without this
+  // the stub leaks into the tests after it.
+  afterEach(() => vi.unstubAllGlobals());
+
   it('goes direct to Google when a key is set, carrying the key in the query', () => {
     const route = routeFor('gemini-3.5-flash', 'AIzaUserKey');
 
@@ -373,6 +377,25 @@ describe('routeFor', () => {
     expect(routeFor('gemini-3.5-flash', '   ').viaProxy).toBe(true);
   });
 
+  // The site is served BY the proxy, so a relative URL is same-origin on
+  // whichever hostname Cloud Run answered. An absolute base would be
+  // cross-origin on the service's other hostname -- both resolve -- which is
+  // the CORS failure co-hosting exists to avoid.
+  it('uses a relative proxy URL in a browser so the call stays same-origin', () => {
+    vi.stubGlobal('document', {});
+
+    const route = routeFor('gemini-3.5-flash', '');
+
+    expect(route.url).toBe('/api/gemini');
+    expect(route.url).not.toContain('run.app');
+  });
+
+  // Native has no origin to be relative to, so it must keep the absolute URL.
+  it('uses the absolute Cloud Run URL off the web', () => {
+    const route = routeFor('gemini-3.5-flash', '');
+
+    expect(route.url).toContain('run.app/api/gemini');
+  });
   // The key never leaves the device on the proxy path. If it did, the whole
   // reason for the proxy would be inverted.
   it('never sends a user key to the proxy', () => {

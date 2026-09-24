@@ -30,7 +30,19 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
  * Set per environment so the route can be exercised against a local dev server
  * without deploying.
  */
-const PROXY_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'https://gemini-proxy-297164004726.asia-southeast1.run.app';
+const PROXY_BASE_OVERRIDE = process.env.EXPO_PUBLIC_API_BASE ?? '';
+const CLOUD_RUN_BASE = 'https://gemini-proxy-297164004726.asia-southeast1.run.app';
+
+/**
+ * Empty in a browser, which makes the request URL relative.
+ *
+ * The site is served by the proxy itself, so a relative path is same-origin
+ * whichever hostname Cloud Run answered on. An absolute base would be
+ * cross-origin the moment the page was opened on the service's other hostname
+ * — both resolve — and that is the CORS failure co-hosting exists to avoid.
+ */
+const proxyBase = (): string =>
+  PROXY_BASE_OVERRIDE || (typeof document === 'undefined' ? CLOUD_RUN_BASE : '');
 const PROXY_TOKEN = process.env.EXPO_PUBLIC_PROXY_TOKEN ?? '';
 
 export interface GeminiRoute {
@@ -58,7 +70,7 @@ export const routeFor = (model: string, apiKey: string): GeminiRoute => {
   }
 
   return {
-    url: `${PROXY_BASE}/api/gemini`,
+    url: `${proxyBase()}/api/gemini`,
     headers: {
       'Content-Type': 'application/json',
       'x-proxy-token': PROXY_TOKEN,
