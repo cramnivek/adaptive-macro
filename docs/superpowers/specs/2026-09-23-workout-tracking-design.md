@@ -4,7 +4,7 @@ Design, 2026-09-23.
 
 ## Problem
 
-Lifting history lives in Lyfta and nutrition lives here, so neither view knows
+Lifting history lives in Hevy and nutrition lives here, so neither view knows
 about the other. The stated motivation was to "account energy expenditure based
 on the workouts as well" — that motivation is wrong, and correcting it is what
 shapes this design.
@@ -26,8 +26,8 @@ knowing whether the weight on the bar is going up.
 
 ## Goals
 
-Migrate lifting history off Lyfta and track progressive overload in this app,
-with routines and a session logger good enough that going back to Lyfta is not
+Migrate lifting history off Hevy and track progressive overload in this app,
+with routines and a session logger good enough that going back to Hevy is not
 tempting.
 
 Separately, show training volume alongside the filter's own expenditure
@@ -41,11 +41,11 @@ estimate, so the model can be checked against something outside itself.
   measurement. Showing one as a number is the same error as an ungrounded food
   estimate, which this app already refuses.
 - **Rest timers, RPE, supersets, plate calculators.** None serve progressive
-  overload. Each is a reason Lyfta exists.
-- **Ongoing sync with Lyfta.** This is a migration. Import is re-runnable so a
+  overload. Each is a reason Hevy exists.
+- **Ongoing sync with Hevy.** This is a migration. Import is re-runnable so a
   failed attempt can be retried, not so the two apps can stay in step.
 - **A shipped exercise catalog.** Exercises come from imported history and from
-  typing a name. Lyfta ships 5,000; this app needs the ~25 you actually do.
+  typing a name. Hevy ships 5,000; this app needs the ~25 you actually do.
 
 ## Data model
 
@@ -80,28 +80,44 @@ setting. One basis, conversions at the edges.
 Press", "Barbell Bench Press" and "Bench Press (Barbell)" as distinct strings.
 A progression chart split three ways is worse than no chart.
 
-`set_type` is `working` or `warmup`, and it is load-bearing rather than
-decorative: warmup sets in a progression series flatten the line and hide the
-trend. Only working sets count toward progression.
+`set_type` stores Hevy's own value verbatim — `normal`, `warmup`, `dropset` or
+`failure` — rather than being flattened to a two-state field. It is
+load-bearing rather than decorative: warmup sets in a progression series
+flatten the line and hide the trend.
+
+Only `warmup` is excluded from progression. A dropset and a set taken to
+failure are both working sets and belong in the numbers. Keeping the source
+value means the distinction stays available later without re-importing.
 
 ## Import
 
 One-time in intent, re-runnable in practice, because the first attempt will be
 wrong in some way.
 
-**Format.** Lyfta's column headers are not published. LiftShift, the only tool
-that supports Lyfta, performs runtime column detection rather than hardcoding —
-evidence the format is not stable enough to guess at. The parser is therefore
-written against a real export, checked in as a fixture.
+**Format.** Hevy's export is documented and stable: 14 columns, one row per
+set — `title`, `start_time`, `end_time`, `description`, `exercise_title`,
+`superset_id`, `exercise_notes`, `set_index`, `set_type`, `weight_lbs`,
+`reps`, `distance_miles`, `duration_seconds`, `rpe`. A workout with five
+exercises of four sets each is twenty rows sharing a title and timestamps.
 
-It is not a generic column detector. That would be speculative generality for a
-format we will be able to see. It targets the actual headers and fails loudly,
-printing the header row it received, when they do not match. If Lyfta changes
-the format, that error says so immediately instead of importing zeros.
+The parser targets those headers and fails loudly, printing the header row it
+received, when they do not match. If Hevy changes the format, that error says
+so immediately instead of importing zeros. It is not a generic column detector;
+the headers are known, and detecting them at runtime would be speculative
+generality.
 
-Expect one row per set — Strong, Hevy and Lyfta all use that shape, and Lyfta
-imports the other two. Rows group into sessions by start timestamp, then into
-exercises within a session.
+A real export is still checked in as a fixture. Knowing the column names is not
+the same as knowing how a real file behaves, and the fixture is what makes the
+parser testable at all.
+
+**One quoting hazard, stated because it corrupts silently.** Timestamps are
+written as `"15 Jul 2026, 09:52"` — a comma *inside* the quotes. A parser that
+splits on commas breaks on every row, and breaks in a way that still produces
+plausible-looking fields. Quoted fields must be handled properly rather than
+split.
+
+Rows group into sessions by `start_time`, then into exercises by
+`exercise_title` within a session.
 
 **Preview before commit.** Nothing is written until the user accepts, matching
 the meal estimate and `LookupCandidateSheet`. The preview states what was found
@@ -113,13 +129,16 @@ shown.
 already exists is skipped. Re-importing the same file changes nothing;
 importing a newer export lands only the new sessions.
 
-**Units.** Hevy exports lbs regardless of display setting; Lyfta's behaviour is
-unknown until the fixture exists. The preview shows a sample converted weight
-so a wrong unit guess is visible before anything is written.
+**Units are unambiguous**, which removes a guess the earlier draft had to make.
+Hevy always writes `weight_lbs` regardless of the display unit set in the app,
+so every value is pounds and converts once to the canonical `weight_kg`. The
+preview still shows a sample converted weight, because a conversion off by a
+factor is obvious to a person and invisible to a test.
 
-**Unmodelled columns are skipped, not approximated.** RPE, distance, duration
-and notes we do not model are ignored, and the preview reports how many columns
-were dropped.
+**Unmodelled columns are skipped, not approximated.** `rpe`, `distance_miles`,
+`duration_seconds`, `superset_id`, `description` and `exercise_notes` are
+ignored — supersets and RPE are explicit non-goals — and the preview reports
+how many columns were dropped so the omission is visible rather than assumed.
 
 ## Routines and logging
 
@@ -153,12 +172,14 @@ is drawn as a labelled band, not a line, because that is what it is.
 The estimate is MET-derived — bodyweight × duration × an activity constant —
 which for resistance training lands in roughly a ±40% band. Bodyweight comes
 from the trend on that date, which the engine already produces. Duration comes
-from `started_at` → `finished_at`.
+from `started_at` → `finished_at`, which Hevy's export supplies directly as
+`start_time` and `end_time` — so imported history carries real durations rather
+than the blanks the earlier draft expected.
 
-**A session missing either input gets no estimate**, shown blank rather than
-defaulted, as `estimateCostUsd` returns null for an unpriced model rather than
-pricing it from the wrong list. Imported history may be largely blank here, and
-that is the correct outcome.
+**A session missing either input still gets no estimate**, shown blank rather
+than defaulted, as `estimateCostUsd` returns null for an unpriced model rather
+than pricing it from the wrong list. That now applies mainly to sessions logged
+in the app and never finished, not to imported ones.
 
 Nothing consumes this number. It exists so the model can be checked from
 outside: if the filter's expenditure rises through heavy blocks and falls
@@ -191,5 +212,7 @@ Two tests carry the most weight:
 
 ## Open input required
 
-A real Lyfta CSV export, to serve as the parser fixture. It is the one part of
-this that cannot be produced from the repository.
+A real Hevy CSV export, to serve as the parser fixture. In Hevy: **Profile tab
+→ settings gear → Export & Import Data → Export Data → Export Workouts.**
+
+It is the one part of this that cannot be produced from the repository.
