@@ -62,18 +62,21 @@ describe('toNodeHandler', () => {
 
   // Cloud Run sends an unsolicited GET / health probe. Letting that reach the
   // handler would answer 401 and could be read as the service being broken.
-  it('answers a health probe on GET / without invoking the handler', async () => {
+  // The health branch moved to the router, where it can answer /healthz
+  // independently of the web build. `/` is now the homepage and must reach
+  // the handler like any other path.
+  it('passes GET / through to the handler now that it is the homepage', async () => {
     let called = false;
     const handler = toNodeHandler(async () => {
       called = true;
-      return new Response('nope', { status: 500 });
+      return new Response('<!DOCTYPE html>', { status: 200 });
     });
 
     const res = fakeRes();
     await handler(fakeReq('GET', '/', {}) as any, res as any);
 
+    expect(called).toBe(true);
     expect(res.statusCode).toBe(200);
-    expect(called).toBe(false);
   });
 
   // A handler that throws must not hang the connection or leak a stack trace.

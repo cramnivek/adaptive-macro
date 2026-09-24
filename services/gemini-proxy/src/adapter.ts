@@ -10,15 +10,6 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 export const toNodeHandler =
   (handler: (request: Request) => Promise<Response>) =>
   async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    // Cloud Run probes GET / to decide the container is live. Answering here
-    // keeps that out of the handler, which would reject it as an unauthorized
-    // request and make a healthy service look broken.
-    if (req.method === 'GET' && req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end(Buffer.from('ok'));
-      return;
-    }
-
     try {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);

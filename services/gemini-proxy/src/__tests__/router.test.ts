@@ -1,0 +1,94 @@
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createRouter } from '../router';
+
+let webRoot: string;
+const env = { geminiApiKey: 'server-key', proxyToken: 'shared-token' };
+
+beforeAll(() => {
+  webRoot = mkdtempSync(join(tmpdir(), 'router-'));
+  writeFileSync(join(webRoot, 'index.html'), '<!DOCTYPE html><title>app</title>');
+  mkdirSync(join(webRoot, '_expo'), { recursive: true });
+  writeFileSync(join(webRoot, '_expo', 'bundle-abc.js'), 'console.log(1)');
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+const get = (path: string) => new Request(`https://x.test${path}`);
+const post = (path: string, headers: Record<string, string> = {}) =>
+  new Request(`https://x.test${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: '{"contents":[]}',
+  });
+
+describe('createRouter', () => {
+  it('serves index.html at the root', async () => {
+    const res = await createRouter({ env, webRoot })(get('/'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+    expect(await res.text()).toContain('<title>app</title>');
+  });
+
+  it('serves a real asset', async () => {
+    const res = await createRouter({ env, webRoot })(get('/_expo/bundle-abc.js'));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('javascript');
+  });
+
+  // expo-router uses client-side paths. Opening or refreshing /describe must
+  // give the app, not a 404.
+  it('falls back to index.html for a client-side route', async () => {
+    const res = await createRouter({ env, webRoot })(get('/describe'));
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<title>app</title>');
+  });
+
+  it('answers /healthz without touching the web build', async () => {
+    const res = await createRouter({ env, webRoot: '/nonexistent' })(get('/healthz'));
+
+    expect(res.status).toBe(200);
+  });
+
+  // The whole point of co-hosting: the API is same-origin, so no CORS.
+  it('routes /api/gemini to the proxy, which still rejects a missing token', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await createRouter({ env, webRoot })(post('/api/gemini'));
+
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('routes /api/gemini with a valid token through to the proxy', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"candidates":[]}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await createRouter({ env, webRoot })(
+      post('/api/gemini', { 'x-proxy-token': 'shared-token', 'x-gemini-model': 'gemini-3.5-flash' }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  // A stray POST must not be answered with the homepage, which would look
+  // like success to a client that is actually calling the wrong path.
+  it('does not serve the SPA fallback for a non-GET request', async () => {
+    const res = await createRouter({ env, webRoot })(post('/not-a-route'));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('404s an unknown path when the web build is absent', async () => {
+    const res = await createRouter({ env, webRoot: '/nonexistent' })(get('/anything'));
+
+    expect(res.status).toBe(404);
+  });
+});
