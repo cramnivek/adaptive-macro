@@ -1,5 +1,6 @@
 import { type ProxyEnv, handleGeminiProxy } from './geminiProxy.js';
 import { handleOffProxy } from './offProxy.js';
+import { handleUsdaProxy } from './usdaProxy.js';
 import { serveStatic } from './staticFiles.js';
 
 /**
@@ -33,6 +34,13 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
         opts.env,
         pathname === '/api/off/legacy' ? 'legacy' : 'search',
       );
+    }
+
+    if (pathname === '/api/usda/search') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405 });
+      }
+      return handleUsdaProxy(request, opts.env);
     }
 
     // Nothing else lives under /api/. Falling through would answer a typo

@@ -290,7 +290,7 @@ export default function SettingsScreen() {
           label="USDA API key"
           value={settings.usdaApiKey}
           onChangeText={(usdaApiKey) => void updateSettings({ usdaApiKey })}
-          hint="DEMO_KEY works but is rate limited to about 30 requests per hour. Free key at fdc.nal.usda.gov/api-key-signup.html"
+          hint="Leave this as DEMO_KEY to use the app's shared key, which is held server-side and is what most people want. Enter your own to get a quota nobody else is spending — free key at fdc.nal.usda.gov/api-key-signup.html"
         />
       </Card>
 

@@ -24,6 +24,13 @@ directly on every platform.
 
 - `GEMINI_API_KEY` — the actual Gemini API key, attached to every forwarded
   request.
+- `USDA_API_KEY` — FoodData Central key, attached to `/api/usda/search`.
+  Optional: unset falls back to USDA's `DEMO_KEY`, which is rate limited to
+  roughly 30 requests per hour per IP and which one search session can
+  exhaust. It is held here rather than shipped in the app because the quota
+  is attached to the key, and a key in the bundle is readable by anyone who
+  opens the site. A user who enters their own key in Settings bypasses this
+  route entirely and spends their own quota.
 - `PROXY_TOKEN` — the shared secret the proxy checks against the
   `x-proxy-token` header. The app sends this as `EXPO_PUBLIC_PROXY_TOKEN`
   (the `EXPO_PUBLIC_` prefix means it's inlined into the app bundle and
@@ -68,7 +75,16 @@ other. Use it only to set them the first time or to rotate one:
 ```
 gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
   --allow-unauthenticated --timeout 120 \
-  --set-env-vars "^##^GEMINI_API_KEY=...##PROXY_TOKEN=..."
+  --set-env-vars "^##^GEMINI_API_KEY=...##PROXY_TOKEN=...##USDA_API_KEY=..."
+```
+
+To add or change one variable while leaving the rest alone, use
+`--update-env-vars` instead, which merges rather than replaces:
+
+```
+gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
+  --allow-unauthenticated --timeout 120 \
+  --update-env-vars USDA_API_KEY=...
 ```
 
 ### Verifying a deploy
@@ -89,6 +105,8 @@ curl -s -o /dev/null -w "%{http_code}\n" \
   $URL/_expo/static/js/web/nope-123.js                       # 404  not the SPA
 curl -s -o /dev/null -w "%{http_code}\n" -X POST $URL/api/gemini \
   -H "Content-Type: application/json" -d '{}'                # 401
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "$URL/api/usda/search?q=chicken"                           # 401  token gate
 ```
 
 Those last two are the ones that catch a stale image: an older build answers

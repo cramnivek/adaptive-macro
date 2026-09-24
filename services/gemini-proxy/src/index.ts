@@ -7,6 +7,7 @@ import { createRouter } from './router.js';
 const env: ProxyEnv = {
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
   proxyToken: process.env.PROXY_TOKEN ?? '',
+  usdaApiKey: process.env.USDA_API_KEY ?? '',
 };
 
 // The exported web build, copied in beside the compiled service at deploy

@@ -41,7 +41,7 @@ const CLOUD_RUN_BASE = 'https://gemini-proxy-297164004726.asia-southeast1.run.ap
  * cross-origin the moment the page was opened on the service's other hostname
  * — both resolve — and that is the CORS failure co-hosting exists to avoid.
  */
-const proxyBase = (): string =>
+export const proxyBase = (): string =>
   PROXY_BASE_OVERRIDE || (typeof document === 'undefined' ? CLOUD_RUN_BASE : '');
 export const PROXY_TOKEN = process.env.EXPO_PUBLIC_PROXY_TOKEN ?? '';
 

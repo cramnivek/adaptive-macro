@@ -25,6 +25,8 @@ export const ALLOWED_MODELS = ['gemini-3.5-flash'] as const;
 export interface ProxyEnv {
   geminiApiKey: string;
   proxyToken: string;
+  /** USDA FoodData Central. Falls back to DEMO_KEY's tiny quota when unset. */
+  usdaApiKey: string;
 }
 
 export const handleGeminiProxy = async (

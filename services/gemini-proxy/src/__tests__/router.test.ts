@@ -166,4 +166,29 @@ describe('createRouter', () => {
 
     expect(res.status).toBe(404);
   });
+
+  // Same reasoning as the OFF route above: a 401 is the USDA handler's own
+  // token gate, so it can only come from the request reaching that handler
+  // rather than the /api/* 404 guard.
+  it('routes GET /api/usda/search to the USDA handler, which still rejects a missing token', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await createRouter({ env, webRoot })(get('/api/usda/search?q=chicken'));
+
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('405s a POST to /api/usda/search', async () => {
+    const res = await createRouter({ env, webRoot })(post('/api/usda/search'));
+
+    expect(res.status).toBe(405);
+  });
+
+  it('404s an unknown path under /api/usda/', async () => {
+    const res = await createRouter({ env, webRoot })(get('/api/usda/other'));
+
+    expect(res.status).toBe(404);
+  });
 });
