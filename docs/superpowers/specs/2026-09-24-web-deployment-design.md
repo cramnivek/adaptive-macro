@@ -105,6 +105,13 @@ today; `navigator.storage.persisted()` returns `false` on the deployed build.
 The API is available and unused, so the diary is evictable even on Chrome. This
 is a defect in the app as it stands, not only a web-deployment concern.
 
+Calling it is necessary but not sufficient. Measured against the deployment:
+`persist()` returns `false` on a cold Chrome profile, because Chrome grants
+persistence on engagement signals — bookmarking, installing, or repeated use —
+rather than on request. So the API call does not by itself make the diary
+safe; the install does, on Chrome as well as iOS, which is the same action
+the prompt already asks for.
+
 **Make the backup obvious.** Export already exists in Settings. On web it
 should produce a downloaded file in one tap and say plainly that it is the only
 copy, because "remember to export" is not a backup strategy for someone trying
