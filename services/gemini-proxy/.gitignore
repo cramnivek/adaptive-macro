@@ -1,0 +1,8 @@
+node_modules/
+dist/
+
+# The staged web build. Deployed from the working directory by
+# `gcloud run deploy --source .`, which reads .gcloudignore rather than git,
+# so it never needs to be committed -- and at a couple of megabytes of
+# generated output per export, it should not be.
+web/

@@ -1,3 +1,10 @@
 node_modules/
+# The buildpack runs `npm run build` in the container, so the compiled output
+# is rebuilt there rather than uploaded.
 dist/
 src/**/__tests__/
+
+# web/ is deliberately absent from this list. It holds the exported web build
+# and is the site itself -- excluding it would deploy a service that answers
+# /healthz and 404s every page. It is named web/ rather than dist/ for exactly
+# this reason: dist/ above would have swallowed it silently.

@@ -20,13 +20,73 @@ allowlists the model.
   therefore extractable — the name states the weakness rather than hiding
   it).
 
+## What this service serves
+
+Two things behind one origin, dispatched by `router.ts`:
+
+- `/api/gemini` — the proxy handler.
+- `/healthz` — a liveness probe that does not touch the web build, so a
+  container that answers it but 404s `/` is misconfigured rather than dead.
+- everything else — a file from the exported web app in `web/`, falling back
+  to `index.html` so expo-router's client-side paths survive a refresh.
+
+Co-hosting is the point. Deployed as two origins, every call from the page
+failed with `TypeError: Failed to fetch`, and the alternative was a CORS
+allowlist that has to stay correct forever. Same origin means no preflight
+and no allowlist, and the shared token never crosses an origin boundary.
+
 ## Deploy
+
+The web build is not committed; stage it into `web/` first. It must be `web/`
+and not `dist/`, which `.gcloudignore` excludes -- naming it `dist/` would
+silently deploy a service with no site.
+
+```
+cd ../../mobile && rm -rf dist && npx expo export --platform web
+rm -rf ../services/gemini-proxy/web && cp -r dist ../services/gemini-proxy/web
+
+cd ../services/gemini-proxy
+gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
+  --allow-unauthenticated --timeout 120 --quiet
+```
+
+The environment variables are already set on the service and survive a
+deploy. Do not pass `--set-env-vars` on a routine deploy: it replaces the set
+wholesale, so naming one variable silently drops the other. To set them the
+first time, or to rotate one:
 
 ```
 gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
   --allow-unauthenticated --timeout 120 \
   --set-env-vars "^##^GEMINI_API_KEY=...##PROXY_TOKEN=..."
 ```
+
+### Verifying a deploy
+
+Against the deployed URL, expect `200 200 200 200 401`:
+
+```
+curl -s -o /dev/null -w "healthz:  %{http_code}\n" $URL/healthz
+curl -s -o /dev/null -w "root:     %{http_code}\n" $URL/
+curl -s -o /dev/null -w "spa:      %{http_code}\n" $URL/describe
+curl -s -o /dev/null -w "manifest: %{http_code}\n" $URL/manifest.json
+curl -s -o /dev/null -w "api401:   %{http_code}\n" -X POST $URL/api/gemini \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+A traversal attempt such as `$URL/../package.json` answers **200 with
+`index.html`**, not 404: `serveStatic` refuses the path, and the SPA fallback
+then answers as it does for any unmatched route. Check the body rather than
+the status -- a leak would be the file's contents.
+
+Then, from the browser console on the deployed page:
+
+```js
+await fetch('/api/gemini', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.status)
+```
+
+`401` means the request reached the gate and co-hosting works. A `TypeError`
+means CORS is still in play.
 
 ## Things a future reader will otherwise learn the hard way
 
