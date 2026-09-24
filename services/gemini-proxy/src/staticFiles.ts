@@ -51,9 +51,20 @@ export const serveStatic = async (
     return null;
   }
 
-  // Normalise first, then confirm the result is still inside the root. Checking
-  // the raw string for '..' is the version of this that keeps getting bypassed;
-  // comparing resolved absolute paths is the version that holds.
+  // Three layers, in the order they actually fire:
+  //
+  //   normalize() collapses a leading '..', and since every HTTP pathname
+  //   begins with '/', this is what stops network-reachable traversal. The
+  //   path lands inside root or nowhere.
+  //
+  //   The boundary check below catches a path normalize() does not collapse —
+  //   one from a caller that passed something other than a URL pathname. Not
+  //   reachable from the network today; kept because normalize()'s behaviour
+  //   is an implementation detail rather than a guarantee, and this suite runs
+  //   on Windows while the service runs on Linux.
+  //
+  //   realpath() after stat() is the one that catches a symlink inside the
+  //   root pointing out of it. Without it readFile follows the link.
   const root = await realpath(resolve(webRoot)).catch(() => resolve(webRoot));
   const target = resolve(join(root, normalize(decoded)));
   if (target !== root && !target.startsWith(root + sep)) return null;

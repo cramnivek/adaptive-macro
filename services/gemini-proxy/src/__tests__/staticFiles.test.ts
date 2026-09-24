@@ -39,7 +39,13 @@ describe('serveStatic', () => {
   // This is the reason this module exists as its own tested unit. The service
   // is public and unauthenticated; a traversal bug turns it into a file
   // server for the container.
-  it('refuses to escape the web root', async () => {
+  //
+  // These are rejected because normalize() collapses the leading '..' and
+  // nothing exists at the collapsed path — not by the boundary check, which a
+  // leading-slash pathname cannot reach. They are still worth pinning: they
+  // are the shapes an attacker sends, and this asserts the observable contract
+  // that every one returns null.
+  it('rejects traversal-shaped paths', async () => {
     const attacks = [
       '/../outside-secret.txt',
       '/..%2Foutside-secret.txt',
@@ -55,6 +61,16 @@ describe('serveStatic', () => {
     for (const attack of attacks) {
       expect(await serveStatic(attack, root), `should reject ${attack}`).toBeNull();
     }
+  });
+
+  // The nine attacks above are all rejected by ENOENT: normalize() strips a
+  // leading '..' before the boundary check runs, so no leading-slash pathname
+  // can reach it. This case can — it passes a path with no leading slash,
+  // which no HTTP pathname has. It exists to pin the boundary check as
+  // defence in depth against a caller that violates the pathname contract,
+  // not against anything reachable from the network.
+  it('rejects a caller-supplied relative path that escapes the root', async () => {
+    expect(await serveStatic('../outside-secret.txt', root)).toBeNull();
   });
 
   it('does not serve a directory as if it were a file', async () => {
