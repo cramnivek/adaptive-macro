@@ -67,14 +67,14 @@ describe('toNodeHandler', () => {
     let called = false;
     const handler = toNodeHandler(async () => {
       called = true;
-      return new Response('<!DOCTYPE html>', { status: 200 });
+      return new Response('<!DOCTYPE html>', { status: 201 });
     });
 
     const res = fakeRes();
     await handler(fakeReq('GET', '/', {}) as any, res as any);
 
     expect(called).toBe(true);
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(201);
   });
 
   // A handler that throws must not hang the connection or leak a stack trace.

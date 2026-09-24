@@ -91,4 +91,54 @@ describe('createRouter', () => {
 
     expect(res.status).toBe(404);
   });
+
+  // /api/ is the app's own namespace and can never be a client-side route.
+  // Answering a typo with the homepage and a 200 reads as "the endpoint is up".
+  it('404s a typo under /api/ instead of serving the homepage', async () => {
+    const res = await createRouter({ env, webRoot })(get('/api/geminni'));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('404s /api/ itself', async () => {
+    const res = await createRouter({ env, webRoot })(get('/api/'));
+
+    expect(res.status).toBe(404);
+  });
+
+  // handleGeminiProxy always POSTs upstream, so a GET that reached it would
+  // forward an empty body to Google on the shared quota.
+  it('405s a GET to /api/gemini rather than forwarding it', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await createRouter({ env, webRoot })(get('/api/gemini'));
+
+    expect(res.status).toBe(405);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not answer /healthz for a non-GET request', async () => {
+    const res = await createRouter({ env, webRoot })(post('/healthz'));
+
+    expect(res.status).toBe(404);
+  });
+
+  // A missing chunk answered with index.html and a 200 reaches the browser as
+  // a syntax error, with no 404 in the logs to point at the redeploy.
+  it('404s a missing asset instead of falling back to index.html', async () => {
+    const res = await createRouter({ env, webRoot })(get('/_expo/static/js/missing-chunk.js'));
+
+    expect(res.status).toBe(404);
+  });
+
+  // The guard above must not cost the deep link the fallback exists for.
+  it('still serves the app for a deep link that accepts HTML', async () => {
+    const res = await createRouter({ env, webRoot })(
+      new Request('https://x.test/scan', { headers: { accept: 'text/html' } }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<title>app</title>');
+  });
 });

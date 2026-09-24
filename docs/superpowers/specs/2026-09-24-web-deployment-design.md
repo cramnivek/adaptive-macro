@@ -55,25 +55,39 @@ the shared token never crosses an origin boundary. A misconfigured CORS
 allowlist is a well-worn way to open something up by accident, and this avoids
 having one at all.
 
-`services/gemini-proxy/src/adapter.ts` gains real routing:
+A new `services/gemini-proxy/src/router.ts` dispatches the origin:
 
 ```
-GET  /                → index.html
-     /api/gemini      → handleGeminiProxy
-     anything else    → a file from dist/, falling back to index.html
+/api/gemini      → handleGeminiProxy, POST only
+/api/*           → 404
+/healthz         → 200 ok
+anything else    → a file from web/, falling back to index.html
 ```
+
+It serves from `web/`, not `dist/`: `.gcloudignore` excludes `dist/`, so a
+build output directory would ship empty and every page would 404.
 
 The SPA fallback matters because expo-router uses client-side paths: a friend
 who opens `/scan` directly, or refreshes there, must get the app rather than a
-404.
+404. It is deliberately **not** unconditional — a request that looks like an
+asset and does not accept HTML gets a 404, because answering a missing
+JavaScript chunk with `index.html` and a 200 produces a white screen and a
+misleading syntax error, with nothing in the logs to point at it.
 
 This is the finding the proxy's final review parked as a Minor — *"the adapter
 routes nothing; every method and path except an exact `GET /` reaches the
 handler."* It was correctly judged harmless then, because the token gate was
 identical on every path. Serving files makes it load-bearing.
 
-**The health probe branch stays.** Cloud Run probes `GET /` to decide the
-container is live, and that must not become a file read that could fail.
+**`GET /` is now the homepage, not a health probe.** An earlier draft of this
+document said the adapter's health branch had to stay, "because Cloud Run
+probes `GET /` to decide the container is live". That was wrong, and the
+adapter's own comment had been wrong in the same way: nothing in this repo
+configures a probe, and Cloud Run's default startup probe is a TCP connect on
+`$PORT`. `listen()` touches no files, so the container goes healthy whether or
+not the web build is present. `/healthz` exists instead, above the static
+branch, so a container that answers it but 404s `/` is diagnosably
+misconfigured rather than dead.
 
 ## Durability
 

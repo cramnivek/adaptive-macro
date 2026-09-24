@@ -20,6 +20,13 @@ allowlists the model.
   therefore extractable — the name states the weakness rather than hiding
   it).
 
+## Health
+
+`GET /healthz` returns `200 ok`. It is answered above the static branch and so
+is deliberately independent of the web build: a container that returns `ok`
+here but 404s `/` is misconfigured rather than dead, and that is worth being
+able to tell apart.
+
 ## Deploy
 
 ```

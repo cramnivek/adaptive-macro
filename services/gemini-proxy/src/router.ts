@@ -14,15 +14,19 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
   return async (request: Request): Promise<Response> => {
     const { pathname } = new URL(request.url);
 
-    // Independent of the web build on purpose: a container that answers this
-    // but 404s `/` is misconfigured rather than dead, and that is worth being
-    // able to tell apart.
-    if (pathname === '/healthz') {
-      return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
+    if (pathname === '/api/gemini') {
+      // handleGeminiProxy always POSTs upstream. Without this, a GET with a
+      // valid token forwards an empty body to Google on the shared quota.
+      if (request.method !== 'POST') {
+        return new Response('Method not allowed', { status: 405 });
+      }
+      return handleGeminiProxy(request, opts.env);
     }
 
-    if (pathname === '/api/gemini') {
-      return handleGeminiProxy(request, opts.env);
+    // Nothing else lives under /api/. Falling through would answer a typo
+    // with the homepage and a 200, which reads as "the endpoint is up".
+    if (pathname === '/api' || pathname.startsWith('/api/')) {
+      return Response.json({ error: 'Not found' }, { status: 404 });
     }
 
     // Only GET and HEAD can be a page. Answering a stray POST with the
@@ -31,8 +35,25 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       return new Response('Not found', { status: 404 });
     }
 
+    // Independent of the web build on purpose: a container that answers this
+    // but 404s `/` is misconfigured rather than dead, and that is worth being
+    // able to tell apart.
+    if (pathname === '/healthz') {
+      return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
+    }
+
     const file = await serveStatic(pathname, opts.webRoot);
     if (file) return file;
+
+    // The fallback exists so a deep link like `/scan` loads the app. It must
+    // not answer for a missing *asset*: index.html with a 200 reaches a caller
+    // expecting JavaScript or wasm as a syntax error or a MIME refusal, and
+    // leaves no 404 in the logs to point at the cause.
+    const looksLikeAsset = /\.[a-z0-9]+$/i.test(pathname);
+    const wantsHtml = (request.headers.get('accept') ?? '').includes('text/html');
+    if (looksLikeAsset && !wantsHtml) {
+      return new Response('Not found', { status: 404 });
+    }
 
     // expo-router resolves paths on the client, so an unmatched path is a
     // route rather than a miss — unless index.html itself is absent, which
