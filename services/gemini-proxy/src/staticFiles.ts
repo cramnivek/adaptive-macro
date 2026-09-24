@@ -22,6 +22,7 @@ const TYPES: Record<string, string> = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.map': 'application/json; charset=utf-8',
+  '.wasm': 'application/wasm',
 };
 
 const contentType = (path: string): string => {

@@ -40,15 +40,20 @@ describe('serveStatic', () => {
   // is public and unauthenticated; a traversal bug turns it into a file
   // server for the container.
   it('refuses to escape the web root', async () => {
-    for (const attack of [
+    const attacks = [
       '/../outside-secret.txt',
       '/..%2Foutside-secret.txt',
       '/_expo/../../outside-secret.txt',
       '/%2e%2e/outside-secret.txt',
       '//....//outside-secret.txt',
-    ]) {
-      const res = await serveStatic(attack, root);
-      if (res) expect(await res.text()).not.toContain('SECRET');
+      '/..\\outside-secret.txt',
+      '/..%5Coutside-secret.txt',
+      '/%252e%252e/outside-secret.txt',
+      '/outside-secret.txt%00.js',
+    ];
+    expect.assertions(attacks.length);
+    for (const attack of attacks) {
+      expect(await serveStatic(attack, root), `should reject ${attack}`).toBeNull();
     }
   });
 
@@ -64,5 +69,14 @@ describe('serveStatic', () => {
 
     expect(asset?.headers.get('Cache-Control')).toContain('immutable');
     expect(html?.headers.get('Cache-Control')).toContain('no-cache');
+  });
+
+  // expo-sqlite ships its SQLite engine as wasm, and WebAssembly.instantiateStreaming
+  // requires this exact type or it throws and falls back to a slower path.
+  it('serves wasm with the exact type streaming compilation requires', async () => {
+    writeFileSync(join(root, 'engine.wasm'), 'fakewasm');
+    const res = await serveStatic('/engine.wasm', root);
+
+    expect(res?.headers.get('Content-Type')).toBe('application/wasm');
   });
 });
