@@ -1,0 +1,7 @@
+# The staged copy of the Expo web build, produced by `expo export` and copied
+# in at deploy time. It is build output and does not belong in git.
+#
+# It must NOT be added to .gcloudignore: gcloud reads .gcloudignore INSTEAD OF
+# .gitignore when one exists, so this file is invisible to the deploy and web/
+# still ships. Excluding it there would deploy a service with no site.
+web/
