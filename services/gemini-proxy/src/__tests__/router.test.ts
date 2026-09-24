@@ -49,8 +49,8 @@ describe('createRouter', () => {
     expect(await res.text()).toContain('<title>app</title>');
   });
 
-  it('answers /healthz without touching the web build', async () => {
-    const res = await createRouter({ env, webRoot: '/nonexistent' })(get('/healthz'));
+  it('answers /_health without touching the web build', async () => {
+    const res = await createRouter({ env, webRoot: '/nonexistent' })(get('/_health'));
 
     expect(res.status).toBe(200);
   });
@@ -118,8 +118,8 @@ describe('createRouter', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('does not answer /healthz for a non-GET request', async () => {
-    const res = await createRouter({ env, webRoot })(post('/healthz'));
+  it('does not answer /_health for a non-GET request', async () => {
+    const res = await createRouter({ env, webRoot })(post('/_health'));
 
     expect(res.status).toBe(404);
   });

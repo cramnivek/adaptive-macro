@@ -60,7 +60,7 @@ describe('toNodeHandler', () => {
     expect(JSON.parse(res.body())).toEqual({ error: 'Unauthorized' });
   });
 
-  // The health branch moved to the router, where it can answer /healthz
+  // The health branch moved to the router, where it can answer /_health
   // independently of the web build. `/` is now the homepage and must reach
   // the handler like any other path.
   it('passes GET / through to the handler now that it is the homepage', async () => {

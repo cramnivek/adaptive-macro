@@ -35,10 +35,14 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       return new Response('Not found', { status: 404 });
     }
 
+    // NOT /healthz, which Google Front End intercepts on Cloud Run: it answers
+    // its own 404 page and the request never reaches the container. Measured
+    // against the deployment -- /health, /livez, /readyz and /healthz/ all pass
+    // through, only the exact /healthz does not. Do not rename this back.
     // Independent of the web build on purpose: a container that answers this
     // but 404s `/` is misconfigured rather than dead, and that is worth being
     // able to tell apart.
-    if (pathname === '/healthz') {
+    if (pathname === '/_health') {
       return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
     }
 

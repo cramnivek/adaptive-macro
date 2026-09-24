@@ -60,7 +60,7 @@ A new `services/gemini-proxy/src/router.ts` dispatches the origin:
 ```
 /api/gemini      → handleGeminiProxy, POST only
 /api/*           → 404
-/healthz         → 200 ok
+/_health         → 200 ok
 anything else    → a file from web/, falling back to index.html
 ```
 
@@ -85,7 +85,7 @@ probes `GET /` to decide the container is live". That was wrong, and the
 adapter's own comment had been wrong in the same way: nothing in this repo
 configures a probe, and Cloud Run's default startup probe is a TCP connect on
 `$PORT`. `listen()` touches no files, so the container goes healthy whether or
-not the web build is present. `/healthz` exists instead, above the static
+not the web build is present. `/_health` exists instead, above the static
 branch, so a container that answers it but 404s `/` is diagnosably
 misconfigured rather than dead.
 

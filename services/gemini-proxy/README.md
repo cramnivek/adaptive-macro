@@ -22,10 +22,14 @@ allowlists the model.
 
 ## Health
 
-`GET /healthz` returns `200 ok`. It is answered above the static branch and so
+`GET /_health` returns `200 ok`. It is answered above the static branch and so
 is deliberately independent of the web build: a container that returns `ok`
 here but 404s `/` is misconfigured rather than dead, and that is worth being
 able to tell apart.
+
+The name is deliberate. Google Front End intercepts the conventional
+`/healthz` on Cloud Run and answers its own 404 before the request reaches
+the container, so that path cannot be used here.
 
 ## Deploy
 
