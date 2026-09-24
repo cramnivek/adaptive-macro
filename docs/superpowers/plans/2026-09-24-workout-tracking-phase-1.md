@@ -25,18 +25,32 @@
 
 **Task 3 cannot start without a real Hevy export.** The spec is explicit that knowing the column names is not the same as knowing how a real file behaves, and it is right: the quoted-comma timestamp is the kind of thing only a real file teaches.
 
-The repository is **public**, so the full export is not checked in — that would publish fifteen months of training history, and bodyweight is derivable from the pull-up rows. Instead the export is trimmed to a fixture of roughly 50 rows that preserves every shape the parser must handle:
+The repository is **public**, so the full export is not checked in — that would publish fifteen months of training history, and bodyweight is derivable from the pull-up rows. Instead the export is trimmed to `mobile/src/import/__tests__/fixtures/hevy-sample.csv`: 45 rows over 8 sessions and 15 exercises, sliced as raw lines from the original so Hevy's exact quoting survives byte for byte.
 
-- a quoted timestamp containing a comma — `"15 Jul 2026, 09:52"`
-- bodyweight rows with an empty `weight_lbs` (Pull Up, Chest Dip, Hanging Leg Raise)
+**Done.** The fixture is checked in and carries every shape the parser must handle, each verified present:
+
+- a quoted timestamp containing a comma — `"29 Dec 2025, 15:37"`
+- bodyweight rows with an empty `weight_lbs` (Wide Pull Up, Chest Dip, Push Up - Close Grip)
 - the `Chest Dip` → `Chest Dip (Weighted)` transition, both sides
 - `set_type` values `normal`, `warmup` and `failure`
-- a row with no reps (`Stretching`, logged by duration)
-- at least one non-bodyweight row with a missing weight (the Bench Press or Deadlift slips)
-- two sessions on the same day, and one session spanning a month boundary
+- rows with no reps in **both** forms: `Stretching` by duration and `Walking Lunge (Dumbbell)` by distance
+- both non-bodyweight missing-weight slips, Bench Press and Deadlift
+- sessions across four or more different months
 - rows carrying `rpe`, and rows without it
+- non-empty `exercise_notes` and `description`, so the test can prove they are ignored rather than merely absent
 
-Trimming is mechanical, so it is a task step rather than a judgement call, but **the source file must be supplied before Task 3 begins**. Tasks 1 and 2 do not depend on it and can proceed first.
+### What the real export says, measured
+
+Every figure the spec quotes was re-checked against the file and holds exactly: 3,073 rows, 14 columns, header identical to the documented one; `normal` 2,948, `warmup` 118, `failure` 7, no dropsets; 453 rows with no weight; 1,428 rows with RPE (46.5%); 16 rows with no reps; `superset_id` empty on every row. 246 sessions spanning 2024-09-08 to 2025-12-29, and `end_time` is present on all of them.
+
+Four corrections, found by measuring rather than trusting:
+
+1. **Nine exercises infer as bodyweight-based, not three.** Pull Up (206 sets), Hanging Leg Raise (96), Wide Pull Up (59), Chest Dip (29), Neutral Grip Pull Up (28), Lying Leg Raise (18), Stretching (6), Chin Up (4), Push Up - Close Grip (2).
+2. **`Stretching` infers bodyweight-based but should not be offered as one.** All six of its sets lack a weight, which trips the inference — and all six also lack reps, so every one is excluded anyway. An exercise with no usable sets must not appear in the preview's bodyweight list, or the user is asked to rule on something that contributes nothing. Task 5 covers this.
+3. **The no-reps rows are 6 `Stretching` and 10 `Walking Lunge (Dumbbell)`,** not "one Walking Lunge" as the spec says. The total of 16 is right; the breakdown is not.
+4. **No two sessions share a calendar day** anywhere in the export, so an earlier draft of this plan asking the fixture to contain that pair was asking for something the data does not have. Dropped rather than fabricated.
+
+The spec's illustrative timestamp `"15 Jul 2026, 09:52"` does not appear in the file either — the export ends in December 2025. The quoting hazard it describes is real; the example was invented to show it.
 
 ---
 
@@ -137,22 +151,20 @@ A date with no bodyweight entry yields null effective load for bodyweight exerci
 **Interfaces:**
 - Produces: `parseHevyCsv(text: string): HevyParseResult` — sessions, exercises, and a `skipped` breakdown. Pure: a string in, a structure out. No file picking, no database.
 
-- [ ] **Step 1: Trim the fixture**
-
-From the supplied export, cut to roughly 50 rows preserving every shape listed in the Prerequisite. Keep the header row exactly as Hevy writes it. Verify each listed shape is present before moving on — a fixture missing the quoted-comma timestamp tests nothing that matters.
+- [x] **Step 1: Trim the fixture** — done, see Prerequisite. 45 rows, all shapes verified present.
 
 - [ ] **Step 2: Write the failing test**
 
 Cover:
 
 - the header row is validated and a mismatch **throws with the received header in the message**, rather than importing zeros
-- `"15 Jul 2026, 09:52"` parses — the comma is inside the quotes, and a naive split corrupts every row while still producing plausible-looking fields. Assert the parsed date, not just that it didn't throw.
+- `"29 Dec 2025, 15:37"` parses — the comma is inside the quotes, and a naive split corrupts every row while still producing plausible-looking fields. Assert the parsed date, not just that it didn't throw.
 - rows group into sessions by `start_time`, and into exercises by `exercise_title` within a session
 - `weight_lbs` converts to kg once, via `lbToKg`
 - an empty `weight_lbs` becomes null, not 0
 - an exercise whose every set lacks a weight is inferred `bodyweightBased`
 - `Chest Dip (Weighted)` is **not** inferred bodyweight-based, because it always carries a number — the spec says plainly this one needs manual correction, and the test pins that the inference does not pretend otherwise
-- rows with no reps are skipped and counted
+- rows with no reps are skipped and counted, in both forms the export contains: `Stretching` logged by duration and `Walking Lunge (Dumbbell)` logged by distance
 - `set_type` values survive verbatim, including `failure`
 - `rpe` is carried through when present and null when absent
 - the result reports counts: sessions, exercises, sets, and each skip reason separately
@@ -247,7 +259,7 @@ Follow the shape of the existing modal screens registered in `_layout.tsx`, and 
 The preview states what was found — sessions, date range, exercises, sets — and then the three judgements most likely to be wrong:
 
 1. which exercises it inferred as bodyweight-based, **editable here**, before anything is written
-2. how many sets it will exclude, and for which of the two reasons
+2. how many sets it will exclude, and for which of the two reasons. An exercise whose every set is excluded — `Stretching` is the real case — must not be listed as bodyweight-based, since asking the user to rule on it decides nothing.
 3. a sample converted weight, because a conversion off by a factor is obvious to a person and invisible to a test
 
 Add the entry point to the Settings screen near the existing export control.
