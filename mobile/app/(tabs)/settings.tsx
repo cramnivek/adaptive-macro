@@ -14,6 +14,7 @@ import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { space, useTheme } from '../../src/theme';
+import { needsHomeScreenInstall } from '../../src/web/persistence';
 
 /**
  * A numeric setting that edits as free text and only commits on blur.
@@ -149,6 +150,18 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings">
+      {needsHomeScreenInstall() && (
+        <Card title="Add to your home screen">
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            Safari deletes a website's saved data after seven days without use, and that
+            includes your diary. Adding this to your home screen exempts it — tap Share,
+            then Add to Home Screen, then open it from there from now on.
+          </Text>
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            Until you do, export a backup below if you have anything you would mind losing.
+          </Text>
+        </Card>
+      )}
       <Card title="You">
         <Segmented<Sex>
           label="Sex"

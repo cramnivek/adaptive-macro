@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Only the pure modules under src/api and src/ai are tested here. Anything
+ * Only the pure modules under src/api, src/ai, and src/web are tested here. Anything
  * touching expo-sqlite or React Native native modules has no node driver and
  * is verified in the running app instead.
  */
