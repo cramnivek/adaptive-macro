@@ -1,5 +1,6 @@
 import type { Food, FoodPortion } from '@adaptive-macros/engine';
 import { fetchJson, isUsableNumber, kjToKcal } from './http';
+import { PROXY_TOKEN } from './gemini';
 
 const SOURCE = 'Open Food Facts';
 
@@ -117,6 +118,21 @@ const toFood = (product: OffProduct): Food | null => {
 const SEARCH_A_LICIOUS_URL = 'https://search.openfoodfacts.org/search';
 
 /**
+ * OFF's search endpoints send no CORS headers, so a browser cannot call them
+ * at all — measured, a plain GET with no custom headers still fails. On web
+ * the search goes through this app's own origin, which serves the app and can
+ * reach OFF server-side. Native calls OFF directly: it has no CORS problem and
+ * no reason to add a hop.
+ *
+ * `lookupBarcode` is deliberately not routed: that endpoint does send CORS
+ * headers and works from a browser as it is.
+ */
+const searchViaProxy = (): boolean => typeof document !== 'undefined';
+
+const proxyHeaders = (): Record<string, string> =>
+  searchViaProxy() ? { 'x-proxy-token': PROXY_TOKEN } : {};
+
+/**
  * Search-a-licious is Open Food Facts' newer search index. Unlike
  * `cgi/search.pl` below, it has been consistently available in testing, so it
  * is tried first.
@@ -135,8 +151,10 @@ const SEARCH_A_LICIOUS_URL = 'https://search.openfoodfacts.org/search';
  * serving. That asymmetry is accepted rather than worked around.
  */
 const searchSearchALicious = async (query: string, pageSize: number): Promise<Food[]> => {
-  const url = `${SEARCH_A_LICIOUS_URL}?q=${encodeURIComponent(query)}&page_size=${pageSize}`;
-  const data = await fetchJson<{ hits?: OffProduct[] }>(url, SOURCE);
+  const url = searchViaProxy()
+    ? `/api/off/search?q=${encodeURIComponent(query)}&page_size=${pageSize}`
+    : `${SEARCH_A_LICIOUS_URL}?q=${encodeURIComponent(query)}&page_size=${pageSize}`;
+  const data = await fetchJson<{ hits?: OffProduct[] }>(url, SOURCE, 10_000, proxyHeaders());
   return (data.hits ?? []).map(toFood).filter((food): food is Food => food !== null);
 };
 
@@ -145,11 +163,13 @@ const searchLegacy = async (
   pageSize: number,
   country: string,
 ): Promise<Food[]> => {
-  const url =
-    `${baseFor(country)}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
-    `&search_simple=1&action=process&json=1&page_size=${pageSize}&fields=${FIELDS}`;
+  const url = searchViaProxy()
+    ? `/api/off/legacy?q=${encodeURIComponent(query)}` +
+      `&page_size=${pageSize}&country=${encodeURIComponent(country)}`
+    : `${baseFor(country)}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
+      `&search_simple=1&action=process&json=1&page_size=${pageSize}&fields=${FIELDS}`;
 
-  const data = await fetchJson<{ products?: OffProduct[] }>(url, SOURCE);
+  const data = await fetchJson<{ products?: OffProduct[] }>(url, SOURCE, 10_000, proxyHeaders());
   return (data.products ?? []).map(toFood).filter((food): food is Food => food !== null);
 };
 

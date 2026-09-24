@@ -10,6 +10,16 @@ floor all stay client-side in `mobile/src/api/gemini.ts`, where they are
 tested. This service only attaches the key, checks the shared token, and
 allowlists the model.
 
+Also proxies Open Food Facts search: `GET /api/off/search` (Search-a-licious)
+and `GET /api/off/legacy` (the per-country `cgi/search.pl` endpoint). OFF's
+search endpoints send no `Access-Control-Allow-Origin`, so a browser cannot
+call them at all — a plain GET with no custom headers still fails. The
+upstream URL for both is built server-side (in `offProxy.ts`) from validated
+query parameters and is never taken from the request, so this cannot become an
+open relay. The barcode endpoint (`/api/v2/product/<barcode>.json`) does send
+CORS headers and is deliberately not proxied — the app keeps calling it
+directly on every platform.
+
 ## Environment variables
 
 - `GEMINI_API_KEY` — the actual Gemini API key, attached to every forwarded

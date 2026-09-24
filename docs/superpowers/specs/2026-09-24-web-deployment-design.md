@@ -59,6 +59,7 @@ A new `services/gemini-proxy/src/router.ts` dispatches the origin:
 
 ```
 /api/gemini      → handleGeminiProxy, POST only
+/api/off/*       → handleOffProxy, GET only (Open Food Facts search)
 /api/*           → 404
 /_health         → 200 ok
 anything else    → a file from web/, falling back to index.html
@@ -124,6 +125,21 @@ API that Chrome provides. The scan screen already handles this correctly —
 verified on the deployed build, it renders "Allow camera" alongside "Search by
 name instead" and does not crash. The honest response is to let it degrade and
 say so in the UI, not to ship a second scanner.
+
+**Open Food Facts search is unreachable from a browser**, and is proxied
+through this app's own origin instead. Measured against the live deployment,
+from a real browser:
+
+| Endpoint | Result |
+|---|---|
+| `search.openfoodfacts.org/search` | `TypeError: Failed to fetch` |
+| `world.openfoodfacts.org/api/v2/search` | `TypeError: Failed to fetch` |
+| `ph.openfoodfacts.org/cgi/search.pl` | `TypeError: Failed to fetch` |
+| `world.openfoodfacts.org/api/v2/product/<barcode>.json` | **200 OK** |
+
+OFF's **search** endpoints send no `Access-Control-Allow-Origin`; its
+**barcode** endpoint does, so barcode lookups stay direct on every platform
+while only search moves through `/api/off/*`.
 
 ## What was measured
 

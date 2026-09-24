@@ -8,9 +8,12 @@ export const USER_AGENT = 'adaptive-macros/0.1 (https://github.com/cramnivek/ada
  *
  * `User-Agent` is a forbidden header name in browsers: script cannot set it,
  * and attempting to makes the request non-simple, which triggers a CORS
- * preflight that Open Food Facts' search endpoint does not answer. The whole
- * request then fails as a network error, which the app reported as "could not
- * reach Open Food Facts" — indistinguishable from the server being down.
+ * preflight. That preflight was necessary but not sufficient for Open Food
+ * Facts' search endpoints: they send no CORS headers at all, so even a plain
+ * GET with no custom headers still fails as a network error — indistinguishable
+ * from the server being down. Search now goes through the app's own origin on
+ * web instead. This omission is still what makes the barcode call work from a
+ * browser, since that endpoint does send CORS headers.
  *
  * On a device the header is both allowed and wanted, so it is sent there and
  * omitted on web, where the browser identifies itself anyway.
@@ -42,6 +45,7 @@ export const fetchJson = async <T,>(
   url: string,
   source: string,
   timeoutMs = 10_000,
+  extraHeaders: Record<string, string> = {},
 ): Promise<T> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -49,7 +53,7 @@ export const fetchJson = async <T,>(
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      headers: headersFor(),
+      headers: { ...headersFor(), ...extraHeaders },
     });
     if (!response.ok) {
       throw new FoodApiError(

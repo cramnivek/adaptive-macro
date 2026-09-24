@@ -1,4 +1,5 @@
 import { type ProxyEnv, handleGeminiProxy } from './geminiProxy.js';
+import { handleOffProxy } from './offProxy.js';
 import { serveStatic } from './staticFiles.js';
 
 /**
@@ -21,6 +22,17 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
         return new Response('Method not allowed', { status: 405 });
       }
       return handleGeminiProxy(request, opts.env);
+    }
+
+    if (pathname === '/api/off/search' || pathname === '/api/off/legacy') {
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405 });
+      }
+      return handleOffProxy(
+        request,
+        opts.env,
+        pathname === '/api/off/legacy' ? 'legacy' : 'search',
+      );
     }
 
     // Nothing else lives under /api/. Falling through would answer a typo

@@ -141,4 +141,29 @@ describe('createRouter', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('<title>app</title>');
   });
+
+  // Proves /api/off/* reaches handleOffProxy rather than the /api/* 404 guard
+  // below it -- a 401 (the handler's own token gate) is only possible if the
+  // request got there at all.
+  it('routes GET /api/off/search to the OFF handler, which still rejects a missing token', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await createRouter({ env, webRoot })(get('/api/off/search?q=chicken'));
+
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('405s a POST to /api/off/search', async () => {
+    const res = await createRouter({ env, webRoot })(post('/api/off/search'));
+
+    expect(res.status).toBe(405);
+  });
+
+  it('404s an unknown path under /api/off/', async () => {
+    const res = await createRouter({ env, webRoot })(get('/api/off/other'));
+
+    expect(res.status).toBe(404);
+  });
 });
