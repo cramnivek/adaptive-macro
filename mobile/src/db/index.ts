@@ -1,11 +1,13 @@
 import type {
   DailyObservation,
+  DatedSet,
   Food,
   FoodPortion,
   ISODate,
   LogEntry,
   Meal,
   Nutrients,
+  SetType,
 } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
@@ -435,4 +437,198 @@ export const exportBackup = async (): Promise<Backup> => {
     foods: await db.getAllAsync('SELECT * FROM foods'),
     entries: await db.getAllAsync('SELECT * FROM log_entries'),
   };
+};
+
+// --- workouts -------------------------------------------------------------
+
+/** A session and its sets, as the importer hands them over. */
+export interface WorkoutSessionInput {
+  title: string;
+  startedAt: string;
+  finishedAt: string | null;
+  date: ISODate;
+  exercises: {
+    name: string;
+    bodyweightBased: boolean;
+    sets: {
+      setIndex: number;
+      weightKg: number | null;
+      reps: number;
+      setType: SetType;
+      rpe: number | null;
+    }[];
+  }[];
+}
+
+/**
+ * Every session start already on record.
+ *
+ * Import idempotency keys on this: a session whose start timestamp exists is
+ * skipped, so re-importing an export changes nothing and importing a newer one
+ * lands only what is new.
+ */
+export const knownSessionStarts = async (): Promise<Set<string>> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ started_at: string }>('SELECT started_at FROM sessions');
+  return new Set(rows.map((row) => row.started_at));
+};
+
+const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+/**
+ * Writes sessions and their sets.
+ *
+ * One transaction for the lot: a half-written import is worse than none, since
+ * the caller cannot tell which half landed and the start-time check would then
+ * skip the sessions that did.
+ *
+ * `bodyweight_based` is written from the caller's value — the import preview
+ * lets the user correct the inference before this is reached — but an exercise
+ * already on record keeps its stored flag rather than being overwritten by a
+ * fresh guess from a later import.
+ */
+export const insertWorkoutSessions = async (
+  sessions: WorkoutSessionInput[],
+): Promise<{ sessions: number; sets: number }> => {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  let setCount = 0;
+
+  await db.withTransactionAsync(async () => {
+    for (const session of sessions) {
+      const sessionId = newId();
+      await db.runAsync(
+        `INSERT INTO sessions (id, date, routine_id, name, started_at, finished_at, notes)
+         VALUES (?, ?, NULL, ?, ?, ?, NULL)`,
+        sessionId,
+        session.date,
+        session.title,
+        session.startedAt,
+        session.finishedAt,
+      );
+
+      for (const exercise of session.exercises) {
+        await db.runAsync(
+          `INSERT INTO exercises (id, name, bodyweight_based, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (name) DO NOTHING`,
+          newId(),
+          exercise.name,
+          exercise.bodyweightBased ? 1 : 0,
+          now,
+        );
+
+        const row = await db.getFirstAsync<{ id: string }>(
+          'SELECT id FROM exercises WHERE name = ?',
+          exercise.name,
+        );
+        if (!row) throw new Error(`Import: exercise ${exercise.name} vanished mid-transaction`);
+
+        for (const set of exercise.sets) {
+          await db.runAsync(
+            `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            newId(),
+            sessionId,
+            row.id,
+            exercise.name,
+            set.setIndex,
+            set.weightKg,
+            set.reps,
+            set.setType,
+            set.rpe,
+            now,
+          );
+          setCount += 1;
+        }
+      }
+    }
+  });
+
+  return { sessions: sessions.length, sets: setCount };
+};
+
+/**
+ * Every recorded set of one exercise, paired with its session date.
+ *
+ * Shaped for `progressionFor`, which takes dated sets and a bodyweight lookup.
+ * Matching is by exact name: `Bench Press (Barbell)` and
+ * `Bench Press (Smith Machine)` are different exercises carrying different
+ * loads, and merging them is the corruption this design warns against.
+ */
+export const listSetsForExercise = async (name: string): Promise<DatedSet[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    session_id: string;
+    date: ISODate;
+    exercise_name: string;
+    set_index: number;
+    weight_kg: number | null;
+    reps: number;
+    set_type: string;
+    rpe: number | null;
+    bodyweight_based: number;
+  }>(
+    `SELECT s.id, s.session_id, w.date, s.exercise_name, s.set_index, s.weight_kg,
+            s.reps, s.set_type, s.rpe, e.bodyweight_based
+       FROM sets s
+       JOIN sessions  w ON w.id = s.session_id
+       JOIN exercises e ON e.id = s.exercise_id
+      WHERE s.exercise_name = ?
+      ORDER BY w.date, s.set_index`,
+    name,
+  );
+
+  return rows.map((row) => ({
+    date: row.date,
+    set: {
+      id: row.id,
+      sessionId: row.session_id,
+      exerciseName: row.exercise_name,
+      setIndex: row.set_index,
+      weightKg: row.weight_kg,
+      reps: row.reps,
+      setType: row.set_type as SetType,
+      rpe: row.rpe,
+      bodyweightBased: row.bodyweight_based === 1,
+    },
+  }));
+};
+
+/** Exercises that have at least one recorded set, most-trained first. */
+export const listTrainedExercises = async (): Promise<
+  { name: string; bodyweightBased: boolean; setCount: number }[]
+> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    name: string;
+    bodyweight_based: number;
+    set_count: number;
+  }>(
+    `SELECT e.name, e.bodyweight_based, COUNT(s.id) AS set_count
+       FROM exercises e
+       JOIN sets s ON s.exercise_id = e.id
+      GROUP BY e.id
+      ORDER BY set_count DESC, e.name`,
+  );
+
+  return rows.map((row) => ({
+    name: row.name,
+    bodyweightBased: row.bodyweight_based === 1,
+    setCount: row.set_count,
+  }));
+};
+
+/** Corrects an inference the import got wrong. */
+export const setExerciseBodyweightBased = async (
+  name: string,
+  bodyweightBased: boolean,
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE exercises SET bodyweight_based = ? WHERE name = ?',
+    bodyweightBased ? 1 : 0,
+    name,
+  );
 };
