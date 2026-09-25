@@ -65,7 +65,7 @@ The spec's illustrative timestamp `"15 Jul 2026, 09:52"` does not appear in the 
 - Consumes: `ISODate` from `./types.ts`.
 - Produces: `WorkoutSet`, `WorkoutSession`, `Exercise` types; `effectiveLoadKg(set, bodyweightKg): number | null`; `isWorkingSet(set): boolean`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `packages/engine/test/workouts.test.ts`. Cover, at minimum:
 
@@ -78,12 +78,12 @@ Create `packages/engine/test/workouts.test.ts`. Cover, at minimum:
 
 State the reasoning in the test names: a reader should be able to tell from the failure which rule broke.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npm run test --workspace @adaptive-macros/engine -- workouts`
 Expected: FAIL — cannot resolve `../src/workouts.ts`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `set_type` is a union of Hevy's four literal values — `'normal' | 'warmup' | 'dropset' | 'failure'` — kept verbatim rather than flattened, so the distinction survives without re-importing.
 
@@ -96,9 +96,9 @@ otherwise        →  weightKg          // already null when not recorded
 
 Comment the null-versus-zero rule where it is implemented, not just in the test. The next reader's instinct will be to default it.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
-- [ ] **Step 5: Export and commit**
+- [x] **Step 5: Export and commit**
 
 Add `export * from './workouts.ts';` to `packages/engine/src/index.ts`, run `npm run typecheck`, then commit.
 
@@ -113,7 +113,7 @@ Add `export * from './workouts.ts';` to `packages/engine/src/index.ts`, run `npm
 **Interfaces:**
 - Produces: `progressionFor(sets, bodyweightByDate): ProgressionPoint[]`, one point per session date for a single exercise, carrying `date`, `heaviestWorkingSetKg`, `workingVolumeKg` and `isRecord`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Cover:
 
@@ -125,17 +125,17 @@ Cover:
 - a pull-up series computes off bodyweight and moves as bodyweight moves, rather than sitting flat at zero
 - an exercise with no usable sets in a session produces no point for that date, rather than a zero point
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `bodyweightByDate` is a `Map<ISODate, number>` or a lookup function — the caller builds it from `DailyEstimate[]`, which already carries `trendWeightKg` per date. The engine must not import `expenditure.ts` to fetch it.
 
 A date with no bodyweight entry yields null effective load for bodyweight exercises, and those sets drop out, per Task 1.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -153,7 +153,7 @@ A date with no bodyweight entry yields null effective load for bodyweight exerci
 
 - [x] **Step 1: Trim the fixture** — done, see Prerequisite. 45 rows, all shapes verified present.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Cover:
 
@@ -169,7 +169,7 @@ Cover:
 - `rpe` is carried through when present and null when absent
 - the result reports counts: sessions, exercises, sets, and each skip reason separately
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Handle quoted fields properly — this is the one hazard the spec calls out as corrupting silently. Do not split on commas.
 
@@ -177,9 +177,9 @@ Target the 14 documented headers exactly. Do not write a generic column detector
 
 Skip `distance_miles`, `duration_seconds`, `superset_id`, `description` and `exercise_notes`, and count them as dropped so the omission is visible.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -192,7 +192,7 @@ Skip `distance_miles`, `duration_seconds`, `superset_id`, `description` and `exe
 **Interfaces:**
 - Produces: the five tables from the spec's Data model, plus read/write functions for sessions and sets.
 
-- [ ] **Step 1: Append v3 to `MIGRATIONS`**
+- [x] **Step 1: Append v3 to `MIGRATIONS`**
 
 Follow v1's conventions exactly: TEXT ids, ISO date strings, `created_at`, `CREATE TABLE IF NOT EXISTS`. Tables per the spec:
 
@@ -213,7 +213,7 @@ Index `sessions (started_at)` — idempotency keys on it and will be checked onc
 
 `exercise_name` is denormalized onto `sets` deliberately, exactly as `food_name` sits on `log_entries`: renaming an exercise must not rewrite what history says happened.
 
-- [ ] **Step 2: Write the persistence functions**
+- [x] **Step 2: Write the persistence functions**
 
 In `mobile/src/db/index.ts`, following the existing style there. At minimum: insert a session with its sets in one transaction, check whether a `started_at` already exists, and read sets for an exercise across sessions.
 
@@ -223,7 +223,7 @@ These paths have no node driver — the existing vitest config covers only the p
 
 Do not add expo-sqlite to the test config to get around this. That boundary is deliberate and predates this work.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ---
 
@@ -239,7 +239,7 @@ Do not add expo-sqlite to the test config to get around this. That boundary is d
 **Interfaces:**
 - Produces: `buildImportPlan(parsed, existingStartTimes): ImportPlan` — pure, decides what would be written; and a commit function that applies a plan inside one transaction.
 
-- [ ] **Step 1: Write the failing test for the plan**
+- [x] **Step 1: Write the failing test for the plan**
 
 The plan is where idempotency lives, and it is pure, so it is tested properly even though the UI is not. Cover:
 
@@ -248,11 +248,11 @@ The plan is where idempotency lives, and it is pure, so it is tested properly ev
 - a newer export lands only its new sessions
 - the plan reports, separately: sessions to add, sessions skipped as duplicates, sets to write, sets excluded for no usable weight, sets excluded for no reps, and which exercises are inferred bodyweight-based
 
-- [ ] **Step 2: Write the implementation**
+- [x] **Step 2: Write the implementation**
 
 Nothing is written until the user accepts — this matches the meal estimate and `LookupCandidateSheet`, which is the established pattern for anything inferred.
 
-- [ ] **Step 3: Build the preview screen**
+- [x] **Step 3: Build the preview screen**
 
 Follow the shape of the existing modal screens registered in `_layout.tsx`, and use `Card`, `Button` and `Field` from `src/components` rather than new primitives.
 
@@ -270,9 +270,20 @@ Import the **full** export, not the fixture. Confirm the session count matches w
 
 Then import the same file again and confirm it writes nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
+
+## Status
+
+Tasks 1–5 are implemented, tested and pushed. 245 automated tests pass across the three workspaces and both platform exports build.
+
+Two steps remain unchecked, and neither can be done from a development container:
+
+- **Task 4, Step 3** — that migration v3 applies cleanly to an existing v2 database on a real device, and `user_version` reads 3. expo-sqlite has no node driver, so this is verified by launching the app, deliberately, rather than by loosening `mobile/vitest.config.ts`.
+- **Task 5, Step 4** — importing the full 3,073-row export through the UI, then importing it a second time to confirm it writes nothing.
+
+The parser half of Task 5 Step 4 *was* verified here: run against the real export, it reproduces every measured figure — 246 sessions, 3,057 sets, 16 dropped for no reps, 5 slips, 2024-09-08 to 2025-12-29, eight bodyweight exercises with `Chest Dip (Weighted)` correctly excluded. What remains unverified is the database write and the screen around it, not the parsing.
 
 ## Self-review
 
