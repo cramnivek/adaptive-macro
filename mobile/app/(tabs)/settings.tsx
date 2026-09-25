@@ -1,6 +1,7 @@
 import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine';
 import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -59,6 +60,7 @@ const NumberSetting = ({
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const { settings, updateSettings, refreshAll } = useApp();
   const metric = settings.units === 'metric';
 
@@ -292,6 +294,15 @@ export default function SettingsScreen() {
           onChangeText={(usdaApiKey) => void updateSettings({ usdaApiKey })}
           hint="Leave this as DEMO_KEY to use the app's shared key, which is held server-side and is what most people want. Enter your own to get a quota nobody else is spending — free key at fdc.nal.usda.gov/api-key-signup.html"
         />
+      </Card>
+
+      <Card title="Lifting history">
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          Bring your training history over from Hevy. Export the CSV from Hevy's settings,
+          then pick it here — you will see what it found before anything is saved, and
+          importing the same file twice changes nothing.
+        </Text>
+        <Button label="Import from Hevy" onPress={() => router.push('/import-workouts')} />
       </Card>
 
       <Card title="Looking up restaurant food">

@@ -89,6 +89,16 @@ export default function RootLayout() {
               headerTintColor: colors.text,
             }}
           />
+          <Stack.Screen
+            name="import-workouts"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Import workouts',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
         </Stack>
       </AppProvider>
     </SafeAreaProvider>
