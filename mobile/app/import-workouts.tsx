@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
@@ -10,6 +10,22 @@ import { notify } from '../src/dialog';
 import { commitImport, planImport } from '../src/import/runImport';
 import type { ImportPlan } from '../src/import/importWorkouts';
 import { space, useTheme } from '../src/theme';
+
+/**
+ * Reads the picked file's text on whichever platform this is.
+ *
+ * `FileSystem.readAsStringAsync` does not exist on web — it throws "not
+ * available on web", which surfaced as an alert and an import that silently
+ * did nothing. On web the picker hands back a real `File`, and its blob URI is
+ * readable through `fetch`; on a device there is no `File` and the URI is a
+ * path only expo-file-system can open. So each platform uses what it actually
+ * has rather than one call that works on one of them.
+ */
+const readAsset = async (asset: DocumentPicker.DocumentPickerAsset): Promise<string> => {
+  if (asset.file) return asset.file.text();
+  if (Platform.OS === 'web') return fetch(asset.uri).then((response) => response.text());
+  return FileSystem.readAsStringAsync(asset.uri);
+};
 
 /**
  * Imports lifting history from a Hevy CSV export.
@@ -36,7 +52,7 @@ export default function ImportWorkoutsScreen() {
       });
       if (result.canceled) return;
 
-      const csv = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const csv = await readAsset(result.assets[0]);
       setPlan(await planImport(csv));
       setOverrides({});
     } catch (error) {
