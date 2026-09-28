@@ -303,6 +303,11 @@ export default function SettingsScreen() {
           importing the same file twice changes nothing.
         </Text>
         <Button label="Import from Hevy" onPress={() => router.push('/import-workouts')} />
+        <Button
+          label="See progression"
+          variant="subtle"
+          onPress={() => router.push('/progression')}
+        />
       </Card>
 
       <Card title="Looking up restaurant food">

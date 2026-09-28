@@ -90,6 +90,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="progression"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Progression',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
             name="import-workouts"
             options={{
               presentation: 'modal',
