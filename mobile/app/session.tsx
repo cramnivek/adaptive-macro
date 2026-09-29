@@ -1,10 +1,17 @@
 import { todayISO } from '@adaptive-macros/engine';
 import type { SetType } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Card } from '../src/components/Card';
-import { Button, Field, Segmented, TOUCH_TARGET } from '../src/components/Controls';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
 import {
   activeSession,
@@ -12,215 +19,283 @@ import {
   deleteSet,
   discardSession,
   finishSession,
-  lastWorkingSet,
+  lastSessionSets,
   listExerciseNames,
   listRoutines,
   startSession,
+  updateSetValues,
 } from '../src/db';
 import type { ActiveSession, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
-import { displayWeight, formatDate, parseWeight, weightUnit } from '../src/format';
+import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
 import { radius, space, useTheme } from '../src/theme';
 
-const SET_TYPES: { value: SetType; label: string }[] = [
-  { value: 'normal', label: 'Working' },
-  { value: 'warmup', label: 'Warmup' },
-  { value: 'failure', label: 'Failure' },
-];
+/** One editable row. `id` is present once the set has been written. */
+interface Row {
+  key: string;
+  id: string | null;
+  weight: string;
+  reps: string;
+  setType: SetType;
+  done: boolean;
+}
+
+interface Block {
+  name: string;
+  bodyweightBased: boolean;
+  rows: Row[];
+  /** The same exercise's sets from the last finished session, by index. */
+  previous: LoggedSet[];
+}
+
+const newKey = () => Math.random().toString(36).slice(2, 10);
+
+const elapsed = (startedAt: string, now: number): string => {
+  const started = new Date(startedAt).getTime();
+  const seconds = Math.max(0, Math.floor((now - started) / 1000));
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`;
+};
 
 /**
- * Logging a session at the rack.
+ * Logging a session.
  *
- * Starts blank and collects sets. A session is not bound to any plan: exercises
- * are added as they are done, and dropped by simply not adding to them.
+ * Laid out as a list of exercises with editable set rows, rather than a form
+ * that adds one set at a time: at the rack you are filling in a grid you can
+ * see, and the previous session's numbers for the same set sit beside the
+ * boxes you are typing into.
  *
- * Finishing stamps the end time. Leaving without finishing keeps the session
- * open and resumable, because walking out of the gym without tapping a button
- * is normal and neither discarding the sets nor inventing an end time is a
- * reasonable thing to do to someone's training log.
+ * A row is a draft until it is ticked. Ticking writes it; editing a ticked row
+ * updates it; unticking deletes it. Nothing is written speculatively, so a row
+ * half typed and abandoned leaves no trace.
  */
 export default function SessionScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { settings } = useApp();
   const unit = weightUnit(settings.units);
-
-  // `start=blank` or `routine=<id>` begins immediately. The Train tab already
-  // asked what the user wanted; making them choose again on arrival is the
-  // same tap twice.
   const params = useLocalSearchParams<{ start?: string; routine?: string }>();
 
   const [session, setSession] = useState<ActiveSession | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
+  const [picking, setPicking] = useState(false);
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
   const [routines, setRoutines] = useState<Routine[]>([]);
-  // The routine this session started from, kept only as a running order to
-  // work through. A session is never bound to it: exercises are added or
-  // dropped freely, and the plan is a suggestion the whole time.
-  const [plan, setPlan] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [now, setNow] = useState(Date.now());
+  const started = useRef(false);
 
-  const [exercise, setExercise] = useState('');
-  const [weight, setWeight] = useState('');
-  const [reps, setReps] = useState('');
-  const [setType, setSetType] = useState<SetType>('normal');
-  const [lastHint, setLastHint] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // The header clock. One second is the resolution anyone reads it at.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const blockFor = useCallback(
+    async (name: string, bodyweightBased: boolean, rows: Row[] = []): Promise<Block> => ({
+      name,
+      bodyweightBased,
+      rows,
+      previous: await lastSessionSets(name),
+    }),
+    [],
+  );
+
+  /** Rebuilds the on-screen blocks from what is already written. */
+  const blocksFromSession = useCallback(
+    async (open: ActiveSession, plan: string[] = []): Promise<Block[]> => {
+      const names: string[] = [];
+      for (const set of open.sets) if (!names.includes(set.exerciseName)) names.push(set.exerciseName);
+      for (const name of plan) if (!names.includes(name)) names.push(name);
+
+      return Promise.all(
+        names.map(async (name) => {
+          const mine = open.sets.filter((s) => s.exerciseName === name);
+          return blockFor(
+            name,
+            mine[0]?.bodyweightBased ?? false,
+            mine.map((s) => ({
+              key: s.id,
+              id: s.id,
+              weight:
+                s.weightKg === null ? '' : String(displayWeight(s.weightKg, settings.units).toFixed(1)),
+              reps: String(s.reps),
+              setType: s.setType,
+              done: true,
+            })),
+          );
+        }),
+      );
+    },
+    [blockFor, settings.units],
+  );
 
   useEffect(() => {
     void (async () => {
-      const existing = await activeSession();
-      const loadedRoutines = await listRoutines();
-      setKnown(await listExerciseNames());
+      const [existing, loadedRoutines, names] = await Promise.all([
+        activeSession(),
+        listRoutines(),
+        listExerciseNames(),
+      ]);
       setRoutines(loadedRoutines);
+      setKnown(names);
 
       if (existing) {
         setSession(existing);
-      } else if (params.routine) {
-        await begin(loadedRoutines.find((r) => r.id === params.routine));
-      } else if (params.start === 'blank') {
-        await begin();
+        setBlocks(await blocksFromSession(existing));
+      } else if (!started.current && (params.start === 'blank' || params.routine)) {
+        started.current = true;
+        const routine = loadedRoutines.find((r) => r.id === params.routine);
+        const fresh = await startSession(routine?.name ?? 'Workout', todayISO());
+        setSession(fresh);
+        setBlocks(
+          await Promise.all(
+            (routine?.exercises ?? []).map((e) => blockFor(e.name, e.bodyweightBased)),
+          ),
+        );
       }
-
       setLoading(false);
     })();
-  }, []);
+  }, [params.start, params.routine, blockFor, blocksFromSession]);
 
-  // The question at the rack is what happened last time, so answer it as soon
-  // as the exercise is known rather than making anyone go and look.
-  //
-  // The fields are replaced, not merely filled when empty. Filling only empties
-  // left the previous exercise's numbers in place when switching, so the next
-  // "Add set" silently logged a lateral raise at the bench press weight.
-  // Consecutive sets of the *same* exercise deliberately keep what is typed,
-  // since straight sets repeat, so this runs on a change of exercise only.
-  useEffect(() => {
-    const name = exercise.trim();
-    if (!name) {
-      setLastHint(null);
-      setWeight('');
-      setReps('');
+  const editRow = (blockIndex: number, rowIndex: number, patch: Partial<Row>) =>
+    setBlocks((current) =>
+      current.map((block, bi) =>
+        bi !== blockIndex
+          ? block
+          : {
+              ...block,
+              rows: block.rows.map((row, ri) => (ri !== rowIndex ? row : { ...row, ...patch })),
+            },
+      ),
+    );
+
+  const addRow = (blockIndex: number) =>
+    setBlocks((current) =>
+      current.map((block, bi) => {
+        if (bi !== blockIndex) return block;
+        // A new row copies the one above, because the next set is usually the
+        // same weight; failing that, the previous session's set at that index.
+        const last = block.rows[block.rows.length - 1];
+        const previous = block.previous[block.rows.length];
+        return {
+          ...block,
+          rows: [
+            ...block.rows,
+            {
+              key: newKey(),
+              id: null,
+              weight:
+                last?.weight ??
+                (previous?.weightKg == null
+                  ? ''
+                  : String(displayWeight(previous.weightKg, settings.units).toFixed(1))),
+              reps: last?.reps ?? (previous ? String(previous.reps) : ''),
+              setType: 'normal',
+              done: false,
+            },
+          ],
+        };
+      }),
+    );
+
+  /** Ticking writes the set; unticking removes it. */
+  const toggleRow = async (blockIndex: number, rowIndex: number) => {
+    if (!session) return;
+    const block = blocks[blockIndex];
+    const row = block.rows[rowIndex];
+
+    if (row.done && row.id) {
+      await deleteSet(row.id);
+      editRow(blockIndex, rowIndex, { done: false, id: null });
       return;
     }
 
-    let current = true;
-    void lastWorkingSet(name).then((last) => {
-      // A slower lookup for an exercise since typed over must not overwrite
-      // the newer one's values.
-      if (!current) return;
+    const reps = Number(row.reps);
+    if (!Number.isFinite(reps) || reps <= 0) {
+      notify('How many reps?', 'Enter a rep count above zero before ticking the set.');
+      return;
+    }
+    const kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+    if (row.weight.trim() && kg === null) {
+      notify('That weight did not parse', `Enter a number in ${unit}, or leave it blank.`);
+      return;
+    }
 
-      if (!last) {
-        setLastHint(null);
-        setWeight('');
-        setReps('');
-        return;
-      }
-      const shown =
-        last.weightKg === null
-          ? `${last.reps} reps`
-          : `${displayWeight(last.weightKg, settings.units).toFixed(1)} ${unit} × ${last.reps}`;
-      setLastHint(`Last time: ${shown} on ${formatDate(last.date)}`);
-      setWeight(
-        last.weightKg === null
-          ? ''
-          : String(displayWeight(last.weightKg, settings.units).toFixed(1)),
-      );
-      setReps(String(last.reps));
+    await addSetToSession(session.id, {
+      exerciseName: block.name,
+      bodyweightBased: block.bodyweightBased,
+      setIndex: rowIndex,
+      weightKg: kg,
+      reps,
+      setType: row.setType,
+      rpe: null,
     });
 
-    return () => {
-      current = false;
-    };
-  }, [exercise, settings.units, unit]);
-
-  const byExercise = useMemo(() => {
-    const groups: { name: string; sets: LoggedSet[] }[] = [];
-    for (const set of session?.sets ?? []) {
-      const found = groups.find((g) => g.name === set.exerciseName);
-      if (found) found.sets.push(set);
-      else groups.push({ name: set.exerciseName, sets: [set] });
-    }
-    return groups;
-  }, [session]);
-
-  const begin = async (routine?: Routine) => {
-    setBusy(true);
-    try {
-      setSession(await startSession(routine?.name ?? 'Workout', todayISO()));
-      setPlan(routine?.exercises.map((e) => e.name) ?? []);
-      if (routine?.exercises.length) setExercise(routine.exercises[0].name);
-    } catch (error) {
-      notify('Could not start the session', (error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    const refreshed = await activeSession();
+    setSession(refreshed);
+    const written = refreshed?.sets.filter((s) => s.exerciseName === block.name) ?? [];
+    editRow(blockIndex, rowIndex, { done: true, id: written[written.length - 1]?.id ?? null });
   };
 
-  const addSet = async () => {
-    if (!session) return;
-    const name = exercise.trim();
-    const repCount = Number(reps);
+  /** Keeps an already-written set in step with an edited row. */
+  const commitEdit = async (blockIndex: number, rowIndex: number) => {
+    const row = blocks[blockIndex].rows[rowIndex];
+    if (!row.done || !row.id) return;
 
-    if (!name) return notify('Which exercise?', 'Enter an exercise name first.');
-    if (!Number.isFinite(repCount) || repCount <= 0) {
-      return notify('How many reps?', 'Reps must be a number above zero.');
-    }
+    const reps = Number(row.reps);
+    if (!Number.isFinite(reps) || reps <= 0) return;
+    const kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
 
-    // Blank weight is recorded as "not recorded", never as zero: a pull-up and
-    // a bench press with a forgotten number are different, and scoring the
-    // second as 0 kg would drag a real progression line down.
-    const kg = weight.trim() ? parseWeight(weight, settings.units) : null;
-    if (weight.trim() && kg === null) {
-      return notify('That weight did not parse', `Enter a number in ${unit}, or leave it blank.`);
-    }
-
-    const bodyweightBased =
-      known.find((e) => e.name === name)?.bodyweightBased ?? kg === null;
-
-    setBusy(true);
-    try {
-      // One past the highest index in use, not the count: deleting a middle set
-      // makes the count collide with an index that already exists, and
-      // lastWorkingSet's `set_index DESC` tiebreak then picks arbitrarily.
-      const used = session.sets.filter((s) => s.exerciseName === name);
-      const index = used.reduce((max, s) => Math.max(max, s.setIndex + 1), 0);
-      await addSetToSession(session.id, {
-        exerciseName: name,
-        bodyweightBased,
-        setIndex: index,
-        weightKg: kg,
-        reps: repCount,
-        setType,
-        rpe: null,
-      });
-      setSession(await activeSession());
-      setKnown(await listExerciseNames());
-    } catch (error) {
-      notify('Could not save that set', (error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    await updateSetValues(row.id, kg, reps);
+    setSession(await activeSession());
   };
 
-  const removeSet = async (id: string) => {
-    setBusy(true);
-    try {
-      await deleteSet(id);
-      setSession(await activeSession());
-    } catch (error) {
-      notify('Could not remove that set', (error as Error).message);
-    } finally {
-      setBusy(false);
+  const addExercise = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (blocks.some((b) => b.name === trimmed)) {
+      setPicking(false);
+      return notify('Already here', `${trimmed} is already in this session.`);
     }
+    const bodyweightBased = known.find((k) => k.name === trimmed)?.bodyweightBased ?? false;
+    const block = await blockFor(trimmed, bodyweightBased);
+    setBlocks((current) => [...current, { ...block, rows: [] }]);
+    setPicking(false);
+    setSearch('');
+  };
+
+  const removeExercise = async (blockIndex: number) => {
+    const block = blocks[blockIndex];
+    const sure = await confirm({
+      title: `Remove ${block.name}?`,
+      message: block.rows.some((r) => r.done)
+        ? 'Its logged sets will be deleted too.'
+        : undefined,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!sure) return;
+
+    for (const row of block.rows) if (row.id) await deleteSet(row.id);
+    setBlocks((current) => current.filter((_, i) => i !== blockIndex));
+    setSession(await activeSession());
   };
 
   const finish = async () => {
     if (!session) return;
+    const logged = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
-    if (session.sets.length === 0) {
+    if (logged === 0) {
       const sure = await confirm({
         title: 'Nothing logged',
-        message: 'This session has no sets. Discard it?',
+        message: 'No sets were ticked. Discard this session?',
         confirmLabel: 'Discard',
         destructive: true,
       });
@@ -230,16 +305,9 @@ export default function SessionScreen() {
       return;
     }
 
-    setBusy(true);
-    try {
-      await finishSession(session.id);
-      notify('Session finished', `${session.sets.length} sets logged.`);
-      router.back();
-    } catch (error) {
-      notify('Could not finish the session', (error as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    await finishSession(session.id);
+    notify('Workout saved', `${logged} sets logged.`);
+    router.back();
   };
 
   if (loading) {
@@ -253,152 +321,204 @@ export default function SessionScreen() {
   if (!session) {
     return (
       <Screen title="Workout">
-        <Card title="Start a session">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            Add exercises as you do them. Each set prefills with what you lifted last time,
-            so you can see what to beat without leaving this screen.
-          </Text>
-          <Button label={busy ? 'Starting…' : 'Start blank'} onPress={() => void begin()} disabled={busy} />
-        </Card>
-
-        {routines.length > 0 && (
-          <Card title="Start from a routine">
-            {routines.map((routine) => (
-              <Pressable
-                key={routine.id}
-                onPress={() => void begin(routine)}
-                style={[styles.setRow, { borderColor: colors.border }]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text }}>{routine.name}</Text>
-                  <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
-                    {routine.exercises.map((e) => e.name).join(' · ')}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </Card>
-        )}
+        <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+          Start an empty workout, or pick one of your routines.
+        </Text>
+        <Button
+          label="Start an empty workout"
+          onPress={() => router.replace('/session?start=blank')}
+        />
+        {routines.map((routine) => (
+          <Button
+            key={routine.id}
+            label={routine.name}
+            variant="subtle"
+            onPress={() => router.replace(`/session?routine=${routine.id}`)}
+          />
+        ))}
       </Screen>
     );
   }
 
+  const loggedCount = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
+
   return (
-    <Screen title="Workout">
-      {plan.length > 0 && (
-        <Card title="Running order">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {plan.map((name) => {
-              const done = (session.sets ?? []).some((set) => set.exerciseName === name);
-              return (
-                <Pressable
-                  key={name}
-                  onPress={() => setExercise(name)}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: done ? colors.surfaceRaised : colors.surface,
-                      borderColor: done ? colors.positive : colors.border,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: colors.text, fontSize: 13 }}>{name}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            From the routine. Add or skip whatever you like — the session is not bound to it.
+    <Screen title={session.name}>
+      <View style={[styles.header, { borderColor: colors.border }]}>
+        <View>
+          <Text style={{ color: colors.text, fontSize: 20, fontVariant: ['tabular-nums'] }}>
+            {elapsed(session.startedAt, now)}
           </Text>
-        </Card>
-      )}
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            {loggedCount} {loggedCount === 1 ? 'set' : 'sets'}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => void finish()}
+          style={[styles.finish, { backgroundColor: colors.accent }]}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Finish</Text>
+        </Pressable>
+      </View>
 
-      <Card title="Add a set">
-        <Field
-          label="Exercise"
-          value={exercise}
-          onChangeText={setExercise}
-          placeholder="Bench Press (Barbell)"
-          hint={lastHint ?? 'Names match exactly, so reuse one below to keep the history joined up.'}
-        />
+      {blocks.map((block, blockIndex) => (
+        <View key={block.name} style={styles.block}>
+          <View style={styles.blockHeader}>
+            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600', flex: 1 }}>
+              {block.name}
+            </Text>
+            <Pressable onPress={() => void removeExercise(blockIndex)} style={styles.iconBtn}>
+              <Text style={{ color: colors.textFaint }}>✕</Text>
+            </Pressable>
+          </View>
 
-        {known.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
-            {known.slice(0, 20).map((item) => (
-              <Pressable
-                key={item.name}
-                onPress={() => setExercise(item.name)}
+          <View style={styles.columns}>
+            <Text style={[styles.col, styles.colSet, { color: colors.textFaint }]}>SET</Text>
+            <Text style={[styles.col, styles.colPrev, { color: colors.textFaint }]}>PREVIOUS</Text>
+            <Text style={[styles.col, styles.colNum, { color: colors.textFaint }]}>
+              {unit.toUpperCase()}
+            </Text>
+            <Text style={[styles.col, styles.colNum, { color: colors.textFaint }]}>REPS</Text>
+            <View style={styles.colTick} />
+          </View>
+
+          {block.rows.map((row, rowIndex) => {
+            const previous = block.previous[rowIndex];
+            const previousLabel = previous
+              ? previous.weightKg === null
+                ? `BW × ${previous.reps}`
+                : `${displayWeight(previous.weightKg, settings.units).toFixed(1)} × ${previous.reps}`
+              : '—';
+
+            return (
+              <View
+                key={row.key}
                 style={[
-                  styles.chip,
-                  { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                  styles.row,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: row.done ? colors.surfaceRaised : 'transparent',
+                  },
                 ]}
               >
-                <Text style={{ color: colors.text, fontSize: 13 }}>{item.name}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
+                <Pressable
+                  onPress={() =>
+                    editRow(blockIndex, rowIndex, {
+                      setType: row.setType === 'normal' ? 'warmup' : 'normal',
+                    })
+                  }
+                  style={styles.colSet}
+                >
+                  <Text
+                    style={{
+                      color: row.setType === 'warmup' ? colors.warning : colors.text,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {row.setType === 'warmup' ? 'W' : rowIndex + 1}
+                  </Text>
+                </Pressable>
 
-        <View style={styles.row}>
-          <View style={styles.half}>
-            <Field
-              label={`Weight (${unit})`}
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-              placeholder="blank for bodyweight"
-            />
-          </View>
-          <View style={styles.half}>
-            <Field label="Reps" value={reps} onChangeText={setReps} keyboardType="number-pad" />
-          </View>
+                <Text
+                  style={[styles.colPrev, { color: colors.textFaint, fontSize: 12 }]}
+                  numberOfLines={1}
+                >
+                  {previousLabel}
+                </Text>
+
+                <TextInput
+                  value={row.weight}
+                  onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
+                  onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                  keyboardType="decimal-pad"
+                  placeholder={block.bodyweightBased ? 'BW' : '—'}
+                  placeholderTextColor={colors.textFaint}
+                  style={[
+                    styles.input,
+                    styles.colNum,
+                    { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                />
+                <TextInput
+                  value={row.reps}
+                  onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
+                  onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                  keyboardType="number-pad"
+                  placeholder="—"
+                  placeholderTextColor={colors.textFaint}
+                  style={[
+                    styles.input,
+                    styles.colNum,
+                    { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
+                  ]}
+                />
+
+                <Pressable onPress={() => void toggleRow(blockIndex, rowIndex)} style={styles.colTick}>
+                  <Text
+                    style={{
+                      color: row.done ? colors.positive : colors.textFaint,
+                      fontSize: 18,
+                      textAlign: 'center',
+                    }}
+                  >
+                    ✓
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+
+          <Pressable
+            onPress={() => addRow(blockIndex)}
+            style={[styles.addSet, { borderColor: colors.border }]}
+          >
+            <Text style={{ color: colors.accent }}>+ Add set</Text>
+          </Pressable>
         </View>
-
-        <Segmented<SetType>
-          label="Type"
-          options={SET_TYPES}
-          value={setType}
-          onChange={setSetType}
-        />
-
-        <Button label={busy ? 'Saving…' : 'Add set'} onPress={addSet} disabled={busy} />
-      </Card>
-
-      {byExercise.map((group) => (
-        <Card key={group.name} title={group.name}>
-          {group.sets.map((set, index) => (
-            <Pressable
-              key={set.id}
-              onLongPress={() => void removeSet(set.id)}
-              style={[styles.setRow, { borderColor: colors.border }]}
-            >
-              <Text style={{ color: colors.textFaint, width: 28 }}>{index + 1}</Text>
-              <Text style={{ color: colors.text, flex: 1 }}>
-                {set.weightKg === null
-                  ? 'bodyweight'
-                  : `${displayWeight(set.weightKg, settings.units).toFixed(1)} ${unit}`}
-                {' × '}
-                {set.reps}
-              </Text>
-              {set.setType !== 'normal' && (
-                <Text style={{ color: colors.warning, fontSize: 12 }}>{set.setType}</Text>
-              )}
-            </Pressable>
-          ))}
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            Long-press a set to remove it.
-          </Text>
-        </Card>
       ))}
 
-      <Button
-        label={session.sets.length ? `Finish (${session.sets.length} sets)` : 'Finish'}
-        onPress={finish}
-        disabled={busy}
-      />
+      {picking ? (
+        <View style={[styles.picker, { borderColor: colors.border }]}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search or type a new exercise"
+            placeholderTextColor={colors.textFaint}
+            autoFocus
+            style={[
+              styles.input,
+              { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          />
+          <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
+            {known
+              .filter((k) => k.name.toLowerCase().includes(search.trim().toLowerCase()))
+              .slice(0, 30)
+              .map((item) => (
+                <Pressable
+                  key={item.name}
+                  onPress={() => void addExercise(item.name)}
+                  style={[styles.pickRow, { borderColor: colors.border }]}
+                >
+                  <Text style={{ color: colors.text }}>{item.name}</Text>
+                  {item.bodyweightBased && (
+                    <Text style={{ color: colors.textFaint, fontSize: 12 }}>bodyweight</Text>
+                  )}
+                </Pressable>
+              ))}
+          </ScrollView>
+          {search.trim() !== '' && (
+            <Button label={`Add "${search.trim()}"`} onPress={() => void addExercise(search)} />
+          )}
+          <Button label="Cancel" variant="subtle" onPress={() => setPicking(false)} />
+        </View>
+      ) : (
+        <Button label="Add exercise" onPress={() => setPicking(true)} />
+      )}
+
       <Text style={[styles.note, { color: colors.textFaint }]}>
-        Started {formatDate(session.date)}. Leaving without finishing keeps this session open —
-        it will still be here when you come back.
+        Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
+        finishing keeps this workout open.
       </Text>
     </Screen>
   );
@@ -406,21 +526,67 @@ export default function SessionScreen() {
 
 const styles = StyleSheet.create({
   note: { fontSize: 12, lineHeight: 17, marginTop: 6 },
-  row: { flexDirection: 'row', gap: space.sm },
-  half: { flex: 1 },
-  chips: { marginBottom: space.sm },
-  chip: {
-    minHeight: TOUCH_TARGET - 14,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    marginRight: space.xs,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  setRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    justifyContent: 'space-between',
+    paddingBottom: space.md,
+    marginBottom: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  finish: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
+  },
+  block: { marginBottom: space.lg },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.xs },
+  columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 4 },
+  col: { fontSize: 11, letterSpacing: 0.5 },
+  colSet: { width: 34, textAlign: 'center' },
+  colPrev: { flex: 1, textAlign: 'center' },
+  colNum: { width: 64, textAlign: 'center', marginHorizontal: 3 },
+  colTick: { width: 40, alignItems: 'center', justifyContent: 'center' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: TOUCH_TARGET,
+    borderRadius: radius.sm,
+    marginBottom: 4,
+  },
+  input: {
+    minHeight: TOUCH_TARGET - 8,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    textAlign: 'center',
+  },
+  addSet: {
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    marginTop: 4,
+  },
+  iconBtn: {
+    minHeight: TOUCH_TARGET,
+    minWidth: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  picker: {
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: space.sm,
+    marginBottom: space.md,
+  },
+  pickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     minHeight: TOUCH_TARGET,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
