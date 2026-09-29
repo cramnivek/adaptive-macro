@@ -90,6 +90,26 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="routines"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Routines',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
+            name="session"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: 'Workout',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+            }}
+          />
+          <Stack.Screen
             name="progression"
             options={{
               presentation: 'modal',

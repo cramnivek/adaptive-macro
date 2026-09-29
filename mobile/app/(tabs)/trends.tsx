@@ -5,6 +5,7 @@ import { Card } from '../../src/components/Card';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
+import { TrainingCrossReference } from '../../src/components/TrainingCrossReference';
 import { formatDateLong, formatRate, formatWeight } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { space, useTheme } from '../../src/theme';
@@ -132,6 +133,8 @@ export default function TrendsScreen() {
           </Text>
         )}
       </Card>
+
+      <TrainingCrossReference series={series} />
 
       <Card title="How this number is worked out">
         <Text style={[styles.body, { color: colors.textMuted }]}>

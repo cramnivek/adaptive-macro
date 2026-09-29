@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveLoadKg, isWorkingSet, progressionFor } from '../src/workouts.ts';
+import {
+  effectiveLoadKg,
+  isWorkingSet,
+  progressionFor,
+  sessionEnergyKcal,
+  weeklyVolume,
+} from '../src/workouts.ts';
 import type { WorkoutSet } from '../src/workouts.ts';
 
 const set = (over: Partial<WorkoutSet> = {}): WorkoutSet => ({
@@ -197,5 +203,67 @@ describe('progressionFor', () => {
     );
 
     expect(points.map((p) => p.date)).toEqual(['2025-01-01', '2025-01-15']);
+  });
+});
+
+describe('sessionEnergyKcal', () => {
+  // Deliberately a band, not a point. MET values for resistance training are
+  // wide, and a single number would read as a measurement.
+  it('returns a band around the MET estimate', () => {
+    const band = sessionEnergyKcal(80, 60);
+
+    expect(band).not.toBeNull();
+    expect(band!.lo).toBeLessThan(band!.mid);
+    expect(band!.mid).toBeLessThan(band!.hi);
+  });
+
+  it('scales with bodyweight and with duration', () => {
+    const light = sessionEnergyKcal(60, 60)!;
+    const heavy = sessionEnergyKcal(90, 60)!;
+    const longer = sessionEnergyKcal(60, 120)!;
+
+    expect(heavy.mid).toBeGreaterThan(light.mid);
+    expect(longer.mid).toBeCloseTo(light.mid * 2, 5);
+  });
+
+  // Same rule as estimateCostUsd returning null for an unpriced model rather
+  // than pricing it from the wrong list: a missing input is stated, not
+  // defaulted.
+  it('returns null when an input is missing, rather than defaulting', () => {
+    expect(sessionEnergyKcal(null, 60)).toBeNull();
+    expect(sessionEnergyKcal(80, null)).toBeNull();
+    expect(sessionEnergyKcal(80, 0)).toBeNull();
+  });
+});
+
+describe('weeklyVolume', () => {
+  const bw = new Map<string, number>([['2025-01-06', 80], ['2025-01-13', 80]]);
+
+  it('sums working volume into weeks starting Monday', () => {
+    const points = weeklyVolume(
+      [
+        { date: '2025-01-06', set: set({ weightKg: 50, reps: 10 }) },
+        { date: '2025-01-13', set: set({ weightKg: 60, reps: 10 }) },
+      ],
+      bw,
+    );
+
+    expect(points).toEqual([
+      { weekStart: '2025-01-06', volumeKg: 500 },
+      { weekStart: '2025-01-13', volumeKg: 600 },
+    ]);
+  });
+
+  it('applies the same exclusions as progression', () => {
+    const points = weeklyVolume(
+      [
+        { date: '2025-01-06', set: set({ weightKg: 100, reps: 5, setType: 'warmup' }) },
+        { date: '2025-01-06', set: set({ weightKg: null, reps: 5 }) },
+        { date: '2025-01-06', set: set({ weightKg: 50, reps: 10 }) },
+      ],
+      bw,
+    );
+
+    expect(points).toEqual([{ weekStart: '2025-01-06', volumeKg: 500 }]);
   });
 });

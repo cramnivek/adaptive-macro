@@ -12,7 +12,20 @@ import type {
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 
-let database: SQLite.SQLiteDatabase | null = null;
+/**
+ * The open in flight, not the opened database.
+ *
+ * Caching the resolved handle instead leaves a window: everything between the
+ * first `await` and the assignment runs with the cache still empty, so a second
+ * caller arriving in that window opens the file a second time. On web that is
+ * fatal rather than wasteful — expo-sqlite runs on OPFS, a sync access handle
+ * is exclusive, and the second open fails with `Invalid VFS state`, which
+ * surfaces at whatever unrelated call happened to be second. The app opens the
+ * database from several effects at startup, so the window is regularly hit.
+ *
+ * Caching the promise means every caller awaits the same open.
+ */
+let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Opens the database once and brings it up to the latest schema version.
@@ -21,9 +34,19 @@ let database: SQLite.SQLiteDatabase | null = null;
  * half-applied upgrade after a crash rolls back rather than leaving the app
  * pointing at a schema it cannot read.
  */
-export const getDb = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (database) return database;
+export const getDb = (): Promise<SQLite.SQLiteDatabase> => {
+  if (!databasePromise) {
+    // Cleared on failure so a later call can retry rather than being stuck
+    // with a rejected promise for the life of the session.
+    databasePromise = openAndMigrate().catch((error) => {
+      databasePromise = null;
+      throw error;
+    });
+  }
+  return databasePromise;
+};
 
+const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
   const db = await SQLite.openDatabaseAsync('adaptive-macros.db');
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
@@ -37,7 +60,6 @@ export const getDb = async (): Promise<SQLite.SQLiteDatabase> => {
     });
   }
 
-  database = db;
   return db;
 };
 
@@ -631,4 +653,452 @@ export const setExerciseBodyweightBased = async (
     bodyweightBased ? 1 : 0,
     name,
   );
+};
+
+// --- logging a session ----------------------------------------------------
+
+export interface ActiveSession {
+  id: string;
+  date: ISODate;
+  name: string;
+  startedAt: string;
+  sets: LoggedSet[];
+}
+
+export interface LoggedSet {
+  id: string;
+  exerciseName: string;
+  bodyweightBased: boolean;
+  setIndex: number;
+  weightKg: number | null;
+  reps: number;
+  setType: SetType;
+  rpe: number | null;
+}
+
+/**
+ * The session started and not yet finished, if there is one.
+ *
+ * A session is resumable rather than auto-closed: leaving the gym without
+ * tapping Finish is normal, and discarding the sets or stamping an invented
+ * end time would both destroy work that really happened.
+ */
+export const activeSession = async (): Promise<ActiveSession | null> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{
+    id: string;
+    date: ISODate;
+    name: string;
+    started_at: string;
+  }>(
+    `SELECT id, date, name, started_at FROM sessions
+      WHERE finished_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+  );
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    date: row.date,
+    name: row.name,
+    startedAt: row.started_at,
+    sets: await sessionSets(row.id),
+  };
+};
+
+export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    exercise_name: string;
+    bodyweight_based: number;
+    set_index: number;
+    weight_kg: number | null;
+    reps: number;
+    set_type: string;
+    rpe: number | null;
+  }>(
+    `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
+            s.reps, s.set_type, s.rpe
+       FROM sets s JOIN exercises e ON e.id = s.exercise_id
+      WHERE s.session_id = ?
+      ORDER BY s.created_at, s.set_index`,
+    sessionId,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    exerciseName: row.exercise_name,
+    bodyweightBased: row.bodyweight_based === 1,
+    setIndex: row.set_index,
+    weightKg: row.weight_kg,
+    reps: row.reps,
+    setType: row.set_type as SetType,
+    rpe: row.rpe,
+  }));
+};
+
+export const startSession = async (name: string, date: ISODate): Promise<ActiveSession> => {
+  const db = await getDb();
+  const id = newId();
+  // Seconds are kept: started_at is UNIQUE, and two sessions begun in the same
+  // minute would otherwise collide with an import's minute-resolution values.
+  const startedAt = new Date().toISOString().slice(0, 19);
+
+  await db.runAsync(
+    `INSERT INTO sessions (id, date, routine_id, name, started_at, finished_at, notes)
+     VALUES (?, ?, NULL, ?, ?, NULL, NULL)`,
+    id,
+    date,
+    name,
+    startedAt,
+  );
+
+  return { id, date, name, startedAt, sets: [] };
+};
+
+/** Creates the exercise if this is the first time it has been used. */
+const exerciseIdFor = async (
+  db: SQLite.SQLiteDatabase,
+  name: string,
+  bodyweightBased: boolean,
+): Promise<string> => {
+  await db.runAsync(
+    `INSERT INTO exercises (id, name, bodyweight_based, created_at)
+     VALUES (?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+    newId(),
+    name,
+    bodyweightBased ? 1 : 0,
+    new Date().toISOString(),
+  );
+  const row = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM exercises WHERE name = ?',
+    name,
+  );
+  if (!row) throw new Error(`Could not create exercise ${name}`);
+  return row.id;
+};
+
+export const addSetToSession = async (
+  sessionId: string,
+  set: {
+    exerciseName: string;
+    bodyweightBased: boolean;
+    setIndex: number;
+    weightKg: number | null;
+    reps: number;
+    setType: SetType;
+    rpe: number | null;
+  },
+): Promise<void> => {
+  const db = await getDb();
+  const exerciseId = await exerciseIdFor(db, set.exerciseName, set.bodyweightBased);
+
+  await db.runAsync(
+    `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    newId(),
+    sessionId,
+    exerciseId,
+    set.exerciseName,
+    set.setIndex,
+    set.weightKg,
+    set.reps,
+    set.setType,
+    set.rpe,
+    new Date().toISOString(),
+  );
+};
+
+export const deleteSet = async (id: string): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM sets WHERE id = ?', id);
+};
+
+export const finishSession = async (sessionId: string): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE sessions SET finished_at = ? WHERE id = ?',
+    new Date().toISOString().slice(0, 19),
+    sessionId,
+  );
+};
+
+/** Removes a session and its sets. Used when one is abandoned with nothing in it. */
+export const discardSession = async (sessionId: string): Promise<void> => {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM sets WHERE session_id = ?', sessionId);
+    await db.runAsync('DELETE FROM sessions WHERE id = ?', sessionId);
+  });
+};
+
+/**
+ * What this exercise was last done with, for prefilling.
+ *
+ * The question at the rack is always what happened last time, and answering it
+ * without making someone leave the screen is what makes progressive overload
+ * work in practice rather than in principle.
+ *
+ * Warmups are skipped: prefilling an empty bar helps nobody.
+ */
+export const lastWorkingSet = async (
+  exerciseName: string,
+): Promise<{ weightKg: number | null; reps: number; date: ISODate } | null> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{
+    weight_kg: number | null;
+    reps: number;
+    date: ISODate;
+  }>(
+    `SELECT s.weight_kg, s.reps, w.date
+       FROM sets s JOIN sessions w ON w.id = s.session_id
+      WHERE s.exercise_name = ? AND s.set_type != 'warmup'
+      ORDER BY w.started_at DESC, s.set_index DESC
+      LIMIT 1`,
+    exerciseName,
+  );
+
+  return row ? { weightKg: row.weight_kg, reps: row.reps, date: row.date } : null;
+};
+
+/** Every exercise name on record, for the picker. Most-used first. */
+export const listExerciseNames = async (): Promise<
+  { name: string; bodyweightBased: boolean }[]
+> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ name: string; bodyweight_based: number }>(
+    `SELECT e.name, e.bodyweight_based
+       FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
+      GROUP BY e.id ORDER BY COUNT(s.id) DESC, e.name`,
+  );
+  return rows.map((r) => ({ name: r.name, bodyweightBased: r.bodyweight_based === 1 }));
+};
+
+// --- routines -------------------------------------------------------------
+
+export interface Routine {
+  id: string;
+  name: string;
+  position: number;
+  exercises: { name: string; bodyweightBased: boolean; targetSets: number; position: number }[];
+}
+
+export const listRoutines = async (): Promise<Routine[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string; name: string; position: number }>(
+    'SELECT id, name, position FROM routines ORDER BY position, name',
+  );
+
+  const routines: Routine[] = [];
+  for (const row of rows) {
+    const exercises = await db.getAllAsync<{
+      name: string;
+      bodyweight_based: number;
+      target_sets: number;
+      position: number;
+    }>(
+      `SELECT e.name, e.bodyweight_based, re.target_sets, re.position
+         FROM routine_exercises re JOIN exercises e ON e.id = re.exercise_id
+        WHERE re.routine_id = ? ORDER BY re.position`,
+      row.id,
+    );
+    routines.push({
+      id: row.id,
+      name: row.name,
+      position: row.position,
+      exercises: exercises.map((e) => ({
+        name: e.name,
+        bodyweightBased: e.bodyweight_based === 1,
+        targetSets: e.target_sets,
+        position: e.position,
+      })),
+    });
+  }
+  return routines;
+};
+
+export const createRoutine = async (
+  name: string,
+  exercises: { name: string; bodyweightBased: boolean; targetSets: number }[],
+): Promise<string> => {
+  const db = await getDb();
+  const id = newId();
+  const now = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    const last = await db.getFirstAsync<{ next: number }>(
+      'SELECT COALESCE(MAX(position), -1) + 1 AS next FROM routines',
+    );
+    await db.runAsync(
+      'INSERT INTO routines (id, name, position, created_at) VALUES (?, ?, ?, ?)',
+      id,
+      name,
+      last?.next ?? 0,
+      now,
+    );
+
+    for (const [index, exercise] of exercises.entries()) {
+      const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
+      await db.runAsync(
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets)
+         VALUES (?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
+           SET position = excluded.position, target_sets = excluded.target_sets`,
+        id,
+        exerciseId,
+        index,
+        exercise.targetSets,
+      );
+    }
+  });
+
+  return id;
+};
+
+export const renameRoutine = async (id: string, name: string): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('UPDATE routines SET name = ? WHERE id = ?', name, id);
+};
+
+/** Rewrites a routine's exercise list wholesale, which is how the editor saves. */
+export const setRoutineExercises = async (
+  id: string,
+  exercises: { name: string; bodyweightBased: boolean; targetSets: number }[],
+): Promise<void> => {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?', id);
+    for (const [index, exercise] of exercises.entries()) {
+      const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
+      await db.runAsync(
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets)
+         VALUES (?, ?, ?, ?)`,
+        id,
+        exerciseId,
+        index,
+        exercise.targetSets,
+      );
+    }
+  });
+};
+
+export const deleteRoutine = async (id: string): Promise<void> => {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?', id);
+    await db.runAsync('DELETE FROM routines WHERE id = ?', id);
+  });
+};
+
+/** Moves a routine one place up or down, which is the only ordering anyone needs. */
+export const moveRoutine = async (id: string, direction: -1 | 1): Promise<void> => {
+  const db = await getDb();
+  const all = await db.getAllAsync<{ id: string }>(
+    'SELECT id FROM routines ORDER BY position, name',
+  );
+  const index = all.findIndex((r) => r.id === id);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= all.length) return;
+
+  const reordered = [...all];
+  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+
+  await db.withTransactionAsync(async () => {
+    for (const [position, row] of reordered.entries()) {
+      await db.runAsync('UPDATE routines SET position = ? WHERE id = ?', position, row.id);
+    }
+  });
+};
+
+/**
+ * The exercises of a past session, in the order they were done.
+ *
+ * After importing 246 sessions, assembling a routine by hand from a picker is
+ * tedious when the answer is already in the history.
+ */
+export const recentSessions = async (
+  limit = 20,
+): Promise<{ id: string; name: string; date: ISODate; exercises: string[] }[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ id: string; name: string; date: ISODate }>(
+    `SELECT id, name, date FROM sessions
+      WHERE finished_at IS NOT NULL ORDER BY started_at DESC LIMIT ?`,
+    limit,
+  );
+
+  const out = [];
+  for (const row of rows) {
+    const exercises = await db.getAllAsync<{ exercise_name: string }>(
+      `SELECT exercise_name FROM sets WHERE session_id = ?
+        GROUP BY exercise_name ORDER BY MIN(rowid)`,
+      row.id,
+    );
+    out.push({ ...row, exercises: exercises.map((e) => e.exercise_name) });
+  }
+  return out;
+};
+
+// --- cross-reference ------------------------------------------------------
+
+/** Every recorded set with its session date, for whole-history aggregates. */
+export const listAllSets = async (): Promise<DatedSet[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    session_id: string;
+    date: ISODate;
+    exercise_name: string;
+    set_index: number;
+    weight_kg: number | null;
+    reps: number;
+    set_type: string;
+    rpe: number | null;
+    bodyweight_based: number;
+  }>(
+    `SELECT s.id, s.session_id, w.date, s.exercise_name, s.set_index, s.weight_kg,
+            s.reps, s.set_type, s.rpe, e.bodyweight_based
+       FROM sets s
+       JOIN sessions  w ON w.id = s.session_id
+       JOIN exercises e ON e.id = s.exercise_id
+      ORDER BY w.date`,
+  );
+
+  return rows.map((row) => ({
+    date: row.date,
+    set: {
+      id: row.id,
+      sessionId: row.session_id,
+      exerciseName: row.exercise_name,
+      setIndex: row.set_index,
+      weightKg: row.weight_kg,
+      reps: row.reps,
+      setType: row.set_type as SetType,
+      rpe: row.rpe,
+      bodyweightBased: row.bodyweight_based === 1,
+    },
+  }));
+};
+
+/**
+ * How long each finished session took.
+ *
+ * `minutes` is null when the session was never finished — there is no end time
+ * to measure against, and inventing one would put a fabricated number into an
+ * energy estimate. Imported sessions always carry both timestamps.
+ */
+export const listSessionSpans = async (): Promise<{ date: ISODate; minutes: number | null }[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    date: ISODate;
+    started_at: string;
+    finished_at: string | null;
+  }>('SELECT date, started_at, finished_at FROM sessions ORDER BY started_at');
+
+  return rows.map((row) => {
+    if (!row.finished_at) return { date: row.date, minutes: null };
+    const ms = Date.parse(row.finished_at) - Date.parse(row.started_at);
+    return {
+      date: row.date,
+      minutes: Number.isFinite(ms) && ms > 0 ? ms / 60000 : null,
+    };
+  });
 };

@@ -142,3 +142,73 @@ export const progressionFor = (
     };
   });
 };
+
+/**
+ * A MET-derived estimate of what a session cost, as a band.
+ *
+ * **Nothing in this app consumes this number.** `expenditure.ts` already
+ * absorbs training through the gap between logged intake and observed weight
+ * change: train harder and the filter raises its estimate to keep explaining
+ * the data. Adding a workout figure on top of that counts the same energy
+ * twice, raises the target and stalls the deficit — the exact defect that makes
+ * exercise calories untrustworthy in mainstream trackers. This exists to be
+ * displayed beside the filter's estimate as an outside check, and for no other
+ * purpose.
+ *
+ * A band rather than a point because that is what the underlying number is:
+ * published METs for resistance training run from roughly 3 to 6 depending on
+ * how the session is conducted, which is about ±40% around the middle. A single
+ * figure would read as a measurement.
+ */
+export const sessionEnergyKcal = (
+  bodyweightKg: number | null,
+  durationMinutes: number | null,
+): { lo: number; mid: number; hi: number } | null => {
+  if (bodyweightKg === null || durationMinutes === null) return null;
+  if (bodyweightKg <= 0 || durationMinutes <= 0) return null;
+
+  // kcal = MET × kg × hours.
+  const hours = durationMinutes / 60;
+  const at = (met: number) => met * bodyweightKg * hours;
+
+  return { lo: at(3), mid: at(4.5), hi: at(6) };
+};
+
+/** Monday of the ISO week containing this date. */
+const weekStartOf = (date: ISODate): ISODate => {
+  const d = new Date(`${date}T00:00:00Z`);
+  // getUTCDay: Sunday is 0, so Sunday belongs to the week that began six days
+  // earlier rather than starting one.
+  const offset = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - offset);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Working volume per week, in kg lifted.
+ *
+ * Reuses `isWorkingSet` and `effectiveLoadKg` rather than restating the
+ * exclusions, so a warmup or an unscoreable set is dropped here for exactly the
+ * same reasons it is dropped from progression.
+ */
+export const weeklyVolume = (
+  sets: DatedSet[],
+  bodyweightByDate: ReadonlyMap<ISODate, number>,
+): { weekStart: ISODate; volumeKg: number }[] => {
+  const byWeek = new Map<ISODate, number>();
+
+  for (const { date, set } of sets) {
+    if (!isWorkingSet(set)) continue;
+    if (set.reps === null) continue;
+
+    const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
+    if (load === null) continue;
+
+    const week = weekStartOf(date);
+    byWeek.set(week, (byWeek.get(week) ?? 0) + load * set.reps);
+  }
+
+  return [...byWeek.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([weekStart, volumeKg]) => ({ weekStart, volumeKg }));
+};

@@ -62,13 +62,24 @@ export default function ImportWorkoutsScreen() {
       });
       if (result.canceled) return;
 
-      const csv = await readAsset(result.assets[0]);
+      // Reading the file and reading the database fail for unrelated reasons,
+      // and reporting both as "could not read that file" sent a database error
+      // -- `Invalid VFS state` -- to someone who then went looking at their
+      // CSV. Each step says what actually failed.
+      let csv: string;
+      try {
+        csv = await readAsset(result.assets[0]);
+      } catch (error) {
+        notify('Could not read that file', (error as Error).message);
+        return;
+      }
+
+      // The parser throws with the header it received when the format does not
+      // match, which is the message worth showing verbatim.
       setPlan(await planImport(csv));
       setOverrides({});
     } catch (error) {
-      // The parser throws with the header it received when the format does not
-      // match, which is the message worth showing verbatim.
-      notify('Could not read that file', (error as Error).message);
+      notify('Could not prepare the import', (error as Error).message);
     } finally {
       setBusy(false);
     }
