@@ -99,14 +99,14 @@ from `runImport.ts`, and for the same reason.
 | `border` | `#2A2A2D` | `#E2E2DC` |
 | `text` | `#F4F4F2` | `#151516` |
 | `textMuted` | `#A0A09C` | `#5E5E5A` |
-| `textFaint` | `#8C8C91` | `#666660` |
+| `textFaint` | `#8C8C91` | `#6E6E68` |
 | `accent` | `#E9E9E6` | `#151516` |
 | `onFill` | `#0E0E0F` | `#FAFAF8` |
 | `protein` | `#6E9FB5` | `#3C6E88` |
-| `carbs` | `#C4A05A` | `#8A6A22` |
+| `carbs` | `#C8A45C` | `#8E6E26` |
 | `fat` | `#B57A56` | `#8A4E32` |
 | `positive` | `#6FB58A` | `#2E7D5B` |
-| `warning` | `#C4A05A` | `#8A6A22` |
+| `warning` | `#C8A45C` | `#8E6E26` |
 | `danger` | `#E06C60` | `#C0392B` |
 
 `onFill` is new and is not optional. It is the foreground colour for text and

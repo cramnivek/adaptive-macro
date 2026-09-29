@@ -401,10 +401,10 @@ const dark: Palette = {
   accent: '#E9E9E6',
   onFill: '#0E0E0F',
   protein: '#6E9FB5',
-  carbs: '#C4A05A',
+  carbs: '#C8A45C',
   fat: '#B57A56',
   positive: '#6FB58A',
-  warning: '#C4A05A',
+  warning: '#C8A45C',
   danger: '#E06C60',
 };
 
@@ -415,14 +415,14 @@ const light: Palette = {
   border: '#E2E2DC',
   text: '#151516',
   textMuted: '#5E5E5A',
-  textFaint: '#666660',
+  textFaint: '#6E6E68',
   accent: '#151516',
   onFill: '#FAFAF8',
   protein: '#3C6E88',
-  carbs: '#8A6A22',
+  carbs: '#8E6E26',
   fat: '#8A4E32',
   positive: '#2E7D5B',
-  warning: '#8A6A22',
+  warning: '#8E6E26',
   danger: '#C0392B',
 };
 ```
