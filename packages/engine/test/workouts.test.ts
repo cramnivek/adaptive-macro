@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bodyweightForDates,
   effectiveLoadKg,
   isWorkingSet,
   progressionFor,
@@ -265,5 +266,68 @@ describe('weeklyVolume', () => {
     );
 
     expect(points).toEqual([{ weekStart: '2025-01-06', volumeKg: 500 }]);
+  });
+});
+
+describe('bodyweightForDates', () => {
+  const series = [
+    { date: '2025-03-01', trendWeightKg: 80 },
+    { date: '2025-03-02', trendWeightKg: 79 },
+  ];
+
+  it('uses the measured weight for dates inside the series', () => {
+    const map = bodyweightForDates(series, ['2025-03-01', '2025-03-02'], { extend: false });
+
+    expect(map.get('2025-03-01')).toBe(80);
+    expect(map.get('2025-03-02')).toBe(79);
+  });
+
+  it('leaves earlier dates absent when not extending', () => {
+    const map = bodyweightForDates(series, ['2024-09-08'], { extend: false });
+
+    expect(map.has('2024-09-08')).toBe(false);
+  });
+
+  // Lifting history predates the first weigh-in by months. Without this the
+  // most-trained exercise in an imported history scores nowhere at all.
+  it('carries the earliest weight back when extending', () => {
+    const map = bodyweightForDates(series, ['2024-09-08'], { extend: true });
+
+    expect(map.get('2024-09-08')).toBe(80);
+  });
+
+  it('carries the latest weight forward when extending', () => {
+    const map = bodyweightForDates(series, ['2025-06-01'], { extend: true });
+
+    expect(map.get('2025-06-01')).toBe(79);
+  });
+
+  // The caller has to be able to say so on screen, or the chart silently
+  // reports assumed weights as measured ones.
+  it('reports which dates were filled rather than measured', () => {
+    const inside = bodyweightForDates(series, ['2025-03-01'], { extend: true });
+    const outside = bodyweightForDates(series, ['2024-09-08', '2025-03-01'], { extend: true });
+
+    expect(inside.extendedCount).toBe(0);
+    expect(outside.extendedCount).toBe(1);
+  });
+
+  // Callers pass one date per set, so the same day arrives many times.
+  it('counts distinct dates, not repeated ones', () => {
+    const map = bodyweightForDates(
+      series,
+      ['2024-09-08', '2024-09-08', '2024-09-08', '2024-10-01'],
+      { extend: true },
+    );
+
+    expect(map.extendedCount).toBe(2);
+    expect(map.size).toBe(2);
+  });
+
+  it('returns nothing at all when there is no weight history', () => {
+    const map = bodyweightForDates([], ['2025-03-01'], { extend: true });
+
+    expect(map.size).toBe(0);
+    expect(map.extendedCount).toBe(0);
   });
 });

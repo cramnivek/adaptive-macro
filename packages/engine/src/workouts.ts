@@ -212,3 +212,67 @@ export const weeklyVolume = (
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([weekStart, volumeKg]) => ({ weekStart, volumeKg }));
 };
+
+/** A bodyweight lookup that also reports how much of it was assumed. */
+export interface BodyweightLookup extends ReadonlyMap<ISODate, number> {
+  /** Dates filled from the nearest known weight rather than measured on the day. */
+  extendedCount: number;
+}
+
+/**
+ * Bodyweight for each date a workout happened.
+ *
+ * The weight trend only covers days this app has observations for, and an
+ * imported lifting history usually starts months before the first weigh-in.
+ * Without `extend`, every bodyweight set from that period scores as nothing —
+ * for a typical Hevy import that is the single most-trained exercise showing an
+ * empty chart.
+ *
+ * With `extend`, dates outside the measured range take the nearest known
+ * weight: the earliest for anything before it, the latest for anything after.
+ * That is an assumption, not a measurement, so the count of dates it was
+ * applied to is returned alongside — the caller is expected to say so on
+ * screen rather than pass assumed weights off as recorded ones.
+ *
+ * Dates inside the range are always the measured trend, never interpolated.
+ */
+export const bodyweightForDates = (
+  series: readonly { date: ISODate; trendWeightKg: number }[],
+  dates: readonly ISODate[],
+  options: { extend: boolean },
+): BodyweightLookup => {
+  const map = new Map<ISODate, number>() as Map<ISODate, number> & { extendedCount: number };
+  map.extendedCount = 0;
+
+  if (series.length === 0) return map;
+
+  const measured = new Map(series.map((day) => [day.date, day.trendWeightKg]));
+  const ordered = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const first = ordered[0];
+  const last = ordered[ordered.length - 1];
+
+  // Deduplicated: callers pass one entry per set, so counting the raw list
+  // would report sets where the caller says sessions -- 206 pull-up sets
+  // across 50 days read as "206 sessions assumed".
+  for (const date of new Set(dates)) {
+    const exact = measured.get(date);
+    if (exact !== undefined) {
+      map.set(date, exact);
+      continue;
+    }
+    if (!options.extend) continue;
+
+    // Only outside the range. A gap in the middle is a day with no observation
+    // between two that have them, and inventing a weight there would be
+    // interpolation dressed as data.
+    if (date < first.date) {
+      map.set(date, first.trendWeightKg);
+      map.extendedCount += 1;
+    } else if (date > last.date) {
+      map.set(date, last.trendWeightKg);
+      map.extendedCount += 1;
+    }
+  }
+
+  return map;
+};

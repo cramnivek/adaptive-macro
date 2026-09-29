@@ -1,4 +1,9 @@
-import { diffDays, sessionEnergyKcal, weeklyVolume } from '@adaptive-macros/engine';
+import {
+  bodyweightForDates,
+  diffDays,
+  sessionEnergyKcal,
+  weeklyVolume,
+} from '@adaptive-macros/engine';
 import type { DailyEstimate, DatedSet } from '@adaptive-macros/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
@@ -39,9 +44,17 @@ export const TrainingCrossReference = ({ series }: { series: DailyEstimate[] }) 
     })();
   }, []);
 
+  // Extended past the measured range for the same reason as the progression
+  // screen: imported history predates the first weigh-in, and dropping it
+  // would understate volume for months rather than merely leaving a gap.
   const bodyweightByDate = useMemo(
-    () => new Map(series.map((day) => [day.date, day.trendWeightKg])),
-    [series],
+    () =>
+      bodyweightForDates(
+        series,
+        [...(sets ?? []).map((s) => s.date), ...spans.map((s) => s.date)],
+        { extend: true },
+      ),
+    [series, sets, spans],
   );
 
   const chart = useMemo(() => {
@@ -143,6 +156,12 @@ export const TrainingCrossReference = ({ series }: { series: DailyEstimate[] }) 
           it is measured from what your weight actually did, so counting these calories again
           would raise your target for work already accounted for.
         </Text>
+        {bodyweightByDate.extendedCount > 0 && (
+          <Text style={[styles.note, { color: colors.warning }]}>
+            Some of this predates your weight history and assumes your nearest recorded
+            weight, so volume and energy there rest on an assumed bodyweight.
+          </Text>
+        )}
         {chart.sessionsWithoutDuration > 0 && (
           <Text style={[styles.note, { color: colors.textFaint }]}>
             {chart.sessionsWithoutDuration} sessions have no recorded duration and are left out

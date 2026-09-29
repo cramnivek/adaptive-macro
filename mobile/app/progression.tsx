@@ -1,4 +1,4 @@
-import { diffDays, progressionFor } from '@adaptive-macros/engine';
+import { bodyweightForDates, diffDays, progressionFor } from '@adaptive-macros/engine';
 import type { DatedSet, ProgressionPoint } from '@adaptive-macros/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -55,9 +55,13 @@ export default function ProgressionScreen() {
 
   // The wiring that makes a pull-up mean anything: the filter's own trend
   // weight for each date, which is the load the user actually moved.
+  //
+  // Extended past the measured range, because an imported history starts long
+  // before the first weigh-in and every bodyweight set from that period would
+  // otherwise score as nothing. What that assumed is shown below the chart.
   const bodyweightByDate = useMemo(
-    () => new Map(series.map((day) => [day.date, day.trendWeightKg])),
-    [series],
+    () => bodyweightForDates(series, (sets ?? []).map((s) => s.date), { extend: true }),
+    [series, sets],
   );
 
   const points: ProgressionPoint[] | null = useMemo(
@@ -178,6 +182,14 @@ export default function ProgressionScreen() {
                 This is a bodyweight exercise, so the load is your weight trend on each date
                 plus anything added. The line moves when your weight moves, not only when
                 you get stronger.
+              </Text>
+            )}
+            {chosen?.bodyweightBased && bodyweightByDate.extendedCount > 0 && (
+              <Text style={[styles.note, { color: colors.warning }]}>
+                {bodyweightByDate.extendedCount} of these sessions fall outside the range your
+                weight was tracked over, so they assume your nearest recorded weight. Those
+                points show real reps against an assumed load — log weights covering that
+                period to replace the assumption with a measurement.
               </Text>
             )}
           </Card>
