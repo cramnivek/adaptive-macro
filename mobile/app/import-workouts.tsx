@@ -1,31 +1,14 @@
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
 import { notify } from '../src/dialog';
 import { commitImport, planImport } from '../src/import/runImport';
+import { pickTextFile } from '../src/platform/files';
 import type { ImportPlan } from '../src/import/importWorkouts';
 import { space, useTheme } from '../src/theme';
-
-/**
- * Reads the picked file's text on whichever platform this is.
- *
- * `FileSystem.readAsStringAsync` does not exist on web — it throws "not
- * available on web", which surfaced as an alert and an import that silently
- * did nothing. On web the picker hands back a real `File`, and its blob URI is
- * readable through `fetch`; on a device there is no `File` and the URI is a
- * path only expo-file-system can open. So each platform uses what it actually
- * has rather than one call that works on one of them.
- */
-const readAsset = async (asset: DocumentPicker.DocumentPickerAsset): Promise<string> => {
-  if (asset.file) return asset.file.text();
-  if (Platform.OS === 'web') return fetch(asset.uri).then((response) => response.text());
-  return FileSystem.readAsStringAsync(asset.uri);
-};
 
 /**
  * Imports lifting history from a Hevy CSV export.
@@ -46,29 +29,15 @@ export default function ImportWorkoutsScreen() {
   const pick = async () => {
     setBusy(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        // Deliberately unfiltered. On web this becomes the file input's
-        // `accept`, and iOS Safari picks which options to offer from it: a list
-        // of CSV media types left only Photo Library and Take Photo, with no
-        // "Choose File", so the Files app -- where the export actually is --
-        // could not be reached at all. Filtering buys a tidier desktop dialog
-        // and costs the whole feature on a phone.
-        //
-        // Nothing is lost by accepting anything: the parser checks the header
-        // and fails loudly, printing what it received, so the wrong file gives
-        // a clear message rather than a bad import.
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-
       // Reading the file and reading the database fail for unrelated reasons,
       // and reporting both as "could not read that file" sent a database error
       // -- `Invalid VFS state` -- to someone who then went looking at their
       // CSV. Each step says what actually failed.
       let csv: string;
       try {
-        csv = await readAsset(result.assets[0]);
+        const picked = await pickTextFile();
+        if (!picked) return;
+        csv = picked.text;
       } catch (error) {
         notify('Could not read that file', (error as Error).message);
         return;

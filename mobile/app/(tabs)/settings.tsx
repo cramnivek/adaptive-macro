@@ -1,11 +1,10 @@
 import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine';
 import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
-import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
-import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { exportBackup } from '../../src/db';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { describeBackup, exportBackup, parseBackup, restoreBackup } from '../../src/db';
+import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
 import { Card } from '../../src/components/Card';
@@ -134,19 +133,57 @@ export default function SettingsScreen() {
   const exportData = async () => {
     try {
       const backup = await exportBackup();
-      const uri = `${FileSystem.cacheDirectory}adaptive-macros-backup.json`;
-      await FileSystem.writeAsStringAsync(uri, JSON.stringify(backup, null, 2));
+      const counts = describeBackup(backup);
+      const stamp = new Date().toISOString().slice(0, 10);
 
-      if (!(await Sharing.isAvailableAsync())) {
-        notify('Export saved', `Written to ${uri}`);
-        return;
+      const how = await saveTextFile(
+        `adaptive-macros-backup-${stamp}.json`,
+        JSON.stringify(backup, null, 2),
+      );
+
+      if (how === 'downloaded' || how === 'written') {
+        notify(
+          'Backup saved',
+          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+            `${counts.sessions} workouts and ${counts.sets} sets.`,
+        );
       }
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/json',
-        dialogTitle: 'Export your data',
-      });
     } catch (error) {
       notify('Export failed', (error as Error).message);
+    }
+  };
+
+  /**
+   * Restores a backup over everything currently stored.
+   *
+   * Confirmed against what the file actually holds rather than a generic "are
+   * you sure": the counts are the only way to notice you picked last month's
+   * backup before it replaces this month's data.
+   */
+  const restoreData = async () => {
+    try {
+      const picked = await pickTextFile();
+      if (!picked) return;
+
+      const backup = parseBackup(picked.text);
+      const counts = describeBackup(backup);
+
+      const sure = await confirm({
+        title: 'Replace everything?',
+        message:
+          `${picked.name} was exported on ${counts.exportedAt.slice(0, 10)} and holds ` +
+          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.sessions} workouts and ${counts.sets} sets.\n\n` +
+          'Everything currently on this device will be deleted and replaced.',
+        confirmLabel: 'Replace',
+        destructive: true,
+      });
+      if (!sure) return;
+
+      await restoreBackup(backup);
+      notify('Restored', 'Close and reopen the app to load the restored data.');
+    } catch (error) {
+      notify('Restore failed', (error as Error).message);
     }
   };
 
@@ -454,11 +491,19 @@ export default function SettingsScreen() {
       </Card>
 
       <Card title="Your data" subtitle="Everything lives on this device and nowhere else.">
-        <Button label="Export backup (JSON)" onPress={() => void exportData()} variant="subtle" />
+        <Button label="Save a backup" onPress={() => void exportData()} />
+        <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
         <Text style={[styles.note, { color: colors.textFaint }]}>
-          There is no server behind this app, so this file is your only backup and your only way onto a new
-          phone. Keep one somewhere safe.
+          There is no server behind this app, so this file is your only backup and your only way onto
+          another device. It holds your weigh-ins, your diary and your whole lifting history.
         </Text>
+        {Platform.OS === 'web' && (
+          <Text style={[styles.note, { color: colors.warning }]}>
+            In a browser your data sits in storage the browser is allowed to clear — clearing site
+            data, or Safari's rule about sites unused for seven days, takes it with no warning. Save a
+            backup now, and again after anything you would mind losing.
+          </Text>
+        )}
       </Card>
 
       {__DEV__ && (

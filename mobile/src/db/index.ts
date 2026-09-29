@@ -435,13 +435,27 @@ export const dailyTotals = async (date: ISODate): Promise<Nutrients> => {
 
 // --- backup ---------------------------------------------------------------
 
+/**
+ * Everything this app holds, in one file.
+ *
+ * Version 2 adds the lifting tables. Version 1 files predate them and restore
+ * fine — their workout arrays are simply absent, which is true rather than
+ * empty-by-assumption. A v1 export taken after the Hevy import would have
+ * silently omitted thousands of sets, which is the failure a backup exists to
+ * prevent.
+ */
 export interface Backup {
-  version: 1;
+  version: 1 | 2;
   exportedAt: string;
   settings: { key: string; value: string }[];
   weights: WeightRow[];
   foods: FoodRow[];
   entries: LogRow[];
+  exercises?: Record<string, unknown>[];
+  routines?: Record<string, unknown>[];
+  routineExercises?: Record<string, unknown>[];
+  sessions?: Record<string, unknown>[];
+  sets?: Record<string, unknown>[];
 }
 
 /**
@@ -452,13 +466,115 @@ export interface Backup {
 export const exportBackup = async (): Promise<Backup> => {
   const db = await getDb();
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     settings: await db.getAllAsync('SELECT key, value FROM settings'),
     weights: await db.getAllAsync('SELECT date, kg FROM weights'),
     foods: await db.getAllAsync('SELECT * FROM foods'),
     entries: await db.getAllAsync('SELECT * FROM log_entries'),
+    exercises: await db.getAllAsync('SELECT * FROM exercises'),
+    routines: await db.getAllAsync('SELECT * FROM routines'),
+    routineExercises: await db.getAllAsync('SELECT * FROM routine_exercises'),
+    sessions: await db.getAllAsync('SELECT * FROM sessions'),
+    sets: await db.getAllAsync('SELECT * FROM sets'),
   };
+};
+
+/** What a backup holds, for showing before it is restored over anything. */
+export const describeBackup = (backup: Backup) => ({
+  version: backup.version,
+  exportedAt: backup.exportedAt,
+  weights: backup.weights?.length ?? 0,
+  foods: backup.foods?.length ?? 0,
+  entries: backup.entries?.length ?? 0,
+  sessions: backup.sessions?.length ?? 0,
+  sets: backup.sets?.length ?? 0,
+  routines: backup.routines?.length ?? 0,
+});
+
+const isBackup = (value: unknown): value is Backup => {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<Backup>;
+  return (
+    (candidate.version === 1 || candidate.version === 2) &&
+    Array.isArray(candidate.weights) &&
+    Array.isArray(candidate.foods) &&
+    Array.isArray(candidate.entries)
+  );
+};
+
+/** Parses a backup file, refusing anything that is not one. */
+export const parseBackup = (text: string): Backup => {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error('That file is not JSON, so it is not a backup from this app.');
+  }
+  if (!isBackup(value)) {
+    throw new Error('That JSON is not a backup from this app — no version or no data arrays.');
+  }
+  return value;
+};
+
+const insertRows = async (
+  db: SQLite.SQLiteDatabase,
+  table: string,
+  rows: Record<string, unknown>[] | undefined,
+): Promise<void> => {
+  if (!rows?.length) return;
+  // Columns come from each row rather than a fixed list, so a backup written
+  // by an older schema restores its own columns and lets the rest default.
+  for (const row of rows) {
+    const columns = Object.keys(row);
+    if (columns.length === 0) continue;
+    await db.runAsync(
+      `INSERT OR REPLACE INTO ${table} (${columns.join(', ')})
+       VALUES (${columns.map(() => '?').join(', ')})`,
+      ...columns.map((column) => row[column] as SQLite.SQLiteBindValue),
+    );
+  }
+};
+
+/**
+ * Replaces everything with the contents of a backup.
+ *
+ * Destructive by design — a restore that merged would silently resurrect
+ * entries the user had deleted, and leave them unable to tell which of two
+ * states they were in. The caller confirms first.
+ *
+ * One transaction: a half-restored database is worse than either state, since
+ * nothing on screen would say which rows came from where.
+ */
+export const restoreBackup = async (backup: Backup): Promise<void> => {
+  const db = await getDb();
+
+  await db.withTransactionAsync(async () => {
+    // Children first, so foreign keys are never left dangling mid-restore.
+    for (const table of [
+      'sets',
+      'routine_exercises',
+      'sessions',
+      'routines',
+      'exercises',
+      'log_entries',
+      'foods',
+      'weights',
+      'settings',
+    ]) {
+      await db.runAsync(`DELETE FROM ${table}`);
+    }
+
+    await insertRows(db, 'settings', backup.settings as Record<string, unknown>[]);
+    await insertRows(db, 'weights', backup.weights as unknown as Record<string, unknown>[]);
+    await insertRows(db, 'foods', backup.foods as unknown as Record<string, unknown>[]);
+    await insertRows(db, 'log_entries', backup.entries as unknown as Record<string, unknown>[]);
+    await insertRows(db, 'exercises', backup.exercises);
+    await insertRows(db, 'routines', backup.routines);
+    await insertRows(db, 'routine_exercises', backup.routineExercises);
+    await insertRows(db, 'sessions', backup.sessions);
+    await insertRows(db, 'sets', backup.sets);
+  });
 };
 
 // --- workouts -------------------------------------------------------------
