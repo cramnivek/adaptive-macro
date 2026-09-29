@@ -47,7 +47,17 @@ export default function ImportWorkoutsScreen() {
     setBusy(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'application/csv', '*/*'],
+        // Deliberately unfiltered. On web this becomes the file input's
+        // `accept`, and iOS Safari picks which options to offer from it: a list
+        // of CSV media types left only Photo Library and Take Photo, with no
+        // "Choose File", so the Files app -- where the export actually is --
+        // could not be reached at all. Filtering buys a tidier desktop dialog
+        // and costs the whole feature on a phone.
+        //
+        // Nothing is lost by accepting anything: the parser checks the header
+        // and fails loudly, printing what it received, so the wrong file gives
+        // a clear message rather than a bad import.
+        type: '*/*',
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
