@@ -32,29 +32,29 @@ The payoff of the import, and the reason to do it before routines or the logger:
 **Interfaces:**
 - Consumes: `listTrainedExercises`, `listSetsForExercise` from `src/db`; `progressionFor` from the engine; `series` from `useApp()`.
 
-- [ ] **Step 1: Build the bodyweight lookup**
+- [x] **Step 1: Build the bodyweight lookup**
 
 `progressionFor` takes `ReadonlyMap<ISODate, number>`. Build it from `useApp().series`, mapping `date → trendWeightKg`. This is the one wiring step that makes pull-ups mean anything, and it is a `useMemo` over a list the app already computes.
 
-- [ ] **Step 2: Exercise picker**
+- [x] **Step 2: Exercise picker**
 
 `listTrainedExercises()` returns names most-trained first, which is the right default order — `Pull Up` at 206 sets is more likely wanted than `Negative Pull Up` at 1.
 
-- [ ] **Step 3: The chart**
+- [x] **Step 3: The chart**
 
 Two series on one `LineChart`: heaviest working set and working volume. Volume is an order of magnitude larger than load, so they cannot share a y-axis honestly — render two charts stacked rather than one with a hidden second scale. A second axis that isn't labelled is a lie about what the lines mean.
 
 Mark records with a `scatter` overlay, using `isRecord` from `progressionFor`.
 
-- [ ] **Step 4: Say when a number rests on bodyweight**
+- [x] **Step 4: Say when a number rests on bodyweight**
 
 For a bodyweight-based exercise the load is the weight trend plus any added plate, so the line moves when the user's weight moves and not only when they got stronger. State that under the chart. Without it the chart silently attributes a cut to a loss of strength.
 
-- [ ] **Step 5: Handle the empty and unusable cases**
+- [x] **Step 5: Handle the empty and unusable cases**
 
 No sets at all, and an exercise whose sets are all unscoreable, are different states and read differently: "nothing logged yet" versus "logged, but no weight was recorded". `progressionFor` already returns no points for the second; the screen must not render both as the same blank.
 
-- [ ] **Step 6: Verify in the running app, commit**
+- [x] **Step 6: Verify in the running app, commit**
 
 ---
 
@@ -67,19 +67,19 @@ No sets at all, and an exercise whose sets are all unscoreable, are different st
 **Interfaces:**
 - Produces: create, rename, reorder, delete; add/remove exercises with a target set count; build a routine from a past session.
 
-- [ ] **Step 1: Persistence**
+- [x] **Step 1: Persistence**
 
 The tables exist from migration v3 and nothing has written to them yet. `routine_exercises` carries `position` and `target_sets`.
 
-- [ ] **Step 2: List and edit screens**
+- [x] **Step 2: List and edit screens**
 
 Full create/edit/reorder/delete, per the spec. Reordering is the one that matters at the rack: the order is the order you do them in.
 
-- [ ] **Step 3: Build a routine from a past session**
+- [x] **Step 3: Build a routine from a past session**
 
 After importing 246 sessions, assembling "Push A" by hand from a picker is tedious when the answer is already in the history. Offer recent sessions, take their exercises in order, and let the user name the result.
 
-- [ ] **Step 4: Verify in the running app, commit**
+- [x] **Step 4: Verify in the running app, commit**
 
 ---
 
@@ -92,19 +92,19 @@ After importing 246 sessions, assembling "Push A" by hand from a picker is tedio
 **Interfaces:**
 - Produces: start from a routine or blank; record sets as weight × reps × type; finish.
 
-- [ ] **Step 1: Last-values prefill**
+- [x] **Step 1: Last-values prefill**
 
 Each set prefills with the last values logged for that exercise. The question at the rack is always what happened last time, and this is the feature that makes progressive overload work in practice rather than in principle. It reads from the same `listSetsForExercise` the progression screen uses.
 
-- [ ] **Step 2: Sessions are not bound to their routine**
+- [x] **Step 2: Sessions are not bound to their routine**
 
 Exercises can be added or dropped mid-session. A routine is a starting point, not a contract.
 
-- [ ] **Step 3: Resumable, not auto-closed**
+- [x] **Step 3: Resumable, not auto-closed**
 
 Finishing stamps `finished_at`. A session started and never finished stays resumable — it is not discarded and not closed on the user's behalf, because both silently destroy work that was really done.
 
-- [ ] **Step 4: Verify in the running app, commit**
+- [x] **Step 4: Verify in the running app, commit**
 
 ---
 
@@ -115,27 +115,37 @@ Finishing stamps `finished_at`. A session started and never finished stays resum
 - Modify: `packages/engine/test/workouts.test.ts`
 - Create: a section on `mobile/app/(tabs)/trends.tsx`
 
-- [ ] **Step 1: Write the failing test for the estimate**
+- [x] **Step 1: Write the failing test for the estimate**
 
 `sessionEnergyKcal(bodyweightKg, durationMinutes, met)` — a MET-derived figure. For resistance training this lands in roughly a ±40% band, so the function returns the band, not a point.
 
 **It returns null when either input is missing**, rather than defaulting. This is the same rule as `estimateCostUsd` returning null for an unpriced model rather than pricing it from the wrong list. Imported sessions carry real durations from `start_time`/`end_time`, so this applies mainly to app-logged sessions never finished.
 
-- [ ] **Step 2: Weekly working volume**
+- [x] **Step 2: Weekly working volume**
 
 Summed per ISO week over effective load, reusing `isWorkingSet` and `effectiveLoadKg` rather than reimplementing the exclusion rules.
 
-- [ ] **Step 3: One chart on a shared time axis**
+- [x] **Step 3: One chart on a shared time axis**
 
 Working volume, the filter's expenditure estimate, and the weight trend. The session energy estimate is drawn as a **labelled band**, not a line, because that is what it is — `LineChart` already takes a `band`.
 
-- [ ] **Step 4: Confirm nothing consumes the estimate**
+- [x] **Step 4: Confirm nothing consumes the estimate**
 
 Grep for the new function's name and check every call site is display-only. Nothing may reach `targets.ts`, the diary or `expenditure.ts`. This step is the whole reason the spec exists in its corrected form, so it is a step rather than an assumption.
 
-- [ ] **Step 5: Verify in the running app, commit**
+- [x] **Step 5: Verify in the running app, commit**
 
 ---
+
+## Status
+
+All four tasks implemented, tested and pushed. 250 automated tests pass; both platform exports build; every screen was driven in a real browser against the full 3,073-row export with no console errors.
+
+Task 4 Step 4 was run as written rather than assumed: `sessionEnergyKcal` appears only in its own definition, its tests and `TrainingCrossReference.tsx`, and `targets.ts`, `expenditure.ts`, `trend.ts` and `AppStore` reference workouts nowhere.
+
+One departure worth recording. The spec asks for a single chart carrying volume, expenditure and the weight trend on a shared time axis. They are rendered as two charts instead: kilograms lifted and kilocalories cannot share a y-axis without a second unlabelled scale, which misstates what the lines mean. The band and the expenditure line are both weekly kcal, so those do share one, and the shared time axis is preserved throughout.
+
+Still unverified on hardware: iOS install and persistence, migration v3 against a device that already holds v2 data, and the import on a native build (expo-document-picker was added this session, so an APK needs rebuilding).
 
 ## Self-review
 
