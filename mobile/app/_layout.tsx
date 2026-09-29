@@ -11,7 +11,7 @@ import { useTheme } from '../src/theme';
 
 export default function RootLayout() {
   const { colors, isDark } = useTheme();
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_600SemiBold,
     IBMPlexMono_500Medium,
@@ -30,7 +30,12 @@ export default function RootLayout() {
   // cold load. Painting the background colour rather than nothing means a slow
   // connection shows an empty app in the right colour — on a dark-default app
   // a white flash is the most visible failure there is.
-  if (!fontsLoaded) {
+  //
+  // `&& !fontError` is load-bearing: if the load fails outright (offline or
+  // flaky first load on the PWA) fontsLoaded never becomes true, and without
+  // it the app would sit blank forever. On failure we render anyway and the
+  // screens fall back to the system font — degraded but usable.
+  if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 
