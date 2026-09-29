@@ -1,13 +1,21 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono';
+import { SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider } from '../src/state/AppStore';
 import { useTheme } from '../src/theme';
 
 export default function RootLayout() {
   const { colors, isDark } = useTheme();
+  const [fontsLoaded] = useFonts({
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_600SemiBold,
+    IBMPlexMono_500Medium,
+  });
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -17,6 +25,14 @@ export default function RootLayout() {
       requestPersistentStorage(),
     );
   }, []);
+
+  // The fonts are local on native but a network fetch on the iOS PWA's first
+  // cold load. Painting the background colour rather than nothing means a slow
+  // connection shows an empty app in the right colour — on a dark-default app
+  // a white flash is the most visible failure there is.
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  }
 
   return (
     <SafeAreaProvider>

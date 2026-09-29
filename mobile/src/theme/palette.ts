@@ -56,3 +56,15 @@ export const light: Palette = {
 /** Shared spacing scale, so padding stays consistent without magic numbers. */
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const radius = { sm: 4, md: 6, lg: 8, pill: 999 } as const;
+
+/**
+ * Family names, so no screen spells out a font.
+ *
+ * Figures get a mono face because most of this app is columns of numbers, and
+ * proportional digits make a weight history jump about as it scrolls.
+ */
+export const font = {
+  ui: 'SpaceGrotesk_400Regular',
+  uiStrong: 'SpaceGrotesk_600SemiBold',
+  figure: 'IBMPlexMono_500Medium',
+} as const;
