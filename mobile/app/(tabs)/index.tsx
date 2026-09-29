@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
@@ -53,6 +54,7 @@ export default function TodayScreen() {
 
   return (
     <Screen title="Today" subtitle={formatDateLong(selectedDate)}>
+      <HomeScreenNotice />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
