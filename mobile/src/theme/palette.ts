@@ -42,7 +42,7 @@ export const light: Palette = {
   border: '#E2E2DC',
   text: '#151516',
   textMuted: '#5E5E5A',
-  textFaint: '#666660',
+  textFaint: '#6E6E68',
   accent: '#151516',
   onFill: '#FAFAF8',
   protein: '#3C6E88',

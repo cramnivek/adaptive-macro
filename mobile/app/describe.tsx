@@ -405,6 +405,11 @@ const styles = StyleSheet.create({
   },
   assumption: { fontSize: 12, marginTop: 2, marginBottom: space.sm, lineHeight: 16 },
   macros: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
-  total: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
+  total: {
+    fontFamily: font.figure,
+    fontVariant: ['tabular-nums'],
+    fontSize: 26,
+    letterSpacing: -0.5,
+  },
   cost: { fontSize: 11, marginTop: space.sm },
 });

@@ -26,7 +26,7 @@ export const Card = ({ title, subtitle, right, children, style }: CardProps) => 
   return (
     <View style={[styles.section, style]}>
       {(title || right) && (
-        <View style={styles.header}>
+        <View style={[styles.header, !subtitle && styles.headerGap]}>
           {title && <Text style={[styles.title, { color: colors.text }]}>{title}</Text>}
           <View style={[styles.rule, { backgroundColor: colors.border }]} />
           {right}
@@ -43,6 +43,8 @@ export const Card = ({ title, subtitle, right, children, style }: CardProps) => 
 const styles = StyleSheet.create({
   section: { marginBottom: space.xl },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // With a subtitle the gap belongs below the subtitle, not between it and the rule.
+  headerGap: { marginBottom: space.md },
   title: {
     fontFamily: font.uiStrong,
     fontSize: 11,
@@ -50,5 +52,5 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   rule: { flex: 1, height: StyleSheet.hairlineWidth },
-  subtitle: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.xs },
+  subtitle: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.xs, marginBottom: space.md },
 });

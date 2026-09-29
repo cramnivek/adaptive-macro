@@ -66,12 +66,10 @@ const NumberSetting = ({
  */
 const Section = ({
   title,
-  subtitle,
   initiallyOpen = false,
   children,
 }: {
   title: string;
-  subtitle?: string;
   initiallyOpen?: boolean;
   children: React.ReactNode;
 }) => {
@@ -92,7 +90,6 @@ const Section = ({
       >
         <View style={{ flex: 1 }}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-          {subtitle && <Text style={[styles.note, { color: colors.textFaint }]}>{subtitle}</Text>}
         </View>
         <Ionicons
           name={open ? 'chevron-up' : 'chevron-down'}
@@ -239,7 +236,7 @@ export default function SettingsScreen() {
     <Screen title="Settings">
       <HomeScreenNotice />
       <Section title="You" initiallyOpen>
-        <Card title="You">
+        <Card>
           <Segmented<Sex>
             label="Sex"
             value={settings.profile.sex}
@@ -286,7 +283,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Goal">
-        <Card title="Goal">
+        <Card>
           <Segmented<GoalDirection>
             label="Direction"
             value={settings.goal.direction}
@@ -348,7 +345,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Units">
-        <Card title="Units">
+        <Card>
           <Segmented
             value={settings.units}
             onChange={(units) => void updateSettings({ units })}
@@ -361,7 +358,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Food data">
-        <Card title="Food data">
+        <Card>
           <Field
             label="Food database country"
             value={settings.foodCountry}
@@ -486,7 +483,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Your data">
-        <Card title="Your data" subtitle="Everything lives on this device and nowhere else.">
+        <Card subtitle="Everything lives on this device and nowhere else.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
           <Text style={[styles.note, { color: colors.textFaint }]}>
@@ -549,7 +546,7 @@ export default function SettingsScreen() {
 
       {__DEV__ && (
         <Section title="Demo data">
-          <Card title="Demo data" subtitle="Development builds only — absent from a release build.">
+          <Card subtitle="Development builds only — absent from a release build.">
             <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
               Generates four months of synthetic weigh-ins and meals so the charts and the expenditure
               estimate have something to show before you have logged that long yourself. Expenditure drifts

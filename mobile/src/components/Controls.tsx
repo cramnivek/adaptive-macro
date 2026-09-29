@@ -6,7 +6,7 @@ import {
   View,
   type KeyboardTypeOptions,
 } from 'react-native';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 
 interface ButtonProps {
   label: string;
@@ -261,9 +261,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     alignItems: 'center',
   },
-  buttonLabel: { fontSize: 15, fontWeight: '600' },
+  buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },
   field: { gap: space.xs, marginBottom: space.md },
-  fieldLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  fieldLabel: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -271,10 +271,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
   },
-  input: { flex: 1, paddingVertical: space.md, fontSize: 16, minHeight: TOUCH_TARGET },
+  input: { fontFamily: font.ui, flex: 1, paddingVertical: space.md, fontSize: 16, minHeight: TOUCH_TARGET },
   inputMultiline: { minHeight: TOUCH_TARGET * 2, paddingTop: space.md },
-  suffix: { fontSize: 13, marginLeft: space.sm },
-  hint: { fontSize: 11, marginTop: 2 },
+  suffix: { fontFamily: font.ui, fontSize: 13, marginLeft: space.sm },
+  hint: { fontFamily: font.ui, fontSize: 11, marginTop: 2 },
   segment: {
     flexDirection: 'row',
     borderRadius: radius.md,
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
   },
-  stepperInput: { flex: 1, fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  stepperInput: { fontFamily: font.figure, flex: 1, fontSize: 18, textAlign: 'center' },
   segmentItem: {
     flex: 1,
     minHeight: TOUCH_TARGET,
@@ -312,5 +312,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     alignItems: 'center',
   },
-  segmentLabel: { fontSize: 13, fontWeight: '600' },
+  segmentLabel: { fontFamily: font.uiStrong, fontSize: 13 },
 });

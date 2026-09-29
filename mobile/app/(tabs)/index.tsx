@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   bannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
   mealActions: { flexDirection: 'row', gap: space.sm },
   // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
-  // hits reliably, and they are three adjacent targets on one row.
+  // hits reliably, and they are two adjacent targets on one row.
   iconButton: {
     width: TOUCH_TARGET,
     height: TOUCH_TARGET,

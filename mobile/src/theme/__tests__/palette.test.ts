@@ -45,6 +45,12 @@ describe.each([
     },
   );
 
+  // Each tier is floored against the grounds above, which says nothing about
+  // the tiers against each other; that is how they once converged.
+  it('keeps textMuted and textFaint apart by 1.25:1', () => {
+    expect(contrast(palette.textMuted, palette.textFaint)).toBeGreaterThanOrEqual(1.25);
+  });
+
   it('onFill reads on both filled controls at 4.5:1', () => {
     expect(contrast(palette.onFill, palette.accent)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(palette.onFill, palette.danger)).toBeGreaterThanOrEqual(4.5);
