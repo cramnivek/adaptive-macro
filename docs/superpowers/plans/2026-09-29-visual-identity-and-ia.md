@@ -568,7 +568,7 @@ import { View } from 'react-native';
 Inside `RootLayout`, above the existing `useEffect`:
 
 ```tsx
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_600SemiBold,
     IBMPlexMono_500Medium,
@@ -582,7 +582,12 @@ And immediately before the existing `return (`:
   // cold load. Painting the background colour rather than nothing means a slow
   // connection shows an empty app in the right colour — on a dark-default app
   // a white flash is the most visible failure there is.
-  if (!fontsLoaded) {
+  //
+  // `&& !fontError` is load-bearing, not defensive noise: without it a failed
+  // fetch leaves fontsLoaded false forever and the app sits on an empty
+  // background with no error and no recovery, which is worse than the flash
+  // this gate exists to prevent. On failure we render in system fonts.
+  if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 ```
