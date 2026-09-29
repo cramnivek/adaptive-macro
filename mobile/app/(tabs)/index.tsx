@@ -152,7 +152,7 @@ export default function TodayScreen() {
                   style={[styles.iconButton, { backgroundColor: colors.accent }]}
                   accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
                 >
-                  <Ionicons name="add" size={18} color="#FFFFFF" />
+                  <Ionicons name="add" size={18} color={colors.onFill} />
                 </Pressable>
               </View>
             }

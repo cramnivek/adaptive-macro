@@ -116,7 +116,7 @@ export default function QuickAddScreen() {
                 },
               ]}
             >
-              <Text style={{ color: option === meal ? '#FFFFFF' : colors.text, fontSize: 13 }}>
+              <Text style={{ color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
                 {MEAL_LABELS[option]}
               </Text>
             </Pressable>

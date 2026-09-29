@@ -125,7 +125,7 @@ export default function ProgressionScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? '#FFFFFF' : colors.text, fontSize: 13 }}>
+                  <Text style={{ color: active ? colors.onFill : colors.text, fontSize: 13 }}>
                     {exercise.name}
                   </Text>
                 </Pressable>

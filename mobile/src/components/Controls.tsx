@@ -19,7 +19,7 @@ export const Button = ({ label, onPress, variant = 'primary', disabled }: Button
   const { colors } = useTheme();
   const background =
     variant === 'primary' ? colors.accent : variant === 'danger' ? colors.danger : colors.surfaceRaised;
-  const textColor = variant === 'subtle' ? colors.text : '#FFFFFF';
+  const textColor = variant === 'subtle' ? colors.text : colors.onFill;
 
   return (
     <Pressable
@@ -231,7 +231,7 @@ export const Segmented = <T extends string>({ label, options, value, onChange }:
               <Text
                 style={[
                   styles.segmentLabel,
-                  { color: active ? '#FFFFFF' : colors.textMuted },
+                  { color: active ? colors.onFill : colors.textMuted },
                 ]}
                 numberOfLines={1}
               >

@@ -83,7 +83,7 @@ export default function RepeatScreen() {
                 },
               ]}
             >
-              <Text style={{ color: date === chosenDate ? '#FFFFFF' : colors.text, fontSize: 13 }}>
+              <Text style={{ color: date === chosenDate ? colors.onFill : colors.text, fontSize: 13 }}>
                 {formatDate(date)}
               </Text>
             </Pressable>
@@ -117,7 +117,7 @@ export default function RepeatScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: on ? '#FFFFFF' : colors.text, fontSize: 13 }}>
+                  <Text style={{ color: on ? colors.onFill : colors.text, fontSize: 13 }}>
                     {MEAL_LABELS[meal]} · {Math.round(kcal)}
                   </Text>
                 </Pressable>
