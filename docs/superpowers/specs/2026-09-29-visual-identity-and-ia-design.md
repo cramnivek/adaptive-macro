@@ -99,7 +99,7 @@ from `runImport.ts`, and for the same reason.
 | `border` | `#2A2A2D` | `#E2E2DC` |
 | `text` | `#F4F4F2` | `#151516` |
 | `textMuted` | `#A0A09C` | `#5E5E5A` |
-| `textFaint` | `#85858A` | `#666660` |
+| `textFaint` | `#8C8C91` | `#666660` |
 | `accent` | `#E9E9E6` | `#151516` |
 | `onFill` | `#0E0E0F` | `#FAFAF8` |
 | `protein` | `#6E9FB5` | `#3C6E88` |
