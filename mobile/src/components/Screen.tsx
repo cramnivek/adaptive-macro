@@ -1,7 +1,7 @@
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { space, useTheme } from '../theme';
+import { font, space, useTheme } from '../theme';
 
 interface ScreenProps {
   title?: string;
@@ -50,6 +50,6 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing }: Scr
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg },
   header: { marginBottom: space.lg },
-  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, marginTop: 2 },
+  title: { fontFamily: font.uiStrong, fontSize: 28, letterSpacing: -0.5 },
+  subtitle: { fontFamily: font.ui, fontSize: 14, marginTop: 2 },
 });

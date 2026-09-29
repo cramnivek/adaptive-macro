@@ -13,7 +13,7 @@ import { Screen } from '../../src/components/Screen';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { radius, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   entryText: { flex: 1 },
   entryName: { fontSize: 15, fontWeight: '500' },
   entryMeta: { fontSize: 11, marginTop: 1 },
-  entryKcal: { fontSize: 15, fontVariant: ['tabular-nums'] },
+  entryKcal: { fontFamily: font.figure, fontSize: 15, fontVariant: ['tabular-nums'] },
   deleteHint: { fontSize: 11, marginTop: space.xs, textAlign: 'center' },
   dayActions: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   dayAction: {

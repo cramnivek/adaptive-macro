@@ -15,7 +15,7 @@ import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { addLogEntry, saveFood } from '../src/db';
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   assumption: { fontSize: 12, marginTop: 2, marginBottom: space.sm, lineHeight: 16 },
-  macros: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  macros: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   total: { fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
   cost: { fontSize: 11, marginTop: space.sm },
 });

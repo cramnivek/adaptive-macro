@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 
 interface StatTileProps {
   label: string;
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
   valueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: space.xs },
-  value: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+  value: { fontFamily: font.figure, fontSize: 22, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   unit: { fontSize: 12, marginLeft: 3 },
   hint: { fontSize: 11, marginTop: 2 },
 });

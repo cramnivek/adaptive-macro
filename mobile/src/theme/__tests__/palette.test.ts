@@ -52,7 +52,7 @@ describe.each([
 
   // Bar fills and ring strokes are graphics, not text: AA asks 3:1.
   it.each(
-    MARKS.flatMap((mark) => (['background', 'surface'] as const).map((ground) => [mark, ground] as const)),
+    MARKS.flatMap((mark) => GROUNDS.map((ground) => [mark, ground] as const)),
   )('%s shows as a mark on %s at 3:1', (mark, ground) => {
     expect(contrast(palette[mark], palette[ground])).toBeGreaterThanOrEqual(3);
   });

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MEAL_LABELS } from '../format';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 import { Button, Stepper, TOUCH_TARGET } from './Controls';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -135,5 +135,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  preview: { fontSize: 13, marginBottom: space.md, fontVariant: ['tabular-nums'] },
+  preview: { fontFamily: font.figure, fontSize: 13, marginBottom: space.md, fontVariant: ['tabular-nums'] },
 });

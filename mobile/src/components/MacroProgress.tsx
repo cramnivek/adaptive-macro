@@ -1,7 +1,7 @@
 import type { Nutrients } from '@adaptive-macros/engine';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 
 interface ProgressBarProps {
   label: string;
@@ -117,10 +117,10 @@ const styles = StyleSheet.create({
   barRow: { gap: space.xs },
   barLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   barLabel: { fontSize: 13, fontWeight: '600' },
-  barValue: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  barValue: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   barTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: radius.pill },
   ringCentre: { alignItems: 'center', justifyContent: 'center' },
-  ringValue: { fontSize: 30, fontWeight: '700', letterSpacing: -1 },
+  ringValue: { fontFamily: font.figure, fontSize: 30, letterSpacing: -1, fontVariant: ['tabular-nums'] },
   ringLabel: { fontSize: 11, marginTop: -2 },
 });

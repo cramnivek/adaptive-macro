@@ -16,7 +16,7 @@ import {
   weightUnit,
 } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { space, useTheme } from '../../src/theme';
+import { font, space, useTheme } from '../../src/theme';
 
 export default function WeightScreen() {
   const { colors } = useTheme();
@@ -179,5 +179,5 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET,
     paddingVertical: space.sm,
   },
-  rowValue: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  rowValue: { fontFamily: font.figure, fontSize: 14, fontVariant: ['tabular-nums'] },
 });
