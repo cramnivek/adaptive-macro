@@ -97,6 +97,10 @@ export const LineChart = ({
   const allX = [
     ...series.flatMap((s) => s.points.map((p) => p.x)),
     ...(scatter?.flatMap((s) => s.points.map((p) => p.x)) ?? []),
+    // The band's x values count too. Omitting them let a band that extends
+    // past the series -- training weeks earlier than any weight observation --
+    // stretch the y-range while being drawn off the canvas.
+    ...(band?.points.map((p) => p.x) ?? []),
   ];
 
   const hasData = allY.length >= 2 && allX.length >= 2;

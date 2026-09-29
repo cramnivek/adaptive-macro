@@ -50,7 +50,16 @@ export default function ProgressionScreen() {
   useEffect(() => {
     if (!chosen) return;
     setSets(null);
-    void listSetsForExercise(chosen.name).then(setSets);
+
+    // A slower query for an exercise already switched away from must not land
+    // and be drawn under the newer one's title and tiles.
+    let current = true;
+    void listSetsForExercise(chosen.name).then((loaded) => {
+      if (current) setSets(loaded);
+    });
+    return () => {
+      current = false;
+    };
   }, [chosen]);
 
   // The wiring that makes a pull-up mean anything: the filter's own trend
@@ -142,9 +151,9 @@ export default function ProgressionScreen() {
       {chosen && sets && sets.length > 0 && points?.length === 0 && (
         <Card title={chosen.name}>
           <Text style={[styles.note, { color: colors.textFaint }]}>
-            {sets.length} sets are recorded, but none can be scored — they have no weight,
-            or no bodyweight trend on those dates. Marking this exercise as bodyweight in
-            Settings would fix the second case.
+            {sets.length} sets are recorded, but none can be scored — they have no weight
+            recorded, and this exercise is not marked as bodyweight. Re-run the Hevy import
+            and correct the flag in its preview, or log a set with a weight.
           </Text>
         </Card>
       )}

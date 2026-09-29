@@ -115,7 +115,10 @@ export const progressionFor = (
 
   for (const { date, set } of sets) {
     if (!isWorkingSet(set)) continue;
-    if (set.reps === null) continue;
+    // Zero reps is an attempt that did not happen, not a set. Letting it
+    // through set the heaviest working weight -- and could mark a record --
+    // off a lift that was never completed.
+    if (set.reps === null || set.reps <= 0) continue;
 
     const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
     if (load === null) continue;
@@ -199,7 +202,7 @@ export const weeklyVolume = (
 
   for (const { date, set } of sets) {
     if (!isWorkingSet(set)) continue;
-    if (set.reps === null) continue;
+    if (set.reps === null || set.reps <= 0) continue;
 
     const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
     if (load === null) continue;

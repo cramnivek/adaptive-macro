@@ -41,8 +41,19 @@ export const buildImportPlan = (
 ): ImportPlan => {
   const sessions = parsed.sessions.filter((s) => !existingStartTimes.has(s.startedAt));
 
-  const names = new Set(sessions.flatMap((s) => s.exercises.map((e) => e.name)));
-  const exercises = parsed.exercises.filter((e) => names.has(e.name));
+  // Set counts are recomputed over the sessions that will actually be written.
+  // The parse-wide figure reported an exercise's whole history -- "412 sets" --
+  // next to an incremental import that will write six.
+  const plannedSets = new Map<string, number>();
+  for (const session of sessions) {
+    for (const exercise of session.exercises) {
+      plannedSets.set(exercise.name, (plannedSets.get(exercise.name) ?? 0) + exercise.sets.length);
+    }
+  }
+
+  const exercises = parsed.exercises
+    .filter((e) => plannedSets.has(e.name))
+    .map((e) => ({ ...e, setCount: plannedSets.get(e.name) ?? 0 }));
 
   const setsToWrite = sessions.reduce(
     (total, s) => total + s.exercises.reduce((n, e) => n + e.sets.length, 0),

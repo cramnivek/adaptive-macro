@@ -73,15 +73,31 @@ export default function SessionScreen() {
 
   // The question at the rack is what happened last time, so answer it as soon
   // as the exercise is known rather than making anyone go and look.
+  //
+  // The fields are replaced, not merely filled when empty. Filling only empties
+  // left the previous exercise's numbers in place when switching, so the next
+  // "Add set" silently logged a lateral raise at the bench press weight.
+  // Consecutive sets of the *same* exercise deliberately keep what is typed,
+  // since straight sets repeat, so this runs on a change of exercise only.
   useEffect(() => {
     const name = exercise.trim();
     if (!name) {
       setLastHint(null);
+      setWeight('');
+      setReps('');
       return;
     }
+
+    let current = true;
     void lastWorkingSet(name).then((last) => {
+      // A slower lookup for an exercise since typed over must not overwrite
+      // the newer one's values.
+      if (!current) return;
+
       if (!last) {
         setLastHint(null);
+        setWeight('');
+        setReps('');
         return;
       }
       const shown =
@@ -89,13 +105,17 @@ export default function SessionScreen() {
           ? `${last.reps} reps`
           : `${displayWeight(last.weightKg, settings.units).toFixed(1)} ${unit} × ${last.reps}`;
       setLastHint(`Last time: ${shown} on ${formatDate(last.date)}`);
-      setWeight((current) =>
-        current || last.weightKg === null
-          ? current
+      setWeight(
+        last.weightKg === null
+          ? ''
           : String(displayWeight(last.weightKg, settings.units).toFixed(1)),
       );
-      setReps((current) => current || String(last.reps));
+      setReps(String(last.reps));
     });
+
+    return () => {
+      current = false;
+    };
   }, [exercise, settings.units, unit]);
 
   const byExercise = useMemo(() => {
@@ -114,6 +134,8 @@ export default function SessionScreen() {
       setSession(await startSession(routine?.name ?? 'Workout', todayISO()));
       setPlan(routine?.exercises.map((e) => e.name) ?? []);
       if (routine?.exercises.length) setExercise(routine.exercises[0].name);
+    } catch (error) {
+      notify('Could not start the session', (error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -142,7 +164,11 @@ export default function SessionScreen() {
 
     setBusy(true);
     try {
-      const index = session.sets.filter((s) => s.exerciseName === name).length;
+      // One past the highest index in use, not the count: deleting a middle set
+      // makes the count collide with an index that already exists, and
+      // lastWorkingSet's `set_index DESC` tiebreak then picks arbitrarily.
+      const used = session.sets.filter((s) => s.exerciseName === name);
+      const index = used.reduce((max, s) => Math.max(max, s.setIndex + 1), 0);
       await addSetToSession(session.id, {
         exerciseName: name,
         bodyweightBased,
@@ -154,6 +180,8 @@ export default function SessionScreen() {
       });
       setSession(await activeSession());
       setKnown(await listExerciseNames());
+    } catch (error) {
+      notify('Could not save that set', (error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -164,6 +192,8 @@ export default function SessionScreen() {
     try {
       await deleteSet(id);
       setSession(await activeSession());
+    } catch (error) {
+      notify('Could not remove that set', (error as Error).message);
     } finally {
       setBusy(false);
     }
@@ -190,6 +220,8 @@ export default function SessionScreen() {
       await finishSession(session.id);
       notify('Session finished', `${session.sets.length} sets logged.`);
       router.back();
+    } catch (error) {
+      notify('Could not finish the session', (error as Error).message);
     } finally {
       setBusy(false);
     }

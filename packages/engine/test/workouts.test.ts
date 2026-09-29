@@ -331,3 +331,29 @@ describe('bodyweightForDates', () => {
     expect(map.extendedCount).toBe(0);
   });
 });
+
+describe('zero-rep sets', () => {
+  const bw = new Map<string, number>([['2025-01-01', 80]]);
+
+  // A failed attempt at a weight is not a set at that weight. Counting it set
+  // the heaviest working weight and could mark a record off a lift that never
+  // happened.
+  it('are excluded from progression, like a missing rep count', () => {
+    const points = progressionFor(
+      [
+        { date: '2025-01-01', set: set({ weightKg: 200, reps: 0 }) },
+        { date: '2025-01-01', set: set({ weightKg: 60, reps: 10 }) },
+      ],
+      bw,
+    );
+
+    expect(points[0].heaviestWorkingSetKg).toBe(60);
+    expect(points[0].isRecord).toBe(true);
+  });
+
+  it('are excluded from weekly volume too', () => {
+    expect(
+      weeklyVolume([{ date: '2025-01-01', set: set({ weightKg: 200, reps: 0 }) }], bw),
+    ).toEqual([]);
+  });
+});

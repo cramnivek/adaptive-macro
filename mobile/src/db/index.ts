@@ -498,6 +498,27 @@ export const knownSessionStarts = async (): Promise<Set<string>> => {
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
+ * Local wall-clock `YYYY-MM-DDTHH:MM:SS`, matching what the importer writes.
+ *
+ * Hevy's export carries no timezone, so imported sessions are stored as local
+ * wall-clock. Writing UTC here would put two conventions in one column, and
+ * `started_at` is ordered and compared lexicographically — sessions logged in
+ * the app would interleave with imported ones off by the UTC offset, so
+ * `lastWorkingSet` could prefill from the older of two sessions.
+ *
+ * Seconds are kept because `started_at` is UNIQUE and the importer's values
+ * have minute resolution.
+ */
+const localStamp = (): string => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  );
+};
+
+/**
  * Writes sessions and their sets.
  *
  * One transaction for the lot: a half-written import is worse than none, since
@@ -530,10 +551,13 @@ export const insertWorkoutSessions = async (
       );
 
       for (const exercise of session.exercises) {
+        // The flag is updated, not just inserted. DO NOTHING made the import
+        // preview's bodyweight toggle a silent no-op for any exercise already
+        // on record, which is exactly the case a re-import exists to correct.
         await db.runAsync(
           `INSERT INTO exercises (id, name, bodyweight_based, created_at)
            VALUES (?, ?, ?, ?)
-           ON CONFLICT (name) DO NOTHING`,
+           ON CONFLICT (name) DO UPDATE SET bodyweight_based = excluded.bodyweight_based`,
           newId(),
           exercise.name,
           exercise.bodyweightBased ? 1 : 0,
@@ -740,9 +764,7 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
 export const startSession = async (name: string, date: ISODate): Promise<ActiveSession> => {
   const db = await getDb();
   const id = newId();
-  // Seconds are kept: started_at is UNIQUE, and two sessions begun in the same
-  // minute would otherwise collide with an import's minute-resolution values.
-  const startedAt = new Date().toISOString().slice(0, 19);
+  const startedAt = localStamp();
 
   await db.runAsync(
     `INSERT INTO sessions (id, date, routine_id, name, started_at, finished_at, notes)
@@ -816,11 +838,7 @@ export const deleteSet = async (id: string): Promise<void> => {
 
 export const finishSession = async (sessionId: string): Promise<void> => {
   const db = await getDb();
-  await db.runAsync(
-    'UPDATE sessions SET finished_at = ? WHERE id = ?',
-    new Date().toISOString().slice(0, 19),
-    sessionId,
-  );
+  await db.runAsync('UPDATE sessions SET finished_at = ? WHERE id = ?', localStamp(), sessionId);
 };
 
 /** Removes a session and its sets. Used when one is abandoned with nothing in it. */

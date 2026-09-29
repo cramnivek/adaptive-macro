@@ -68,11 +68,16 @@ export const TrainingCrossReference = ({ series }: { series: DailyEstimate[] }) 
     const energy = new Map<string, { lo: number; mid: number; hi: number }>();
     let sessionsWithoutDuration = 0;
     for (const span of spans) {
-      const band = sessionEnergyKcal(bodyweightByDate.get(span.date) ?? null, span.minutes);
-      if (!band) {
+      // Counted apart from a missing bodyweight, which is a different problem
+      // with a different fix. Treating every null as a missing duration told
+      // someone with no weigh-ins that all their imported sessions lacked
+      // timestamps, which was false for every one of them.
+      if (span.minutes === null) {
         sessionsWithoutDuration += 1;
         continue;
       }
+      const band = sessionEnergyKcal(bodyweightByDate.get(span.date) ?? null, span.minutes);
+      if (!band) continue;
       const week = weekStartOf(span.date);
       const running = energy.get(week) ?? { lo: 0, mid: 0, hi: 0 };
       energy.set(week, {

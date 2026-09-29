@@ -173,8 +173,51 @@ const numberOrNull = (raw: string): number | null => {
   return Number.isFinite(value) ? value : null;
 };
 
+/**
+ * Splits the file into records, honouring quotes.
+ *
+ * Splitting on newlines first is the same mistake as splitting on commas: a
+ * newline inside a quoted `exercise_notes` or `description` would cut one
+ * record in two, and the fragment then fails timestamp parsing and aborts the
+ * whole import with an error blaming `start_time`. Notes are free text, so
+ * this is a matter of time rather than a hypothetical.
+ */
+const splitCsvRecords = (text: string): string[] => {
+  const records: string[] = [];
+  let record = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (char === '"') {
+      // A doubled quote is an escaped literal and does not change state.
+      if (inQuotes && text[i + 1] === '"') {
+        record += '""';
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      record += char;
+      continue;
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && text[i + 1] === '\n') i += 1;
+      if (record.trim() !== '') records.push(record);
+      record = '';
+      continue;
+    }
+
+    record += char;
+  }
+
+  if (record.trim() !== '') records.push(record);
+  return records;
+};
+
 export const parseHevyCsv = (text: string): HevyParseResult => {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  const lines = splitCsvRecords(text);
   if (lines.length === 0) throw new Error('Hevy import: the file is empty');
 
   const header = splitCsvLine(lines[0]).map((h) => h.trim());

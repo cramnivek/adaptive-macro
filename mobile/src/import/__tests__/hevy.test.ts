@@ -185,3 +185,32 @@ describe('counts for the preview', () => {
     expect(bench.some((s) => s.weightKg === null)).toBe(true);
   });
 });
+
+describe('records spanning more than one line', () => {
+  // Notes are free text, so a newline inside one is a matter of time. Splitting
+  // the file on newlines before honouring quotes cut the record in two and
+  // aborted the whole import with an error blaming start_time.
+  it('keeps a quoted field containing a newline in one record', () => {
+    const csv =
+      HEVY_COLUMNS.join(',') +
+      '\n' +
+      '"Push","29 Dec 2025, 15:37","29 Dec 2025, 17:01","","Bench Press (Barbell)",,' +
+      '"felt heavy\nsecond line",0,"normal",100,5,,,\n';
+
+    const result = parseHevyCsv(csv);
+
+    expect(result.counts.sessions).toBe(1);
+    expect(result.counts.sets).toBe(1);
+    expect(result.sessions[0].exercises[0].name).toBe('Bench Press (Barbell)');
+  });
+
+  it('handles an escaped double quote inside a field', () => {
+    const csv =
+      HEVY_COLUMNS.join(',') +
+      '\n' +
+      '"Push","29 Dec 2025, 15:37","29 Dec 2025, 17:01","","Bench ""Press""",,' +
+      '"",0,"normal",100,5,,,\n';
+
+    expect(parseHevyCsv(csv).sessions[0].exercises[0].name).toBe('Bench "Press"');
+  });
+});
