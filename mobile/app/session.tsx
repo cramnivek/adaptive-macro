@@ -1,6 +1,6 @@
 import { todayISO } from '@adaptive-macros/engine';
 import type { SetType } from '@adaptive-macros/engine';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
@@ -46,6 +46,11 @@ export default function SessionScreen() {
   const { settings } = useApp();
   const unit = weightUnit(settings.units);
 
+  // `start=blank` or `routine=<id>` begins immediately. The Train tab already
+  // asked what the user wanted; making them choose again on arrival is the
+  // same tap twice.
+  const params = useLocalSearchParams<{ start?: string; routine?: string }>();
+
   const [session, setSession] = useState<ActiveSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
@@ -64,9 +69,19 @@ export default function SessionScreen() {
 
   useEffect(() => {
     void (async () => {
-      setSession(await activeSession());
+      const existing = await activeSession();
+      const loadedRoutines = await listRoutines();
       setKnown(await listExerciseNames());
-      setRoutines(await listRoutines());
+      setRoutines(loadedRoutines);
+
+      if (existing) {
+        setSession(existing);
+      } else if (params.routine) {
+        await begin(loadedRoutines.find((r) => r.id === params.routine));
+      } else if (params.start === 'blank') {
+        await begin();
+      }
+
       setLoading(false);
     })();
   }, []);

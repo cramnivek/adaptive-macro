@@ -243,7 +243,7 @@ export default function RoutinesScreen() {
           </View>
           {index === 0 && (
             <Text style={[styles.note, { color: colors.textFaint }]}>
-              Start a workout from Settings → Log a workout.
+              Start a workout from the Train tab.
             </Text>
           )}
         </Card>

@@ -339,18 +339,10 @@ export default function SettingsScreen() {
           then pick it here — you will see what it found before anything is saved, and
           importing the same file twice changes nothing.
         </Text>
-        <Button label="Log a workout" onPress={() => router.push('/session')} />
-        <Button
-          label="Import from Hevy"
-          variant="subtle"
-          onPress={() => router.push('/import-workouts')}
-        />
-        <Button label="Routines" variant="subtle" onPress={() => router.push('/routines')} />
-        <Button
-          label="See progression"
-          variant="subtle"
-          onPress={() => router.push('/progression')}
-        />
+        <Button label="Import from Hevy" onPress={() => router.push('/import-workouts')} />
+        <Text style={[styles.note, { color: colors.textFaint }]}>
+          Logging, routines and progression live on the Train tab.
+        </Text>
       </Card>
 
       <Card title="Looking up restaurant food">
