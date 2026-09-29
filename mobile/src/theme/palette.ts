@@ -1,5 +1,3 @@
-import { useColorScheme } from 'react-native';
-
 export interface Palette {
   background: string;
   surface: string;
@@ -17,7 +15,7 @@ export interface Palette {
   danger: string;
 }
 
-const dark: Palette = {
+export const dark: Palette = {
   background: '#0B1220',
   surface: '#141C2B',
   surfaceRaised: '#1C2637',
@@ -34,7 +32,7 @@ const dark: Palette = {
   danger: '#FF6B6B',
 };
 
-const light: Palette = {
+export const light: Palette = {
   background: '#F6F8FC',
   surface: '#FFFFFF',
   surfaceRaised: '#EEF2F8',
@@ -49,12 +47,6 @@ const light: Palette = {
   positive: '#1F9D63',
   warning: '#C98A0B',
   danger: '#D93F3F',
-};
-
-export const useTheme = (): { colors: Palette; isDark: boolean } => {
-  const scheme = useColorScheme();
-  const isDark = scheme !== 'light';
-  return { colors: isDark ? dark : light, isDark };
 };
 
 /** Shared spacing scale, so padding stays consistent without magic numbers. */
