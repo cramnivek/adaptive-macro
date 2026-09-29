@@ -8,6 +8,7 @@ import { Card } from '../../src/components/Card';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
+import { MealActionsSheet } from '../../src/components/MealActionsSheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
 import { confirm } from '../../src/dialog';
@@ -33,6 +34,7 @@ export default function TodayScreen() {
   } = useApp();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
+  const [mealActions, setMealActions] = useState<Meal | null>(null);
 
   const byMeal = useMemo(() => {
     const groups = new Map<Meal, LogEntry[]>(MEAL_ORDER.map((meal) => [meal, []]));
@@ -134,18 +136,11 @@ export default function TodayScreen() {
             right={
               <View style={styles.mealActions}>
                 <Pressable
-                  onPress={() => router.push({ pathname: '/describe', params: { meal } })}
+                  onPress={() => setMealActions(meal)}
                   style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-                  accessibilityLabel={`Describe ${MEAL_LABELS[meal]} in words`}
+                  accessibilityLabel={`More ways to add to ${MEAL_LABELS[meal]}`}
                 >
-                  <Ionicons name="sparkles-outline" size={17} color={colors.text} />
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push({ pathname: '/scan', params: { meal } })}
-                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-                  accessibilityLabel={`Scan a barcode for ${MEAL_LABELS[meal]}`}
-                >
-                  <Ionicons name="barcode-outline" size={18} color={colors.text} />
+                  <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
                 </Pressable>
                 <Pressable
                   onPress={() => router.push({ pathname: '/search', params: { meal } })}
@@ -196,6 +191,18 @@ export default function TodayScreen() {
         onDelete={(entry) => {
           setEditing(null);
           void removeEntry(entry.id);
+        }}
+      />
+      <MealActionsSheet
+        meal={mealActions}
+        onClose={() => setMealActions(null)}
+        onDescribe={(meal) => {
+          setMealActions(null);
+          router.push({ pathname: '/describe', params: { meal } });
+        }}
+        onScan={(meal) => {
+          setMealActions(null);
+          router.push({ pathname: '/scan', params: { meal } });
         }}
       />
     </Screen>
