@@ -197,6 +197,14 @@ A routine deploy must **not** pass `--set-env-vars`: it replaces the whole set, 
 
 **`MIGRATIONS` is append-only.** Each entry has shipped to a real device.
 
+**A restarted Metro can serve a stale bundle, or no routes at all.** Two separate
+traps, both hit in one session. Starting the dev server with `CI=1` disables file
+watching, so edits are silently not picked up and you audit a bundle that predates
+your change. And restarting Metro mid-session left Expo Router matching nothing —
+every path fell through to its "Unmatched Route" screen, with a clean bundle and a
+clean typecheck. Neither is a code fault; `npx expo start --web --clear` fixes both.
+Suspect the cache before you go bisecting.
+
 ---
 
 ## Verifying without a deploy
