@@ -252,6 +252,7 @@ export default function SettingsScreen() {
     const unreadable: string[] = [];
     let stoppedEarly: string | null = null;
     let total = 0;
+    let linked = 0;
 
     try {
       const names = await listUnlinkedExerciseNames();
@@ -272,6 +273,7 @@ export default function SettingsScreen() {
           for (const entry of entries) {
             const id = await upsertCatalogueEntry(entry);
             await linkExerciseToCatalogue(entry.requestedName, id);
+            linked += 1;
           }
           missed.push(...missing);
         } catch (error) {
@@ -295,7 +297,7 @@ export default function SettingsScreen() {
     }
 
     // Each batch commits as it completes, so what already linked stays linked.
-    const parts = [`${total - missed.length - unreadable.length} of ${total} catalogued.`];
+    const parts = [`${linked} of ${total} catalogued.`];
     if (missed.length > 0) {
       parts.push(`Not recognised: ${list(missed)}. Running it again may pick these up.`);
     }
