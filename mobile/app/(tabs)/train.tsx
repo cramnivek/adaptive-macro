@@ -15,7 +15,7 @@ import {
 import type { ActiveSession, Routine } from '../../src/db';
 import { displayWeight, formatDate, weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { radius, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
 
 /**
  * The training home.
@@ -143,7 +143,7 @@ export default function TrainScreen() {
                 </Text>
               </View>
               {last?.isRecord && (
-                <Text style={{ color: colors.positive, fontSize: 12 }}>best yet</Text>
+                <Text style={{ fontFamily: font.ui, color: colors.positive, fontSize: 12 }}>best yet</Text>
               )}
             </Pressable>
           ))}
@@ -183,7 +183,7 @@ export default function TrainScreen() {
                 key={routine.id}
                 style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
               >
-                <Text style={{ color: colors.text, fontSize: 13 }}>{routine.name}</Text>
+                <Text style={{ fontFamily: font.ui, color: colors.text, fontSize: 13 }}>{routine.name}</Text>
               </View>
             ))}
           </View>
@@ -198,7 +198,7 @@ export default function TrainScreen() {
       {totalSets === 0 && (
         <Card title="Bringing history over">
           <Text style={[styles.note, { color: colors.textFaint }]}>
-            Already training elsewhere? Settings → Lifting history imports a Hevy export, so your
+            Already training elsewhere? Settings → Your data imports a Hevy export, so your
             progression starts full rather than empty.
           </Text>
         </Card>
@@ -208,7 +208,7 @@ export default function TrainScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
