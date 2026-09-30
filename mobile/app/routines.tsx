@@ -15,7 +15,7 @@ import {
 import type { Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { formatDate } from '../src/format';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 type Draft = { name: string; bodyweightBased: boolean; targetSets: number };
 
@@ -197,7 +197,7 @@ export default function RoutinesScreen() {
                   onPress={() => addToDraft(item.name)}
                   style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
                 >
-                  <Text style={{ color: colors.text, fontSize: 13 }}>{item.name}</Text>
+                  <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{item.name}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -286,7 +286,7 @@ export default function RoutinesScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

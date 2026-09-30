@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepperGlyph: { fontSize: 22, fontWeight: '600', lineHeight: 26 },
+  stepperGlyph: { fontFamily: font.uiStrong, fontSize: 22, lineHeight: 26 },
   stepperValue: {
     flex: 1,
     flexDirection: 'row',

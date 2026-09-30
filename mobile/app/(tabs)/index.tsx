@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navToday: { flex: 1 },
-  targetLine: { fontSize: 12, marginTop: space.lg, textAlign: 'center' },
+  targetLine: { fontFamily: font.ui, fontSize: 12, marginTop: space.lg, textAlign: 'center' },
   banner: {
     flexDirection: 'row',
     gap: space.sm,
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     padding: space.md,
     marginBottom: space.md,
   },
-  bannerText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  bannerText: { fontFamily: font.ui, flex: 1, fontSize: 12, lineHeight: 17 },
   mealActions: { flexDirection: 'row', gap: space.sm },
   // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
   // hits reliably, and they are two adjacent targets on one row.
@@ -251,10 +251,10 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   entryText: { flex: 1 },
-  entryName: { fontSize: 15, fontWeight: '500' },
-  entryMeta: { fontSize: 11, marginTop: 1 },
+  entryName: { fontFamily: font.uiStrong, fontSize: 15 },
+  entryMeta: { fontFamily: font.ui, fontSize: 11, marginTop: 1 },
   entryKcal: { fontFamily: font.figure, fontSize: 15, fontVariant: ['tabular-nums'] },
-  deleteHint: { fontSize: 11, marginTop: space.xs, textAlign: 'center' },
+  deleteHint: { fontFamily: font.ui, fontSize: 11, marginTop: space.xs, textAlign: 'center' },
   dayActions: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   dayAction: {
     flex: 1,
@@ -267,5 +267,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  dayActionLabel: { fontSize: 13, fontWeight: '600' },
+  dayActionLabel: { fontFamily: font.uiStrong, fontSize: 13 },
 });

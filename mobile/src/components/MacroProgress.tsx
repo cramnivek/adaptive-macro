@@ -116,11 +116,11 @@ const styles = StyleSheet.create({
   bars: { flex: 1, gap: space.md },
   barRow: { gap: space.xs },
   barLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { fontSize: 13, fontWeight: '600' },
+  barLabel: { fontFamily: font.uiStrong, fontSize: 13 },
   barValue: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   barTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: radius.pill },
   ringCentre: { alignItems: 'center', justifyContent: 'center' },
   ringValue: { fontFamily: font.figure, fontSize: 30, letterSpacing: -1, fontVariant: ['tabular-nums'] },
-  ringLabel: { fontSize: 11, marginTop: -2 },
+  ringLabel: { fontFamily: font.ui, fontSize: 11, marginTop: -2 },
 });

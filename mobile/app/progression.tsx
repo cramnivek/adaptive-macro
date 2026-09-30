@@ -10,7 +10,7 @@ import { TOUCH_TARGET } from '../src/components/Controls';
 import { listSetsForExercise, listTrainedExercises } from '../src/db';
 import { displayWeight, formatDate, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 type TrainedExercise = { name: string; bodyweightBased: boolean; setCount: number };
 
@@ -125,7 +125,7 @@ export default function ProgressionScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: active ? colors.onFill : colors.text, fontSize: 13 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: active ? colors.onFill : colors.text, fontSize: 13 }}>
                     {exercise.name}
                   </Text>
                 </Pressable>
@@ -222,7 +222,7 @@ export default function ProgressionScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 6 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 6 },
   tiles: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   chip: {
     minHeight: TOUCH_TARGET - 12,

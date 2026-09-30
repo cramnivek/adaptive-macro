@@ -21,7 +21,7 @@ import type { ActiveSession, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, formatDate, parseWeight, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 const SET_TYPES: { value: SetType; label: string }[] = [
   { value: 'normal', label: 'Working' },
@@ -302,7 +302,7 @@ export default function SessionScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: colors.text, fontSize: 13 }}>{name}</Text>
+                  <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{name}</Text>
                 </Pressable>
               );
             })}
@@ -333,7 +333,7 @@ export default function SessionScreen() {
                   { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
                 ]}
               >
-                <Text style={{ color: colors.text, fontSize: 13 }}>{item.name}</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{item.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -381,7 +381,7 @@ export default function SessionScreen() {
                 {set.reps}
               </Text>
               {set.setType !== 'normal' && (
-                <Text style={{ color: colors.warning, fontSize: 12 }}>{set.setType}</Text>
+                <Text style={{ fontFamily: font.ui, color: colors.warning, fontSize: 12 }}>{set.setType}</Text>
               )}
             </Pressable>
           ))}
@@ -405,7 +405,7 @@ export default function SessionScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 6 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 6 },
   row: { flexDirection: 'row', gap: space.sm },
   half: { flex: 1 },
   chips: { marginBottom: space.sm },

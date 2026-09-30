@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, Text, View } from 'react-native';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 import { needsHomeScreenInstall } from '../web/persistence';
 
 /**
@@ -48,6 +48,6 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   text: { flex: 1, gap: space.xs },
-  title: { fontSize: 13, fontWeight: '600' },
-  body: { fontSize: 12, lineHeight: 17 },
+  title: { fontFamily: font.uiStrong, fontSize: 13 },
+  body: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
 });

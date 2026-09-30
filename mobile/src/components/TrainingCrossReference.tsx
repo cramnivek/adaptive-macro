@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { listAllSets, listSessionSpans } from '../db';
 import { formatDate } from '../format';
-import { useTheme } from '../theme';
+import { font, useTheme } from '../theme';
 import { Card } from './Card';
 import { LineChart } from './LineChart';
 
@@ -184,5 +184,5 @@ const shiftWeeks = (origin: string, weeks: number): string =>
     .slice(0, 10);
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 6 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 6 },
 });

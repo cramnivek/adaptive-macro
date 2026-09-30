@@ -85,7 +85,7 @@ export const EditEntrySheet = ({ entry, onCancel, onSave, onDelete }: EditEntryS
                     },
                   ]}
                 >
-                  <Text style={{ color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
                     {MEAL_LABELS[option]}
                   </Text>
                 </Pressable>
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.lg,
   },
-  name: { fontSize: 18, fontWeight: '700', marginBottom: space.md },
+  name: { fontFamily: font.uiStrong, fontSize: 18, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   chip: {
     // Tappable, so it has to clear the comfortable thumb minimum.

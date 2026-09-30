@@ -223,7 +223,7 @@ export default function DescribeScreen() {
                 },
               ]}
             >
-              <Text style={{ color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
+              <Text style={{ fontFamily: font.uiStrong, color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
                 {MEAL_LABELS[option]}
               </Text>
             </Pressable>
@@ -301,7 +301,7 @@ export default function DescribeScreen() {
                     <View
                       style={[styles.badge, { borderColor: confidenceColor(draft.item.confidence) }]}
                     >
-                      <Text style={{ fontSize: 10, color: confidenceColor(draft.item.confidence) }}>
+                      <Text style={{ fontFamily: font.ui, fontSize: 10, color: confidenceColor(draft.item.confidence) }}>
                         {draft.item.confidence}
                       </Text>
                     </View>
@@ -383,7 +383,7 @@ export default function DescribeScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: space.xxl },
-  body: { fontSize: 13, lineHeight: 19 },
+  body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   chip: {
     // Tappable, so it has to clear the comfortable thumb minimum.
@@ -396,14 +396,14 @@ const styles = StyleSheet.create({
   },
   item: { marginBottom: space.lg },
   itemHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  itemName: { flex: 1, fontSize: 15, fontWeight: '600' },
+  itemName: { fontFamily: font.uiStrong, flex: 1, fontSize: 15 },
   badge: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 1,
   },
-  assumption: { fontSize: 12, marginTop: 2, marginBottom: space.sm, lineHeight: 16 },
+  assumption: { fontFamily: font.ui, fontSize: 12, marginTop: 2, marginBottom: space.sm, lineHeight: 16 },
   macros: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   total: {
     fontFamily: font.figure,
@@ -411,5 +411,5 @@ const styles = StyleSheet.create({
     fontSize: 26,
     letterSpacing: -0.5,
   },
-  cost: { fontSize: 11, marginTop: space.sm },
+  cost: { fontFamily: font.ui, fontSize: 11, marginTop: space.sm },
 });

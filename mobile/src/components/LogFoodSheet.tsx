@@ -81,7 +81,7 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
                   onPress={() => setGrams(String(portion.grams))}
                   style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
                 >
-                  <Text style={{ color: colors.text, fontSize: 13 }}>{portion.label}</Text>
+                  <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{portion.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -101,7 +101,7 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
                     },
                   ]}
                 >
-                  <Text style={{ color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
                     {MEAL_LABELS[option]}
                   </Text>
                 </Pressable>
@@ -138,15 +138,15 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.lg,
   },
-  name: { fontSize: 18, fontWeight: '700' },
-  brand: { fontSize: 13, marginTop: 2 },
+  name: { fontFamily: font.uiStrong, fontSize: 18 },
+  brand: { fontFamily: font.ui, fontSize: 13, marginTop: 2 },
   warning: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     padding: space.md,
     marginTop: space.md,
   },
-  warningText: { fontSize: 12, lineHeight: 17 },
+  warningText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md, marginBottom: space.sm },
   chip: {
     // Tappable, so it has to clear the comfortable thumb minimum.

@@ -9,7 +9,7 @@ import { Button } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { findFoodByBarcode } from '../src/db';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 /** Formats used on food packaging; QR and the rest are ignored deliberately. */
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
@@ -158,6 +158,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
   },
   panel: { borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: space.lg, gap: space.sm },
-  message: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  hint: { fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  message: { fontFamily: font.uiStrong, fontSize: 16, textAlign: 'center' },
+  hint: { fontFamily: font.ui, fontSize: 13, lineHeight: 18, textAlign: 'center' },
 });

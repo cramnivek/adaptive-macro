@@ -8,7 +8,7 @@ import { StatTile } from '../../src/components/StatTile';
 import { TrainingCrossReference } from '../../src/components/TrainingCrossReference';
 import { formatDateLong, formatRate, formatWeight } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { space, useTheme } from '../../src/theme';
+import { font, space, useTheme } from '../../src/theme';
 
 const CONFIDENCE_COPY = {
   insufficient: 'Not enough data yet — still leaning on the formula estimate.',
@@ -155,5 +155,5 @@ export default function TrendsScreen() {
 
 const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', gap: space.md, marginBottom: space.md },
-  body: { fontSize: 13, lineHeight: 19 },
+  body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
 });

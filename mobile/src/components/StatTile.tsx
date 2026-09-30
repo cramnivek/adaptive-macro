@@ -41,9 +41,9 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.md,
   },
-  label: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  label: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },
   valueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: space.xs },
   value: { fontFamily: font.figure, fontSize: 22, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
-  unit: { fontSize: 12, marginLeft: 3 },
-  hint: { fontSize: 11, marginTop: 2 },
+  unit: { fontFamily: font.ui, fontSize: 12, marginLeft: 3 },
+  hint: { fontFamily: font.ui, fontSize: 11, marginTop: 2 },
 });

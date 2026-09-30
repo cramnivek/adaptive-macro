@@ -10,7 +10,7 @@ import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
 import { getFoodById, listFrequentFoods, saveFood } from '../src/db';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 const SOURCE_LABELS: Record<Food['source'], string> = {
   custom: 'Saved',
@@ -270,12 +270,12 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   searchBar: { paddingHorizontal: space.lg, paddingTop: space.lg },
-  error: { fontSize: 12, paddingHorizontal: space.lg, paddingBottom: space.xs },
+  error: { fontFamily: font.ui, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: space.xs },
   spinner: { marginVertical: space.sm },
   list: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
   sectionLabel: {
+    fontFamily: font.uiStrong,
     fontSize: 11,
-    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: space.sm,
@@ -290,17 +290,18 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
   },
   rowText: { flex: 1 },
-  rowName: { fontSize: 15, fontWeight: '500' },
-  rowMeta: { fontSize: 11, marginTop: 2 },
-  rowWarning: { fontSize: 11, marginTop: 3, lineHeight: 15 },
+  rowName: { fontFamily: font.uiStrong, fontSize: 15 },
+  rowMeta: { fontFamily: font.ui, fontSize: 11, marginTop: 2 },
+  rowWarning: { fontFamily: font.ui, fontSize: 11, marginTop: 3, lineHeight: 15 },
   badge: {
+    fontFamily: font.ui,
     fontSize: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  empty: { fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
+  empty: { fontFamily: font.ui, fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
   footer: { marginTop: space.lg, gap: space.sm },
-  footerNote: { fontSize: 12, textAlign: 'center' },
+  footerNote: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },
 });

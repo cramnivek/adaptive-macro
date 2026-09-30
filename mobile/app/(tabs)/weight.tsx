@@ -141,7 +141,7 @@ export default function WeightScreen() {
 
       <Card title="Recent weigh-ins" subtitle={recent.length ? 'Hold an entry to remove it' : undefined}>
         {recent.length === 0 && (
-          <Text style={{ color: colors.textFaint, fontSize: 13 }}>Nothing logged yet.</Text>
+          <Text style={{ fontFamily: font.ui, color: colors.textFaint, fontSize: 13 }}>Nothing logged yet.</Text>
         )}
         {recent.map((row) => (
           <Pressable
@@ -149,7 +149,7 @@ export default function WeightScreen() {
             onLongPress={() => void confirmDelete(row.date)}
             style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Text style={{ color: colors.textMuted, fontSize: 14 }}>
+            <Text style={{ fontFamily: font.figure, fontVariant: ['tabular-nums'], color: colors.textMuted, fontSize: 14 }}>
               {formatDate(row.date)}
               {outlierDates.has(row.date) && (
                 <Text style={{ color: colors.warning }}> · discounted</Text>

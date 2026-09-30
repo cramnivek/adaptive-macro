@@ -6,7 +6,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, Field, Segmented } from '../src/components/Controls';
 import { saveFood } from '../src/db';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 /**
  * Create a food by hand.
@@ -237,13 +237,13 @@ export default function NewFoodScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: space.xxl },
-  implied: { fontSize: 12, marginTop: space.xs },
+  implied: { fontFamily: font.ui, fontSize: 12, marginTop: space.xs },
   warning: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     padding: space.md,
     marginTop: space.md,
   },
-  warningText: { fontSize: 12, lineHeight: 17 },
-  error: { fontSize: 13, marginBottom: space.md, textAlign: 'center' },
+  warningText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
+  error: { fontFamily: font.ui, fontSize: 13, marginBottom: space.md, textAlign: 'center' },
 });

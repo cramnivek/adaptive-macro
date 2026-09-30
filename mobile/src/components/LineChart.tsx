@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
-import { space, useTheme } from '../theme';
+import { font, space, useTheme } from '../theme';
 
 export interface ChartPoint {
   x: number;
@@ -228,7 +228,7 @@ export const LineChart = ({
         </Svg>
       ) : (
         <View style={styles.empty}>
-          <Text style={{ color: colors.textFaint, fontSize: 13 }}>{emptyMessage}</Text>
+          <Text style={{ fontFamily: font.ui, color: colors.textFaint, fontSize: 13 }}>{emptyMessage}</Text>
         </View>
       )}
     </View>

@@ -7,7 +7,7 @@ import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { listLoggedDates, listLogEntries } from '../src/db';
 import { MEAL_LABELS, formatDate } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -83,7 +83,7 @@ export default function RepeatScreen() {
                 },
               ]}
             >
-              <Text style={{ color: date === chosenDate ? colors.onFill : colors.text, fontSize: 13 }}>
+              <Text style={{ fontFamily: font.figure, fontVariant: ['tabular-nums'], color: date === chosenDate ? colors.onFill : colors.text, fontSize: 13 }}>
                 {formatDate(date)}
               </Text>
             </Pressable>
@@ -117,7 +117,7 @@ export default function RepeatScreen() {
                     },
                   ]}
                 >
-                  <Text style={{ color: on ? colors.onFill : colors.text, fontSize: 13 }}>
+                  <Text style={{ fontFamily: font.ui, color: on ? colors.onFill : colors.text, fontSize: 13 }}>
                     {MEAL_LABELS[meal]} · {Math.round(kcal)}
                   </Text>
                 </Pressable>
@@ -151,7 +151,7 @@ export default function RepeatScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, paddingBottom: space.xxl },
-  body: { fontSize: 13, lineHeight: 19 },
+  body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   chip: {
     // Tappable, so it has to clear the comfortable thumb minimum.
@@ -162,6 +162,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  item: { fontSize: 12, marginTop: space.xs },
-  total: { fontSize: 15, fontWeight: '600', marginTop: space.md },
+  item: { fontFamily: font.ui, fontSize: 12, marginTop: space.xs },
+  total: { fontFamily: font.uiStrong, fontSize: 15, marginTop: space.md },
 });

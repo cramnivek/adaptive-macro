@@ -1,7 +1,7 @@
 import type { Food } from '@adaptive-macros/engine';
 import { isNutritionallyConsistent } from '@adaptive-macros/engine';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme } from '../theme';
 import { Button } from './Controls';
 
 interface LookupCandidateSheetProps {
@@ -81,23 +81,23 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.lg,
   },
-  name: { fontSize: 18, fontWeight: '700' },
-  brand: { fontSize: 13, marginTop: 2 },
-  meta: { fontSize: 13, marginTop: space.xs },
+  name: { fontFamily: font.uiStrong, fontSize: 18 },
+  brand: { fontFamily: font.ui, fontSize: 13, marginTop: 2 },
+  meta: { fontFamily: font.ui, fontSize: 13, marginTop: space.xs },
   warning: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     padding: space.md,
     marginTop: space.md,
   },
-  warningText: { fontSize: 12, lineHeight: 17 },
+  warningText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   sourcesLabel: {
+    fontFamily: font.uiStrong,
     fontSize: 11,
-    fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginTop: space.lg,
   },
-  source: { fontSize: 12, marginTop: 2 },
-  disclaimer: { fontSize: 12, marginTop: space.lg, marginBottom: space.md, lineHeight: 17 },
+  source: { fontFamily: font.ui, fontSize: 12, marginTop: 2 },
+  disclaimer: { fontFamily: font.ui, fontSize: 12, marginTop: space.lg, marginBottom: space.md, lineHeight: 17 },
 });

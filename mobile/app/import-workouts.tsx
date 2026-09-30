@@ -8,7 +8,7 @@ import { notify } from '../src/dialog';
 import { commitImport, planImport } from '../src/import/runImport';
 import { pickTextFile } from '../src/platform/files';
 import type { ImportPlan } from '../src/import/importWorkouts';
-import { space, useTheme } from '../src/theme';
+import { font, space, useTheme } from '../src/theme';
 
 /**
  * Imports lifting history from a Hevy CSV export.
@@ -171,8 +171,8 @@ export default function ImportWorkoutsScreen() {
 }
 
 const styles = StyleSheet.create({
-  line: { fontSize: 15, marginBottom: 4 },
-  note: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  line: { fontFamily: font.ui, fontSize: 15, marginBottom: 4 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

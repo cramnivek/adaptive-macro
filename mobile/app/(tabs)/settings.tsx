@@ -580,7 +580,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontSize: 12, lineHeight: 17, marginTop: 4 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

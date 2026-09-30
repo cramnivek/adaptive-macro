@@ -7,7 +7,7 @@ import { Card } from '../src/components/Card';
 import { Button, Field, Stepper, TOUCH_TARGET } from '../src/components/Controls';
 import { MEAL_LABELS } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { radius, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -116,7 +116,7 @@ export default function QuickAddScreen() {
                 },
               ]}
             >
-              <Text style={{ color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
+              <Text style={{ fontFamily: font.uiStrong, color: option === meal ? colors.onFill : colors.text, fontSize: 13 }}>
                 {MEAL_LABELS[option]}
               </Text>
             </Pressable>
@@ -167,6 +167,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  note: { fontSize: 12, lineHeight: 17, marginTop: space.xs },
-  error: { fontSize: 13, marginTop: space.sm },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.xs },
+  error: { fontFamily: font.ui, fontSize: 13, marginTop: space.sm },
 });
