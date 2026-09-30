@@ -60,6 +60,10 @@ export default function SearchScreen() {
   // food calls router.back(); "Create a food" pushes a new screen). Without
   // this, its eventual resolution would set state on an unmounted screen.
   const mounted = useRef(true);
+  // Every query the auto-lookup has already tried on this screen. Without it a
+  // failed lookup refires the moment its error clears, and deleting a
+  // character then retyping it spends a second call for the same question.
+  const autoAttempted = useRef<Set<string>>(new Set());
   useEffect(
     () => () => {
       mounted.current = false;
@@ -121,10 +125,14 @@ export default function SearchScreen() {
   // Three rather than zero: the case this exists for returned one irrelevant
   // result, not an empty list.
   const THIN_RESULT_COUNT = 3;
-  // The offer no longer depends on configuration — it routes through the
-  // shared proxy by default, so thin results are the only gate. A user's own
-  // Gemini key (if set) is just an alternate credential the lookup call uses.
-  const canLookUp = !showingFrequent && !loading && shown.length < THIN_RESULT_COUNT;
+  // On top of the 350ms search debounce, so the full sequence is: stop typing,
+  // 350ms, database search, settles empty, then this before a call is spent.
+  const AUTO_LOOKUP_DELAY_MS = 1200;
+  // Zero results is now handled automatically below. The button survives for
+  // one or two results, where a real database hit might still be the right
+  // answer and spending a call would be presumptuous.
+  const canLookUp =
+    !showingFrequent && !loading && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
 
   const runLookup = useCallback(async () => {
     const trimmed = query.trim();
@@ -148,6 +156,24 @@ export default function SearchScreen() {
       if (mounted.current) setLookingUp(false);
     }
   }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
+
+  // AI is not a thing you ask for here; it is what happens when the databases
+  // have nothing. Only on zero results, only once per distinct query, and only
+  // after typing has settled, so nothing fires mid-word.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (showingFrequent || loading || lookingUp) return;
+    if (results.length > 0 || trimmed.length < 2) return;
+    if (autoAttempted.current.has(trimmed)) return;
+
+    const timer = setTimeout(() => {
+      if (!mounted.current || latestQuery.current !== trimmed) return;
+      autoAttempted.current.add(trimmed);
+      void runLookup();
+    }, AUTO_LOOKUP_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [query, showingFrequent, loading, lookingUp, results.length, runLookup]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -183,7 +209,9 @@ export default function SearchScreen() {
             <Text style={[styles.empty, { color: colors.textFaint }]}>
               {showingFrequent
                 ? 'Search for a food, or scan a barcode from the Today tab.'
-                : 'Nothing found. Try a shorter or more general term, or add it yourself.'}
+                : lookingUp
+                  ? `Nothing found — looking it up… ${lookupElapsed}s`
+                  : 'Nothing found. Try a shorter or more general term, or add it yourself.'}
             </Text>
           )
         }
