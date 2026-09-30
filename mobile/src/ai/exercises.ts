@@ -120,7 +120,14 @@ export const parseEnrichment = (
     throw new EnrichmentParseError('Enrichment response had no exercises array');
   }
 
-  const wanted = new Set(requested);
+  // Keyed on the lowercased name, valued with the spelling actually asked for.
+  // Hevy exports `Bench Press (Barbell)` and the model happily echoes
+  // `Bench Press (barbell)`; an exact-match lookup drops that entry, the name
+  // lands in `missing`, and because nothing about the request ever changes it
+  // is reported as unrecognised on every future run while billing a call each
+  // time. The value is the requested spelling because `exercises.name` is what
+  // `linkExerciseToCatalogue` matches on, exactly.
+  const wanted = new Map(requested.map((name) => [name.trim().toLowerCase(), name]));
   const entries: EnrichedExercise[] = [];
 
   for (const item of list) {
@@ -128,10 +135,18 @@ export const parseEnrichment = (
       throw new EnrichmentParseError('Enrichment response contained a non-object entry');
     }
     const row = item as Record<string, unknown>;
+    if (!isNonEmptyString(row.requestedName)) continue;
     // An entry for something we never asked about tells us nothing and would
     // create a catalogue row no exercise links to.
-    if (!isNonEmptyString(row.requestedName) || !wanted.has(row.requestedName)) continue;
+    const asked = wanted.get(row.requestedName.trim().toLowerCase());
+    if (asked === undefined) continue;
 
+    // A field the model fluffed costs that one entry, not the other nineteen.
+    // Failing the whole batch told the user twenty names "could not be read,
+    // running it again will not help" over one empty `instructions`, and it
+    // contradicted the reason that column is nullable: a generation failure must
+    // not stop the entry existing. Skipping lands this name in `missing` below,
+    // which is both the honest report and a retryable one.
     if (
       !isNonEmptyString(row.canonicalName) ||
       !isNonEmptyString(row.primaryMuscle) ||
@@ -139,11 +154,11 @@ export const parseEnrichment = (
       !isNonEmptyString(row.instructions) ||
       typeof row.bodyweightBased !== 'boolean'
     ) {
-      throw new EnrichmentParseError(`Enrichment entry for ${row.requestedName} was incomplete`);
+      continue;
     }
 
     entries.push({
-      requestedName: row.requestedName,
+      requestedName: asked,
       canonicalName: row.canonicalName,
       movementPattern: normalisePattern(row.movementPattern),
       primaryMuscle: row.primaryMuscle,

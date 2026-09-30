@@ -120,12 +120,67 @@ describe('parseEnrichment', () => {
     ['primaryMuscle', undefined],
     ['equipment', undefined],
     ['instructions', undefined],
+    ['instructions', ''],
     ['bodyweightBased', undefined],
     ['bodyweightBased', 'false'],
-  ])('throws when %s is %o', (field, value) => {
+  ])('reports the name as missing when %s is %o', (field, value) => {
     const broken = { ...entry('Squat'), [field]: value };
-    expect(() => parseEnrichment({ exercises: [broken] }, ['Squat'])).toThrow(
-      EnrichmentParseError,
+    const result = parseEnrichment({ exercises: [broken] }, ['Squat']);
+    expect(result.entries).toEqual([]);
+    expect(result.missing).toEqual(['Squat']);
+  });
+
+  // The defect this replaced: one fluffed field failed all twenty names in the
+  // batch, and the user was told all twenty "could not be read".
+  it('keeps the good entries when one entry in the batch is incomplete', () => {
+    const result = parseEnrichment(
+      {
+        exercises: [
+          entry('Bench Press'),
+          { ...entry('Squat'), instructions: '' },
+          entry('Deadlift'),
+        ],
+      },
+      ['Bench Press', 'Squat', 'Deadlift'],
     );
+    expect(result.entries.map((e) => e.requestedName)).toEqual(['Bench Press', 'Deadlift']);
+    expect(result.missing).toEqual(['Squat']);
+  });
+});
+
+/**
+ * Casing is the seam between a Hevy export and a model echoing a name back.
+ * `Bench Press (Barbell)` returned as `Bench Press (barbell)` used to be
+ * dropped, reported as unrecognised, and re-billed on every future run.
+ */
+describe('parseEnrichment and requested spelling', () => {
+  it('matches the requested name whatever case the model echoes it in', () => {
+    const result = parseEnrichment({ exercises: [entry('Bench Press (barbell)')] }, [
+      'Bench Press (Barbell)',
+    ]);
+    expect(result.missing).toEqual([]);
+    expect(result.entries).toHaveLength(1);
+  });
+
+  // `linkExerciseToCatalogue` runs an exact-match UPDATE on `exercises.name`,
+  // so the entry has to carry the spelling that table holds, not the model's.
+  it('emits the requested spelling, not the echoed one', () => {
+    const result = parseEnrichment({ exercises: [entry('bench press (BARBELL)')] }, [
+      'Bench Press (Barbell)',
+    ]);
+    expect(result.entries[0].requestedName).toBe('Bench Press (Barbell)');
+  });
+
+  it('ignores surrounding whitespace on the echoed name', () => {
+    const result = parseEnrichment({ exercises: [entry('  Pull Up  ')] }, ['Pull Up']);
+    expect(result.entries[0].requestedName).toBe('Pull Up');
+    expect(result.missing).toEqual([]);
+  });
+
+  // Still nothing we asked about, so it must not become a catalogue row.
+  it('still ignores a name that was never requested', () => {
+    const result = parseEnrichment({ exercises: [entry('Leg Press')] }, ['Bench Press']);
+    expect(result.entries).toEqual([]);
+    expect(result.missing).toEqual(['Bench Press']);
   });
 });
