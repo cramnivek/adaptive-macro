@@ -17,7 +17,7 @@ import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { BATCH_SIZE, EnrichmentParseError, batchNames } from '../../src/ai/exercises';
 import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
-import { enrichExercises } from '../../src/api/gemini';
+import { GeminiAccessError, enrichExercises } from '../../src/api/gemini';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
@@ -250,6 +250,7 @@ export default function SettingsScreen() {
 
     const missed: string[] = [];
     const unreadable: string[] = [];
+    const failed: string[] = [];
     let stoppedEarly: string | null = null;
     let total = 0;
     let linked = 0;
@@ -277,16 +278,27 @@ export default function SettingsScreen() {
           }
           missed.push(...missing);
         } catch (error) {
+          // A rejected key or an exhausted quota answers every remaining batch
+          // the same way, so spending them to find that out is pure waste.
+          if (error instanceof GeminiAccessError) {
+            stoppedEarly = error.message;
+            break;
+          }
           if (error instanceof EnrichmentParseError) {
-            // One unreadable entry fails its whole batch by design, and it will
-            // fail again every run. Carrying on means the rest of the history
-            // still gets catalogued instead of being starved behind it.
+            // A response with no readable shape at all fails the same way every
+            // run. Carrying on means the rest of the history still gets
+            // catalogued instead of being starved behind it.
             unreadable.push(...batch);
             continue;
           }
-          // A network or HTTP failure will almost certainly hit the next batch too.
-          stoppedEarly = (error as Error).message;
-          break;
+          // Everything else — a timeout, a truncated body, a dropped
+          // connection — is about this batch and this moment, not about the
+          // next batch. Breaking here starved every run at the same place,
+          // because the queue is ordered deterministically and nothing linked,
+          // so batch 1 came up first every time and the other 58 lifts were
+          // never asked about.
+          failed.push(...batch);
+          continue;
         }
       }
     } catch (error) {
@@ -306,13 +318,22 @@ export default function SettingsScreen() {
         `Could not be read: ${list(unreadable)}. Running it again will not help these — rename them or add them by hand.`,
       );
     }
+    if (failed.length > 0) {
+      parts.push(
+        `The lookup failed for: ${list(failed)}. Running it again retries just these.`,
+      );
+    }
     if (stoppedEarly !== null) {
       parts.push(
         `Stopped early: ${stoppedEarly.replace(/[.\s]+$/, '')}. Running it again resumes from where it got to.`,
       );
     }
     notify(
-      stoppedEarly !== null ? 'Stopped partway' : unreadable.length > 0 ? 'Catalogue partly built' : 'Catalogue built',
+      stoppedEarly !== null
+        ? 'Stopped partway'
+        : unreadable.length + failed.length > 0
+          ? 'Catalogue partly built'
+          : 'Catalogue built',
       parts.join(' '),
     );
   };

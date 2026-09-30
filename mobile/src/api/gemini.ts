@@ -100,10 +100,19 @@ const GROUNDED_TIMEOUT_MS = 90_000;
 /** The structuring call does no I/O of its own and should be quick. */
 const STRUCTURE_TIMEOUT_MS = 15_000;
 /**
- * Enrichment does no grounded I/O, so it should be as quick as the structuring
- * call. If it is not, something is wrong rather than merely slow.
+ * Enrichment is slow because of what it writes, not because of any I/O.
+ *
+ * This was 15 s on the reasoning that it does no grounded I/O and should
+ * therefore be as quick as the structuring call. Measured against the real API,
+ * a full 20-name batch took 26.5 s: 2,066 output tokens of prose and, mostly,
+ * 5,114 thinking tokens. So every full batch aborted, every run, and the abort
+ * stopped the whole queue. A generation call is bounded by the tokens it emits
+ * and the thinking it does first, neither of which the structuring call's ~10
+ * scalars come anywhere near. 60 s is that measurement with headroom over twice
+ * it, which is the right shape for a one-off catalogue build the user is
+ * watching a progress line for.
  */
-const ENRICH_TIMEOUT_MS = 15_000;
+const ENRICH_TIMEOUT_MS = 60_000;
 
 /**
  * Above this, a food with no macros at all is not a real figure.
@@ -118,6 +127,27 @@ export class GroundedLookupError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'GroundedLookupError';
+  }
+}
+
+/**
+ * A failure the next call will hit in exactly the same way.
+ *
+ * Rejected key, no key, quota gone: each of those answers every request
+ * identically until something outside the app changes, so a caller working
+ * through a queue of batches should stop rather than spend the rest of them
+ * finding out. A timeout or a truncated body is the opposite — the next batch
+ * asks about different names and may well succeed — and telling the two apart
+ * is the difference between cataloguing 78 lifts and cataloguing the first 20
+ * forever.
+ *
+ * A subclass rather than a flag, so the food lookup's callers, which care only
+ * that the lookup failed, go on catching it as a `GroundedLookupError`.
+ */
+export class GeminiAccessError extends GroundedLookupError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GeminiAccessError';
   }
 }
 
@@ -204,21 +234,21 @@ const postJson = async (
     // and "check it in Settings" would send them looking for a field that is
     // empty on purpose.
     if (response.status === 400 || response.status === 403) {
-      throw new GroundedLookupError(
+      throw new GeminiAccessError(
         route.viaProxy
           ? 'The lookup service is unavailable. Try again later, or add your own Gemini API key in Settings.'
           : 'That Gemini API key was rejected. Check it in Settings.',
       );
     }
     if (response.status === 401) {
-      throw new GroundedLookupError(
+      throw new GeminiAccessError(
         'This build cannot reach the lookup service. Add your own Gemini API key in Settings.',
       );
     }
     // Grounding is metered separately and needs billing enabled on the project;
     // without it every grounded call returns 429 while plain ones still succeed.
     if (response.status === 429) {
-      throw new GroundedLookupError(
+      throw new GeminiAccessError(
         route.viaProxy
           ? 'The shared lookup allowance is used up for now. Try again later, or add your own Gemini API key in Settings.'
           : 'Gemini quota reached. Web lookup needs billing enabled on your Google Cloud project.',
