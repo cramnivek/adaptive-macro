@@ -14,6 +14,8 @@ import {
 import { EnrichmentParseError } from '../src/ai/exercises';
 import { GroundedLookupError, enrichExercises } from '../src/api/gemini';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
+import { ExerciseIcon } from '../src/components/ExerciseIcon';
+import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { Screen } from '../src/components/Screen';
 import {
   activeSession,
@@ -23,6 +25,7 @@ import {
   finishSession,
   lastSessionSets,
   listExerciseNames,
+  catalogueEntryForExercise,
   linkExerciseToCatalogue,
   listRoutines,
   searchCatalogue,
@@ -98,6 +101,7 @@ export default function SessionScreen() {
 
   const [matches, setMatches] = useState<CatalogueEntry[]>([]);
   const [enriching, setEnriching] = useState(false);
+  const [info, setInfo] = useState<CatalogueEntry | null>(null);
   // Same guard as the food search: one automatic call per distinct term, so a
   // failed enrichment cannot refire and retyping costs nothing.
   const autoEnriched = useRef<Set<string>>(new Set());
@@ -428,9 +432,15 @@ export default function SessionScreen() {
       {blocks.map((block, blockIndex) => (
         <View key={block.name} style={styles.block}>
           <View style={styles.blockHeader}>
-            <Text style={{ color: colors.accent, fontSize: 16, fontFamily: font.uiStrong, flex: 1 }}>
-              {block.name}
-            </Text>
+            <Pressable
+              onPress={() => void catalogueEntryForExercise(block.name).then(setInfo)}
+              style={{ flex: 1, minHeight: TOUCH_TARGET, justifyContent: 'center' }}
+              accessibilityLabel={`How to do ${block.name}`}
+            >
+              <Text style={{ color: colors.accent, fontSize: 16, fontFamily: font.uiStrong }}>
+                {block.name}
+              </Text>
+            </Pressable>
             <Pressable onPress={() => void removeExercise(blockIndex)} style={styles.iconBtn}>
               <Text style={{ color: colors.textFaint }}>✕</Text>
             </Pressable>
@@ -563,6 +573,7 @@ export default function SessionScreen() {
                 onPress={() => void addExercise(item.canonicalName, item.bodyweightBased)}
                 style={[styles.pickRow, { borderColor: colors.border }]}
               >
+                <ExerciseIcon pattern={item.movementPattern} size={20} color={colors.textMuted} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.text, fontFamily: font.ui }}>
                     {item.canonicalName}
@@ -603,6 +614,8 @@ export default function SessionScreen() {
       ) : (
         <Button label="Add exercise" onPress={() => setPicking(true)} />
       )}
+
+      <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
 
       <Text style={[styles.note, { color: colors.textFaint }]}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without

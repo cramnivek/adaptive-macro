@@ -2,12 +2,14 @@ import { bodyweightForDates, diffDays, progressionFor } from '@adaptive-macros/e
 import type { DatedSet, ProgressionPoint } from '@adaptive-macros/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { MovementPattern } from '../src/ai/exercises';
 import { Card } from '../src/components/Card';
+import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { LineChart } from '../src/components/LineChart';
 import { Screen } from '../src/components/Screen';
 import { StatTile } from '../src/components/StatTile';
 import { TOUCH_TARGET } from '../src/components/Controls';
-import { listSetsForExercise, listTrainedExercises } from '../src/db';
+import { cataloguePatternsByExerciseName, listSetsForExercise, listTrainedExercises } from '../src/db';
 import { displayWeight, formatDate, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
@@ -38,6 +40,11 @@ export default function ProgressionScreen() {
   const [exercises, setExercises] = useState<TrainedExercise[] | null>(null);
   const [chosen, setChosen] = useState<TrainedExercise | null>(null);
   const [sets, setSets] = useState<DatedSet[] | null>(null);
+  const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
+
+  useEffect(() => {
+    void cataloguePatternsByExerciseName().then(setPatterns);
+  }, []);
 
   useEffect(() => {
     void listTrainedExercises().then((loaded) => {
@@ -125,6 +132,11 @@ export default function ProgressionScreen() {
                     },
                   ]}
                 >
+                  <ExerciseIcon
+                    pattern={patterns[exercise.name]}
+                    size={14}
+                    color={active ? colors.onFill : colors.textMuted}
+                  />
                   <Text style={{ fontFamily: font.uiStrong, color: active ? colors.onFill : colors.text, fontSize: 13 }}>
                     {exercise.name}
                   </Text>
@@ -226,6 +238,9 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   chip: {
     minHeight: TOUCH_TARGET - 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
     justifyContent: 'center',
     paddingHorizontal: space.md,
     marginRight: space.xs,

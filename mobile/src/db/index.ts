@@ -918,6 +918,23 @@ export const catalogueEntryForExercise = async (
   return row ? toCatalogueEntry(row) : null;
 };
 
+/**
+ * Movement pattern for every exercise that has one, keyed by recorded name.
+ *
+ * One query rather than one per row: progression draws a chip per exercise and
+ * looking each one up separately would be a query per chip per render.
+ */
+export const cataloguePatternsByExerciseName = async (): Promise<
+  Record<string, MovementPattern>
+> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ name: string; movement_pattern: string }>(
+    `SELECT e.name, c.movement_pattern
+       FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id`,
+  );
+  return Object.fromEntries(rows.map((r) => [r.name, normalisePattern(r.movement_pattern)]));
+};
+
 // --- logging a session ----------------------------------------------------
 
 export interface ActiveSession {
