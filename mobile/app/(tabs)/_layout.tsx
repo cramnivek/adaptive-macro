@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
-import { useTheme } from '../../src/theme';
+import { font, useTheme } from '../../src/theme';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
@@ -12,6 +12,10 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textFaint,
+        // React Navigation styles its own label, so the typeface pass over our
+        // style sheets never reached it and the tab bar stayed in the system
+        // font on every screen.
+        tabBarLabelStyle: { fontFamily: font.ui },
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,

@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider } from '../src/state/AppStore';
-import { useTheme } from '../src/theme';
+import { font, useTheme } from '../src/theme';
 
 export default function RootLayout() {
   const { colors, isDark } = useTheme();
@@ -47,6 +47,10 @@ export default function RootLayout() {
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.background },
+            // Set once here rather than on each of the eleven modal screens:
+            // React Navigation draws its own title, so it kept the system font
+            // while the screen beneath it was typeset.
+            headerTitleStyle: { fontFamily: font.uiStrong },
           }}
         >
           <Stack.Screen name="(tabs)" />

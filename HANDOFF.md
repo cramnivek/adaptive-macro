@@ -94,8 +94,45 @@ floor. Both have assertions. Do not nudge those hexes without running the test.
 
 **Known and deliberate:** `stepperGlyph` stays in the system font because the `−` is
 U+2212 and it was not confirmed that either bundled face carries that glyph; a
-missing glyph renders as tofu. `Card.title` has no `flexShrink`, which is safe only
-while `right` slots stay narrow.
+missing glyph renders as tofu. The same carve-out covers five symbol-only `<Text>`
+elements in `routines.tsx` (`↑` `↓` `✕`). `Card.title` has no `flexShrink`, which is
+safe only while `right` slots stay narrow.
+
+### What the browser walk found
+
+Walked dark mode at 390px on 2026-09-30. The direction reads: Settings shows all
+seven sections on one screen, the hairline rule is visible, `onFill` is legible on
+every filled control, and the Section header is a real `<button>` with a 44px target.
+
+Three findings the automated gates could not see, all now fixed:
+
+- **The typeface pass was ~22% done.** 76 of 98 style entries had a `fontSize` and no
+  `fontFamily`, because the redesign typeset the shared primitives but not the style
+  sheets each screen defines for itself. Today alone rendered three faces at once.
+  Then a second gap: in React Native Web **any `<Text>` without an explicit family
+  falls back to the system font**, so 19 inline colour-only `<Text>` elements were
+  still untypeset even after the style sheets were done. No test can see a font, and
+  no diff reviewer could see it either — nothing was wrong in any one file.
+- **A stale cross-reference.** `train.tsx` pointed at "Settings → Lifting history"
+  after that card moved into "Your data". No review could catch it: `train.tsx` was
+  not in the diff of the task that moved it.
+- **Nothing else visual regressed.** Verified by reading computed styles in the live
+  DOM rather than by eye.
+
+**Still open, and NOT fixed:**
+
+- **`kg` is clipped on the Weight stepper.** Measured in the live DOM: the suffix
+  overflows its container by 12px with the system font and 13px with Space Grotesk,
+  so this is **pre-existing** and the redesign contributes 1px. Cause is a `flex: 1`
+  `TextInput` measuring 226px inside a 223px parent — React Native Web does not imply
+  `min-width: 0`. Fix by giving the input `minWidth: 0` or the suffix `flexShrink: 0`.
+- **The modal header divider** (visible on Describe) is React Navigation's own
+  default and reads much brighter than the `border` token against near-black.
+- **Light mode has never been looked at.** `prefers-color-scheme` could not be forced
+  without devtools emulation. Its colours are all test-asserted; its layout is
+  identical to dark by construction, but no human has seen it.
+- **The hairline at 1:1 on a real phone.** It read clearly in captures, but those were
+  zoomed ~2x. At `hairlineWidth` and 1.49:1 it may be fainter in daylight.
 
 ## Verified, and how
 
