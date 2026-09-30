@@ -1236,3 +1236,67 @@ export const listSessionSpans = async (): Promise<{ date: ISODate; minutes: numb
     };
   });
 };
+
+/**
+ * The sets of the most recent session that included this exercise.
+ *
+ * This is the "previous" column at the rack: set 1 against set 1, not a single
+ * best or last value. Matching by index is what makes it answerable at a
+ * glance — you are trying to beat the same set, not the session.
+ */
+export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]> => {
+  const db = await getDb();
+  const session = await db.getFirstAsync<{ session_id: string }>(
+    `SELECT s.session_id
+       FROM sets s JOIN sessions w ON w.id = s.session_id
+      WHERE s.exercise_name = ? AND w.finished_at IS NOT NULL
+      ORDER BY w.started_at DESC LIMIT 1`,
+    exerciseName,
+  );
+  if (!session) return [];
+
+  const rows = await db.getAllAsync<{
+    id: string;
+    exercise_name: string;
+    bodyweight_based: number;
+    set_index: number;
+    weight_kg: number | null;
+    reps: number;
+    set_type: string;
+    rpe: number | null;
+  }>(
+    `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
+            s.reps, s.set_type, s.rpe
+       FROM sets s JOIN exercises e ON e.id = s.exercise_id
+      WHERE s.session_id = ? AND s.exercise_name = ?
+      ORDER BY s.set_index`,
+    session.session_id,
+    exerciseName,
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    exerciseName: row.exercise_name,
+    bodyweightBased: row.bodyweight_based === 1,
+    setIndex: row.set_index,
+    weightKg: row.weight_kg,
+    reps: row.reps,
+    setType: row.set_type as SetType,
+    rpe: row.rpe,
+  }));
+};
+
+/** Corrects a set already written, for editing a row after ticking it. */
+export const updateSetValues = async (
+  id: string,
+  weightKg: number | null,
+  reps: number,
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE sets SET weight_kg = ?, reps = ? WHERE id = ?',
+    weightKg,
+    reps,
+    id,
+  );
+};

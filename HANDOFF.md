@@ -51,6 +51,43 @@ idempotent on session start time.
 
 ---
 
+## The workout logger, and what is rough about it
+
+**The design brief: the logging UI should follow Hevy closely.** The logger was
+rebuilt in that direction (`efdd3e4`) and **has not been reviewed against the real
+app by anyone who uses it.** That review is still owed.
+
+`mobile/app/session.tsx` is a list of exercises, each a grid of rows:
+
+```
+SET   PREVIOUS      KG    REPS   ✓
+1     100.0 × 8    [100]  [5]    ✓
+```
+
+- `PREVIOUS` is the same set index from the last finished session
+- A row is a draft until ticked; ticking writes it, editing a ticked row updates it,
+  unticking deletes it
+- A new row copies the one above, falling back to the previous session's set at that
+  index
+- Tapping the set number toggles warmup
+- The header carries elapsed time, set count and Finish
+
+**Known rough edges, all in the logger:**
+
+1. **The header scrolls away.** Finish and the timer sit in the scroll flow, so they
+   disappear as rows are added. Hevy pins them. Most obvious thing to fix first.
+2. **No rest timer.** A deliberate non-goal in the spec, but one of the things Hevy
+   does that people miss.
+3. **No reordering exercises** within a session.
+4. **The exercise picker is a plain inline list** — no muscle-group filter, no
+   recent-first grouping beyond most-used ordering.
+5. **`setIndex` is the row position**, so warmup rows consume indices. Harmless for
+   progression, which excludes warmups, but it makes `PREVIOUS` line up oddly when a
+   session's warmup count changes between sessions.
+
+Judge all of these against the real Hevy app; the rebuild worked from a description
+of its layout, not the app itself.
+
 ## The redesign
 
 Nine commits, 2026-09-29/30. Spec in `docs/superpowers/specs/2026-09-29-visual-identity-and-ia-design.md`,
@@ -208,6 +245,20 @@ Suspect the cache before you go bisecting.
 ---
 
 ## Verifying without a deploy
+
+**For UI work, run the dev server rather than exporting.** `cd mobile && npx expo
+start`, then `w` for a browser or scan the QR code with Expo Go on a real phone.
+Changes hot-reload, so iteration is seconds instead of the minutes an export,
+re-stage and deploy costs. Do **not** prefix it with `CI=1` — that disables file
+watching and you will silently test a stale bundle.
+
+Keep the habit of driving the real build in a browser after a UI change rather than
+trusting the suite. It has now caught five bugs a green suite missed: `expo-file-system`
+missing on web, a MIME-filtered picker unusable on iOS, the OPFS `Invalid VFS state`,
+and — from the 2026-09-30 walk — a typeface pass that had only reached a fifth of the
+app and a stale cross-reference on the Train tab.
+
+### Against a production-shaped build
 
 `gcloud` is not installed in the cloud container, and a service account key was considered and declined — a Cloud Run deploy key also reads the service's env vars, which hold the Gemini key. It is not needed: Chromium is present.
 
