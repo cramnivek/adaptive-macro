@@ -162,10 +162,11 @@ export default function SessionScreen() {
           if (latestTerm.current === term) setMatches(found);
         })
         .catch((error) => {
-          // Typing the name still works; this only means it arrives without a
-          // pattern or a how-to, which is better than blocking the set. Only the
-          // two lookup failures are expected; anything else is a real bug.
+          // Typing the name still works; the failure only means it arrives
+          // without a pattern or a how-to, which is better than blocking the set.
+          // So it is reported rather than raised.
           if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
+          // Only the two lookup failures are expected; anything else is a bug.
           if (error instanceof GroundedLookupError || error instanceof EnrichmentParseError) return;
           console.warn('exercise enrichment failed', error);
         })
