@@ -324,6 +324,14 @@ export default function SessionScreen() {
     setSession(await activeSession());
   };
 
+  /**
+   * Adds a block. `name` is the name the sets will be written under.
+   *
+   * Never the catalogue's `canonicalName` when a recorded name exists: `sets`
+   * carries its own `exercise_name` and PREVIOUS, the progression list and the
+   * icon map all key on it, so logging the model's spelling of a lift already on
+   * record forks it in two and blanks the history of both halves.
+   */
   const addExercise = async (name: string, catalogueBodyweight?: boolean) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -331,8 +339,11 @@ export default function SessionScreen() {
       setPicking(false);
       return notify('Already here', `${trimmed} is already in this session.`);
     }
+    // The stored flag first, the catalogue's second. `exercises.bodyweight_based`
+    // may hold a correction the user made through Settings, and the model's
+    // guess must not quietly overwrite it — a row on record beats a guess.
     const bodyweightBased =
-      catalogueBodyweight ?? known.find((k) => k.name === trimmed)?.bodyweightBased ?? false;
+      known.find((k) => k.name === trimmed)?.bodyweightBased ?? catalogueBodyweight ?? false;
     const block = await blockFor(trimmed, bodyweightBased);
     setBlocks((current) => [...current, { ...block, rows: [] }]);
     setPicking(false);
@@ -570,7 +581,9 @@ export default function SessionScreen() {
             {matches.map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() => void addExercise(item.canonicalName, item.bodyweightBased)}
+                onPress={() =>
+                  void addExercise(item.recordedName ?? item.canonicalName, item.bodyweightBased)
+                }
                 style={[styles.pickRow, { borderColor: colors.border }]}
               >
                 <ExerciseIcon pattern={item.movementPattern} size={20} color={colors.textMuted} />
@@ -601,12 +614,16 @@ export default function SessionScreen() {
             )}
           </ScrollView>
           {search.trim() !== '' && (
-            <Button label={`Add "${search.trim()}"`} onPress={() =>
-                void addExercise(
-                  search,
-                  matches.find((m) => m.canonicalName.toLowerCase() === search.trim().toLowerCase())?.bodyweightBased,
-                )
-              }
+            <Button
+              label={`Add "${search.trim()}"`}
+              onPress={() => {
+                // Typing a catalogue name out in full is the same tap by another
+                // route, so it has to resolve to the same recorded name.
+                const exact = matches.find(
+                  (m) => m.canonicalName.toLowerCase() === search.trim().toLowerCase(),
+                );
+                void addExercise(exact?.recordedName ?? search, exact?.bodyweightBased);
+              }}
             />
           )}
           <Button label="Cancel" variant="subtle" onPress={() => setPicking(false)} />

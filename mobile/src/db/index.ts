@@ -805,6 +805,16 @@ export const setExerciseBodyweightBased = async (
 export interface CatalogueEntry {
   id: string;
   canonicalName: string;
+  /**
+   * The `exercises.name` linked to this entry, if one is.
+   *
+   * The catalogue holds the model's canonical name; history is keyed on the
+   * name the export or the user actually used. They are routinely different —
+   * `Deadlift (Barbell)` comes back as `Barbell Deadlift` — so anything that
+   * writes a set has to use this and not `canonicalName`, or it forks the
+   * exercise in two and leaves the older half's forty sessions unreachable.
+   */
+  recordedName: string | null;
   movementPattern: MovementPattern;
   primaryMuscle: string;
   equipment: string;
@@ -815,6 +825,7 @@ export interface CatalogueEntry {
 interface CatalogueRow {
   id: string;
   canonical_name: string;
+  recorded_name: string | null;
   movement_pattern: string;
   primary_muscle: string;
   equipment: string;
@@ -825,6 +836,7 @@ interface CatalogueRow {
 const toCatalogueEntry = (row: CatalogueRow): CatalogueEntry => ({
   id: row.id,
   canonicalName: row.canonical_name,
+  recordedName: row.recorded_name,
   movementPattern: normalisePattern(row.movement_pattern),
   primaryMuscle: row.primary_muscle,
   equipment: row.equipment,
@@ -889,14 +901,26 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
   return rows.map((r) => r.name);
 };
 
+/**
+ * Catalogue entries matching a term, each carrying the name history is under.
+ *
+ * The join is the point. A picker that offers `Barbell Bench Press` and logs
+ * that string writes a second `exercises` row beside the `Bench Press
+ * (Barbell)` that every previous set belongs to — PREVIOUS goes blank, the
+ * progression list shows the lift twice, and the new row is unlinked so the next
+ * seeding run pays for it again. Grouped and aggregated because two recorded
+ * names can legitimately point at one entry once `exerciseIdFor` links on write;
+ * `MIN` then picks one of them, deterministically.
+ */
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(
-    `SELECT id, canonical_name, movement_pattern, primary_muscle, equipment,
-            bodyweight_based, instructions
-       FROM exercise_catalogue
-      WHERE canonical_name LIKE ?
-      ORDER BY canonical_name
+    `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
+            c.bodyweight_based, c.instructions, MIN(e.name) AS recorded_name
+       FROM exercise_catalogue c LEFT JOIN exercises e ON e.catalogue_id = c.id
+      WHERE c.canonical_name LIKE ?
+      GROUP BY c.id
+      ORDER BY c.canonical_name
       LIMIT ?`,
     `%${term}%`,
     limit,
@@ -910,7 +934,7 @@ export const catalogueEntryForExercise = async (
   const db = await getDb();
   const row = await db.getFirstAsync<CatalogueRow>(
     `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions
+            c.bodyweight_based, c.instructions, e.name AS recorded_name
        FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
       WHERE e.name = ?`,
     exerciseName,
