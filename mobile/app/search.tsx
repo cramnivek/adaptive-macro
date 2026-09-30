@@ -60,10 +60,11 @@ export default function SearchScreen() {
   // food calls router.back(); "Create a food" pushes a new screen). Without
   // this, its eventual resolution would set state on an unmounted screen.
   const mounted = useRef(true);
-  // Every query the auto-lookup has already tried on this screen. Without it a
-  // failed lookup refires the moment its error clears, and deleting a
-  // character then retyping it spends a second call for the same question.
-  const autoAttempted = useRef<Set<string>>(new Set());
+  // How many times the auto-lookup has fired for a query on this screen. A
+  // failed attempt leaves room for one retry — a transient network error is
+  // exactly when a retry is wanted. A success closes the query outright, or
+  // cancelling the candidate sheet would spend another call.
+  const autoAttempts = useRef<Map<string, number>>(new Map());
   useEffect(
     () => () => {
       mounted.current = false;
@@ -128,6 +129,8 @@ export default function SearchScreen() {
   // On top of the 350ms search debounce, so the full sequence is: stop typing,
   // 350ms, database search, settles empty, then this before a call is spent.
   const AUTO_LOOKUP_DELAY_MS = 1200;
+  /** Two attempts per query: the first, and one retry if that one failed. */
+  const MAX_AUTO_ATTEMPTS = 2;
   // Zero results is now handled automatically below. The button survives for
   // one or two results, where a real database hit might still be the right
   // answer and spending a call would be presumptuous.
@@ -144,6 +147,9 @@ export default function SearchScreen() {
       // was in flight. Either way, a result for what they searched a moment
       // ago has nothing to do with what is on screen now.
       if (!mounted.current || latestQuery.current !== trimmed) return;
+      // A found food ends the question. Without this, cancelling the candidate
+      // sheet would leave results empty and let the effect fire again.
+      autoAttempts.current.set(trimmed, MAX_AUTO_ATTEMPTS);
       setCandidate(food);
     } catch (error) {
       if (!mounted.current || latestQuery.current !== trimmed) return;
@@ -164,11 +170,11 @@ export default function SearchScreen() {
     const trimmed = query.trim();
     if (showingFrequent || loading || lookingUp) return;
     if (results.length > 0 || trimmed.length < 2) return;
-    if (autoAttempted.current.has(trimmed)) return;
+    if ((autoAttempts.current.get(trimmed) ?? 0) >= MAX_AUTO_ATTEMPTS) return;
 
     const timer = setTimeout(() => {
       if (!mounted.current || latestQuery.current !== trimmed) return;
-      autoAttempted.current.add(trimmed);
+      autoAttempts.current.set(trimmed, (autoAttempts.current.get(trimmed) ?? 0) + 1);
       void runLookup();
     }, AUTO_LOOKUP_DELAY_MS);
 
