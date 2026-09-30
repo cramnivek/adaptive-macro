@@ -1058,18 +1058,34 @@ export const startSession = async (name: string, date: ISODate): Promise<ActiveS
   return { id, date, name, startedAt, sets: [] };
 };
 
-/** Creates the exercise if this is the first time it has been used. */
+/**
+ * Creates the exercise if this is the first time it has been used.
+ *
+ * Links it to the catalogue in the same statement. Enrichment runs while the
+ * name is still only typed into the picker, so `linkExerciseToCatalogue`'s
+ * UPDATE on `exercises.name` matches nothing — the row does not exist until
+ * here, and it used to arrive with a NULL `catalogue_id`. Tapping the block
+ * header then found no entry and the how-to sheet silently did not open, which
+ * left the instructions working only for exercises a Settings seeding run had
+ * linked: everything except the new movement the feature exists for. The
+ * subquery is NULL when the catalogue knows nothing by that name, which is the
+ * old behaviour and what the seeding queue then picks up.
+ */
 const exerciseIdFor = async (
   db: SQLite.SQLiteDatabase,
   name: string,
   bodyweightBased: boolean,
 ): Promise<string> => {
   await db.runAsync(
-    `INSERT INTO exercises (id, name, bodyweight_based, created_at)
-     VALUES (?, ?, ?, ?) ON CONFLICT (name) DO NOTHING`,
+    `INSERT INTO exercises (id, name, bodyweight_based, catalogue_id, created_at)
+     VALUES (?, ?, ?,
+             (SELECT id FROM exercise_catalogue WHERE canonical_name = ? COLLATE NOCASE),
+             ?)
+     ON CONFLICT (name) DO NOTHING`,
     newId(),
     name,
     bodyweightBased ? 1 : 0,
+    name,
     new Date().toISOString(),
   );
   const row = await db.getFirstAsync<{ id: string }>(

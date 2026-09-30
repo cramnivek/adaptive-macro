@@ -350,6 +350,21 @@ export default function SessionScreen() {
     setSearch('');
   };
 
+  /**
+   * Opens the how-to sheet, or says why it cannot.
+   *
+   * A tap that resolves to `null` used to do nothing at all, which reads as a
+   * broken control rather than as an absence.
+   */
+  const showInfoFor = async (name: string) => {
+    const entry = await catalogueEntryForExercise(name);
+    if (entry) return setInfo(entry);
+    notify(
+      'No how-to yet',
+      `Nothing is catalogued for ${name}. Settings can build the catalogue from your history.`,
+    );
+  };
+
   const removeExercise = async (blockIndex: number) => {
     const block = blocks[blockIndex];
     const sure = await confirm({
@@ -444,7 +459,7 @@ export default function SessionScreen() {
         <View key={block.name} style={styles.block}>
           <View style={styles.blockHeader}>
             <Pressable
-              onPress={() => void catalogueEntryForExercise(block.name).then(setInfo)}
+              onPress={() => void showInfoFor(block.name)}
               style={{ flex: 1, minHeight: TOUCH_TARGET, justifyContent: 'center' }}
               accessibilityLabel={`How to do ${block.name}`}
             >
