@@ -59,6 +59,8 @@ interface Block {
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
 
+const couldNotLookUp = 'Could not look that up. You can still add it.';
+
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
   const seconds = Math.max(0, Math.floor((now - started) / 1000));
@@ -101,6 +103,11 @@ export default function SessionScreen() {
 
   const [matches, setMatches] = useState<CatalogueEntry[]>([]);
   const [enriching, setEnriching] = useState(false);
+  // What to say when the lookup came back with nothing. The spec has a name the
+  // model declines left unlinked and *reported*, not guessed at; Settings
+  // reports it, and the picker used to swallow it and leave the progress line
+  // flickering as the only thing that ever happened.
+  const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [info, setInfo] = useState<CatalogueEntry | null>(null);
   // Same guard as the food search: one automatic call per distinct term, so a
   // failed enrichment cannot refire and retyping costs nothing.
@@ -110,6 +117,7 @@ export default function SessionScreen() {
   useEffect(() => {
     const term = search.trim();
     latestTerm.current = term;
+    setEnrichNote(null);
     if (term.length < 2) {
       setMatches([]);
       return;
@@ -131,13 +139,21 @@ export default function SessionScreen() {
     const term = search.trim();
     if (!picking || enriching || term.length < 2) return;
     if (matches.length > 0 || autoEnriched.current.has(term)) return;
+    // An exercise already on record is not a dead end, whatever the catalogue
+    // knows about it: the picker lists it below and tapping it works. Spending a
+    // call to be told what `exercises` already holds is the waste worth avoiding.
+    if (known.some((k) => k.name.toLowerCase().includes(term.toLowerCase()))) return;
 
     const timer = setTimeout(() => {
       autoEnriched.current.add(term);
       setEnriching(true);
+      setEnrichNote(null);
       void enrichExercises([term], settings.foodLookup.geminiApiKey)
         .then(async ({ entries }) => {
-          if (entries.length === 0) return;
+          if (entries.length === 0) {
+            if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
+            return;
+          }
           const id = await upsertCatalogueEntry(entries[0]);
           await linkExerciseToCatalogue(entries[0].requestedName, id);
           // By the name the model returned, which may not contain what was typed.
@@ -149,6 +165,7 @@ export default function SessionScreen() {
           // Typing the name still works; this only means it arrives without a
           // pattern or a how-to, which is better than blocking the set. Only the
           // two lookup failures are expected; anything else is a real bug.
+          if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
           if (error instanceof GroundedLookupError || error instanceof EnrichmentParseError) return;
           console.warn('exercise enrichment failed', error);
         })
@@ -156,7 +173,7 @@ export default function SessionScreen() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [search, picking, enriching, matches.length, settings.foodLookup.geminiApiKey]);
+  }, [search, picking, enriching, matches.length, known, settings.foodLookup.geminiApiKey]);
 
   // The header clock. One second is the resolution anyone reads it at.
   useEffect(() => {
@@ -436,6 +453,21 @@ export default function SessionScreen() {
 
   const loggedCount = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
+  // Catalogue matches first, then the exercises already on record that no match
+  // covers. Rendering matches alone gave a device with a year of history and no
+  // seeding run an empty box, and made typing a name it already knew fire a
+  // Gemini call for it. A row with no icon and no muscle still logs sets.
+  const pickerTerm = search.trim().toLowerCase();
+  const knownMatches = known.filter(
+    (k) =>
+      k.name.toLowerCase().includes(pickerTerm) &&
+      !matches.some(
+        (m) =>
+          m.recordedName?.toLowerCase() === k.name.toLowerCase() ||
+          m.canonicalName.toLowerCase() === k.name.toLowerCase(),
+      ),
+  );
+
   return (
     <Screen title={session.name}>
       <View style={[styles.header, { borderColor: colors.border }]}>
@@ -615,6 +647,22 @@ export default function SessionScreen() {
                 </View>
               </Pressable>
             ))}
+            {knownMatches.length > 0 && (
+              <Text style={[styles.pickGroup, { color: colors.textFaint }]}>FROM YOUR HISTORY</Text>
+            )}
+            {knownMatches.map((item) => (
+              <Pressable
+                key={`known:${item.name}`}
+                onPress={() => void addExercise(item.name)}
+                style={[styles.pickRow, { borderColor: colors.border }]}
+              >
+                {/* The icon's slot, so these line up with the rows above it. */}
+                <View style={{ width: 20 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontFamily: font.ui }}>{item.name}</Text>
+                </View>
+              </Pressable>
+            ))}
             {enriching && (
               <Text
                 style={{
@@ -626,6 +674,9 @@ export default function SessionScreen() {
               >
                 Looking that exercise up…
               </Text>
+            )}
+            {enrichNote !== null && !enriching && (
+              <Text style={[styles.pickNote, { color: colors.textFaint }]}>{enrichNote}</Text>
             )}
           </ScrollView>
           {search.trim() !== '' && (
@@ -716,6 +767,14 @@ const styles = StyleSheet.create({
     padding: space.sm,
     marginBottom: space.md,
   },
+  pickGroup: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    paddingTop: space.md,
+    paddingBottom: 4,
+  },
+  pickNote: { fontFamily: font.ui, fontSize: 12, padding: space.md },
   pickRow: {
     flexDirection: 'row',
     alignItems: 'center',
