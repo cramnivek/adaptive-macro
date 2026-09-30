@@ -836,7 +836,7 @@ const toCatalogueEntry = (row: CatalogueRow): CatalogueEntry => ({
 export const upsertCatalogueEntry = async (entry: EnrichedExercise): Promise<string> => {
   const db = await getDb();
   const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM exercise_catalogue WHERE canonical_name = ?',
+    'SELECT id FROM exercise_catalogue WHERE canonical_name = ? COLLATE NOCASE',
     entry.canonicalName,
   );
   if (existing) return existing.id;

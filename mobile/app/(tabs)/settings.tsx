@@ -4,10 +4,20 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { describeBackup, exportBackup, parseBackup, restoreBackup } from '../../src/db';
+import {
+  describeBackup,
+  exportBackup,
+  linkExerciseToCatalogue,
+  listUnlinkedExerciseNames,
+  parseBackup,
+  restoreBackup,
+  upsertCatalogueEntry,
+} from '../../src/db';
 import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
+import { BATCH_SIZE, batchNames } from '../../src/ai/exercises';
 import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
+import { enrichExercises } from '../../src/api/gemini';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
@@ -229,6 +239,45 @@ export default function SettingsScreen() {
       notify('Restored', 'Close and reopen the app to load the restored data.');
     } catch (error) {
       notify('Restore failed', (error as Error).message);
+    }
+  };
+
+  const buildCatalogue = async () => {
+    const names = await listUnlinkedExerciseNames();
+    if (names.length === 0) {
+      notify('Nothing to do', 'Every exercise on record already has a catalogue entry.');
+      return;
+    }
+
+    const batches = batchNames(names);
+    const missed: string[] = [];
+
+    try {
+      for (const [index, batch] of batches.entries()) {
+        setBusy(`Batch ${index + 1} of ${batches.length}…`);
+        const { entries, missing } = await enrichExercises(
+          batch,
+          settings.foodLookup.geminiApiKey,
+        );
+        for (const entry of entries) {
+          const id = await upsertCatalogueEntry(entry);
+          await linkExerciseToCatalogue(entry.requestedName, id);
+        }
+        missed.push(...missing);
+      }
+
+      notify(
+        'Catalogue built',
+        missed.length === 0
+          ? `${names.length} exercises catalogued.`
+          : `${names.length - missed.length} catalogued. Not recognised: ${missed.join(', ')}. Run it again to retry those.`,
+      );
+    } catch (error) {
+      // Each batch commits as it completes, so what already linked stays
+      // linked and running it again picks up where this stopped.
+      notify('Stopped partway', `${(error as Error).message} Run it again to continue.`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -486,6 +535,17 @@ export default function SettingsScreen() {
         <Card subtitle="Everything lives on this device and nowhere else.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
+          <View style={{ height: space.sm }} />
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
+            Gives every exercise you have on record a movement pattern, a primary muscle
+            and instructions. Runs {BATCH_SIZE} at a time, so a long history costs a few
+            calls rather than one per exercise. Safe to run again — it skips what is done.
+          </Text>
+          <Button
+            label={busy ?? 'Build the exercise catalogue'}
+            disabled={busy !== null}
+            onPress={() => void buildCatalogue()}
+          />
           <Text style={[styles.note, { color: colors.textFaint }]}>
             There is no server behind this app, so this file is your only backup and your only way onto
             another device. It holds your weigh-ins, your diary and your whole lifting history.
