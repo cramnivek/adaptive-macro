@@ -451,6 +451,7 @@ export interface Backup {
   weights: WeightRow[];
   foods: FoodRow[];
   entries: LogRow[];
+  exerciseCatalogue?: Record<string, unknown>[];
   exercises?: Record<string, unknown>[];
   routines?: Record<string, unknown>[];
   routineExercises?: Record<string, unknown>[];
@@ -472,6 +473,7 @@ export const exportBackup = async (): Promise<Backup> => {
     weights: await db.getAllAsync('SELECT date, kg FROM weights'),
     foods: await db.getAllAsync('SELECT * FROM foods'),
     entries: await db.getAllAsync('SELECT * FROM log_entries'),
+    exerciseCatalogue: await db.getAllAsync('SELECT * FROM exercise_catalogue'),
     exercises: await db.getAllAsync('SELECT * FROM exercises'),
     routines: await db.getAllAsync('SELECT * FROM routines'),
     routineExercises: await db.getAllAsync('SELECT * FROM routine_exercises'),
@@ -557,6 +559,7 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       'sessions',
       'routines',
       'exercises',
+      'exercise_catalogue',
       'log_entries',
       'foods',
       'weights',
@@ -569,6 +572,7 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
     await insertRows(db, 'weights', backup.weights as unknown as Record<string, unknown>[]);
     await insertRows(db, 'foods', backup.foods as unknown as Record<string, unknown>[]);
     await insertRows(db, 'log_entries', backup.entries as unknown as Record<string, unknown>[]);
+    await insertRows(db, 'exercise_catalogue', backup.exerciseCatalogue);
     await insertRows(db, 'exercises', backup.exercises);
     await insertRows(db, 'routines', backup.routines);
     await insertRows(db, 'routine_exercises', backup.routineExercises);

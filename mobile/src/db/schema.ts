@@ -116,4 +116,19 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_sets_session     ON sets (session_id);
   CREATE INDEX IF NOT EXISTS idx_sets_exercise    ON sets (exercise_name);
   `,
+  // v4 — the exercise catalogue
+  `
+  CREATE TABLE IF NOT EXISTS exercise_catalogue (
+    id               TEXT PRIMARY KEY NOT NULL,
+    canonical_name   TEXT NOT NULL UNIQUE,
+    movement_pattern TEXT NOT NULL,
+    primary_muscle   TEXT NOT NULL,
+    equipment        TEXT NOT NULL,
+    bodyweight_based INTEGER NOT NULL DEFAULT 0,
+    instructions     TEXT,
+    created_at       TEXT NOT NULL
+  );
+
+  ALTER TABLE exercises ADD COLUMN catalogue_id TEXT REFERENCES exercise_catalogue (id);
+  `,
 ];
