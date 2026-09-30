@@ -124,6 +124,9 @@ export const parseEnrichment = (
   const entries: EnrichedExercise[] = [];
 
   for (const item of list) {
+    if (typeof item !== 'object' || item === null) {
+      throw new EnrichmentParseError('Enrichment response contained a non-object entry');
+    }
     const row = item as Record<string, unknown>;
     // An entry for something we never asked about tells us nothing and would
     // create a catalogue row no exercise links to.

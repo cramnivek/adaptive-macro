@@ -1,4 +1,10 @@
 import { type Food, type FoodPortion, per100gFromPortion } from '@adaptive-macros/engine';
+import {
+  ENRICHMENT_SCHEMA,
+  enrichmentPromptFor,
+  parseEnrichment,
+  type EnrichedExercise,
+} from '../ai/exercises';
 
 /**
  * Grounded food lookup.
@@ -93,6 +99,11 @@ export const routeFor = (model: string, apiKey: string): GeminiRoute => {
 const GROUNDED_TIMEOUT_MS = 90_000;
 /** The structuring call does no I/O of its own and should be quick. */
 const STRUCTURE_TIMEOUT_MS = 15_000;
+/**
+ * Enrichment does no grounded I/O, so it should be as quick as the structuring
+ * call. If it is not, something is wrong rather than merely slow.
+ */
+const ENRICH_TIMEOUT_MS = 15_000;
 
 /**
  * Above this, a food with no macros at all is not a real figure.
@@ -395,4 +406,41 @@ export const lookupFood = async (
   }
 
   return toCandidateFood(parsed, sources);
+};
+
+/**
+ * Classifies a batch of exercise names and writes their how-to.
+ *
+ * One call, not two. `lookupFood` needs a grounded search first because macros
+ * are published figures and an ungrounded answer is a fabrication. Which muscle
+ * a press loads is general knowledge, so this asks for structured output
+ * directly and carries no grounding charge.
+ */
+export const enrichExercises = async (
+  names: string[],
+  apiKey: string,
+): Promise<{ entries: EnrichedExercise[]; missing: string[] }> => {
+  if (names.length === 0) return { entries: [], missing: [] };
+
+  const response = await postJson(
+    MODEL,
+    {
+      contents: [{ role: 'user', parts: [{ text: enrichmentPromptFor(names) }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: ENRICHMENT_SCHEMA,
+      },
+    },
+    apiKey,
+    ENRICH_TIMEOUT_MS,
+  );
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(textOf(response));
+  } catch {
+    throw new GroundedLookupError('The catalogue lookup returned a malformed response');
+  }
+
+  return parseEnrichment(parsed, names);
 };

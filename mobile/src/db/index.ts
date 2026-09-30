@@ -11,6 +11,7 @@ import type {
 } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
+import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 
 /**
  * The open in flight, not the opened database.
@@ -797,6 +798,124 @@ export const setExerciseBodyweightBased = async (
     bodyweightBased ? 1 : 0,
     name,
   );
+};
+
+// --- the exercise catalogue ------------------------------------------------
+
+export interface CatalogueEntry {
+  id: string;
+  canonicalName: string;
+  movementPattern: MovementPattern;
+  primaryMuscle: string;
+  equipment: string;
+  bodyweightBased: boolean;
+  instructions: string | null;
+}
+
+interface CatalogueRow {
+  id: string;
+  canonical_name: string;
+  movement_pattern: string;
+  primary_muscle: string;
+  equipment: string;
+  bodyweight_based: number;
+  instructions: string | null;
+}
+
+const toCatalogueEntry = (row: CatalogueRow): CatalogueEntry => ({
+  id: row.id,
+  canonicalName: row.canonical_name,
+  movementPattern: normalisePattern(row.movement_pattern),
+  primaryMuscle: row.primary_muscle,
+  equipment: row.equipment,
+  bodyweightBased: row.bodyweight_based === 1,
+  instructions: row.instructions,
+});
+
+/** Creates the entry, or returns the id of the one already holding that name. */
+export const upsertCatalogueEntry = async (entry: EnrichedExercise): Promise<string> => {
+  const db = await getDb();
+  const existing = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM exercise_catalogue WHERE canonical_name = ?',
+    entry.canonicalName,
+  );
+  if (existing) return existing.id;
+
+  const id = newId();
+  await db.runAsync(
+    `INSERT INTO exercise_catalogue
+       (id, canonical_name, movement_pattern, primary_muscle, equipment, bodyweight_based, instructions, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    entry.canonicalName,
+    entry.movementPattern,
+    entry.primaryMuscle,
+    entry.equipment,
+    entry.bodyweightBased ? 1 : 0,
+    entry.instructions,
+    localStamp(),
+  );
+  return id;
+};
+
+/**
+ * Links an exercise to its catalogue entry.
+ *
+ * Only ever writes `catalogue_id`. `exercises.name` is not touched here or
+ * anywhere else: `sets` carries its own `exercise_name` copy and
+ * `listSetsForExercise` keys on it, so a rename rewrites history silently.
+ */
+export const linkExerciseToCatalogue = async (
+  exerciseName: string,
+  catalogueId: string,
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE exercises SET catalogue_id = ? WHERE name = ?',
+    catalogueId,
+    exerciseName,
+  );
+};
+
+/** Exercise names with no catalogue entry yet — the seeding queue. */
+export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ name: string }>(
+    `SELECT e.name
+       FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
+      WHERE e.catalogue_id IS NULL
+      GROUP BY e.id ORDER BY COUNT(s.id) DESC, e.name`,
+  );
+  return rows.map((r) => r.name);
+};
+
+export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<CatalogueRow>(
+    `SELECT id, canonical_name, movement_pattern, primary_muscle, equipment,
+            bodyweight_based, instructions
+       FROM exercise_catalogue
+      WHERE canonical_name LIKE ?
+      ORDER BY canonical_name
+      LIMIT ?`,
+    `%${term}%`,
+    limit,
+  );
+  return rows.map(toCatalogueEntry);
+};
+
+export const catalogueEntryForExercise = async (
+  exerciseName: string,
+): Promise<CatalogueEntry | null> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<CatalogueRow>(
+    `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
+            c.bodyweight_based, c.instructions
+       FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
+      WHERE e.name = ?`,
+    exerciseName,
+  );
+  return row ? toCatalogueEntry(row) : null;
 };
 
 // --- logging a session ----------------------------------------------------

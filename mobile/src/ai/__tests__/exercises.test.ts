@@ -110,8 +110,20 @@ describe('parseEnrichment', () => {
     },
   );
 
-  it('throws when an entry is missing a required field', () => {
-    const broken = { ...entry('Squat'), instructions: undefined };
+  it('throws EnrichmentParseError, not TypeError, for a null entry', () => {
+    expect(() => parseEnrichment({ exercises: [null] }, ['Squat'])).toThrow(EnrichmentParseError);
+  });
+
+  // bodyweightBased as the string 'false' is the likeliest real model slip.
+  it.each([
+    ['canonicalName', undefined],
+    ['primaryMuscle', undefined],
+    ['equipment', undefined],
+    ['instructions', undefined],
+    ['bodyweightBased', undefined],
+    ['bodyweightBased', 'false'],
+  ])('throws when %s is %o', (field, value) => {
+    const broken = { ...entry('Squat'), [field]: value };
     expect(() => parseEnrichment({ exercises: [broken] }, ['Squat'])).toThrow(
       EnrichmentParseError,
     );
