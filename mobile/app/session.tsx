@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { enrichExercises } from '../src/api/gemini';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
 import {
@@ -21,11 +22,14 @@ import {
   finishSession,
   lastSessionSets,
   listExerciseNames,
+  linkExerciseToCatalogue,
   listRoutines,
+  searchCatalogue,
   startSession,
   updateSetValues,
+  upsertCatalogueEntry,
 } from '../src/db';
-import type { ActiveSession, LoggedSet, Routine } from '../src/db';
+import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
@@ -90,6 +94,58 @@ export default function SessionScreen() {
   const [search, setSearch] = useState('');
   const [now, setNow] = useState(Date.now());
   const started = useRef(false);
+
+  const [matches, setMatches] = useState<CatalogueEntry[]>([]);
+  const [enriching, setEnriching] = useState(false);
+  // Same guard as the food search: one automatic call per distinct term, so a
+  // failed enrichment cannot refire and retyping costs nothing.
+  const autoEnriched = useRef<Set<string>>(new Set());
+  const latestTerm = useRef('');
+
+  useEffect(() => {
+    const term = search.trim();
+    latestTerm.current = term;
+    if (term.length < 2) {
+      setMatches([]);
+      return;
+    }
+    let current = true;
+    void searchCatalogue(term).then((found) => {
+      if (current) setMatches(found);
+    });
+    return () => {
+      current = false;
+    };
+  }, [search]);
+
+  // A name the catalogue does not know is the dead end worth removing. Wait for
+  // typing to settle, then classify it and write its how-to, once.
+  useEffect(() => {
+    const term = search.trim();
+    if (!picking || enriching || term.length < 2) return;
+    if (matches.length > 0 || autoEnriched.current.has(term)) return;
+
+    const timer = setTimeout(() => {
+      autoEnriched.current.add(term);
+      setEnriching(true);
+      void enrichExercises([term], settings.foodLookup.geminiApiKey)
+        .then(async ({ entries }) => {
+          if (entries.length === 0) return;
+          const id = await upsertCatalogueEntry(entries[0]);
+          await linkExerciseToCatalogue(entries[0].requestedName, id);
+          const found = await searchCatalogue(term);
+          // The user may have kept typing while this was in flight.
+          if (latestTerm.current === term) setMatches(found);
+        })
+        .catch(() => {
+          // Typing the name still works; this only means it arrives without a
+          // pattern or a how-to, which is better than blocking the set.
+        })
+        .finally(() => setEnriching(false));
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [search, picking, enriching, matches.length, settings.foodLookup.geminiApiKey]);
 
   // The header clock. One second is the resolution anyone reads it at.
   useEffect(() => {
@@ -493,21 +549,37 @@ export default function SessionScreen() {
             ]}
           />
           <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
-            {known
-              .filter((k) => k.name.toLowerCase().includes(search.trim().toLowerCase()))
-              .slice(0, 30)
-              .map((item) => (
-                <Pressable
-                  key={item.name}
-                  onPress={() => void addExercise(item.name)}
-                  style={[styles.pickRow, { borderColor: colors.border }]}
-                >
-                  <Text style={{ color: colors.text, fontFamily: font.ui }}>{item.name}</Text>
-                  {item.bodyweightBased && (
-                    <Text style={{ color: colors.textFaint, fontSize: 12, fontFamily: font.ui }}>bodyweight</Text>
-                  )}
-                </Pressable>
-              ))}
+            {matches.map((item) => (
+              <Pressable
+                key={item.id}
+                onPress={() => void addExercise(item.canonicalName)}
+                style={[styles.pickRow, { borderColor: colors.border }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontFamily: font.ui }}>
+                    {item.canonicalName}
+                  </Text>
+                  <Text
+                    style={{ color: colors.textFaint, fontSize: 12, fontFamily: font.ui }}
+                  >
+                    {item.primaryMuscle} · {item.equipment}
+                    {item.bodyweightBased ? ' · bodyweight' : ''}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+            {enriching && (
+              <Text
+                style={{
+                  color: colors.textFaint,
+                  fontSize: 12,
+                  fontFamily: font.ui,
+                  padding: space.md,
+                }}
+              >
+                Looking that exercise up…
+              </Text>
+            )}
           </ScrollView>
           {search.trim() !== '' && (
             <Button label={`Add "${search.trim()}"`} onPress={() => void addExercise(search)} />
