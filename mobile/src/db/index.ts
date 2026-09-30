@@ -904,22 +904,33 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
 /**
  * Catalogue entries matching a term, each carrying the name history is under.
  *
- * The join is the point. A picker that offers `Barbell Bench Press` and logs
- * that string writes a second `exercises` row beside the `Bench Press
+ * The linked name is the point. A picker that offers `Barbell Bench Press` and
+ * logs that string writes a second `exercises` row beside the `Bench Press
  * (Barbell)` that every previous set belongs to — PREVIOUS goes blank, the
  * progression list shows the lift twice, and the new row is unlinked so the next
- * seeding run pays for it again. Grouped and aggregated because two recorded
- * names can legitimately point at one entry once `exerciseIdFor` links on write;
- * `MIN` then picks one of them, deterministically.
+ * seeding run pays for it again.
+ *
+ * Most-trained-first, because more than one row can legitimately link to one
+ * entry: `exerciseIdFor` links on write, and a device that ran the build with
+ * the bug above already has both halves of a forked lift pointing here. The
+ * whole purpose of carrying this name is to land sets where the history is, so
+ * of the candidates the right one is the one with the sets — alphabetical order
+ * would have picked `Barbell Bench Press` and its single set over the forty
+ * sessions under `Bench Press (Barbell)`.
  */
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(
     `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions, MIN(e.name) AS recorded_name
-       FROM exercise_catalogue c LEFT JOIN exercises e ON e.catalogue_id = c.id
+            c.bodyweight_based, c.instructions,
+            (SELECT e.name
+               FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
+              WHERE e.catalogue_id = c.id
+              GROUP BY e.id
+              ORDER BY COUNT(s.id) DESC, e.name
+              LIMIT 1) AS recorded_name
+       FROM exercise_catalogue c
       WHERE c.canonical_name LIKE ?
-      GROUP BY c.id
       ORDER BY c.canonical_name
       LIMIT ?`,
     `%${term}%`,
