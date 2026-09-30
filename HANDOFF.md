@@ -1,6 +1,6 @@
 # Handoff
 
-Last updated 2026-09-30. Branch `feat/web-deployment`, **47 commits ahead of `main`**, working tree clean, **not pushed**.
+Last updated 2026-09-30. Branch `feat/web-deployment`, **56 commits ahead of `main`**, working tree clean, pushed, and deployed.
 
 322 tests pass (`npm test`) — engine 104, mobile 152, gemini-proxy 66. `npm run typecheck` is clean, web and android both export.
 
