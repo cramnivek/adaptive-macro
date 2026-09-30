@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GroundedLookupError, UngroundedResponseError, lookupFood, routeFor, sourceDomainsFrom, toCandidateFood } from '../gemini';
+import { GeminiAccessError, GroundedLookupError, UngroundedResponseError, enrichExercises, lookupFood, routeFor, sourceDomainsFrom, toCandidateFood } from '../gemini';
+import { MOVEMENT_PATTERNS } from '../../ai/exercises';
 
 const validRaw = {
   name: 'Chickenjoy',
@@ -402,6 +403,138 @@ describe('routeFor', () => {
     const route = routeFor('gemini-3.5-flash', '');
 
     expect(JSON.stringify(route)).not.toContain('AIza');
+  });
+});
+
+/**
+ * The one request shape the app sends that no test used to cover.
+ *
+ * `ENRICHMENT_SCHEMA` is data, not code, so nothing in `tsc` ever proved the
+ * posted body was a schema Gemini accepts — a drifted pattern list or a
+ * misspelled key would fail every enrichment call at runtime behind a green
+ * suite. A live 20-name call confirms the shape is currently accepted, so these
+ * are regression insurance on the request the app actually posts.
+ */
+describe('enrichExercises', () => {
+  const jsonResponse = (status: number, body: unknown) => ({
+    status,
+    ok: status >= 200 && status < 300,
+    json: async () => body,
+  });
+
+  const bodyOf = (call: unknown[]): any => JSON.parse((call[1] as { body: string }).body);
+
+  const enriched = {
+    requestedName: 'Bench Press (Barbell)',
+    canonicalName: 'Barbell Bench Press',
+    movementPattern: 'push',
+    primaryMuscle: 'chest',
+    equipment: 'barbell',
+    bodyweightBased: false,
+    instructions: 'Lie on the bench. Lower the bar to your chest. Press it back up.',
+  };
+
+  const responseWith = (text: string) => ({
+    candidates: [{ content: { parts: [{ text }] } }],
+  });
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('posts the movement patterns as the schema enum, in step with MOVEMENT_PATTERNS', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, responseWith(JSON.stringify({ exercises: [enriched] }))),
+    );
+
+    await enrichExercises(['Bench Press (Barbell)'], 'test-key');
+
+    const schema = bodyOf(fetchMock.mock.calls[0]).generationConfig.responseSchema;
+    expect(schema.properties.exercises.items.properties.movementPattern.enum).toEqual([
+      ...MOVEMENT_PATTERNS,
+    ]);
+    expect(schema.properties.exercises.type).toBe('array');
+    expect(schema.properties.exercises.items.type).toBe('object');
+  });
+
+  // Structured output and grounding are mutually exclusive: asking for both
+  // returns valid JSON with the citations stripped. Enrichment needs the JSON.
+  it('asks for JSON and attaches no search tool', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, responseWith(JSON.stringify({ exercises: [enriched] }))),
+    );
+
+    await enrichExercises(['Bench Press (Barbell)'], 'test-key');
+
+    const body = bodyOf(fetchMock.mock.calls[0]);
+    expect(body.generationConfig.responseMimeType).toBe('application/json');
+    expect(body.tools).toBeUndefined();
+  });
+
+  it('returns the entry under the requested spelling', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, responseWith(JSON.stringify({ exercises: [enriched] }))),
+    );
+
+    const { entries, missing } = await enrichExercises(['Bench Press (Barbell)'], 'test-key');
+
+    expect(missing).toEqual([]);
+    expect(entries[0].requestedName).toBe('Bench Press (Barbell)');
+    expect(entries[0].canonicalName).toBe('Barbell Bench Press');
+  });
+
+  it('spends no call on an empty list', async () => {
+    const result = await enrichExercises([], 'test-key');
+
+    expect(result).toEqual({ entries: [], missing: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // A batch of twenty emits ~2,000 output tokens plus thinking, so a body cut
+  // off mid-JSON is the realistic failure. It must arrive as a transient
+  // failure, because seeding retries those and abandons the queue on the others.
+  it('surfaces a truncated body as a retryable GroundedLookupError', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, responseWith('{"exercises":[{"requestedName":"Bench Pr')),
+    );
+
+    await expect(enrichExercises(['Bench Press (Barbell)'], 'test-key')).rejects.toBeInstanceOf(
+      GroundedLookupError,
+    );
+    await expect(
+      enrichExercises(['Bench Press (Barbell)'], 'test-key'),
+    ).rejects.not.toBeInstanceOf(GeminiAccessError);
+  });
+
+  // The other half of that distinction: a rejected key or an exhausted quota
+  // answers the next batch the same way, so seeding must stop rather than spend
+  // the rest of the queue finding out.
+  it.each([[400], [401], [403], [429]])(
+    'surfaces HTTP %i as a GeminiAccessError, which stops the queue',
+    async (status) => {
+      fetchMock.mockResolvedValue(jsonResponse(status, {}));
+
+      await expect(enrichExercises(['Squat'], 'test-key')).rejects.toBeInstanceOf(
+        GeminiAccessError,
+      );
+    },
+  );
+
+  it('surfaces a server error as a plain GroundedLookupError, not an access failure', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(503, {}));
+
+    const call = enrichExercises(['Squat'], 'test-key');
+    await expect(call).rejects.toBeInstanceOf(GroundedLookupError);
+    await expect(enrichExercises(['Squat'], 'test-key')).rejects.not.toBeInstanceOf(
+      GeminiAccessError,
+    );
   });
 });
 

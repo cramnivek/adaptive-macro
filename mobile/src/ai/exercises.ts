@@ -77,7 +77,16 @@ export const enrichmentPromptFor = (names: string[]): string =>
     ...names.map((name) => `- ${name}`),
   ].join('\n');
 
-export const ENRICHMENT_SCHEMA: Record<string, unknown> = {
+/**
+ * `as const` so a typo in it is a type error rather than a runtime surprise.
+ *
+ * Typed `Record<string, unknown>`, every key and value here was unchecked: a
+ * misspelled `propertes` or a pattern list that drifted from
+ * `MOVEMENT_PATTERNS` would fail every enrichment call at runtime with a fully
+ * green suite behind it. The shape is checked against a mocked request in
+ * `src/api/__tests__/gemini.test.ts` for the same reason.
+ */
+export const ENRICHMENT_SCHEMA = {
   type: 'object',
   properties: {
     exercises: {
@@ -106,7 +115,7 @@ export const ENRICHMENT_SCHEMA: Record<string, unknown> = {
     },
   },
   required: ['exercises'],
-};
+} as const;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== '';
