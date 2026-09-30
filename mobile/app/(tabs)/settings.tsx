@@ -15,7 +15,7 @@ import {
 } from '../../src/db';
 import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
-import { BATCH_SIZE, batchNames } from '../../src/ai/exercises';
+import { BATCH_SIZE, EnrichmentParseError, batchNames } from '../../src/ai/exercises';
 import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
 import { enrichExercises } from '../../src/api/gemini';
 import { Card } from '../../src/components/Card';
@@ -243,42 +243,76 @@ export default function SettingsScreen() {
   };
 
   const buildCatalogue = async () => {
-    const names = await listUnlinkedExerciseNames();
-    if (names.length === 0) {
-      notify('Nothing to do', 'Every exercise on record already has a catalogue entry.');
-      return;
-    }
+    const list = (items: string[]) =>
+      items.length > 10
+        ? `${items.slice(0, 10).join(', ')} and ${items.length - 10} more`
+        : items.join(', ');
 
-    const batches = batchNames(names);
     const missed: string[] = [];
+    const unreadable: string[] = [];
+    let stoppedEarly: string | null = null;
+    let total = 0;
 
     try {
+      const names = await listUnlinkedExerciseNames();
+      if (names.length === 0) {
+        notify('Nothing to do', 'Every exercise on record already has a catalogue entry.');
+        return;
+      }
+      total = names.length;
+
+      const batches = batchNames(names);
       for (const [index, batch] of batches.entries()) {
         setBusy(`Batch ${index + 1} of ${batches.length}…`);
-        const { entries, missing } = await enrichExercises(
-          batch,
-          settings.foodLookup.geminiApiKey,
-        );
-        for (const entry of entries) {
-          const id = await upsertCatalogueEntry(entry);
-          await linkExerciseToCatalogue(entry.requestedName, id);
+        try {
+          const { entries, missing } = await enrichExercises(
+            batch,
+            settings.foodLookup.geminiApiKey,
+          );
+          for (const entry of entries) {
+            const id = await upsertCatalogueEntry(entry);
+            await linkExerciseToCatalogue(entry.requestedName, id);
+          }
+          missed.push(...missing);
+        } catch (error) {
+          if (error instanceof EnrichmentParseError) {
+            // One unreadable entry fails its whole batch by design, and it will
+            // fail again every run. Carrying on means the rest of the history
+            // still gets catalogued instead of being starved behind it.
+            unreadable.push(...batch);
+            continue;
+          }
+          // A network or HTTP failure will almost certainly hit the next batch too.
+          stoppedEarly = (error as Error).message;
+          break;
         }
-        missed.push(...missing);
       }
-
-      notify(
-        'Catalogue built',
-        missed.length === 0
-          ? `${names.length} exercises catalogued.`
-          : `${names.length - missed.length} catalogued. Not recognised: ${missed.join(', ')}. Run it again to retry those.`,
-      );
     } catch (error) {
-      // Each batch commits as it completes, so what already linked stays
-      // linked and running it again picks up where this stopped.
-      notify('Stopped partway', `${(error as Error).message} Run it again to continue.`);
+      notify('Catalogue failed', (error as Error).message);
+      return;
     } finally {
       setBusy(null);
     }
+
+    // Each batch commits as it completes, so what already linked stays linked.
+    const parts = [`${total - missed.length - unreadable.length} of ${total} catalogued.`];
+    if (missed.length > 0) {
+      parts.push(`Not recognised: ${list(missed)}. Running it again may pick these up.`);
+    }
+    if (unreadable.length > 0) {
+      parts.push(
+        `Could not be read: ${list(unreadable)}. Running it again will not help these — rename them or add them by hand.`,
+      );
+    }
+    if (stoppedEarly !== null) {
+      parts.push(
+        `Stopped early: ${stoppedEarly.replace(/[.\s]+$/, '')}. Running it again resumes from where it got to.`,
+      );
+    }
+    notify(
+      stoppedEarly !== null ? 'Stopped partway' : unreadable.length > 0 ? 'Catalogue partly built' : 'Catalogue built',
+      parts.join(' '),
+    );
   };
 
   return (
@@ -535,17 +569,6 @@ export default function SettingsScreen() {
         <Card subtitle="Everything lives on this device and nowhere else.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
-          <View style={{ height: space.sm }} />
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
-            Gives every exercise you have on record a movement pattern, a primary muscle
-            and instructions. Runs {BATCH_SIZE} at a time, so a long history costs a few
-            calls rather than one per exercise. Safe to run again — it skips what is done.
-          </Text>
-          <Button
-            label={busy ?? 'Build the exercise catalogue'}
-            disabled={busy !== null}
-            onPress={() => void buildCatalogue()}
-          />
           <Text style={[styles.note, { color: colors.textFaint }]}>
             There is no server behind this app, so this file is your only backup and your only way onto
             another device. It holds your weigh-ins, your diary and your whole lifting history.
@@ -557,6 +580,17 @@ export default function SettingsScreen() {
               backup now, and again after anything you would mind losing.
             </Text>
           )}
+          <View style={{ height: space.sm }} />
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
+            Gives every exercise you have on record a movement pattern, a primary muscle
+            and instructions. Runs {BATCH_SIZE} at a time, so a long history costs a few
+            calls rather than one per exercise. Safe to run again — it skips what is done.
+          </Text>
+          <Button
+            label={busy ?? 'Build the exercise catalogue'}
+            disabled={busy !== null}
+            onPress={() => void buildCatalogue()}
+          />
         </Card>
 
         <Card title="Lifting history">
