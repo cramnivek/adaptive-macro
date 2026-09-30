@@ -335,7 +335,7 @@ export default function DescribeScreen() {
                         {Math.round(scaled.kcal)} kcal · P {scaled.proteinG.toFixed(1)} · C{' '}
                         {scaled.carbsG.toFixed(1)} · F {scaled.fatG.toFixed(1)}
                         {adjusted && (
-                          <Text style={{ color: colors.textFaint }}>
+                          <Text style={{ fontFamily: font.ui, color: colors.textFaint }}>
                             {'  '}· scaled from {Math.round(draft.item.grams)} g
                           </Text>
                         )}

@@ -133,7 +133,7 @@ export default function TrainScreen() {
               style={[styles.row, { borderColor: colors.border }]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text }} numberOfLines={1}>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.text }} numberOfLines={1}>
                   {name}
                 </Text>
                 <Text style={[styles.note, { color: colors.textFaint }]}>
@@ -160,7 +160,7 @@ export default function TrainScreen() {
           {recent.slice(0, 5).map((session) => (
             <View key={session.id} style={[styles.row, { borderColor: colors.border }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text }}>{session.name}</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{session.name}</Text>
                 <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
                   {formatDate(session.date)} · {session.exercises.join(', ')}
                 </Text>

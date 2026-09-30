@@ -127,12 +127,12 @@ export default function ImportWorkoutsScreen() {
                     style={[styles.row, { borderColor: colors.border }]}
                   >
                     <View style={styles.rowText}>
-                      <Text style={{ color: colors.text }}>{exercise.name}</Text>
+                      <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{exercise.name}</Text>
                       <Text style={[styles.note, { color: colors.textFaint }]}>
                         {exercise.setCount} sets
                       </Text>
                     </View>
-                    <Text style={{ color: on ? colors.accent : colors.textFaint }}>
+                    <Text style={{ fontFamily: font.ui, color: on ? colors.accent : colors.textFaint }}>
                       {on ? 'Bodyweight' : 'Weighted'}
                     </Text>
                   </Pressable>

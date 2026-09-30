@@ -148,7 +148,7 @@ export default function RoutinesScreen() {
           {draft.map((item, index) => (
             <View key={item.name} style={[styles.row, { borderColor: colors.border }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text }}>{item.name}</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{item.name}</Text>
                 <Text style={[styles.note, { color: colors.textFaint }]}>
                   {item.targetSets} sets{item.bodyweightBased ? ' · bodyweight' : ''}
                 </Text>
@@ -169,7 +169,7 @@ export default function RoutinesScreen() {
                 }
                 style={styles.iconBtn}
               >
-                <Text style={{ color: colors.accent }}>sets</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.accent }}>sets</Text>
               </Pressable>
               <Pressable
                 onPress={() => setDraft((c) => c.filter((_, i) => i !== index))}
@@ -235,10 +235,10 @@ export default function RoutinesScreen() {
               <Text style={{ color: colors.textMuted }}>↓</Text>
             </Pressable>
             <Pressable onPress={() => edit(routine)} style={styles.iconBtn}>
-              <Text style={{ color: colors.accent }}>Edit</Text>
+              <Text style={{ fontFamily: font.uiStrong, color: colors.accent }}>Edit</Text>
             </Pressable>
             <Pressable onPress={() => void remove(routine)} style={styles.iconBtn}>
-              <Text style={{ color: colors.danger }}>Delete</Text>
+              <Text style={{ fontFamily: font.uiStrong, color: colors.danger }}>Delete</Text>
             </Pressable>
           </View>
           {index === 0 && (
@@ -272,7 +272,7 @@ export default function RoutinesScreen() {
               style={[styles.row, { borderColor: colors.border }]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text }}>{session.name}</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{session.name}</Text>
                 <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
                   {formatDate(session.date)} · {session.exercises.join(', ')}
                 </Text>

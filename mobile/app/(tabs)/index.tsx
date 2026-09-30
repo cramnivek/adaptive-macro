@@ -68,7 +68,7 @@ export default function TodayScreen() {
           onPress={() => setSelectedDate(todayISO())}
           style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
-          <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontWeight: '600' }}>
+          <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontFamily: font.uiStrong }}>
             {isToday ? 'Today' : 'Jump to today'}
           </Text>
         </Pressable>

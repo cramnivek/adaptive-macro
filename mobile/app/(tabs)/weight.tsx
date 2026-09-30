@@ -152,7 +152,7 @@ export default function WeightScreen() {
             <Text style={{ fontFamily: font.figure, fontVariant: ['tabular-nums'], color: colors.textMuted, fontSize: 14 }}>
               {formatDate(row.date)}
               {outlierDates.has(row.date) && (
-                <Text style={{ color: colors.warning }}> · discounted</Text>
+                <Text style={{ fontFamily: font.ui, color: colors.warning }}> · discounted</Text>
               )}
             </Text>
             <Text style={[styles.rowValue, { color: colors.text }]}>{formatWeight(row.kg, units)}</Text>

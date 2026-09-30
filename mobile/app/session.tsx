@@ -270,7 +270,7 @@ export default function SessionScreen() {
                 style={[styles.setRow, { borderColor: colors.border }]}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text }}>{routine.name}</Text>
+                  <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{routine.name}</Text>
                   <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
                     {routine.exercises.map((e) => e.name).join(' · ')}
                   </Text>
@@ -372,8 +372,8 @@ export default function SessionScreen() {
               onLongPress={() => void removeSet(set.id)}
               style={[styles.setRow, { borderColor: colors.border }]}
             >
-              <Text style={{ color: colors.textFaint, width: 28 }}>{index + 1}</Text>
-              <Text style={{ color: colors.text, flex: 1 }}>
+              <Text style={{ fontFamily: font.figure, fontVariant: ['tabular-nums'], color: colors.textFaint, width: 28 }}>{index + 1}</Text>
+              <Text style={{ fontFamily: font.figure, fontVariant: ['tabular-nums'], color: colors.text, flex: 1 }}>
                 {set.weightKg === null
                   ? 'bodyweight'
                   : `${displayWeight(set.weightKg, settings.units).toFixed(1)} ${unit}`}
