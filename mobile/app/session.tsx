@@ -11,7 +11,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { enrichExercises } from '../src/api/gemini';
+import { EnrichmentParseError } from '../src/ai/exercises';
+import { GroundedLookupError, enrichExercises } from '../src/api/gemini';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
 import {
@@ -110,9 +111,11 @@ export default function SessionScreen() {
       return;
     }
     let current = true;
-    void searchCatalogue(term).then((found) => {
-      if (current) setMatches(found);
-    });
+    void searchCatalogue(term)
+      .then((found) => {
+        if (current) setMatches(found);
+      })
+      .catch((error) => console.warn('catalogue search failed', error));
     return () => {
       current = false;
     };
@@ -133,13 +136,17 @@ export default function SessionScreen() {
           if (entries.length === 0) return;
           const id = await upsertCatalogueEntry(entries[0]);
           await linkExerciseToCatalogue(entries[0].requestedName, id);
-          const found = await searchCatalogue(term);
+          // By the name the model returned, which may not contain what was typed.
+          const found = await searchCatalogue(entries[0].canonicalName);
           // The user may have kept typing while this was in flight.
           if (latestTerm.current === term) setMatches(found);
         })
-        .catch(() => {
+        .catch((error) => {
           // Typing the name still works; this only means it arrives without a
-          // pattern or a how-to, which is better than blocking the set.
+          // pattern or a how-to, which is better than blocking the set. Only the
+          // two lookup failures are expected; anything else is a real bug.
+          if (error instanceof GroundedLookupError || error instanceof EnrichmentParseError) return;
+          console.warn('exercise enrichment failed', error);
         })
         .finally(() => setEnriching(false));
     }, 1200);
@@ -313,14 +320,15 @@ export default function SessionScreen() {
     setSession(await activeSession());
   };
 
-  const addExercise = async (name: string) => {
+  const addExercise = async (name: string, catalogueBodyweight?: boolean) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (blocks.some((b) => b.name === trimmed)) {
       setPicking(false);
       return notify('Already here', `${trimmed} is already in this session.`);
     }
-    const bodyweightBased = known.find((k) => k.name === trimmed)?.bodyweightBased ?? false;
+    const bodyweightBased =
+      catalogueBodyweight ?? known.find((k) => k.name === trimmed)?.bodyweightBased ?? false;
     const block = await blockFor(trimmed, bodyweightBased);
     setBlocks((current) => [...current, { ...block, rows: [] }]);
     setPicking(false);
@@ -552,7 +560,7 @@ export default function SessionScreen() {
             {matches.map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() => void addExercise(item.canonicalName)}
+                onPress={() => void addExercise(item.canonicalName, item.bodyweightBased)}
                 style={[styles.pickRow, { borderColor: colors.border }]}
               >
                 <View style={{ flex: 1 }}>
@@ -582,7 +590,13 @@ export default function SessionScreen() {
             )}
           </ScrollView>
           {search.trim() !== '' && (
-            <Button label={`Add "${search.trim()}"`} onPress={() => void addExercise(search)} />
+            <Button label={`Add "${search.trim()}"`} onPress={() =>
+                void addExercise(
+                  search,
+                  matches.find((m) => m.canonicalName.toLowerCase() === search.trim().toLowerCase())?.bodyweightBased,
+                )
+              }
+            />
           )}
           <Button label="Cancel" variant="subtle" onPress={() => setPicking(false)} />
         </View>
