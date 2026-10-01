@@ -108,9 +108,17 @@ const STRUCTURE_TIMEOUT_MS = 15_000;
  * 5,114 thinking tokens. So every full batch aborted, every run, and the abort
  * stopped the whole queue. A generation call is bounded by the tokens it emits
  * and the thinking it does first, neither of which the structuring call's ~10
- * scalars come anywhere near. 60 s is that measurement with headroom over twice
- * it, which is the right shape for a one-off catalogue build the user is
- * watching a progress line for.
+ * scalars come anywhere near.
+ *
+ * Re-measured after muscle regions and numbered steps were added to the same
+ * call, because the figure above was taken before they existed and a comment
+ * that quietly stops being true is worse than no comment: the same 20-name
+ * batch now takes **33.8 s**, 2,930 output tokens and 5,835 thinking tokens,
+ * and returns all twenty entries complete. So 60 s is 1.77x the real thing
+ * rather than the "over twice" this used to claim — still the right shape for a
+ * one-off catalogue build the user is watching a progress line for, but
+ * narrower than it reads, and worth re-measuring again before anything else is
+ * added to this response.
  */
 const ENRICH_TIMEOUT_MS = 60_000;
 

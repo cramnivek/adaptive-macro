@@ -8,6 +8,7 @@ import {
   describeBackup,
   exportBackup,
   linkExerciseToCatalogue,
+  backfillCatalogueRegions,
   listCatalogueNamesNeedingRegions,
   listUnlinkedExerciseNames,
   parseBackup,
@@ -264,7 +265,12 @@ export default function SettingsScreen() {
       // feature was added for.
       const unlinked = await listUnlinkedExerciseNames();
       const needRegions = await listCatalogueNamesNeedingRegions();
-      const names = [...unlinked, ...needRegions];
+      // Backfill rows are written by id, never by the name that comes back:
+      // ask about `Pull Up` and the model may answer `Pull-Up`, which would
+      // miss the row and insert an orphan holding the regions while the real
+      // entry stayed empty and was asked about again every run.
+      const backfillIds = new Map(needRegions.map((t) => [t.canonicalName, t.id]));
+      const names = [...unlinked, ...needRegions.map((t) => t.canonicalName)];
       if (names.length === 0) {
         notify('Nothing to do', 'Every exercise on record is catalogued, with its muscles and steps.');
         return;
@@ -273,7 +279,6 @@ export default function SettingsScreen() {
       // rows that are already linked, and counting those as links would report
       // more than were ever asked for.
       const linkable = new Set(unlinked);
-      backfilled = needRegions.length;
       total = unlinked.length;
 
       const batches = batchNames(names);
@@ -285,6 +290,13 @@ export default function SettingsScreen() {
             settings.foodLookup.geminiApiKey,
           );
           for (const entry of entries) {
+            const target = backfillIds.get(entry.requestedName);
+            if (target !== undefined) {
+              // Counted on the write, not on the queue: a batch that failed
+              // before reaching the database must not report rows as filled.
+              if (await backfillCatalogueRegions(target, entry)) backfilled += 1;
+              continue;
+            }
             const id = await upsertCatalogueEntry(entry);
             if (linkable.has(entry.requestedName)) {
               await linkExerciseToCatalogue(entry.requestedName, id);

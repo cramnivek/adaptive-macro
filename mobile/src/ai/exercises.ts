@@ -13,9 +13,9 @@
  * a press loads is general knowledge, so this is one structured call.
  */
 
-/** The patterns an icon exists for. Anything else is normalised into `isolation`. */
 import { MUSCLE_REGIONS, normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 
+/** The patterns an icon exists for. Anything else is normalised into `isolation`. */
 export const MOVEMENT_PATTERNS = [
   'push',
   'pull',
@@ -136,6 +136,27 @@ export const ENRICHMENT_SCHEMA = {
   required: ['exercises'],
 } as const;
 
+/**
+ * The secondary regions worth drawing: deduplicated, and never the primary.
+ *
+ * "Lats, also lats and biceps" is an ordinary answer from a model asked for the
+ * muscles a pull-up works, and it reads as a mistake. A repeat is worse than
+ * cosmetic: the figure draws each at 35% opacity, so two of the same composite
+ * to roughly 58% and a secondary reads almost as strongly as the primary.
+ *
+ * `full_body` goes too — as a secondary it says only "and the rest", and
+ * shading the whole body behind a primary tells no one anything.
+ */
+const secondariesOf = (raw: unknown, primary: MuscleRegion): MuscleRegion[] => {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<MuscleRegion>();
+  for (const value of raw) {
+    const region = normaliseRegion(value);
+    if (region !== 'full_body' && region !== primary) seen.add(region);
+  }
+  return [...seen];
+};
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== '';
 
@@ -194,9 +215,7 @@ export const parseEnrichment = (
       // dropping the entry over: `full_body` is a truthful answer for a stretch
       // or a carry, and the diagram has something to draw either way.
       primaryRegion: normaliseRegion(row.primaryRegion),
-      secondaryRegions: Array.isArray(row.secondaryRegions)
-        ? row.secondaryRegions.map(normaliseRegion).filter((r) => r !== 'full_body')
-        : [],
+      secondaryRegions: secondariesOf(row.secondaryRegions, normaliseRegion(row.primaryRegion)),
       steps: Array.isArray(row.steps) ? row.steps.filter(isNonEmptyString) : [],
       equipment: row.equipment,
       bodyweightBased: row.bodyweightBased,

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeminiAccessError, GroundedLookupError, UngroundedResponseError, enrichExercises, lookupFood, routeFor, sourceDomainsFrom, toCandidateFood } from '../gemini';
 import { MOVEMENT_PATTERNS } from '../../ai/exercises';
+import { MUSCLE_REGIONS } from '../../components/muscleMap';
 
 const validRaw = {
   name: 'Chickenjoy',
@@ -432,6 +433,9 @@ describe('enrichExercises', () => {
     equipment: 'barbell',
     bodyweightBased: false,
     instructions: 'Lie on the bench. Lower the bar to your chest. Press it back up.',
+    primaryRegion: 'chest',
+    secondaryRegions: ['triceps', 'shoulders'],
+    steps: ['Lie on the bench.', 'Lower the bar to your chest.', 'Press it back up.'],
   };
 
   const responseWith = (text: string) => ({
@@ -462,6 +466,28 @@ describe('enrichExercises', () => {
     ]);
     expect(schema.properties.exercises.type).toBe('array');
     expect(schema.properties.exercises.items.type).toBe('object');
+  });
+
+  it('posts the muscle regions as enums too, in step with MUSCLE_REGIONS', async () => {
+    // The same guard as the one above, for the enum that drives the body
+    // diagram. `as const` narrows literals and checks nothing against a schema
+    // type, so a sixteenth region added to the vocabulary and forgotten here
+    // would be rejected by the model at runtime behind a green suite.
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, responseWith(JSON.stringify({ exercises: [enriched] }))),
+    );
+
+    await enrichExercises(['Bench Press (Barbell)'], 'test-key');
+
+    const item = bodyOf(fetchMock.mock.calls[0]).generationConfig.responseSchema.properties
+      .exercises.items;
+    expect(item.properties.primaryRegion.enum).toEqual([...MUSCLE_REGIONS]);
+    expect(item.properties.secondaryRegions.type).toBe('array');
+    expect(item.properties.secondaryRegions.items.enum).toEqual([...MUSCLE_REGIONS]);
+    expect(item.properties.steps.type).toBe('array');
+    for (const field of ['primaryRegion', 'secondaryRegions', 'steps']) {
+      expect(item.required).toContain(field);
+    }
   });
 
   // Structured output and grounding are mutually exclusive: asking for both

@@ -48,36 +48,18 @@ export const normaliseRegion = (raw: unknown): MuscleRegion =>
 export type BodyView = 'front' | 'back';
 
 /**
- * Which side of the body a region is drawn on.
+ * The figure, on a 48x96 grid, built from simple parts rather than one traced
+ * path, and the same from the front as from the back.
  *
- * The small map has room for one view, so it shows the side carrying the
- * primary region: a lat pulldown shows a back, a bench press shows a front.
- * Shoulders and forearms exist on both and are drawn on both; `front` is their
- * answer here only because the small map has to pick one.
- */
-const BACK_REGIONS: readonly MuscleRegion[] = [
-  'traps',
-  'upper_back',
-  'lats',
-  'lower_back',
-  'triceps',
-  'glutes',
-  'hamstrings',
-  'calves',
-];
-
-export const viewFor = (region: MuscleRegion): BodyView =>
-  BACK_REGIONS.includes(region) ? 'back' : 'front';
-
-/**
- * The figure itself, on a 48x96 grid.
+ * Separate parts because a single long path is unreadable and I got it wrong
+ * the first time: the traced silhouette filled only the top two thirds of the
+ * box, so every region sat too high — calves landed at shoulder height. Each
+ * part occupies a stated band of the grid, and the region shapes below are
+ * placed against those bands.
  *
- * One silhouette outline per view, then a shape per region placed on it. Every
- * shape is a rounded rectangle or a simple polygon: at the sizes this is drawn
- * the difference between a real deltoid and a rounded box is invisible, and the
- * box is something I can be sure is in the right place.
+ * Bands: head 2-14, shoulders 17-25, chest/upper back 22-33, waist 33-50,
+ * hips 50-62, thighs 60-78, lower legs 79-93. Arms run 18-50 down each side.
  */
-/** Shared by both views: from the front and the back this figure is the same. */
 const BODY_PARTS: string[] = [
   // head
   'M24 2a6 6 0 1 1 0 12a6 6 0 1 1 0-12',
@@ -91,19 +73,6 @@ const BODY_PARTS: string[] = [
   'M33 19h7v31h-7z',
 ];
 
-/**
- * The figure, on a 48x96 grid, built from simple parts rather than one traced
- * path.
- *
- * Separate parts because a single long path is unreadable and I got it wrong
- * the first time: the traced silhouette filled only the top two thirds of the
- * box, so every region sat too high — calves landed at shoulder height. Parts
- * each occupy a stated band of the grid, and the region shapes below are placed
- * against those bands.
- *
- * Bands: head 2-14, shoulders 17-25, chest/upper back 22-33, waist 33-50,
- * hips 50-62, thighs 60-78, lower legs 79-93. Arms run 18-50 down each side.
- */
 export const BODY_OUTLINE: Record<BodyView, string[]> = {
   front: BODY_PARTS,
   back: BODY_PARTS,
@@ -122,7 +91,10 @@ const REGION_SHAPES: Record<BodyView, Partial<Record<MuscleRegion, string[]>>> =
     abs: ['M20 33h8v15h-8z'],
     obliques: ['M16 34h3v13h-3z', 'M29 34h3v13h-3z'],
     quads: ['M17 63h5v14h-5z', 'M26 63h5v14h-5z'],
-    full_body: ['M15 17h18v45h-18z', 'M16 62h16v31h-16z'],
+    // Arms included: this is also the fallback for a carry, where the forearms
+    // and the grip are the whole point, and a torso-only shading reads as
+    // though they were not involved.
+    full_body: ['M15 17h18v45h-18z', 'M16 62h16v31h-16z', 'M9 19h5v30h-5z', 'M34 19h5v30h-5z'],
   },
   back: {
     traps: ['M18 17h12v7h-12z'],
@@ -135,7 +107,7 @@ const REGION_SHAPES: Record<BodyView, Partial<Record<MuscleRegion, string[]>>> =
     glutes: ['M16 52h16v9h-16z'],
     hamstrings: ['M17 63h5v14h-5z', 'M26 63h5v14h-5z'],
     calves: ['M17 79h5v13h-5z', 'M26 79h5v13h-5z'],
-    full_body: ['M15 17h18v45h-18z', 'M16 62h16v31h-16z'],
+    full_body: ['M15 17h18v45h-18z', 'M16 62h16v31h-16z', 'M9 19h5v30h-5z', 'M34 19h5v30h-5z'],
   },
 };
 

@@ -5,7 +5,6 @@ import {
   REGION_LABELS,
   normaliseRegion,
   pathsForRegion,
-  viewFor,
 } from '../muscleMap';
 
 describe('normaliseRegion', () => {
@@ -25,25 +24,26 @@ describe('normaliseRegion', () => {
   });
 });
 
-describe('viewFor', () => {
-  it('puts a lat pulldown on the back and a bench press on the front', () => {
-    expect(viewFor('lats')).toBe('back');
-    expect(viewFor('chest')).toBe('front');
-  });
-
-  it('answers for every region, so the small map always has a side to draw', () => {
-    for (const region of MUSCLE_REGIONS) {
-      expect(['front', 'back']).toContain(viewFor(region));
-    }
-  });
-});
+/**
+ * Which side each region is drawn on, stated rather than derived.
+ *
+ * The sheet draws both views, so nothing in production needs to choose one.
+ * Writing the expectation out by hand is what makes the next test an assertion
+ * about placement rather than a restatement of the table it is checking.
+ */
+const SIDE: Record<string, 'front' | 'back'> = {
+  chest: 'front', shoulders: 'front', biceps: 'front', forearms: 'front',
+  abs: 'front', obliques: 'front', quads: 'front', full_body: 'front',
+  traps: 'back', upper_back: 'back', lats: 'back', lower_back: 'back',
+  triceps: 'back', glutes: 'back', hamstrings: 'back', calves: 'back',
+};
 
 describe('pathsForRegion', () => {
   it('draws something for every region on the view it belongs to', () => {
     // The failure this catches is silent: a region nothing matches renders a
     // blank body, which reads as "this exercise works nothing".
     for (const region of MUSCLE_REGIONS) {
-      expect(pathsForRegion(region, viewFor(region)).length).toBeGreaterThan(0);
+      expect(pathsForRegion(region, SIDE[region]).length).toBeGreaterThan(0);
     }
   });
 

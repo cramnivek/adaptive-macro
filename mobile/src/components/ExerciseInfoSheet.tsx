@@ -88,7 +88,8 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
 
             {entry.steps.length > 0 ? (
               entry.steps.map((step, index) => (
-                <View key={step} style={styles.step}>
+                // Index, not the text: a model emitting "Repeat." twice would collide.
+                <View key={index} style={styles.step}>
                   <Text style={[styles.stepNumber, { color: colors.textFaint }]}>{index + 1}</Text>
                   <Text style={[styles.stepText, { color: colors.textMuted }]}>{step}</Text>
                 </View>

@@ -253,3 +253,35 @@ describe('enrichmentPromptFor and the muscle map', () => {
     for (const region of MUSCLE_REGIONS) expect(prompt).toContain(region);
   });
 });
+
+describe('parseEnrichment and a messy secondary list', () => {
+  const rowWith = (secondaryRegions: unknown) => ({
+    requestedName: 'Pull Up',
+    canonicalName: 'Pull Up',
+    movementPattern: 'pull',
+    primaryMuscle: 'Lats',
+    equipment: 'Pull-up bar',
+    bodyweightBased: true,
+    instructions: 'Hang and pull.',
+    primaryRegion: 'lats',
+    secondaryRegions,
+    steps: ['Hang.', 'Pull.'],
+  });
+  const secondaries = (value: unknown) =>
+    parseEnrichment({ exercises: [rowWith(value)] }, ['Pull Up']).entries[0].secondaryRegions;
+
+  it('drops the primary when the model repeats it as a secondary', () => {
+    // "Lats, also lats and biceps" is an ordinary answer and reads as a bug.
+    expect(secondaries(['lats', 'biceps'])).toEqual(['biceps']);
+  });
+
+  it('deduplicates, because two of the same shade darker than one', () => {
+    // The figure draws each secondary at 35% opacity; two composite to ~58%
+    // and the muscle reads almost as strongly as the primary.
+    expect(secondaries(['biceps', 'biceps', 'forearms'])).toEqual(['biceps', 'forearms']);
+  });
+
+  it('still drops full_body and still tolerates nonsense', () => {
+    expect(secondaries(['full_body', 'nonsense', 'traps'])).toEqual(['traps']);
+  });
+});

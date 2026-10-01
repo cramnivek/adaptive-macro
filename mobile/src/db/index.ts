@@ -931,18 +931,30 @@ export const upsertCatalogueEntry = async (entry: EnrichedExercise): Promise<str
   return id;
 };
 
+export interface CatalogueBackfillTarget {
+  id: string;
+  canonicalName: string;
+}
+
 /**
- * Catalogue entries that predate v5, by canonical name, most-trained first.
+ * Catalogue entries that predate v5, with their ids, most-trained first.
  *
  * Seeding's other query selects exercises with no `catalogue_id`, which on a
  * device whose catalogue is already built returns nothing at all — so without
  * this, "Build the exercise catalogue" would report "0 of 0" and the muscles
  * and steps would stay null forever.
+ *
+ * The id travels with the name because the row cannot be found again by name
+ * afterwards — see `backfillCatalogueRegions`.
+ *
+ * A row that got a region but no steps is deliberately not re-queued. An empty
+ * `steps` is a permitted answer, the prose how-to is still shown, and asking
+ * again on every run would re-bill a call for an entry that already works.
  */
-export const listCatalogueNamesNeedingRegions = async (): Promise<string[]> => {
+export const listCatalogueNamesNeedingRegions = async (): Promise<CatalogueBackfillTarget[]> => {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ canonical_name: string }>(
-    `SELECT c.canonical_name
+  const rows = await db.getAllAsync<{ id: string; canonical_name: string }>(
+    `SELECT c.id, c.canonical_name
        FROM exercise_catalogue c
        LEFT JOIN exercises e ON e.catalogue_id = c.id
        LEFT JOIN sets s ON s.exercise_id = e.id
@@ -950,7 +962,37 @@ export const listCatalogueNamesNeedingRegions = async (): Promise<string[]> => {
       GROUP BY c.id
       ORDER BY COUNT(s.id) DESC, c.canonical_name`,
   );
-  return rows.map((r) => r.canonical_name);
+  return rows.map((r) => ({ id: r.id, canonicalName: r.canonical_name }));
+};
+
+/**
+ * Fills in the v5 columns on one known row.
+ *
+ * By id, and only by id. Resolving the row by `entry.canonicalName` — the
+ * model's answer — looks equivalent and is not: ask about `Pull Up` and it may
+ * reply `Pull-Up`. The name lookup then misses, a second catalogue row is
+ * inserted holding the regions, the real row stays null and is asked about
+ * again on every future run, and the orphan appears in the picker where tapping
+ * it logs sets under a name the history has never used.
+ *
+ * Returns whether it wrote, so the screen reports work done rather than work
+ * queued.
+ */
+export const backfillCatalogueRegions = async (
+  id: string,
+  entry: EnrichedExercise,
+): Promise<boolean> => {
+  const db = await getDb();
+  const result = await db.runAsync(
+    `UPDATE exercise_catalogue
+        SET primary_region = ?, secondary_regions = ?, instruction_steps = ?
+      WHERE id = ? AND primary_region IS NULL`,
+    entry.primaryRegion,
+    JSON.stringify(entry.secondaryRegions),
+    JSON.stringify(entry.steps),
+    id,
+  );
+  return result.changes > 0;
 };
 
 /**
