@@ -43,8 +43,16 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               <ExerciseIcon pattern={entry.movementPattern} size={28} color={colors.text} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.name, { color: colors.text }]}>{entry.canonicalName}</Text>
+                {/*
+                  The free-text muscle only appears when there is no diagram.
+                  The model answers the two separately and they disagree — a
+                  deadlift came back primaryMuscle "Hamstrings" and region
+                  "glutes" — so showing both put two answers to one question
+                  four lines apart. The legend below is the validated one.
+                */}
                 <Text style={[styles.meta, { color: colors.textFaint }]}>
-                  {entry.primaryMuscle} · {entry.equipment}
+                  {entry.primaryRegion === null ? `${entry.primaryMuscle} · ` : ''}
+                  {entry.equipment}
                   {entry.bodyweightBased ? ' · bodyweight' : ''}
                 </Text>
               </View>

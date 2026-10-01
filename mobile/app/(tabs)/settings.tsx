@@ -2,7 +2,7 @@ import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine'
 import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   describeBackup,
@@ -124,6 +124,8 @@ export default function SettingsScreen() {
   // hundreds of inserts, long enough that an unchanged button reads as a
   // no-op and invites a second tap.
   const [busy, setBusy] = useState<string | null>(null);
+  /** Guards the window between the first tap and `busy` being set. */
+  const building = useRef(false);
 
   // Populated by an explicit connection check rather than on mount: probing a
   // local server the user may not be running would fail noisily on every visit
@@ -245,6 +247,22 @@ export default function SettingsScreen() {
   };
 
   const buildCatalogue = async () => {
+    // The button is disabled on `busy`, but `busy` is only set once the two
+    // work queues have been read, and a second tap inside that window starts a
+    // second run against the same database. Two concurrent builds put
+    // expo-sqlite's OPFS worker into "Invalid VFS state", after which every
+    // screen renders empty until the app is reopened. Same latch, and the same
+    // reason, as the one on the barcode scanner.
+    if (building.current) return;
+    building.current = true;
+    try {
+      await runCatalogueBuild();
+    } finally {
+      building.current = false;
+    }
+  };
+
+  const runCatalogueBuild = async () => {
     const list = (items: string[]) =>
       items.length > 10
         ? `${items.slice(0, 10).join(', ')} and ${items.length - 10} more`
