@@ -1,19 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { toNodeHandler } from '../adapter';
 
-// A minimal stand-in for node:http's ServerResponse, recording what was written.
+/**
+ * A minimal stand-in for node:http's ServerResponse, recording what was written.
+ *
+ * It carries `on` and `writableFinished` because a real one does, and the
+ * adapter listens for the client hanging up. A fake missing them does not make
+ * the adapter wrong — it makes the fake a worse model of the thing it stands in
+ * for, and the difference is a 500.
+ */
 const fakeRes = () => {
   const chunks: Buffer[] = [];
+  const listeners: Record<string, Array<() => void>> = {};
   return {
     statusCode: 0,
     headers: {} as Record<string, string>,
+    writableFinished: false,
     body: () => Buffer.concat(chunks).toString(),
+    on(event: string, listener: () => void) {
+      (listeners[event] ??= []).push(listener);
+      return this;
+    },
+    /** What node does when the socket goes away. */
+    emitClose() {
+      for (const listener of listeners.close ?? []) listener();
+    },
     writeHead(status: number, headers: Record<string, string>) {
       this.statusCode = status;
       this.headers = headers;
     },
     end(chunk?: Buffer) {
       if (chunk) chunks.push(chunk);
+      this.writableFinished = true;
     },
   };
 };
@@ -88,5 +106,51 @@ describe('toNodeHandler', () => {
 
     expect(res.statusCode).toBe(500);
     expect(res.body()).not.toContain('secret-key-abc');
+  });
+});
+
+describe('toNodeHandler and a client that hangs up', () => {
+  it('aborts the request signal when the response closes unfinished', async () => {
+    let aborted = false;
+    let release: (() => void) | undefined;
+    const handler = toNodeHandler(async (request) => {
+      request.signal.addEventListener('abort', () => {
+        aborted = true;
+      });
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return new Response('ok', { status: 200 });
+    });
+
+    const res = fakeRes();
+    const running = handler(fakeReq('POST', '/api/gemini', {}, '{}') as never, res as never);
+    // Let the handler reach its await before the client goes away.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    res.emitClose();
+    expect(aborted).toBe(true);
+
+    release?.();
+    await running;
+  });
+
+  it('does not abort when the response closes after it finished', async () => {
+    let aborted = false;
+    const handler = toNodeHandler(async (request) => {
+      request.signal.addEventListener('abort', () => {
+        aborted = true;
+      });
+      return new Response('ok', { status: 200 });
+    });
+
+    const res = fakeRes();
+    await handler(fakeReq('GET', '/', {}) as never, res as never);
+
+    // Node emits close on every response, served or abandoned. Only the
+    // abandoned one may cancel: aborting a finished request would cancel
+    // nothing and log noise.
+    res.emitClose();
+    expect(aborted).toBe(false);
   });
 });
