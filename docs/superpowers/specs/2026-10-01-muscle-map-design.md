@@ -49,6 +49,18 @@ If the figure does not read at 20px when seen on a device, the picker and block 
 fall back to the existing movement glyph and the map stays in the how-to sheet, where
 it is drawn at 96px and certainly legible. That decision is made by looking, not now.
 
+**Looked at, and decided: the small map is out.** Rendered at both sizes, 96px is
+clearly legible — chest, abs, biceps, quads, lats, glutes and calves each land where
+they belong and read at a glance. At 20px the same figure is a sliver and chest, abs
+and biceps are indistinguishable. So the picker row and the session block header keep
+the movement glyph, and the muscle map appears only in the how-to sheet. Step 6 of the
+order of work is therefore not built.
+
+The first attempt at the figure was also wrong in a way only looking would catch: the
+traced silhouette filled the top two thirds of its box, so every region sat too high
+and calves rendered at shoulder height. The figure is now built from simple parts with
+a stated band of the grid each, which is what made the regions placeable at all.
+
 ## Regions
 
 `movement_pattern` is already a validated field with a fallback, and this follows it.
