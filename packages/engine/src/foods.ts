@@ -150,14 +150,39 @@ export const isNutritionallyConsistent = (n: Nutrients, tolerance = 0.15): boole
 };
 
 /**
- * Lowercase, with every non-alphanumeric character becoming a space.
+ * Lowercase and unaccented, with every non-alphanumeric character a space.
  *
  * Applied to both sides of the comparison so punctuation cannot decide a
  * match: `Oscar Mayer, Chicken Breast (Honey Glazed)` and `oscar-mayer` have
  * to meet somewhere, and that somewhere is here.
+ *
+ * Accents are decomposed and stripped first, because they are asymmetric in
+ * practice: people type `jalapeno`, databases store `Jalapeño`. Without this
+ * the name normalises to `jalape o`, the query word is not a substring of it,
+ * and a perfect match spends a charged lookup.
  */
 const normalise = (value: string): string =>
-  value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  value
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+/**
+ * The token itself, and its singular if it looks like a plural.
+ *
+ * Matching is query-word-inside-result-word, so a longer query word can never
+ * match a shorter one in a name: `almonds` misses `Almond, raw` and spends a
+ * call on it. Dropping a trailing `s` or `es` covers the overwhelmingly common
+ * case without a stemmer. It only ever makes a token easier to cover, which is
+ * the direction that withholds a lookup rather than spending one.
+ */
+const variantsOf = (token: string): string[] => {
+  if (token.endsWith('es') && token.length > 4) return [token, token.slice(0, -2), token.slice(0, -1)];
+  if (token.endsWith('s') && token.length > 3) return [token, token.slice(0, -1)];
+  return [token];
+};
 
 /** Words this short carry no signal, and firing a lookup on one spends money on noise. */
 const MIN_TOKEN_LENGTH = 3;
@@ -200,5 +225,7 @@ export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
   if (foods.length === 0) return false;
 
   const haystacks = foods.map((food) => normalise(`${food.name} ${food.brand ?? ''}`));
-  return tokens.every((token) => haystacks.some((hay) => hay.includes(token)));
+  return tokens.every((token) =>
+    variantsOf(token).some((variant) => haystacks.some((hay) => hay.includes(variant))),
+  );
 };

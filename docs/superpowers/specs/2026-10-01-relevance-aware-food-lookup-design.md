@@ -42,8 +42,10 @@ auto-lookup handles them. No new model call on the common path.
   see. Nothing in the screenshot needs intelligence to reject: `crispyking` appears in
   none of the twelve names.
 - **Ranking or re-ordering results.** Only the decision to look up changes.
-- **Spell correction, stemming or fuzzy matching.** A typo becoming a lookup is an
-  acceptable outcome; see *Risks*.
+- **Spell correction or fuzzy matching.** A typo becoming a lookup is an acceptable
+  outcome; see *Risks*. Stemming is out of scope beyond one case: a trailing plural
+  `s`/`es` is stripped, because `almonds` against `Almond, raw` would otherwise spend a
+  charged call on a perfect match. That is not a stemmer, and nothing else is inferred.
 - **Widening the manual button.** If the check judges results relevant and the user
   disagrees, there is still no override. Deliberate: see whether the check is right
   before adding a second path.
@@ -62,8 +64,12 @@ under the project's node harness with no new configuration.
 export const resultsAnswerQuery = (query: string, foods: Food[]): boolean
 ```
 
-Normalise both sides identically: lowercase, replace every non-alphanumeric character
-with a space, collapse runs of spaces. Apply it to the query and to each food's
+Normalise both sides identically: decompose accents and strip the combining marks,
+lowercase, replace every non-alphanumeric character with a space, collapse runs of
+spaces. Accents must go first and on both sides, because they are asymmetric in
+practice — people type `jalapeno`, databases store `Jalapeño`. Leaving them in
+normalises the name to `jalape o`, so the query word is not a substring of it and a
+perfect match spends a lookup. Apply it to the query and to each food's
 `name` plus `brand` joined — `brand` matters, because `Oscar Mayer, Chicken Breast`
 carries the brand in a separate field and a check against `name` alone would miss it.
 
@@ -79,7 +85,9 @@ haystack. The results answer the query when every surviving token is covered.
 Two deliberate choices:
 
 - **Substring, not whole-word.** `breast` covers `breasts`, `pulldown` covers
-  `pull down`. It also means `ham` is covered by `graham`, which is a false *positive*
+  `pull down`. The reverse does not follow — a longer query word never matches a
+  shorter name word — which is why the plural `s`/`es` is stripped as a second variant
+  of each token. It also means `ham` is covered by `graham`, which is a false *positive*
   — it makes the app less likely to spend a call. That is the conservative direction
   for a feature whose risk is cost, so the looser rule is the right one.
 - **Every token must be covered.** One uncovered distinctive word is the whole signal.
@@ -152,11 +160,16 @@ unchanged: one attempt per distinct query, two maximum, behind a settle delay.
 **A typo now fires a lookup.** `chiken breast` has an uncovered token. Judged
 desirable — the model handles a misspelling better than the databases do.
 
+**A query in a non-Latin script never fires a lookup.** Stripping non-alphanumerics
+leaves no tokens, and no tokens means "nothing to judge". Those users get the database
+results and the manual button, and no automatic call. Accepted: firing on every such
+query would be worse than not firing.
+
 **A specific query whose words legitimately do not appear in any result name fires a
 lookup that may find nothing.** Costs one call, capped at two, and the user sees the
 existing `UngroundedResponseError` message.
 
 ## Order of work
 
-One task. The pure function and its seven tests in `packages/engine`, then the
+One task. The pure function and its tests in `packages/engine`, then the
 two-line condition change and the status line in `search.tsx`.

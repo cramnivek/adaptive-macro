@@ -191,6 +191,27 @@ describe('resultsAnswerQuery', () => {
     // Deliberate: the false positive withholds a charged lookup rather than
     // spending one. Pinned so it is not "fixed" into whole-word matching.
     expect(resultsAnswerQuery('ham', [result('Graham Crackers')])).toBe(true);
-    expect(resultsAnswerQuery('breast', poultry)).toBe(true);
+  });
+
+  it('folds punctuation on the result side too, not just the query', () => {
+    expect(resultsAnswerQuery('oven roasted', [result('Chicken Breast, Oven-roasted')])).toBe(true);
+  });
+
+  it('reads through accents, which the query usually lacks and the database has', () => {
+    // Without this the name normalises to "jalape o" and a perfect match
+    // spends a charged lookup.
+    expect(resultsAnswerQuery('jalapeno', [result('Jalapeño Peppers, Raw')])).toBe(true);
+    expect(resultsAnswerQuery('puree', [result('Tomato Purée')])).toBe(true);
+  });
+
+  it('matches a plural query against a singular name', () => {
+    // Query word inside result word, so a longer query word never matches a
+    // shorter name word on its own.
+    expect(resultsAnswerQuery('almonds', [result('Almond, Raw')])).toBe(true);
+    expect(resultsAnswerQuery('potatoes', [result('Potato, Boiled')])).toBe(true);
+  });
+
+  it('still rejects a miss that merely looks like a plural', () => {
+    expect(resultsAnswerQuery('crispykings', poultry)).toBe(false);
   });
 });

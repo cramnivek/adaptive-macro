@@ -1,7 +1,7 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
 import { isNutritionallyConsistent, resultsAnswerQuery } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { UngroundedResponseError, lookupFood } from '../src/api/gemini';
 import { searchFoods } from '../src/api/search';
@@ -123,22 +123,36 @@ export default function SearchScreen() {
   const shown = query.trim().length < 2 ? frequent : results;
   const showingFrequent = query.trim().length < 2;
 
-  // Three rather than zero: the case this exists for returned one irrelevant
-  // result, not an empty list.
+  // One or two results, where the relevance check was satisfied but a thin
+  // list might still be the wrong answer. Asking costs a call, so it stays the
+  // user's decision rather than the app's.
   const THIN_RESULT_COUNT = 3;
   // On top of the 350ms search debounce, so the full sequence is: stop typing,
-  // 350ms, database search, settles empty, then this before a call is spent.
+  // 350ms, database search, settles with nothing useful, then this before a
+  // call is spent.
   const AUTO_LOOKUP_DELAY_MS = 1200;
   /** Two attempts per query: the first, and one retry if that one failed. */
-  const MAX_AUTO_ATTEMPTS = 2;
-  // Zero results is now handled automatically below. The button survives for
-  // one or two results, where a real database hit might still be the right
-  // answer and spending a call would be presumptuous.
+  const MAX_ATTEMPTS = 2;
   const canLookUp =
     !showingFrequent && !loading && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
 
+  /**
+   * Whether the rows on screen are plausible answers to what was typed.
+   *
+   * Read twice: the effect below decides whether to spend a call on it, and
+   * the list header decides what to tell the user while that call runs.
+   */
+  const answered = useMemo(
+    () => results.length > 0 && resultsAnswerQuery(query.trim(), results),
+    [query, results],
+  );
+
   const runLookup = useCallback(async () => {
     const trimmed = query.trim();
+    // Counted here rather than at the call site, so a manual tap and an
+    // automatic firing draw on the same budget. Counting only automatic firings
+    // let a failed manual tap be followed by two more charged calls.
+    autoAttempts.current.set(trimmed, (autoAttempts.current.get(trimmed) ?? 0) + 1);
     setLookingUp(true);
     setErrors([]);
     try {
@@ -149,7 +163,7 @@ export default function SearchScreen() {
       if (!mounted.current || latestQuery.current !== trimmed) return;
       // A found food ends the question. Without this, cancelling the candidate
       // sheet would leave results empty and let the effect fire again.
-      autoAttempts.current.set(trimmed, MAX_AUTO_ATTEMPTS);
+      autoAttempts.current.set(trimmed, MAX_ATTEMPTS);
       setCandidate(food);
     } catch (error) {
       if (!mounted.current || latestQuery.current !== trimmed) return;
@@ -172,18 +186,16 @@ export default function SearchScreen() {
   useEffect(() => {
     const trimmed = query.trim();
     if (showingFrequent || loading || lookingUp) return;
-    if (trimmed.length < 2) return;
-    if (results.length > 0 && resultsAnswerQuery(trimmed, results)) return;
-    if ((autoAttempts.current.get(trimmed) ?? 0) >= MAX_AUTO_ATTEMPTS) return;
+    if (trimmed.length < 2 || answered) return;
+    if ((autoAttempts.current.get(trimmed) ?? 0) >= MAX_ATTEMPTS) return;
 
     const timer = setTimeout(() => {
       if (!mounted.current || latestQuery.current !== trimmed) return;
-      autoAttempts.current.set(trimmed, (autoAttempts.current.get(trimmed) ?? 0) + 1);
       void runLookup();
     }, AUTO_LOOKUP_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [query, showingFrequent, loading, lookingUp, results.length, runLookup]);
+  }, [query, showingFrequent, loading, lookingUp, answered, runLookup]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -215,9 +227,13 @@ export default function SearchScreen() {
           ) : shown.length > 0 && lookingUp ? (
             // The rows stay visible and selectable underneath. The relevance
             // check is a guess, and a guess must not take away an answer that
-            // might have been right.
+            // might have been right. Only say they look wrong when the check
+            // actually said so — after a manual tap on results it judged
+            // relevant, that sentence would be a lie.
             <Text style={[styles.lookupNote, { color: colors.warning }]}>
-              These do not look like what you searched. Looking it up… {lookupElapsed}s
+              {answered
+                ? `Looking it up… ${lookupElapsed}s`
+                : `These do not look like what you searched. Looking it up… ${lookupElapsed}s`}
             </Text>
           ) : null
         }
