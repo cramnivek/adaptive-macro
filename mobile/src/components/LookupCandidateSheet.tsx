@@ -58,9 +58,17 @@ export const LookupCandidateSheet = ({ food, onCancel, onSave }: LookupCandidate
             </Text>
           ))}
 
+          {/*
+            These domains are what the lookup actually read — they come from the
+            response's grounding metadata, not from the model's account of
+            itself. Naming them is the whole basis for accepting a figure the
+            operator never published, so the wording points at them rather than
+            talking vaguely about "web sources".
+          */}
           <Text style={[styles.disclaimer, { color: colors.textFaint }]}>
-            Estimated from web sources, not a verified label. Check it against the packaging or
-            receipt when you can.
+            These figures were reported by the pages listed above, which may not be the
+            manufacturer or restaurant. A third-hand number can be wrong or out of date — check it
+            against the packaging or the receipt when you can.
           </Text>
 
           <Button label="Save this food" onPress={() => onSave(food)} />

@@ -187,15 +187,37 @@ const RESPONSE_SCHEMA = {
   required: ['found', 'name', 'portionLabel', 'portionGrams', 'kcal', 'proteinG', 'carbsG', 'fatG'],
 } as const;
 
+/**
+ * Operator figures first, but not operator figures only.
+ *
+ * Demanding that the operator published them sounds like rigour and in
+ * practice refuses real answers. A regional chain like Mang Inasal publishes
+ * nothing, so a sixty-second grounded search ended in "no published figures"
+ * while the numbers sat in plain sight on third-party pages — findable by
+ * anyone who typed the same words into Google.
+ *
+ * A figure someone else published is a different thing from one invented on
+ * the spot, and the difference is shown rather than asserted: `sources` carries
+ * the domains the lookup actually read, taken from the grounding metadata
+ * rather than from the model's account of itself, and the candidate sheet lists
+ * them before anything is saved.
+ *
+ * What stays strict: report what a source states, never average, never
+ * estimate, and `UngroundedResponseError` still refuses an answer with no
+ * grounding behind it at all.
+ */
 const searchPromptFor = (query: string, country: string) =>
   `Find published nutrition information for: ${query}\n\n` +
   `Market: ${country === 'world' ? 'any' : country.toUpperCase()}. Prefer the ` +
   `operator's or manufacturer's own published figures for that market, and ` +
   `prefer a single named menu item over a combo or meal deal.\n\n` +
+  `If the operator publishes nothing, figures reported by a nutrition ` +
+  `database, a publication or another third party are acceptable. Name who ` +
+  `reported them, and say that the operator did not publish them.\n\n` +
   `Report the values exactly as the source states them, for one stated ` +
   `serving, and give that serving's weight in grams. Do not convert to a ` +
-  `100 g basis and do not average across sources. If you cannot find ` +
-  `published figures, say so plainly rather than estimating.`;
+  `100 g basis and do not average across sources. If no source states ` +
+  `figures at all, say so plainly rather than estimating.`;
 
 const structurePromptFor = (text: string) =>
   `Extract the nutrition figures from the text below into the required ` +
