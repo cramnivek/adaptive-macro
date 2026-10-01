@@ -216,9 +216,16 @@ const postJson = async (
   body: unknown,
   apiKey: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<any> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // The caller's signal and the timeout both abort the same request. A lookup
+  // the user has typed past is a charged call nobody will ever see the result
+  // of, so it is worth stopping rather than letting it run to ninety seconds.
+  const abandon = () => controller.abort();
+  signal?.addEventListener('abort', abandon);
+  if (signal?.aborted) controller.abort();
   const route = routeFor(model, apiKey);
 
   try {
@@ -271,6 +278,7 @@ const postJson = async (
     throw new GroundedLookupError('Could not reach Gemini. Check your connection.');
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abandon);
   }
 };
 
@@ -382,6 +390,7 @@ export const lookupFood = async (
   query: string,
   country: string,
   apiKey: string,
+  signal?: AbortSignal,
 ): Promise<Food> => {
   // Call one: search the web and keep the citations.
   const grounded = await postJson(
@@ -392,6 +401,7 @@ export const lookupFood = async (
     },
     apiKey,
     GROUNDED_TIMEOUT_MS,
+    signal,
   );
 
   // Before anything else: if it did not search, it did not look anything up.
@@ -414,6 +424,7 @@ export const lookupFood = async (
     },
     apiKey,
     STRUCTURE_TIMEOUT_MS,
+    signal,
   );
 
   const json = textOf(structured);

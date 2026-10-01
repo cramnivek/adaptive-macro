@@ -36,6 +36,15 @@ export default function SearchScreen() {
   const [candidate, setCandidate] = useState<Food | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupElapsed, setLookupElapsed] = useState(0);
+  /**
+   * Whether every source has reported, as opposed to the fast ones.
+   *
+   * The relevance check must not judge a half-finished list: the word it is
+   * looking for may be in a result Open Food Facts has not returned yet, and
+   * judging early would buy a charged lookup for a query the databases were
+   * about to answer.
+   */
+  const [settled, setSettled] = useState(true);
 
   // The grounded lookup can take up to 90s. Without a visible clock that reads
   // as a hang, and the user taps again or gives up on the feature. Mirrors the
@@ -65,6 +74,14 @@ export default function SearchScreen() {
   // exactly when a retry is wanted. A success closes the query outright, or
   // cancelling the candidate sheet would spend another call.
   const autoAttempts = useRef<Map<string, number>>(new Map());
+  /**
+   * The lookup in flight, so typing past it can stop it.
+   *
+   * A grounded call runs for up to ninety seconds and its result is discarded
+   * the moment the query changes. Left alone it sits there being charged for,
+   * with a clock on screen counting towards an answer nobody will ever see.
+   */
+  const lookupAbort = useRef<AbortController | null>(null);
   useEffect(
     () => () => {
       mounted.current = false;
@@ -94,16 +111,31 @@ export default function SearchScreen() {
       setResults([]);
       setErrors([]);
       setLoading(false);
+      setSettled(true);
       return;
     }
 
     setLoading(true);
+    setSettled(false);
     debounce.current = setTimeout(async () => {
-      const found = await searchFoods(trimmed, settings.usdaApiKey, settings.foodCountry);
+      const found = await searchFoods(
+        trimmed,
+        settings.usdaApiKey,
+        settings.foodCountry,
+        // The device cache and USDA, about a second ahead of Open Food Facts.
+        // Painting them straight away is most of what makes search feel quick.
+        (partial) => {
+          if (latestQuery.current !== trimmed) return;
+          setResults(partial.foods);
+          setErrors(partial.errors);
+          setLoading(false);
+        },
+      );
       if (latestQuery.current !== trimmed) return;
       setResults(found.foods);
       setErrors(found.errors);
       setLoading(false);
+      setSettled(true);
     }, 350);
 
     return () => {
@@ -134,7 +166,7 @@ export default function SearchScreen() {
   /** Two attempts per query: the first, and one retry if that one failed. */
   const MAX_ATTEMPTS = 2;
   const canLookUp =
-    !showingFrequent && !loading && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
+    !showingFrequent && !loading && settled && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
 
   /**
    * Whether the rows on screen are plausible answers to what was typed.
@@ -149,6 +181,9 @@ export default function SearchScreen() {
 
   const runLookup = useCallback(async () => {
     const trimmed = query.trim();
+    lookupAbort.current?.abort();
+    const controller = new AbortController();
+    lookupAbort.current = controller;
     // Counted here rather than at the call site, so a manual tap and an
     // automatic firing draw on the same budget. Counting only automatic firings
     // let a failed manual tap be followed by two more charged calls.
@@ -156,7 +191,12 @@ export default function SearchScreen() {
     setLookingUp(true);
     setErrors([]);
     try {
-      const food = await lookupFood(trimmed, settings.foodCountry, settings.foodLookup.geminiApiKey);
+      const food = await lookupFood(
+        trimmed,
+        settings.foodCountry,
+        settings.foodLookup.geminiApiKey,
+        controller.signal,
+      );
       // The user may have retyped the query, or left the screen, while this
       // was in flight. Either way, a result for what they searched a moment
       // ago has nothing to do with what is on screen now.
@@ -166,6 +206,9 @@ export default function SearchScreen() {
       autoAttempts.current.set(trimmed, MAX_ATTEMPTS);
       setCandidate(food);
     } catch (error) {
+      // An abandoned lookup is not a failure to report: the user moved on, and
+      // an error about a query they are no longer looking at is noise.
+      if (controller.signal.aborted) return;
       if (!mounted.current || latestQuery.current !== trimmed) return;
       setErrors([
         error instanceof UngroundedResponseError
@@ -173,9 +216,17 @@ export default function SearchScreen() {
           : (error as Error).message,
       ]);
     } finally {
+      if (lookupAbort.current === controller) lookupAbort.current = null;
       if (mounted.current) setLookingUp(false);
     }
   }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
+
+  // Typing past a lookup abandons it. Without this the clock keeps counting
+  // against the old query while the new results sit underneath it, which is
+  // what makes a forty-second wait end in nothing.
+  useEffect(() => {
+    return () => lookupAbort.current?.abort();
+  }, [query]);
 
   // AI is not a thing you ask for here; it is what happens when the databases
   // have nothing useful. Nothing useful covers both an empty list and a full
@@ -185,7 +236,7 @@ export default function SearchScreen() {
   // mid-word.
   useEffect(() => {
     const trimmed = query.trim();
-    if (showingFrequent || loading || lookingUp) return;
+    if (showingFrequent || loading || lookingUp || !settled) return;
     if (trimmed.length < 2 || answered) return;
     if ((autoAttempts.current.get(trimmed) ?? 0) >= MAX_ATTEMPTS) return;
 
@@ -195,7 +246,7 @@ export default function SearchScreen() {
     }, AUTO_LOOKUP_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [query, showingFrequent, loading, lookingUp, answered, runLookup]);
+  }, [query, showingFrequent, loading, lookingUp, settled, answered, runLookup]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

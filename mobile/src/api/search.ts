@@ -20,11 +20,22 @@ export interface SearchResults {
  *
  * Sources are queried in parallel and failures are collected instead of
  * thrown — one API being down should still leave the search usable.
+ *
+ * They are also *awaited* in two waves. Every source starts at once, but the
+ * device cache and USDA answer in about a second where Open Food Facts takes
+ * two to three, and a country view of it can take longer still. Waiting for all
+ * four means every search runs at the speed of the slowest one. `onPartial`
+ * fires when the fast wave lands so the screen can paint it.
+ *
+ * This is safe only because the wave order matches the ordering rule above:
+ * cached and USDA results sort ahead of Open Food Facts anyway, so the late
+ * arrivals append and the list never reorders under the user's finger.
  */
 export const searchFoods = async (
   query: string,
   usdaApiKey: string = USDA_DEMO_KEY,
   country: string = DEFAULT_FOOD_COUNTRY,
+  onPartial?: (partial: SearchResults) => void,
 ): Promise<SearchResults> => {
   const trimmed = query.trim();
   if (trimmed.length < 2) return { foods: [], errors: [] };
@@ -40,12 +51,11 @@ export const searchFoods = async (
       ? Promise.resolve<Food[]>([])
       : searchOpenFoodFacts(trimmed, 20, DEFAULT_FOOD_COUNTRY);
 
-  const [localResult, usdaResult, localMarketResult, worldResult] = await Promise.allSettled([
-    local,
-    usda,
-    localMarket,
-    worldMarket,
-  ]);
+  // Settled now, awaited later. Attaching the handler at once is what keeps a
+  // fast Open Food Facts failure from looking like an unhandled rejection
+  // during the second or so before the second wave is awaited.
+  const markets = Promise.allSettled([localMarket, worldMarket]);
+  const [localResult, usdaResult] = await Promise.allSettled([local, usda]);
 
   const errors: string[] = [];
   const foods: Food[] = [];
@@ -71,6 +81,11 @@ export const searchFoods = async (
 
   collect(localResult);
   collect(usdaResult);
+  // Copies, because the arrays below keep growing and the screen must not see
+  // its own state mutate underneath it.
+  onPartial?.({ foods: [...foods], errors: [...errors] });
+
+  const [localMarketResult, worldResult] = await markets;
   collect(localMarketResult);
   collect(worldResult);
 
