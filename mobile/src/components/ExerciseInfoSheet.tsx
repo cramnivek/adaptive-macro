@@ -4,6 +4,8 @@ import type { CatalogueEntry } from '../db';
 import { font, radius, space, useTheme } from '../theme';
 import { Button } from './Controls';
 import { ExerciseIcon } from './ExerciseIcon';
+import { MuscleFigure } from './MuscleFigure';
+import { REGION_LABELS } from './muscleMap';
 
 interface ExerciseInfoSheetProps {
   entry: CatalogueEntry | null;
@@ -48,7 +50,52 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               </View>
             </View>
 
-            {entry.instructions ? (
+            {entry.primaryRegion !== null && (
+              <View style={styles.map}>
+                {/*
+                  Both sides, always. Which one carries the primary muscle is
+                  not something to make someone work out from a single view, and
+                  a pull shades the back while its secondaries sit on the front.
+                */}
+                <MuscleFigure
+                  view="front"
+                  primary={entry.primaryRegion}
+                  secondary={entry.secondaryRegions}
+                  size={96}
+                  outline={colors.border}
+                  fill={colors.accent}
+                />
+                <MuscleFigure
+                  view="back"
+                  primary={entry.primaryRegion}
+                  secondary={entry.secondaryRegions}
+                  size={96}
+                  outline={colors.border}
+                  fill={colors.accent}
+                />
+                <View style={styles.legend}>
+                  <Text style={[styles.legendPrimary, { color: colors.text }]}>
+                    {REGION_LABELS[entry.primaryRegion]}
+                  </Text>
+                  {entry.secondaryRegions.length > 0 && (
+                    <Text style={[styles.legendSecondary, { color: colors.textFaint }]}>
+                      also {entry.secondaryRegions.map((r) => REGION_LABELS[r].toLowerCase()).join(', ')}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {entry.steps.length > 0 ? (
+              entry.steps.map((step, index) => (
+                <View key={step} style={styles.step}>
+                  <Text style={[styles.stepNumber, { color: colors.textFaint }]}>{index + 1}</Text>
+                  <Text style={[styles.stepText, { color: colors.textMuted }]}>{step}</Text>
+                </View>
+              ))
+            ) : entry.instructions ? (
+              // An entry catalogued before steps existed still has its prose,
+              // and showing that beats showing nothing while a backfill waits.
               <Text style={[styles.body, { color: colors.textMuted }]}>{entry.instructions}</Text>
             ) : (
               <Text style={[styles.body, { color: colors.textFaint }]}>
@@ -56,7 +103,7 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               </Text>
             )}
 
-            {entry.instructions && (
+            {(entry.instructions || entry.steps.length > 0) && (
               <Text style={[styles.caveat, { color: colors.warning }]}>
                 Written by a model. Check it against a source you trust before loading a bar.
               </Text>
@@ -84,5 +131,12 @@ const styles = StyleSheet.create({
   name: { fontFamily: font.uiStrong, fontSize: 17 },
   meta: { fontFamily: font.ui, fontSize: 12, marginTop: 2 },
   body: { fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
+  map: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
+  legend: { flex: 1, gap: 2 },
+  legendPrimary: { fontFamily: font.uiStrong, fontSize: 14 },
+  legendSecondary: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
+  step: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
+  stepNumber: { fontFamily: font.figure, fontSize: 13, minWidth: 14 },
+  stepText: { flex: 1, fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
   caveat: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.md },
 });

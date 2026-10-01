@@ -8,6 +8,7 @@ import {
   describeBackup,
   exportBackup,
   linkExerciseToCatalogue,
+  listCatalogueNamesNeedingRegions,
   listUnlinkedExerciseNames,
   parseBackup,
   restoreBackup,
@@ -254,14 +255,26 @@ export default function SettingsScreen() {
     let stoppedEarly: string | null = null;
     let total = 0;
     let linked = 0;
+    let backfilled = 0;
 
     try {
-      const names = await listUnlinkedExerciseNames();
+      // Two sources of work, and the second is the one that matters on a device
+      // that has run this before: entries catalogued before muscles and steps
+      // existed. Without it this reports "0 of 0" on exactly the devices the
+      // feature was added for.
+      const unlinked = await listUnlinkedExerciseNames();
+      const needRegions = await listCatalogueNamesNeedingRegions();
+      const names = [...unlinked, ...needRegions];
       if (names.length === 0) {
-        notify('Nothing to do', 'Every exercise on record already has a catalogue entry.');
+        notify('Nothing to do', 'Every exercise on record is catalogued, with its muscles and steps.');
         return;
       }
-      total = names.length;
+      // Only the first source can link an exercise; the second is filling in
+      // rows that are already linked, and counting those as links would report
+      // more than were ever asked for.
+      const linkable = new Set(unlinked);
+      backfilled = needRegions.length;
+      total = unlinked.length;
 
       const batches = batchNames(names);
       for (const [index, batch] of batches.entries()) {
@@ -273,8 +286,10 @@ export default function SettingsScreen() {
           );
           for (const entry of entries) {
             const id = await upsertCatalogueEntry(entry);
-            await linkExerciseToCatalogue(entry.requestedName, id);
-            linked += 1;
+            if (linkable.has(entry.requestedName)) {
+              await linkExerciseToCatalogue(entry.requestedName, id);
+              linked += 1;
+            }
           }
           missed.push(...missing);
         } catch (error) {
@@ -309,7 +324,11 @@ export default function SettingsScreen() {
     }
 
     // Each batch commits as it completes, so what already linked stays linked.
-    const parts = [`${linked} of ${total} catalogued.`];
+    const parts: string[] = [];
+    if (total > 0) parts.push(`${linked} of ${total} catalogued.`);
+    if (backfilled > 0) {
+      parts.push(`Muscles and steps filled in for ${backfilled} already catalogued.`);
+    }
     if (missed.length > 0) {
       parts.push(`Not recognised: ${list(missed)}. Running it again may pick these up.`);
     }
