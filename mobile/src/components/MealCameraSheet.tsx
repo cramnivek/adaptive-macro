@@ -110,6 +110,10 @@ export const MealCameraSheet = ({
                 ref={camera}
                 style={StyleSheet.absoluteFill}
                 facing="back"
+                // Without this the browser picks a focus distance once and keeps
+                // it, so a plate held at arm's length stays soft. On web this
+                // maps to a focusMode: 'continuous' track constraint.
+                autofocus="on"
                 onCameraReady={() => setReady(true)}
               />
             )}

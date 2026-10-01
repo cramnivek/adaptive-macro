@@ -54,11 +54,12 @@ const scaleItem = (item: EstimatedItem, grams: number): Nutrients => {
 export default function DescribeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ meal?: string; capture?: string }>();
+  const params = useLocalSearchParams<{ meal?: string; capture?: string; text?: string }>();
 
   const { settings, selectedDate, refreshAll } = useApp();
   const [meal, setMeal] = useState<Meal>((params.meal as Meal) ?? 'snack');
-  const [text, setText] = useState('');
+  // Prefilled when arriving from a search that the databases could not answer.
+  const [text, setText] = useState(params.text ?? '');
   const [photo, setPhoto] = useState<MealPhoto | null>(null);
   const [camera, setCamera] = useState(false);
   const [busy, setBusy] = useState(false);

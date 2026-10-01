@@ -328,6 +328,19 @@ export default function SearchScreen() {
                 variant="subtle"
                 onPress={() => router.push({ pathname: '/food-new', params: { meal } })}
               />
+              {!showingFrequent && query.trim().length >= 2 && (
+                // The way out of a lookup that is going to say no. A grounded
+                // call can spend sixty seconds establishing that a restaurant
+                // publishes no figures — true, and useless. An estimate needs
+                // none, takes about five seconds, and says what it assumed.
+                <Button
+                  label="Estimate it instead"
+                  variant="subtle"
+                  onPress={() =>
+                    router.push({ pathname: '/describe', params: { meal, text: query.trim() } })
+                  }
+                />
+              )}
               {canLookUp && (
                 <Button
                   label={lookingUp ? `Looking it up… ${lookupElapsed}s` : 'Look it up with AI'}
