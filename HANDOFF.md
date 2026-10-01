@@ -1,8 +1,8 @@
 # Handoff
 
-Last updated 2026-09-30. Branch `feat/web-deployment`, **56 commits ahead of `main`**, working tree clean, pushed, and deployed.
+Last updated 2026-10-01. Branch `feat/web-deployment`, **81 commits ahead of `main`**, working tree clean. Not yet pushed; the deployed site is older still.
 
-322 tests pass (`npm test`) — engine 104, mobile 152, gemini-proxy 66. `npm run typecheck` is clean, web and android both export.
+397 tests pass (`npm test`) — engine 104, mobile 227, gemini-proxy 66. `npm run typecheck` is clean, web and android both export.
 
 **A caveat on typecheck**, which cost time once and will again. It fails with seven
 `TS2345` route-string errors whenever `mobile/.expo/types/router.d.ts` is stale —
@@ -11,21 +11,24 @@ that file is generated, gitignored, and only the Metro dev server writes it.
 `/session`, `/progression` or `/import-workouts`, run `CI=1 npx expo start --web`
 briefly and kill it.
 
-**Every planned feature is built, and the interface has been redesigned.** What
-remains is not code: looking at the redesign in a browser, deploying, merging, and
-the checks that need real hardware.
+**Every planned feature is built, the interface has been redesigned, and AI is now
+the default rather than a button you press.** What remains is not code: pushing,
+deploying, merging, and the checks that need real hardware.
 
 ---
 
 ## Do these first
 
-1. **Look at the redesign in a browser.** Nine commits changed how every screen is
-   drawn and none of it has been seen by a human or a browser. Nothing about layout
-   is checkable under node, and three bugs have already shipped past a green suite on
-   this project. Priorities are in *The redesign* below.
-2. **Deploy.** The live site is several commits behind and is missing everything from 2026-09-29: the logger, routines, the cross-reference, the backup rewrite, the `Invalid VFS state` fix and eleven review fixes. See *Deploying*.
-3. **Merge to `main`.** Forty-seven commits have never left this branch. Nothing depends on it, but the gap grows.
-4. `git push origin --delete claude/brave-pascal-zwfg38` — a dead duplicate branch that was accidentally deployed once. Deleting it from a dev container fails at the git proxy; it needs a real machine.
+1. **Push.** Twenty-five commits since the last push, including the whole exercise
+   catalogue and the fix pass that followed its review.
+2. **Deploy.** The live site is missing everything from 2026-09-29 and 2026-09-30: the logger, routines, the cross-reference, the backup rewrite, the `Invalid VFS state` fix, the redesign, and the exercise catalogue. See *Deploying*.
+3. **Merge to `main`.** Eighty-one commits have never left this branch. Nothing depends on it, but the gap grows.
+4. **Run migration v4 against a device holding real data.** v3 and v4 have only ever
+   been applied to fresh databases. v4 is additive — one table, one nullable column,
+   the safest shape there is, and a reviewer checked that `ALTER TABLE … ADD COLUMN
+   catalogue_id TEXT REFERENCES …` with no DEFAULT is the form SQLite permits under
+   `foreign_keys = ON`. It still has not been run against history.
+5. `git push origin --delete claude/brave-pascal-zwfg38` — a dead duplicate branch that was accidentally deployed once. Deleting it from a dev container fails at the git proxy; it needs a real machine.
 
 ---
 
@@ -48,6 +51,48 @@ idempotent on session start time.
 **Trends** additionally shows weekly volume, and weekly training energy as a band against the filter's expenditure. That energy figure is display-only and nothing consumes it — `expenditure.ts` already absorbs training through the intake-versus-weight gap, so counting it again would raise the target for work already accounted for.
 
 **Backups** (Settings → Your data) hold everything including the lifting history, download properly in a browser, and can be restored. Restore replaces rather than merges and states what the file holds before it does.
+
+---
+
+## The exercise catalogue, and AI by default
+
+Migration **v4** adds `exercise_catalogue` (canonical name, movement pattern, primary
+muscle, equipment, a bodyweight flag, instructions) and a nullable
+`exercises.catalogue_id`. Enrichment is a **single structured call** — no grounding,
+no grounding charge — because which muscle a press loads is general knowledge rather
+than a published figure.
+
+**AI fires without being asked**, which is the point of the feature and the thing to
+watch. Three paths spend a call: food search with zero results, the exercise picker
+with zero catalogue matches, and batch seeding in Settings. Each is guarded by
+zero-results-only, a settle delay, and one attempt per distinct query per screen.
+
+**`exercises.name` is never written.** The link is the new column, and the picker
+displays `canonical_name` while logging the **recorded** name. That distinction is
+load-bearing: `sets` carries its own `exercise_name`, and PREVIOUS, the progression
+list and the icon map all key on it, so logging the model's spelling of a lift
+already on record forks it in two and blanks both halves. A whole-branch review
+caught that the first implementation did exactly this.
+
+**Measured, not assumed:** a 20-name enrichment call takes **26.5 s** against
+`gemini-3.5-flash` (318 prompt / 2,066 output / **5,114 thinking** tokens, HTTP 200,
+`finishReason: STOP`). The thinking tokens are most of the latency and no
+output-token estimate sees them. `ENRICH_TIMEOUT_MS` is 60 s for that reason. A batch
+that fails to parse or times out is retried on the next run; only a rejected key or
+an exhausted quota (`GeminiAccessError`) stops the queue.
+
+**Known rough edges**, none blocking:
+
+- Case-colliding recorded names (`Chin Up` and `Chin up` both on record) collapse in
+  the enrichment name map, so one is reported "not recognised" on every run.
+- A local database failure during seeding is reported as a lookup failure and the
+  remaining batches each spend a real call before hitting the same fault.
+- Nothing caps consecutive timeouts: four batches on a hanging connection is four
+  minutes with the button disabled and its label stuck on "Batch 1 of 4…".
+- The `Add "<typed text>"` button's label names what you typed while it correctly
+  creates the recorded name. The data outcome is right; the label disagrees.
+- `notify` and `confirm` are `window.alert`/`window.confirm` on web, so the "No
+  how-to yet" notice is a browser dialog on the iOS PWA.
 
 ---
 
@@ -180,12 +225,34 @@ Everything below was driven in a real browser against the full 3,073-row export,
 - Progression: both charts draw, record markers present, pull-ups score off the weight trend
 - Backup: download a v2 file with all 3,057 sets, open a **fresh browser profile**, confirm empty, restore, history returns with bodyweight flags intact
 
+**The catalogue (2026-10-01)**, walked against the *exported* build served by the real
+proxy, so `/api/gemini` was live and the calls were real. Metro cannot serve that
+route — a dev-server walk gets the SPA fallback HTML back, the parse fails, and the
+feature looks silently broken when it is fine. Use the staging recipe in *Verifying
+without a deploy*.
+
+- Typed `Deadlift (Barbell)` into an empty catalogue: the row `Barbell Deadlift ·
+  Hamstrings · Barbell` appeared about eight seconds later, carrying the **hinge**
+  glyph — so the model classified it correctly and the glyph map resolved it
+- Seeding from Settings: "Catalogue built — 1 of 1 catalogued"
+- The picker then offered `Barbell Deadlift` and adding it created a block named
+  **`Deadlift (Barbell)`**. This is the one that matters; see *The exercise catalogue*
+- The how-to sheet: 28px glyph, muscle and equipment, instructions that genuinely
+  describe a barbell deadlift down to "avoid rounding your lower back", and the
+  caveat. **A human read them.** No test can do this one
+- An uncatalogued block header says "No how-to yet" rather than doing nothing
+- With `/api/gemini` forced to 500 the picker says "Could not look that up. You can
+  still add it." rather than failing silently
+
+Not looked at by eye: light mode (the palette contrast test covers the tokens), the
+progression chips, and whether `pull` and `isolation` are tellable apart at 14px.
+
 ---
 
 ## Still unverified — needs hardware
 
 - **iOS.** Safari → Add to Home Screen → log a weight → fully close → reopen. The reason the web deployment exists, and nobody has done it.
-- **Migration v3 against a device that already holds v2 data.** Only ever applied to fresh databases.
+- **Migrations v3 and v4 against a device that already holds earlier data.** Only ever applied to fresh databases.
 - **Native.** `expo-document-picker` was added this session, so an APK needs rebuilding before import or restore work on a device.
 - **The wasm content type** in `staticFiles.ts`. Probing guessed paths returned 404, so it is unconfirmed end to end.
 
@@ -269,7 +336,12 @@ cd services/gemini-proxy && npm run build
 PORT=8200 GEMINI_API_KEY=x PROXY_TOKEN=y node dist/index.js &
 ```
 
-Drive `http://localhost:8200` with Playwright against `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`. Two things that cost time: `notify()` uses `window.alert` on web, so listen for `dialog` events or failures vanish; and assert on something that cannot be true by accident — a check for a static label once reported a weigh-in as saved when nothing had been.
+**This is the only way to exercise anything that calls `/api/gemini`.** Metro does
+not serve that route, so a dev-server walk gets the SPA fallback HTML, the JSON parse
+fails, and auto-lookup and enrichment look broken when they are not. Put the real key
+in `GEMINI_API_KEY` (it is in `mobile/.env.local`) and the calls are real.
+
+Drive `http://localhost:8200` with Playwright against `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`. Three things that cost time: `notify()` and `confirm()` use `window.alert`/`window.confirm` on web, so listen for `dialog` events or failures vanish — and a browser-automation session that cannot answer one will wedge entirely; resizing the window mid-session wedged CDP input and screenshots once, after which only JS-dispatched clicks on the React Native Web pressables worked; and assert on something that cannot be true by accident — a check for a static label once reported a weigh-in as saved when nothing had been.
 
 ---
 
