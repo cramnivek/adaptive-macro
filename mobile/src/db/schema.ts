@@ -131,4 +131,23 @@ export const MIGRATIONS: string[] = [
 
   ALTER TABLE exercises ADD COLUMN catalogue_id TEXT REFERENCES exercise_catalogue (id);
   `,
+  // v5 — muscles to draw, and a how-to in steps
+  //
+  // All three nullable, because every existing row has none of them and a
+  // migration that rewrites rows is a migration that can corrupt them. The two
+  // plural columns hold JSON arrays: a list read in one place, written in one
+  // place, and never queried by SQL.
+  //
+  // `instructions` keeps its prose. An entry catalogued before this still has a
+  // how-to, and the sheet shows steps when they exist and the paragraph when
+  // they do not, so nothing is discarded for the sake of a new format.
+  //
+  // `primary_muscle` also stays as it is: free text in the model's own wording,
+  // shown as a label. `primary_region` is the validated one, because free text
+  // cannot drive a diagram — "posterior chain" has nowhere to go on a body.
+  `
+  ALTER TABLE exercise_catalogue ADD COLUMN primary_region TEXT;
+  ALTER TABLE exercise_catalogue ADD COLUMN secondary_regions TEXT;
+  ALTER TABLE exercise_catalogue ADD COLUMN instruction_steps TEXT;
+  `,
 ];

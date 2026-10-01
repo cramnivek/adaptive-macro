@@ -14,6 +14,8 @@
  */
 
 /** The patterns an icon exists for. Anything else is normalised into `isolation`. */
+import { MUSCLE_REGIONS, normaliseRegion, type MuscleRegion } from '../components/muscleMap';
+
 export const MOVEMENT_PATTERNS = [
   'push',
   'pull',
@@ -36,6 +38,11 @@ export interface EnrichedExercise {
   equipment: string;
   bodyweightBased: boolean;
   instructions: string;
+  /** Drives the body diagram, so it is validated rather than free text. */
+  primaryRegion: MuscleRegion;
+  secondaryRegions: MuscleRegion[];
+  /** Two to five, each one action. Empty when the model returned none. */
+  steps: string[];
 }
 
 /**
@@ -70,6 +77,8 @@ export const enrichmentPromptFor = (names: string[]): string =>
     'For each name below, return its canonical name, its movement pattern, the primary muscle it loads, the equipment it needs, whether it is loaded by bodyweight, and brief instructions for performing it.',
     `The movement pattern must be exactly one of: ${MOVEMENT_PATTERNS.join(', ')}.`,
     'Instructions should be two to four short sentences covering setup, the movement itself, and the one cue that most often goes wrong. Do not number them.',
+    `Also give the muscles worked, chosen from exactly this list: ${MUSCLE_REGIONS.join(', ')}. primaryRegion is the one it loads most; secondaryRegions are the others it meaningfully loads, up to three, and may be empty.`,
+    'Also give steps: two to five of them, each a single action, in the order they are performed. These are the same instructions broken up, not extra detail.',
     'Keep the canonical name close to the name given — do not merge a machine or variation into its barbell parent, because they load differently and are tracked separately.',
     'Return one entry per name given, using the name exactly as given in requestedName.',
     '',
@@ -102,6 +111,12 @@ export const ENRICHMENT_SCHEMA = {
           equipment: { type: 'string' },
           bodyweightBased: { type: 'boolean' },
           instructions: { type: 'string' },
+          primaryRegion: { type: 'string', enum: [...MUSCLE_REGIONS] },
+          secondaryRegions: {
+            type: 'array',
+            items: { type: 'string', enum: [...MUSCLE_REGIONS] },
+          },
+          steps: { type: 'array', items: { type: 'string' } },
         },
         required: [
           'requestedName',
@@ -111,6 +126,9 @@ export const ENRICHMENT_SCHEMA = {
           'equipment',
           'bodyweightBased',
           'instructions',
+          'primaryRegion',
+          'secondaryRegions',
+          'steps',
         ],
       },
     },
@@ -172,6 +190,14 @@ export const parseEnrichment = (
       canonicalName: row.canonicalName,
       movementPattern: normalisePattern(row.movementPattern),
       primaryMuscle: row.primaryMuscle,
+      // Unlike the fields above, a missing or invented region is not worth
+      // dropping the entry over: `full_body` is a truthful answer for a stretch
+      // or a carry, and the diagram has something to draw either way.
+      primaryRegion: normaliseRegion(row.primaryRegion),
+      secondaryRegions: Array.isArray(row.secondaryRegions)
+        ? row.secondaryRegions.map(normaliseRegion).filter((r) => r !== 'full_body')
+        : [],
+      steps: Array.isArray(row.steps) ? row.steps.filter(isNonEmptyString) : [],
       equipment: row.equipment,
       bodyweightBased: row.bodyweightBased,
       instructions: row.instructions,

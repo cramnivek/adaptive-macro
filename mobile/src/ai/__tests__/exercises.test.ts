@@ -8,6 +8,7 @@ import {
   normalisePattern,
   parseEnrichment,
 } from '../exercises';
+import { MUSCLE_REGIONS } from '../../components/muscleMap';
 
 const entry = (name: string, pattern = 'push') => ({
   requestedName: name,
@@ -182,5 +183,73 @@ describe('parseEnrichment and requested spelling', () => {
     const result = parseEnrichment({ exercises: [entry('Leg Press')] }, ['Bench Press']);
     expect(result.entries).toEqual([]);
     expect(result.missing).toEqual(['Bench Press']);
+  });
+});
+
+describe('parseEnrichment and the muscle map', () => {
+  /** A response row, overridable per test. */
+  const row = (extra: Record<string, unknown> = {}) => ({
+    requestedName: 'Pull Up',
+    canonicalName: 'Pull Up',
+    movementPattern: 'pull',
+    primaryMuscle: 'Lats',
+    equipment: 'Pull-up bar',
+    bodyweightBased: true,
+    instructions: 'Hang from the bar and pull your chin over it.',
+    primaryRegion: 'lats',
+    secondaryRegions: ['biceps', 'upper_back'],
+    steps: ['Grip the bar wider than your shoulders.', 'Pull until your chin clears it.'],
+    ...extra,
+  });
+
+  const parseOne = (extra: Record<string, unknown> = {}) =>
+    parseEnrichment({ exercises: [row(extra)] }, ['Pull Up']).entries[0];
+
+  it('keeps the regions and steps the model returned', () => {
+    const entry = parseOne();
+    expect(entry.primaryRegion).toBe('lats');
+    expect(entry.secondaryRegions).toEqual(['biceps', 'upper_back']);
+    expect(entry.steps).toHaveLength(2);
+  });
+
+  it('falls back to full_body for a region it invented', () => {
+    // "posterior chain" is a phrase a model reaches for and a diagram cannot use.
+    expect(parseOne({ primaryRegion: 'posterior chain' }).primaryRegion).toBe('full_body');
+  });
+
+  it('keeps the entry when the regions are missing entirely', () => {
+    // Unlike a missing name or equipment, this is not worth dropping an entry
+    // over: the diagram has something to draw either way.
+    const entry = parseOne({ primaryRegion: undefined, secondaryRegions: undefined });
+    expect(entry).toBeDefined();
+    expect(entry.primaryRegion).toBe('full_body');
+    expect(entry.secondaryRegions).toEqual([]);
+  });
+
+  it('drops full_body from the secondary list, where it means nothing', () => {
+    // Shading the whole body as a *secondary* muscle says only "and the rest".
+    const entry = parseOne({ secondaryRegions: ['full_body', 'biceps', 'nonsense'] });
+    expect(entry.secondaryRegions).toEqual(['biceps']);
+  });
+
+  it('keeps the entry when steps are missing, because the prose is the fallback', () => {
+    const entry = parseOne({ steps: undefined });
+    expect(entry.steps).toEqual([]);
+    expect(entry.instructions).toContain('Hang from the bar');
+  });
+
+  it('drops a blank step rather than numbering an empty line', () => {
+    expect(parseOne({ steps: ['Grip the bar.', '  ', 'Pull.'] }).steps).toEqual([
+      'Grip the bar.',
+      'Pull.',
+    ]);
+  });
+});
+
+describe('enrichmentPromptFor and the muscle map', () => {
+  it('lists every region the model may choose from', () => {
+    // An enum the prompt does not mention is one the model invents around.
+    const prompt = enrichmentPromptFor(['Squat']);
+    for (const region of MUSCLE_REGIONS) expect(prompt).toContain(region);
   });
 });

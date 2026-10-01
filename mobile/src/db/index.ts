@@ -12,6 +12,7 @@ import type {
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
+import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 
 /**
  * The open in flight, not the opened database.
@@ -820,6 +821,14 @@ export interface CatalogueEntry {
   equipment: string;
   bodyweightBased: boolean;
   instructions: string | null;
+  /**
+   * The validated region that drives the diagram, null on an entry catalogued
+   * before v5 and not yet backfilled. `primaryMuscle` above stays the label.
+   */
+  primaryRegion: MuscleRegion | null;
+  secondaryRegions: MuscleRegion[];
+  /** Empty when the entry predates v5; `instructions` is the fallback. */
+  steps: string[];
 }
 
 interface CatalogueRow {
@@ -831,7 +840,27 @@ interface CatalogueRow {
   equipment: string;
   bodyweight_based: number;
   instructions: string | null;
+  primary_region: string | null;
+  secondary_regions: string | null;
+  instruction_steps: string | null;
 }
+
+/**
+ * A JSON array column, which is empty whenever it is anything else.
+ *
+ * Null for a pre-v5 row, and a row written by a future version could hold
+ * something this one does not expect. Neither is a reason to throw while
+ * drawing a list of exercises.
+ */
+const parseList = (raw: string | null): string[] => {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+};
 
 const toCatalogueEntry = (row: CatalogueRow): CatalogueEntry => ({
   id: row.id,
@@ -842,22 +871,51 @@ const toCatalogueEntry = (row: CatalogueRow): CatalogueEntry => ({
   equipment: row.equipment,
   bodyweightBased: row.bodyweight_based === 1,
   instructions: row.instructions,
+  // Null stays null: "not backfilled yet" is a different thing from
+  // `full_body`, and the sheet needs to tell them apart to decide whether to
+  // draw a body at all.
+  primaryRegion: row.primary_region === null ? null : normaliseRegion(row.primary_region),
+  secondaryRegions: parseList(row.secondary_regions).map(normaliseRegion),
+  steps: parseList(row.instruction_steps),
 });
 
-/** Creates the entry, or returns the id of the one already holding that name. */
+/**
+ * Creates the entry, or fills in what an existing one is missing.
+ *
+ * The update is the backfill path, and it is an UPDATE rather than a delete and
+ * re-insert because `exercises.catalogue_id` points at this row's id: replacing
+ * it would unlink every exercise using it. Only the v5 columns are written, and
+ * only when the row has none — re-running this must not churn the classification
+ * a user has already seen, and must not overwrite a region with a later call's
+ * different guess.
+ */
 export const upsertCatalogueEntry = async (entry: EnrichedExercise): Promise<string> => {
   const db = await getDb();
-  const existing = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM exercise_catalogue WHERE canonical_name = ? COLLATE NOCASE',
+  const existing = await db.getFirstAsync<{ id: string; primary_region: string | null }>(
+    'SELECT id, primary_region FROM exercise_catalogue WHERE canonical_name = ? COLLATE NOCASE',
     entry.canonicalName,
   );
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.primary_region === null) {
+      await db.runAsync(
+        `UPDATE exercise_catalogue
+            SET primary_region = ?, secondary_regions = ?, instruction_steps = ?
+          WHERE id = ?`,
+        entry.primaryRegion,
+        JSON.stringify(entry.secondaryRegions),
+        JSON.stringify(entry.steps),
+        existing.id,
+      );
+    }
+    return existing.id;
+  }
 
   const id = newId();
   await db.runAsync(
     `INSERT INTO exercise_catalogue
-       (id, canonical_name, movement_pattern, primary_muscle, equipment, bodyweight_based, instructions, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, canonical_name, movement_pattern, primary_muscle, equipment, bodyweight_based,
+        instructions, primary_region, secondary_regions, instruction_steps, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     entry.canonicalName,
     entry.movementPattern,
@@ -865,9 +923,34 @@ export const upsertCatalogueEntry = async (entry: EnrichedExercise): Promise<str
     entry.equipment,
     entry.bodyweightBased ? 1 : 0,
     entry.instructions,
+    entry.primaryRegion,
+    JSON.stringify(entry.secondaryRegions),
+    JSON.stringify(entry.steps),
     localStamp(),
   );
   return id;
+};
+
+/**
+ * Catalogue entries that predate v5, by canonical name, most-trained first.
+ *
+ * Seeding's other query selects exercises with no `catalogue_id`, which on a
+ * device whose catalogue is already built returns nothing at all — so without
+ * this, "Build the exercise catalogue" would report "0 of 0" and the muscles
+ * and steps would stay null forever.
+ */
+export const listCatalogueNamesNeedingRegions = async (): Promise<string[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ canonical_name: string }>(
+    `SELECT c.canonical_name
+       FROM exercise_catalogue c
+       LEFT JOIN exercises e ON e.catalogue_id = c.id
+       LEFT JOIN sets s ON s.exercise_id = e.id
+      WHERE c.primary_region IS NULL
+      GROUP BY c.id
+      ORDER BY COUNT(s.id) DESC, c.canonical_name`,
+  );
+  return rows.map((r) => r.canonical_name);
 };
 
 /**
@@ -922,7 +1005,8 @@ export const searchCatalogue = async (term: string, limit = 30): Promise<Catalog
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(
     `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions,
+            c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
+            c.instruction_steps,
             (SELECT e.name
                FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
               WHERE e.catalogue_id = c.id
@@ -945,7 +1029,8 @@ export const catalogueEntryForExercise = async (
   const db = await getDb();
   const row = await db.getFirstAsync<CatalogueRow>(
     `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions, e.name AS recorded_name
+            c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
+            c.instruction_steps, e.name AS recorded_name
        FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
       WHERE e.name = ?`,
     exerciseName,
