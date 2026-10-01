@@ -148,3 +148,57 @@ export const isNutritionallyConsistent = (n: Nutrients, tolerance = 0.15): boole
   if (n.kcal <= 0) return implied <= 0;
   return Math.abs(implied - n.kcal) / n.kcal <= tolerance;
 };
+
+/**
+ * Lowercase, with every non-alphanumeric character becoming a space.
+ *
+ * Applied to both sides of the comparison so punctuation cannot decide a
+ * match: `Oscar Mayer, Chicken Breast (Honey Glazed)` and `oscar-mayer` have
+ * to meet somewhere, and that somewhere is here.
+ */
+const normalise = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Words this short carry no signal, and firing a lookup on one spends money on noise. */
+const MIN_TOKEN_LENGTH = 3;
+
+/**
+ * Function words, which survive the length filter and must not decide a lookup.
+ *
+ * `the` is exactly three characters. Without this, "bread and butter" turns on
+ * whether some result happens to contain `and` inside a longer word — `Island`
+ * does, `Sourdough` does not — which is a coin toss deciding a charged call.
+ */
+const STOPWORDS = new Set(['and', 'the', 'with', 'for', 'from']);
+
+/**
+ * True when the results plausibly answer the query.
+ *
+ * Search `crispyking breast` and the databases return twelve kinds of poultry:
+ * confident, correctly formatted, and not the thing you asked for. Auto-lookup
+ * used to be gated on an empty result list, so the one case where the
+ * databases are weakest — branded and restaurant items — was the one case AI
+ * could not reach.
+ *
+ * A model call is not needed to see the problem. `crispyking` appears in none
+ * of the twelve names. So: every query word of three or more characters must
+ * turn up somewhere in some result's name or brand. One word that does not is
+ * the whole signal.
+ *
+ * Matching is by substring rather than whole word, which covers `breasts` for
+ * `breast` and also lets `graham` cover `ham`. That false positive is the
+ * direction worth being wrong in — it withholds a charged lookup rather than
+ * spending one.
+ */
+export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
+  const tokens = normalise(query)
+    .split(' ')
+    .filter((token) => token.length >= MIN_TOKEN_LENGTH && !STOPWORDS.has(token));
+
+  // Nothing to judge. Not a miss — a query of "of the" has told us nothing.
+  if (tokens.length === 0) return true;
+  if (foods.length === 0) return false;
+
+  const haystacks = foods.map((food) => normalise(`${food.name} ${food.brand ?? ''}`));
+  return tokens.every((token) => haystacks.some((hay) => hay.includes(token)));
+};

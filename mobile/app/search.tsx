@@ -1,5 +1,5 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
-import { isNutritionallyConsistent } from '@adaptive-macros/engine';
+import { isNutritionallyConsistent, resultsAnswerQuery } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -164,12 +164,16 @@ export default function SearchScreen() {
   }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
 
   // AI is not a thing you ask for here; it is what happens when the databases
-  // have nothing. Only on zero results, only once per distinct query, and only
-  // after typing has settled, so nothing fires mid-word.
+  // have nothing useful. Nothing useful covers both an empty list and a full
+  // page that answers a different question — search "crispyking breast" and
+  // twelve kinds of poultry come back, none of them the thing. Once per
+  // distinct query, and only after typing has settled, so nothing fires
+  // mid-word.
   useEffect(() => {
     const trimmed = query.trim();
     if (showingFrequent || loading || lookingUp) return;
-    if (results.length > 0 || trimmed.length < 2) return;
+    if (trimmed.length < 2) return;
+    if (results.length > 0 && resultsAnswerQuery(trimmed, results)) return;
     if ((autoAttempts.current.get(trimmed) ?? 0) >= MAX_AUTO_ATTEMPTS) return;
 
     const timer = setTimeout(() => {
@@ -208,6 +212,13 @@ export default function SearchScreen() {
         ListHeaderComponent={
           shown.length > 0 && showingFrequent ? (
             <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>Your frequent foods</Text>
+          ) : shown.length > 0 && lookingUp ? (
+            // The rows stay visible and selectable underneath. The relevance
+            // check is a guess, and a guess must not take away an answer that
+            // might have been right.
+            <Text style={[styles.lookupNote, { color: colors.warning }]}>
+              These do not look like what you searched. Looking it up… {lookupElapsed}s
+            </Text>
           ) : null
         }
         ListEmptyComponent={
@@ -335,6 +346,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
+  lookupNote: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginBottom: space.sm },
   empty: { fontFamily: font.ui, fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
   footer: { marginTop: space.lg, gap: space.sm },
   footerNote: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },

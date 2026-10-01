@@ -5,6 +5,7 @@ import {
   kcalFromMacros,
   per100gFromPortion,
   remainingAgainst,
+  resultsAnswerQuery,
   scaleNutrients,
   sumNutrients,
 } from '../src/foods';
@@ -129,5 +130,67 @@ describe('dates', () => {
   it('rejects malformed dates', () => {
     expect(isValidISODate('2026-1-1')).toBe(false);
     expect(isValidISODate('not-a-date')).toBe(false);
+  });
+});
+
+/** Only the fields `resultsAnswerQuery` reads; the rest of `Food` is irrelevant here. */
+const result = (name: string, brand?: string) =>
+  ({ name, brand }) as unknown as Parameters<typeof resultsAnswerQuery>[1][number];
+
+/** The twelve rows a real search for "crispyking breast" returned. */
+const poultry = [
+  result('Turkey Breast, Sliced, Prepackaged'),
+  result('Chicken Breast Tenders, Breaded, Uncooked'),
+  result('Chicken Breast, Roll, Oven-roasted'),
+  result('Pheasant, Breast, Meat Only, Raw'),
+  result('Quail, Breast, Meat Only, Raw'),
+  result('Veal, Breast, Separable Fat, Cooked'),
+  result('Chicken Breast Tenders, Breaded, Cooked, Microwaved'),
+  result('Duck, Wild, Breast, Meat Only, Raw'),
+  result('Chicken Breast (Honey Glazed)', 'Oscar Mayer'),
+  result('Ruffed Grouse, Breast Meat, Skinless, Raw'),
+  result('Turkey, Whole, Breast, Meat Only, Raw'),
+  result('Chicken, Broiler, Breast, Skinless, Raw'),
+];
+
+describe('resultsAnswerQuery', () => {
+  it('rejects a page of results that share only the common word', () => {
+    // "breast" is covered twelve times over; "crispyking" appears nowhere.
+    expect(resultsAnswerQuery('crispyking breast', poultry)).toBe(false);
+  });
+
+  it('accepts the same results for a query they do answer', () => {
+    expect(resultsAnswerQuery('chicken breast', poultry)).toBe(true);
+  });
+
+  it('counts a brand carried in its own field', () => {
+    // Nothing is named "Oscar Mayer"; it is only ever the brand.
+    expect(resultsAnswerQuery('oscar mayer honey', poultry)).toBe(true);
+  });
+
+  it('ignores punctuation and case on both sides', () => {
+    expect(resultsAnswerQuery('OSCAR-MAYER', poultry)).toBe(true);
+  });
+
+  it('ignores words too short to carry a signal', () => {
+    // No token survives, so there is nothing to judge and no call to spend.
+    expect(resultsAnswerQuery('of a', poultry)).toBe(true);
+  });
+
+  it('ignores function words, which are long enough to survive the length filter', () => {
+    // "the" is exactly three characters. Letting it decide would make the call
+    // turn on whether some result happens to contain it inside a longer word.
+    expect(resultsAnswerQuery('the chicken and the breast', poultry)).toBe(true);
+  });
+
+  it('treats an empty result list as a miss', () => {
+    expect(resultsAnswerQuery('chicken breast', [])).toBe(false);
+  });
+
+  it('matches by substring, so a longer word covers a shorter one', () => {
+    // Deliberate: the false positive withholds a charged lookup rather than
+    // spending one. Pinned so it is not "fixed" into whole-word matching.
+    expect(resultsAnswerQuery('ham', [result('Graham Crackers')])).toBe(true);
+    expect(resultsAnswerQuery('breast', poultry)).toBe(true);
   });
 });

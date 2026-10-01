@@ -67,7 +67,12 @@ with a space, collapse runs of spaces. Apply it to the query and to each food's
 `name` plus `brand` joined — `brand` matters, because `Oscar Mayer, Chicken Breast`
 carries the brand in a separate field and a check against `name` alone would miss it.
 
-Tokenise the normalised query on spaces and drop tokens shorter than three characters.
+Tokenise the normalised query on spaces, drop tokens shorter than three characters,
+and drop a short list of function words — `and`, `the`, `with`, `for`, `from`. The
+length filter alone is not enough: `the` is exactly three characters, so without this
+"bread and butter" turns on whether some result happens to contain `and` inside a
+longer word, which `Island` does and `Sourdough` does not. A coin toss must not decide
+a charged call.
 A token is **covered** when it appears as a substring of any food's normalised
 haystack. The results answer the query when every surviving token is covered.
 
@@ -81,7 +86,7 @@ Two deliberate choices:
   Requiring all of them is what catches `crispyking` while leaving `chicken breast`
   alone.
 
-Edge cases: a query with no surviving tokens (`a`, `of the`) returns `true`, because
+Edge cases: a query with no surviving tokens (`of a`, `and the`) returns `true`, because
 there is nothing to judge and firing a call on it would be spending money on noise. An
 empty `foods` array returns `false`, consistent with the zero-results case the existing
 effect already handles first.
@@ -129,7 +134,8 @@ Pure, no mocking:
 3. a brand matched only through the `brand` field — query `oscar mayer turkey`,
    result `name: 'Turkey Breast', brand: 'Oscar Mayer'` — returns `true`
 4. case and punctuation fold: `oscar-mayer` against `Oscar Mayer,` returns `true`
-5. tokens under three characters are ignored: `of the` returns `true`
+5. tokens under three characters are ignored: `of a` returns `true`
+5b. function words are ignored: `the chicken and the breast` returns `true`
 6. an empty result list returns `false`
 7. the documented false positive holds: `ham` is covered by `Graham Crackers`
 
