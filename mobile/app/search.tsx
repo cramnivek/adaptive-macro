@@ -128,7 +128,11 @@ export default function SearchScreen() {
           if (latestQuery.current !== trimmed) return;
           setResults(partial.foods);
           setErrors(partial.errors);
-          setLoading(false);
+          // Only stop the spinner if the fast wave actually found something.
+          // An empty partial would otherwise paint "Nothing found" for a second
+          // before Open Food Facts answers — and a packaged brand only it knows
+          // is exactly the search this is meant to serve.
+          if (partial.foods.length > 0) setLoading(false);
         },
       );
       if (latestQuery.current !== trimmed) return;
@@ -207,8 +211,14 @@ export default function SearchScreen() {
       setCandidate(food);
     } catch (error) {
       // An abandoned lookup is not a failure to report: the user moved on, and
-      // an error about a query they are no longer looking at is noise.
-      if (controller.signal.aborted) return;
+      // an error about a query they are no longer looking at is noise. It also
+      // gives the attempt back — nothing was learned about this query, and
+      // charging it an attempt would quietly exhaust it after two edits.
+      if (controller.signal.aborted) {
+        const spent = autoAttempts.current.get(trimmed) ?? 1;
+        autoAttempts.current.set(trimmed, Math.max(0, spent - 1));
+        return;
+      }
       if (!mounted.current || latestQuery.current !== trimmed) return;
       setErrors([
         error instanceof UngroundedResponseError
@@ -216,8 +226,13 @@ export default function SearchScreen() {
           : (error as Error).message,
       ]);
     } finally {
-      if (lookupAbort.current === controller) lookupAbort.current = null;
-      if (mounted.current) setLookingUp(false);
+      // Only the lookup still being waited on may clear the flag. A superseded
+      // one finishing later must not take the clock off a live call — which a
+      // double tap on the button is enough to cause.
+      if (lookupAbort.current === controller) {
+        lookupAbort.current = null;
+        if (mounted.current) setLookingUp(false);
+      }
     }
   }, [query, settings.foodCountry, settings.foodLookup.geminiApiKey]);
 
@@ -226,7 +241,10 @@ export default function SearchScreen() {
   // what makes a forty-second wait end in nothing.
   useEffect(() => {
     return () => lookupAbort.current?.abort();
-  }, [query]);
+    // The trimmed query, not the raw one: everything else here keys on trimmed,
+    // so aborting on a trailing space would throw away a lookup whose result
+    // was still wanted and then buy a second one for the same search.
+  }, [query.trim()]);
 
   // AI is not a thing you ask for here; it is what happens when the databases
   // have nothing useful. Nothing useful covers both an empty list and a full

@@ -55,6 +55,9 @@ export const handleGeminiProxy = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
+      // Carries the client's cancellation through, so abandoning a lookup
+      // actually stops the charge rather than only hiding the clock.
+      signal: request.signal,
     },
   );
 

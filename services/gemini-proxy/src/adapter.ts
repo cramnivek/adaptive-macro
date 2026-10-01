@@ -14,10 +14,20 @@ export const toNodeHandler =
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
 
+      // A client that hangs up should take the upstream call with it. Without
+      // this the handler runs to completion against Gemini and is billed for an
+      // answer with nobody left to receive it — a grounded lookup the user
+      // typed past is ninety seconds of exactly that.
+      const aborter = new AbortController();
+      res.on('close', () => {
+        if (!res.writableFinished) aborter.abort();
+      });
+
       const request = new Request(`https://proxy.invalid${req.url ?? '/'}`, {
         method: req.method,
         headers: req.headers as Record<string, string>,
         body: chunks.length ? Buffer.concat(chunks) : undefined,
+        signal: aborter.signal,
       });
 
       const response = await handler(request);
