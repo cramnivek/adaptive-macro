@@ -200,6 +200,10 @@ export default function TodayScreen() {
           setMealActions(null);
           router.push({ pathname: '/describe', params: { meal } });
         }}
+        onPhotograph={(meal) => {
+          setMealActions(null);
+          router.push({ pathname: '/describe', params: { meal, capture: 'camera' } });
+        }}
         onScan={(meal) => {
           setMealActions(null);
           router.push({ pathname: '/scan', params: { meal } });

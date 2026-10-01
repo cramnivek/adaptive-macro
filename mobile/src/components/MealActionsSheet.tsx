@@ -10,6 +10,7 @@ interface MealActionsSheetProps {
   meal: Meal | null;
   onClose: () => void;
   onDescribe: (meal: Meal) => void;
+  onPhotograph: (meal: Meal) => void;
   onScan: (meal: Meal) => void;
 }
 
@@ -20,7 +21,13 @@ interface MealActionsSheetProps {
  * times over, which is twelve targets on one screen and two glyphs nobody
  * reads the same way twice. Behind one overflow they can afford words.
  */
-export const MealActionsSheet = ({ meal, onClose, onDescribe, onScan }: MealActionsSheetProps) => {
+export const MealActionsSheet = ({
+  meal,
+  onClose,
+  onDescribe,
+  onPhotograph,
+  onScan,
+}: MealActionsSheetProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -47,6 +54,16 @@ export const MealActionsSheet = ({ meal, onClose, onDescribe, onScan }: MealActi
                 <Text style={[styles.rowLabel, { color: colors.text }]}>Describe it in words</Text>
                 <Text style={[styles.rowHint, { color: colors.textFaint }]}>
                   Write or dictate what you ate and get macros back.
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable onPress={() => onPhotograph(meal)} style={[styles.row, { borderColor: colors.border }]}>
+              <Ionicons name="camera-outline" size={20} color={colors.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rowLabel, { color: colors.text }]}>Photograph it</Text>
+                <Text style={[styles.rowHint, { color: colors.textFaint }]}>
+                  Estimate the macros from a picture of the plate.
                 </Text>
               </View>
             </Pressable>

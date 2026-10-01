@@ -2,14 +2,16 @@ import type { Food, Meal, Nutrients } from '@adaptive-macros/engine';
 import { roundTo } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   type EstimatedItem,
   type MealEstimate,
+  type MealPhoto,
   describeErrorMessage,
   estimateCostUsd,
   estimateMeal,
 } from '../src/ai/describeMeal';
+import { chooseMealPhoto, takeMealPhoto } from '../src/ai/mealPhoto';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { addLogEntry, saveFood } from '../src/db';
@@ -51,11 +53,12 @@ const scaleItem = (item: EstimatedItem, grams: number): Nutrients => {
 export default function DescribeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ meal?: string }>();
+  const params = useLocalSearchParams<{ meal?: string; capture?: string }>();
 
   const { settings, selectedDate, refreshAll } = useApp();
   const [meal, setMeal] = useState<Meal>((params.meal as Meal) ?? 'snack');
   const [text, setText] = useState('');
+  const [photo, setPhoto] = useState<MealPhoto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
@@ -74,21 +77,47 @@ export default function DescribeScreen() {
     return () => clearInterval(timer);
   }, [busy]);
 
+  /**
+   * A cancelled picker is not an error, so `null` leaves the screen as it was.
+   * A refused camera permission is one, and says so without blocking the text
+   * path, which still works.
+   */
+  const pick = async (source: () => Promise<MealPhoto | null>) => {
+    setError(null);
+    try {
+      const chosen = await source();
+      if (chosen) setPhoto(chosen);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    if (params.capture === 'camera') void pick(takeMealPhoto);
+    // Mount only. Re-running when the param object's identity changes would
+    // reopen the camera behind the user on every re-render of this screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const run = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !photo) return;
     setBusy(true);
     setError(null);
     setEstimate(null);
     setDrafts([]);
 
     try {
-      const result = await estimateMeal(text, {
-        provider: settings.aiProvider,
-        geminiApiKey: settings.foodLookup.geminiApiKey,
-        anthropicApiKey: settings.anthropicApiKey,
-        ollamaHost: settings.ollamaHost,
-        ollamaModel: settings.ollamaModel,
-      });
+      const result = await estimateMeal(
+        text,
+        {
+          provider: settings.aiProvider,
+          geminiApiKey: settings.foodLookup.geminiApiKey,
+          anthropicApiKey: settings.anthropicApiKey,
+          ollamaHost: settings.ollamaHost,
+          ollamaModel: settings.ollamaModel,
+        },
+        photo ?? undefined,
+      );
       setEstimate(result.estimate);
       setRanOn(result.model);
       // A local model has no per-request price, so there is no cost to show —
@@ -201,7 +230,27 @@ export default function DescribeScreen() {
         </Card>
       )}
 
-      <Card title="What did you eat?" subtitle="Write it how you would say it out loud.">
+      <Card title="What did you eat?" subtitle="Photograph it, write it, or both.">
+        {photo ? (
+          <View style={styles.photoRow}>
+            <Image
+              source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
+              style={[styles.photoPreview, { borderColor: colors.border }]}
+            />
+            <View style={{ flex: 1 }}>
+              <Button label="Remove photo" variant="subtle" onPress={() => setPhoto(null)} />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.photoRow}>
+            <View style={{ flex: 1 }}>
+              <Button label="Take a photo" variant="subtle" onPress={() => void pick(takeMealPhoto)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Choose a photo" variant="subtle" onPress={() => void pick(chooseMealPhoto)} />
+            </View>
+          </View>
+        )}
         <Field
           label="Description"
           value={text}
@@ -231,7 +280,7 @@ export default function DescribeScreen() {
         </View>
         <Button
           label={busy ? `Estimating… ${elapsed}s` : 'Estimate macros'}
-          disabled={busy || !text.trim() || !ready}
+          disabled={busy || (!text.trim() && !photo) || !ready}
           onPress={() => void run()}
         />
       </Card>
@@ -382,6 +431,8 @@ export default function DescribeScreen() {
 }
 
 const styles = StyleSheet.create({
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.md },
+  photoPreview: { width: 72, height: 72, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth },
   content: { padding: space.lg, paddingBottom: space.xxl },
   body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
