@@ -78,13 +78,14 @@ export const enrichmentPromptFor = (names: string[]): string =>
   ].join('\n');
 
 /**
- * `as const` so a typo in it is a type error rather than a runtime surprise.
+ * A typo in here is caught by a test, not by the compiler.
  *
- * Typed `Record<string, unknown>`, every key and value here was unchecked: a
- * misspelled `propertes` or a pattern list that drifted from
+ * A misspelled `propertes` or a pattern list that drifted from
  * `MOVEMENT_PATTERNS` would fail every enrichment call at runtime with a fully
- * green suite behind it. The shape is checked against a mocked request in
- * `src/api/__tests__/gemini.test.ts` for the same reason.
+ * green suite behind it. `as const` narrows the literals but checks nothing —
+ * there is no declared schema type to check this object against, so `tsc` stays
+ * silent. The guard that actually bites is the assertion on the posted request
+ * body in `src/api/__tests__/gemini.test.ts`; keep it in step with this.
  */
 export const ENRICHMENT_SCHEMA = {
   type: 'object',

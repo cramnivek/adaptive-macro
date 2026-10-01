@@ -501,7 +501,7 @@ describe('enrichExercises', () => {
   // off mid-JSON is the realistic failure. It must arrive as a transient
   // failure, because seeding retries those and abandons the queue on the others.
   it('surfaces a truncated body as a retryable GroundedLookupError', async () => {
-    fetchMock.mockResolvedValueOnce(
+    fetchMock.mockResolvedValue(
       jsonResponse(200, responseWith('{"exercises":[{"requestedName":"Bench Pr')),
     );
 
