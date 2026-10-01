@@ -91,6 +91,39 @@ Keep macros consistent with the calories you give: protein and carbohydrate are 
 
 If the text does not describe food that was eaten, set notFood and return no items.`;
 
+/** A photo already shrunk and encoded, ready to send. */
+export interface MealPhoto {
+  base64: string;
+  mimeType: string;
+}
+
+/**
+ * Appended to SYSTEM_PROMPT only when an image is present.
+ *
+ * Kept separate rather than folded in because the meal-estimation eval compares
+ * providers on SYSTEM_PROMPT verbatim; changing that prompt would silently
+ * change what the eval measures.
+ */
+export const PHOTO_PROMPT_ADDENDUM = `
+The user has sent a photograph of what they ate. Identify each food you can see and estimate the portion from what is on the plate, using the plate, cutlery or container as a size reference — say in the assumption what you judged the portion against.
+
+If the text contradicts the photograph, the text wins: it is what the person says they ate, and the photograph may be of someone else's plate or of the food before they finished.
+
+Where part of the meal is hidden, stacked or ambiguous, say so in the assumption and lower the confidence rather than guessing confidently.
+
+If the photograph is not of food, set notFood.`;
+
+/**
+ * The configured local model is a text model, and asking it to read a picture
+ * fails somewhere deep and unhelpfully. Refusing by name is kinder.
+ */
+export class PhotoUnsupportedError extends Error {
+  constructor() {
+    super('Photo estimates need Gemini or Claude. Change the estimate provider in Settings.');
+    this.name = 'PhotoUnsupportedError';
+  }
+}
+
 export class MissingApiKeyError extends Error {
   constructor() {
     super('No Anthropic API key set');
