@@ -11,7 +11,8 @@ import {
   estimateCostUsd,
   estimateMeal,
 } from '../src/ai/describeMeal';
-import { chooseMealPhoto, takeMealPhoto } from '../src/ai/mealPhoto';
+import { chooseMealPhoto, preparePhoto } from '../src/ai/mealPhoto';
+import { MealCameraSheet } from '../src/components/MealCameraSheet';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { addLogEntry, saveFood } from '../src/db';
@@ -59,6 +60,7 @@ export default function DescribeScreen() {
   const [meal, setMeal] = useState<Meal>((params.meal as Meal) ?? 'snack');
   const [text, setText] = useState('');
   const [photo, setPhoto] = useState<MealPhoto | null>(null);
+  const [camera, setCamera] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
@@ -93,14 +95,43 @@ export default function DescribeScreen() {
   };
 
   useEffect(() => {
-    if (params.capture === 'camera') void pick(takeMealPhoto);
+    if (params.capture === 'camera') setCamera(true);
     // Mount only. Re-running when the param object's identity changes would
     // reopen the camera behind the user on every re-render of this screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const run = async () => {
-    if (!text.trim() && !photo) return;
+  /**
+   * A shot taken inside the camera sheet: keep it, then estimate it straight
+   * away. The sheet stays open over the result, so a bad frame costs a retake
+   * rather than the whole walk back through this screen.
+   */
+  const captureFromCamera = async (uri: string) => {
+    setError(null);
+    setEstimate(null);
+    setDrafts([]);
+    try {
+      const shot = await preparePhoto(uri);
+      setPhoto(shot);
+      await run(shot);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  /** Back to the live camera, with nothing from the discarded frame left over. */
+  const retake = () => {
+    setPhoto(null);
+    setEstimate(null);
+    setDrafts([]);
+    setError(null);
+  };
+
+  const run = async (withPhoto?: MealPhoto) => {
+    // Taken as an argument because the camera sheet estimates in the same tick
+    // it sets the photo, and the state update has not committed by then.
+    const image = withPhoto ?? photo ?? undefined;
+    if (!text.trim() && !image) return;
     setBusy(true);
     setError(null);
     setEstimate(null);
@@ -116,7 +147,7 @@ export default function DescribeScreen() {
           ollamaHost: settings.ollamaHost,
           ollamaModel: settings.ollamaModel,
         },
-        photo ?? undefined,
+        image,
       );
       setEstimate(result.estimate);
       setRanOn(result.model);
@@ -230,6 +261,17 @@ export default function DescribeScreen() {
         </Card>
       )}
 
+      <MealCameraSheet
+        visible={camera}
+        photo={photo}
+        estimate={estimate}
+        busy={busy}
+        elapsed={elapsed}
+        onCapture={(uri) => void captureFromCamera(uri)}
+        onRetake={retake}
+        onClose={() => setCamera(false)}
+      />
+
       <Card title="What did you eat?" subtitle="Photograph it, write it, or both.">
         {photo ? (
           <View style={styles.photoRow}>
@@ -244,7 +286,7 @@ export default function DescribeScreen() {
         ) : (
           <View style={styles.photoRow}>
             <View style={{ flex: 1 }}>
-              <Button label="Take a photo" variant="subtle" onPress={() => void pick(takeMealPhoto)} />
+              <Button label="Take a photo" variant="subtle" onPress={() => setCamera(true)} />
             </View>
             <View style={{ flex: 1 }}>
               <Button label="Choose a photo" variant="subtle" onPress={() => void pick(chooseMealPhoto)} />

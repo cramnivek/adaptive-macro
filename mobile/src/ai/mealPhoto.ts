@@ -21,18 +21,28 @@ const MAX_EDGE = 1024;
 const JPEG_QUALITY = 0.7;
 
 /**
- * Shrinks and re-encodes, returning base64.
+ * Shrinks and re-encodes any image URI, returning clean base64.
  *
- * base64 rather than a file path because the web build has no filesystem: on
- * web the camera hands back base64 already, and one representation that behaves
- * the same on both runtimes is worth more than the bytes it costs.
+ * Takes a URI rather than bytes because that is the one thing every source
+ * agrees on. A picker hands back a file path on native and a data URL on web;
+ * `CameraView` hands back a data URL in *both* `uri` and `base64` on web while
+ * native puts raw base64 in `base64` and a path in `uri`. Going through the URI
+ * and letting the manipulator produce the base64 makes that difference stop
+ * mattering — read `base64` straight off a web capture and a `data:` prefix
+ * ends up inside the request.
+ *
+ * The dimensions come from the loaded image rather than the caller, because the
+ * caller's are not reliable: web capture reports the media track's settings,
+ * which can be zero.
  *
  * The longest edge is what gets constrained. Resizing a 3000x4000 portrait by
  * width alone leaves it 1024x1365 — over the budget, and billed for it.
  */
-const prepare = async (uri: string, width: number, height: number): Promise<MealPhoto> => {
-  const context = ImageManipulator.manipulate(uri);
-  context.resize(width >= height ? { width: MAX_EDGE } : { height: MAX_EDGE });
+export const preparePhoto = async (uri: string): Promise<MealPhoto> => {
+  const loaded = await ImageManipulator.manipulate(uri).renderAsync();
+
+  const context = ImageManipulator.manipulate(loaded);
+  context.resize(loaded.width >= loaded.height ? { width: MAX_EDGE } : { height: MAX_EDGE });
 
   const rendered = await context.renderAsync();
   const result = await rendered.saveAsync({
@@ -50,22 +60,17 @@ const prepare = async (uri: string, width: number, height: number): Promise<Meal
 /** `null` when the user backs out, which is not an error. */
 const firstAsset = async (result: ImagePicker.ImagePickerResult): Promise<MealPhoto | null> => {
   if (result.canceled || result.assets.length === 0) return null;
-  const asset = result.assets[0];
-  return prepare(asset.uri, asset.width, asset.height);
+  return preparePhoto(result.assets[0].uri);
 };
 
 /**
- * `quality: 1` here and the real compression in `prepare`: compressing twice
- * loses detail for nothing, since the second pass re-encodes the first one's
- * artefacts.
+ * `quality: 1` at the picker and the real compression in `preparePhoto`:
+ * compressing twice loses detail for nothing, since the second pass re-encodes
+ * the first one's artefacts.
+ *
+ * There is no camera counterpart here any more. Taking a photo goes through
+ * `MealCameraSheet`, which drives `CameraView` itself so the camera can stay
+ * open for a retake — the OS camera closes after one shot and cannot.
  */
-export const takeMealPhoto = async (): Promise<MealPhoto | null> => {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Camera access is off for this app. You can still describe the meal.');
-  }
-  return firstAsset(await ImagePicker.launchCameraAsync({ quality: 1 }));
-};
-
 export const chooseMealPhoto = async (): Promise<MealPhoto | null> =>
   firstAsset(await ImagePicker.launchImageLibraryAsync({ quality: 1 }));
