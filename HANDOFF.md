@@ -74,6 +74,12 @@ list and the icon map all key on it, so logging the model's spelling of a lift
 already on record forks it in two and blanks both halves. A whole-branch review
 caught that the first implementation did exactly this.
 
+**Measured, not assumed (photo estimates):** a 470x1024 JPEG at quality 0.7 costs
+**1,076 input tokens** — 1,477 prompt tokens with the image against a 401-token
+baseline for the same prompts without it, on `gemini-3.5-flash`. The round trip was
+3 seconds. So the resize is doing its job and a photo is cheap; the figure is a
+measurement, not an estimate, and the resize is what keeps it true.
+
 **Measured, not assumed:** a 20-name enrichment call takes **26.5 s** against
 `gemini-3.5-flash` (318 prompt / 2,066 output / **5,114 thinking** tokens, HTTP 200,
 `finishReason: STOP`). The thinking tokens are most of the latency and no
