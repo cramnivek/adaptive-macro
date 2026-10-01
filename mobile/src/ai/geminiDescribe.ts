@@ -1,5 +1,6 @@
 import { routeFor } from '../api/gemini';
-import { type DescribeResult, type MealEstimate, MealEstimateSchema, SYSTEM_PROMPT } from './describeMeal';
+import { type DescribeResult, type MealEstimate, MealEstimateSchema, type MealPhoto } from './describeMeal';
+import { geminiPartsFor, systemInstructionFor } from './mealRequest';
 
 /**
  * Meal estimation through Gemini.
@@ -17,6 +18,13 @@ const MODEL = 'gemini-3.5-flash';
 
 /** No web search here, so structured output is honoured and this can be quick. */
 const TIMEOUT_MS = 30_000;
+
+/**
+ * An image request uploads a few hundred kilobytes, usually on mobile data,
+ * before the model starts. Thirty seconds can go entirely on the upload and
+ * then report a timeout, which names the mechanism rather than the problem.
+ */
+const PHOTO_TIMEOUT_MS = 60_000;
 
 /**
  * Mirrors `MealEstimateSchema`, which zod still enforces on the parsed result.
@@ -73,10 +81,11 @@ const textOf = (response: unknown): string => {
 export const describeMealWithGemini = async (
   description: string,
   apiKey: string,
+  photo?: MealPhoto,
 ): Promise<DescribeResult> => {
   const route = routeFor(MODEL, apiKey);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), photo ? PHOTO_TIMEOUT_MS : TIMEOUT_MS);
 
   let payload: any;
   try {
@@ -85,8 +94,8 @@ export const describeMealWithGemini = async (
       signal: controller.signal,
       headers: route.headers,
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ parts: [{ text: description.trim() }] }],
+        systemInstruction: { parts: [{ text: systemInstructionFor(photo) }] },
+        contents: [{ parts: geminiPartsFor(description, photo) }],
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: MEAL_RESPONSE_SCHEMA,

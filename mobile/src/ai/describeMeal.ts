@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { claudeContentFor, systemInstructionFor } from './mealRequest';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import * as z from 'zod/v4';
 
@@ -91,10 +92,20 @@ Keep macros consistent with the calories you give: protein and carbohydrate are 
 
 If the text does not describe food that was eaten, set notFood and return no items.`;
 
+/**
+ * The image types both providers accept.
+ *
+ * Narrowed rather than left as `string` because the Anthropic SDK types
+ * `media_type` as exactly these four, and widening it there would mean a cast
+ * that silently accepts whatever a picker hands back. `preparePhoto` always
+ * re-encodes to JPEG, so this costs nothing and keeps the compiler useful.
+ */
+export type MealImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
 /** A photo already shrunk and encoded, ready to send. */
 export interface MealPhoto {
   base64: string;
-  mimeType: string;
+  mimeType: MealImageMimeType;
 }
 
 /**
@@ -155,6 +166,7 @@ export const describeMeal = async (
   description: string,
   apiKey: string,
   model: string = DEFAULT_MODEL,
+  photo?: MealPhoto,
 ): Promise<DescribeResult> => {
   if (!apiKey.trim()) throw new MissingApiKeyError();
 
@@ -163,8 +175,8 @@ export const describeMeal = async (
   const response = await client.messages.parse({
     model,
     max_tokens: 4000,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: description.trim() }],
+    system: systemInstructionFor(photo),
+    messages: [{ role: 'user', content: claudeContentFor(description, photo) }],
     output_config: { format: zodOutputFormat(MealEstimateSchema) },
   });
 
@@ -227,20 +239,25 @@ export const estimateMeal = async (
     ollamaHost: string;
     ollamaModel: string;
   },
+  photo?: MealPhoto,
 ): Promise<DescribeResult> => {
   if (config.provider === 'ollama') {
+    // Refused here rather than inside the Ollama path, so the message names the
+    // provider instead of surfacing a parse failure three layers down.
+    if (photo) throw new PhotoUnsupportedError();
     const { describeMealWithOllama } = await import('./ollama');
     return describeMealWithOllama(description, config.ollamaHost, config.ollamaModel);
   }
   if (config.provider === 'anthropic') {
-    return describeMeal(description, config.anthropicApiKey);
+    return describeMeal(description, config.anthropicApiKey, DEFAULT_MODEL, photo);
   }
   const { describeMealWithGemini } = await import('./geminiDescribe');
-  return describeMealWithGemini(description, config.geminiApiKey);
+  return describeMealWithGemini(description, config.geminiApiKey, photo);
 };
 
 /** Maps a friendly message onto the SDK's typed errors. */
 export const describeErrorMessage = (error: unknown): string => {
+  if (error instanceof PhotoUnsupportedError) return error.message;
   if (error instanceof MissingApiKeyError) {
     return 'Add your Anthropic API key in Settings to use this.';
   }

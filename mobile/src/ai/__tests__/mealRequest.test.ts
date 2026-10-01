@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { PHOTO_PROMPT_ADDENDUM, SYSTEM_PROMPT } from '../describeMeal';
+import {
+  type MealPhoto,
+  PHOTO_PROMPT_ADDENDUM,
+  PhotoUnsupportedError,
+  SYSTEM_PROMPT,
+  describeErrorMessage,
+  estimateMeal,
+} from '../describeMeal';
 import { claudeContentFor, geminiPartsFor, systemInstructionFor } from '../mealRequest';
 
-const photo = { base64: 'QUJD', mimeType: 'image/jpeg' };
+const photo: MealPhoto = { base64: 'QUJD', mimeType: 'image/jpeg' };
 
 describe('systemInstructionFor', () => {
   it('is byte-identical to SYSTEM_PROMPT without a photo', () => {
@@ -43,7 +50,7 @@ describe('geminiPartsFor', () => {
   });
 
   it('carries the photo mime type rather than assuming JPEG', () => {
-    const png = { base64: 'UE5H', mimeType: 'image/png' };
+    const png: MealPhoto = { base64: 'UE5H', mimeType: 'image/png' };
     expect(geminiPartsFor('', png)[0]).toEqual({
       inlineData: { mimeType: 'image/png', data: 'UE5H' },
     });
@@ -60,5 +67,30 @@ describe('claudeContentFor', () => {
       { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJD' } },
       { type: 'text', text: 'two eggs' },
     ]);
+  });
+});
+
+describe('estimateMeal with a photo', () => {
+  const ollamaConfig = {
+    provider: 'ollama' as const,
+    geminiApiKey: '',
+    anthropicApiKey: '',
+    // Deliberately unreachable: if the refusal regresses, the test fails by
+    // trying to reach this rather than passing for the wrong reason.
+    ollamaHost: 'http://127.0.0.1:1',
+    ollamaModel: 'llama3',
+  };
+
+  it('refuses the local provider, which cannot see', async () => {
+    // Failing inside an Ollama call would name the mechanism, not the problem.
+    await expect(estimateMeal('', ollamaConfig, photo)).rejects.toBeInstanceOf(
+      PhotoUnsupportedError,
+    );
+  });
+
+  it('says which providers can, rather than only that this one cannot', () => {
+    expect(describeErrorMessage(new PhotoUnsupportedError())).toBe(
+      'Photo estimates need Gemini or Claude. Change the estimate provider in Settings.',
+    );
   });
 });
