@@ -36,12 +36,3 @@ export const session = {
   rule: '#26262B',
   warn: '#E8B22A',
 } as const;
-
-/**
- * The diagonal. Every slab on this screen leans by exactly this.
- *
- * The lean goes on background layers only — content stays upright. Skewing the
- * text too would be closer to the reference, and would also make a column of
- * weights unreadable, which is the one thing this screen cannot afford.
- */
-export const SKEW = '-8deg';

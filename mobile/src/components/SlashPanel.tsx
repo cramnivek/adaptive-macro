@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { SKEW } from '../theme/sessionTheme';
+import { SKEW } from '../theme';
 
 interface SlashPanelProps {
   color: string;

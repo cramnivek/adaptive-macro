@@ -7,6 +7,8 @@ import {
   type KeyboardTypeOptions,
 } from 'react-native';
 import { font, radius, space, useTheme } from '../theme';
+import { session as loud } from '../theme/sessionTheme';
+import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 interface ButtonProps {
@@ -14,23 +16,50 @@ interface ButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'subtle' | 'danger';
   disabled?: boolean;
+  /** Draws on the training side's palette, so its primary action is the red. */
+  tone?: 'loud';
 }
 
-export const Button = ({ label, onPress, variant = 'primary', disabled }: ButtonProps) => {
+export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: ButtonProps) => {
   const { colors } = useTheme();
-  const background =
-    variant === 'primary' ? colors.accent : variant === 'danger' ? colors.danger : colors.surfaceRaised;
-  const textColor = variant === 'subtle' ? colors.text : colors.onFill;
+  const isLoud = tone === 'loud';
+  const background = isLoud
+    ? variant === 'primary'
+      ? loud.loud
+      : variant === 'danger'
+        ? colors.danger
+        : loud.panel
+    : variant === 'primary'
+      ? colors.accent
+      : variant === 'danger'
+        ? colors.danger
+        : colors.surfaceRaised;
+  const textColor = isLoud
+    ? variant === 'subtle'
+      ? loud.figure
+      : loud.onLoud
+    : variant === 'subtle'
+      ? colors.text
+      : colors.onFill;
 
   return (
     // `Tappable` rather than `Pressable`: the press used to register only as a
     // drop in opacity, which on a filled slab is barely visible. It sinks now.
-    <Tappable
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.button, { backgroundColor: background, opacity: disabled ? 0.4 : 1 }]}
-    >
-      <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
+    //
+    // A primary action leans; everything else stays square. The lean is the
+    // app's one piece of shared visual language, and spending it on the single
+    // action a screen most wants you to take is what makes it mean anything —
+    // a screen where Cancel leans as hard as Save says nothing at all.
+    <Tappable onPress={onPress} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
+      {variant === 'primary' ? (
+        <SlashPanel color={background} style={styles.button}>
+          <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
+        </SlashPanel>
+      ) : (
+        <View style={[styles.button, styles.squared, { backgroundColor: background }]}>
+          <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
+        </View>
+      )}
     </Tappable>
   );
 };
@@ -253,14 +282,16 @@ export const Segmented = <T extends string>({ label, options, value, onChange }:
 export const TOUCH_TARGET = 44;
 
 const styles = StyleSheet.create({
+  // No corner radius here: the leaning primary gets its shape from the skew,
+  // and a rounded rectangle behind a sheared one shows at the corners.
   button: {
-    borderRadius: radius.md,
     minHeight: TOUCH_TARGET,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    alignItems: 'center',
   },
+  squared: { borderRadius: radius.md },
   buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },
   field: { gap: space.xs, marginBottom: space.md },
   fieldLabel: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },

@@ -1,9 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef } from 'react';
 import { Animated, Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
-import { font } from '../theme';
+import { SKEW, font } from '../theme';
 import { ease, exit, impact } from '../theme/motion';
-import { SKEW, session } from '../theme/sessionTheme';
+import { session } from '../theme/sessionTheme';
 import type { ImpactContent } from './setImpact';
 
 // Named `ImpactFrame` rather than `SetImpact`: on a case-insensitive filesystem

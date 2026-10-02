@@ -15,7 +15,8 @@ import {
 import type { Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { formatDate } from '../src/format';
-import { font, radius, space, useTheme } from '../src/theme';
+import { font, radius, space } from '../src/theme';
+import { session as loud } from '../src/theme/sessionTheme';
 
 type Draft = { name: string; bodyweightBased: boolean; targetSets: number };
 
@@ -27,7 +28,6 @@ type Draft = { name: string; bodyweightBased: boolean; targetSets: number };
  * already in the history.
  */
 export default function RoutinesScreen() {
-  const { colors } = useTheme();
 
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
@@ -128,36 +128,36 @@ export default function RoutinesScreen() {
 
   if (routines === null) {
     return (
-      <Screen title="Routines">
-        <ActivityIndicator color={colors.accent} />
+      <Screen title="Routines" tone="loud">
+        <ActivityIndicator color={loud.loud} />
       </Screen>
     );
   }
 
   if (editing) {
     return (
-      <Screen title={editing === 'new' ? 'New routine' : 'Edit routine'}>
-        <Card title="Name">
+      <Screen tone="loud" title={editing === 'new' ? 'New routine' : 'Edit routine'}>
+        <Card loud title="Name">
           <Field label="Routine name" value={draftName} onChangeText={setDraftName} placeholder="Push A" />
         </Card>
 
-        <Card title="Exercises">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="Exercises">
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             The order here is the order you do them in.
           </Text>
           {draft.map((item, index) => (
-            <View key={item.name} style={[styles.row, { borderColor: colors.border }]}>
+            <View key={item.name} style={[styles.row, { borderColor: loud.rule }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{item.name}</Text>
-                <Text style={[styles.note, { color: colors.textFaint }]}>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{item.name}</Text>
+                <Text style={[styles.note, { color: loud.figureFaint }]}>
                   {item.targetSets} sets{item.bodyweightBased ? ' · bodyweight' : ''}
                 </Text>
               </View>
               <Pressable onPress={() => move(index, -1)} style={styles.iconBtn}>
-                <Text style={{ color: colors.textMuted }}>↑</Text>
+                <Text style={{ color: loud.figureMuted }}>↑</Text>
               </Pressable>
               <Pressable onPress={() => move(index, 1)} style={styles.iconBtn}>
-                <Text style={{ color: colors.textMuted }}>↓</Text>
+                <Text style={{ color: loud.figureMuted }}>↓</Text>
               </Pressable>
               <Pressable
                 onPress={() =>
@@ -169,13 +169,13 @@ export default function RoutinesScreen() {
                 }
                 style={styles.iconBtn}
               >
-                <Text style={{ fontFamily: font.uiStrong, color: colors.accent }}>sets</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>sets</Text>
               </Pressable>
               <Pressable
                 onPress={() => setDraft((c) => c.filter((_, i) => i !== index))}
                 style={styles.iconBtn}
               >
-                <Text style={{ color: colors.danger }}>✕</Text>
+                <Text style={{ color: loud.loud }}>✕</Text>
               </Pressable>
             </View>
           ))}
@@ -187,7 +187,7 @@ export default function RoutinesScreen() {
             placeholder="Bench Press (Barbell)"
             hint="Names match exactly, so reuse one below to keep history joined up."
           />
-          <Button label="Add" variant="subtle" onPress={() => addToDraft(adding)} />
+          <Button tone="loud" label="Add" variant="subtle" onPress={() => addToDraft(adding)} />
 
           {known.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
@@ -195,26 +195,26 @@ export default function RoutinesScreen() {
                 <Pressable
                   key={item.name}
                   onPress={() => addToDraft(item.name)}
-                  style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+                  style={[styles.chip, { backgroundColor: loud.panel, borderColor: loud.rule }]}
                 >
-                  <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{item.name}</Text>
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure, fontSize: 13 }}>{item.name}</Text>
                 </Pressable>
               ))}
             </ScrollView>
           )}
         </Card>
 
-        <Button label={busy ? 'Saving…' : 'Save routine'} onPress={save} disabled={busy} />
-        <Button label="Cancel" variant="subtle" onPress={() => setEditing(null)} />
+        <Button tone="loud" label={busy ? 'Saving…' : 'Save routine'} onPress={save} disabled={busy} />
+        <Button tone="loud" label="Cancel" variant="subtle" onPress={() => setEditing(null)} />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Routines">
+    <Screen title="Routines" tone="loud">
       {routines.length === 0 && (
-        <Card title="No routines yet">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="No routines yet">
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             A routine is a named list of exercises in the order you do them. You can start one
             from scratch, or build it from a session you have already done.
           </Text>
@@ -223,37 +223,37 @@ export default function RoutinesScreen() {
 
       {routines.map((routine, index) => (
         <Card key={routine.id} title={routine.name}>
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             {routine.exercises.map((e) => `${e.name} × ${e.targetSets}`).join(' · ') ||
               'No exercises'}
           </Text>
           <View style={styles.actions}>
             <Pressable onPress={() => void moveRoutine(routine.id, -1).then(refresh)} style={styles.iconBtn}>
-              <Text style={{ color: colors.textMuted }}>↑</Text>
+              <Text style={{ color: loud.figureMuted }}>↑</Text>
             </Pressable>
             <Pressable onPress={() => void moveRoutine(routine.id, 1).then(refresh)} style={styles.iconBtn}>
-              <Text style={{ color: colors.textMuted }}>↓</Text>
+              <Text style={{ color: loud.figureMuted }}>↓</Text>
             </Pressable>
             <Pressable onPress={() => edit(routine)} style={styles.iconBtn}>
-              <Text style={{ fontFamily: font.uiStrong, color: colors.accent }}>Edit</Text>
+              <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>Edit</Text>
             </Pressable>
             <Pressable onPress={() => void remove(routine)} style={styles.iconBtn}>
-              <Text style={{ fontFamily: font.uiStrong, color: colors.danger }}>Delete</Text>
+              <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>Delete</Text>
             </Pressable>
           </View>
           {index === 0 && (
-            <Text style={[styles.note, { color: colors.textFaint }]}>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
               Start a workout from the Train tab.
             </Text>
           )}
         </Card>
       ))}
 
-      <Button label="New routine" onPress={() => startNew('', [])} />
+      <Button tone="loud" label="New routine" onPress={() => startNew('', [])} />
 
       {past.length > 0 && (
-        <Card title="Build one from a past session">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="Build one from a past session">
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             Takes that session's exercises, in the order they were done.
           </Text>
           {past.slice(0, 8).map((session) => (
@@ -269,11 +269,11 @@ export default function RoutinesScreen() {
                   })),
                 )
               }
-              style={[styles.row, { borderColor: colors.border }]}
+              style={[styles.row, { borderColor: loud.rule }]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{session.name}</Text>
-                <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
+                <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
                   {formatDate(session.date)} · {session.exercises.join(', ')}
                 </Text>
               </View>

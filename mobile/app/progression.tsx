@@ -12,7 +12,8 @@ import { TOUCH_TARGET } from '../src/components/Controls';
 import { cataloguePatternsByExerciseName, listSetsForExercise, listTrainedExercises } from '../src/db';
 import { displayWeight, formatDate, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { font, radius, space, useTheme } from '../src/theme';
+import { font, radius, space } from '../src/theme';
+import { session as loud } from '../src/theme/sessionTheme';
 
 type TrainedExercise = { name: string; bodyweightBased: boolean; setCount: number };
 
@@ -34,7 +35,6 @@ const shiftDate = (origin: string, offsetDays: number): string =>
  * unlabelled scale — which is a lie about what the lines mean.
  */
 export default function ProgressionScreen() {
-  const { colors } = useTheme();
   const { series, settings } = useApp();
 
   const [exercises, setExercises] = useState<TrainedExercise[] | null>(null);
@@ -103,12 +103,12 @@ export default function ProgressionScreen() {
   const heaviestEver = points?.reduce((max, p) => Math.max(max, p.heaviestWorkingSetKg), 0) ?? 0;
 
   return (
-    <Screen title="Progression">
-      {exercises === null && <ActivityIndicator color={colors.accent} />}
+    <Screen title="Progression" tone="loud">
+      {exercises === null && <ActivityIndicator color={loud.loud} />}
 
       {exercises?.length === 0 && (
-        <Card title="Nothing logged yet">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="Nothing logged yet">
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             Import your history from Hevy in Settings, or log a session, and this will show
             whether the weight on the bar is going up.
           </Text>
@@ -116,7 +116,7 @@ export default function ProgressionScreen() {
       )}
 
       {exercises && exercises.length > 0 && (
-        <Card title="Exercise">
+        <Card loud title="Exercise">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {exercises.map((exercise) => {
               const active = exercise.name === chosen?.name;
@@ -127,17 +127,17 @@ export default function ProgressionScreen() {
                   style={[
                     styles.chip,
                     {
-                      backgroundColor: active ? colors.accent : colors.surfaceRaised,
-                      borderColor: colors.border,
+                      backgroundColor: active ? loud.loud : loud.panel,
+                      borderColor: loud.rule,
                     },
                   ]}
                 >
                   <ExerciseIcon
                     pattern={patterns[exercise.name]}
                     size={14}
-                    color={active ? colors.onFill : colors.textMuted}
+                    color={active ? loud.onLoud : loud.figureMuted}
                   />
-                  <Text style={{ fontFamily: font.uiStrong, color: active ? colors.onFill : colors.text, fontSize: 13 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: active ? loud.onLoud : loud.figure, fontSize: 13 }}>
                     {exercise.name}
                   </Text>
                 </Pressable>
@@ -147,7 +147,7 @@ export default function ProgressionScreen() {
         </Card>
       )}
 
-      {chosen && sets === null && <ActivityIndicator color={colors.accent} />}
+      {chosen && sets === null && <ActivityIndicator color={loud.loud} />}
 
       {/*
         Two different silences, told apart. "No sets" means nothing was ever
@@ -155,14 +155,14 @@ export default function ProgressionScreen() {
         weight, which is a different problem with a different fix.
       */}
       {chosen && sets?.length === 0 && (
-        <Card title={chosen.name}>
-          <Text style={[styles.note, { color: colors.textFaint }]}>No sets recorded.</Text>
+        <Card loud title={chosen.name}>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>No sets recorded.</Text>
         </Card>
       )}
 
       {chosen && sets && sets.length > 0 && points?.length === 0 && (
-        <Card title={chosen.name}>
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title={chosen.name}>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             {sets.length} sets are recorded, but none can be scored — they have no weight
             recorded, and this exercise is not marked as bodyweight. Re-run the Hevy import
             and correct the flag in its preview, or log a set with a weight.
@@ -187,26 +187,26 @@ export default function ProgressionScreen() {
             />
           </View>
 
-          <Card title="Heaviest working set">
+          <Card loud title="Heaviest working set">
             <LineChart
-              series={[{ points: chart.load, color: colors.accent, strokeWidth: 2.5 }]}
-              scatter={[{ points: chart.records, color: colors.positive, radius: 3.5 }]}
+              series={[{ points: chart.load, color: loud.loud, strokeWidth: 2.5 }]}
+              scatter={[{ points: chart.records, color: loud.loud, radius: 3.5 }]}
               formatY={(value) => displayWeight(value, settings.units).toFixed(0)}
               formatX={(value) => formatDate(shiftDate(chart.origin, value))}
             />
-            <Text style={[styles.note, { color: colors.textFaint }]}>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
               Marked points beat everything before them. Warmups are excluded; dropsets and
               sets to failure count.
             </Text>
             {chosen?.bodyweightBased && (
-              <Text style={[styles.note, { color: colors.textFaint }]}>
+              <Text style={[styles.note, { color: loud.figureFaint }]}>
                 This is a bodyweight exercise, so the load is your weight trend on each date
                 plus anything added. The line moves when your weight moves, not only when
                 you get stronger.
               </Text>
             )}
             {chosen?.bodyweightBased && bodyweightByDate.extendedCount > 0 && (
-              <Text style={[styles.note, { color: colors.warning }]}>
+              <Text style={[styles.note, { color: loud.warn }]}>
                 {bodyweightByDate.extendedCount} of these sessions fall outside the range your
                 weight was tracked over, so they assume your nearest recorded weight. Those
                 points show real reps against an assumed load — log weights covering that
@@ -215,13 +215,13 @@ export default function ProgressionScreen() {
             )}
           </Card>
 
-          <Card title="Working volume">
+          <Card loud title="Working volume">
             <LineChart
-              series={[{ points: chart.volume, color: colors.textMuted, strokeWidth: 2 }]}
+              series={[{ points: chart.volume, color: loud.figureMuted, strokeWidth: 2 }]}
               formatY={(value) => `${Math.round(displayWeight(value, settings.units) / 1000)}k`}
               formatX={(value) => formatDate(shiftDate(chart.origin, value))}
             />
-            <Text style={[styles.note, { color: colors.textFaint }]}>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
               Load × reps across working sets, in {unit}. Shown separately because volume is
               far larger than the weight on the bar — on one axis the load line would flatten
               into the floor.

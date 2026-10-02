@@ -15,7 +15,8 @@ import {
 import type { ActiveSession, Routine } from '../../src/db';
 import { displayWeight, formatDate, weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { font, radius, space, useTheme } from '../../src/theme';
+import { font, radius, space } from '../../src/theme';
+import { session as loud } from '../../src/theme/sessionTheme';
 
 /**
  * The training home.
@@ -27,7 +28,6 @@ import { font, radius, space, useTheme } from '../../src/theme';
  * The import stays in Settings, where a one-time migration belongs.
  */
 export default function TrainScreen() {
-  const { colors } = useTheme();
   const router = useRouter();
   const { series, settings } = useApp();
   const unit = weightUnit(settings.units);
@@ -90,31 +90,33 @@ export default function TrainScreen() {
 
   if (loading) {
     return (
-      <Screen title="Train">
-        <ActivityIndicator color={colors.accent} />
+      <Screen title="Train" tone="loud">
+        <ActivityIndicator color={loud.loud} />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Train">
+    <Screen title="Train" tone="loud">
       {open ? (
-        <Card title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             {open.sets.length} sets logged so far.
           </Text>
-          <Button label="Carry on" onPress={() => router.push('/session')} />
+          <Button tone="loud" label="Carry on" onPress={() => router.push('/session')} />
         </Card>
       ) : (
-        <Card title="Log a workout">
+        <Card loud title="Log a workout">
           {/* Each of these starts logging straight away. Routing to a screen
               that asks the same question again is the same tap twice. */}
           <Button
+            tone="loud"
             label="Start a session"
             onPress={() => router.push('/session?start=blank')}
           />
           {routines.map((routine) => (
             <Button
+              tone="loud"
               key={routine.id}
               label={`Start ${routine.name}`}
               variant="subtle"
@@ -125,29 +127,30 @@ export default function TrainScreen() {
       )}
 
       {headline.length > 0 && (
-        <Card title="Where you are" subtitle={`${totalSets} sets on record`}>
+        <Card loud title="Where you are" subtitle={`${totalSets} sets on record`}>
           {headline.map(({ name, last }) => (
             <Pressable
               key={name}
               onPress={() => router.push('/progression')}
-              style={[styles.row, { borderColor: colors.border }]}
+              style={[styles.row, { borderColor: loud.rule }]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: colors.text }} numberOfLines={1}>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={[styles.note, { color: colors.textFaint }]}>
+                <Text style={[styles.note, { color: loud.figureFaint }]}>
                   {last
                     ? `${displayWeight(last.heaviestWorkingSetKg, settings.units).toFixed(1)} ${unit} · ${formatDate(last.date)}`
                     : 'nothing scoreable yet'}
                 </Text>
               </View>
               {last?.isRecord && (
-                <Text style={{ fontFamily: font.ui, color: colors.positive, fontSize: 12 }}>best yet</Text>
+                <Text style={{ fontFamily: font.ui, color: loud.loud, fontSize: 12 }}>best yet</Text>
               )}
             </Pressable>
           ))}
           <Button
+            tone="loud"
             label="See progression"
             variant="subtle"
             onPress={() => router.push('/progression')}
@@ -156,12 +159,12 @@ export default function TrainScreen() {
       )}
 
       {recent.length > 0 && (
-        <Card title="Recent sessions">
+        <Card loud title="Recent sessions">
           {recent.slice(0, 5).map((session) => (
-            <View key={session.id} style={[styles.row, { borderColor: colors.border }]}>
+            <View key={session.id} style={[styles.row, { borderColor: loud.rule }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{session.name}</Text>
-                <Text style={[styles.note, { color: colors.textFaint }]} numberOfLines={1}>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
+                <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
                   {formatDate(session.date)} · {session.exercises.join(', ')}
                 </Text>
               </View>
@@ -170,9 +173,9 @@ export default function TrainScreen() {
         </Card>
       )}
 
-      <Card title="Routines">
+      <Card loud title="Routines">
         {routines.length === 0 ? (
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             A routine is a named list of exercises in the order you do them. You can build one
             from a session you have already done.
           </Text>
@@ -181,14 +184,15 @@ export default function TrainScreen() {
             {routines.map((routine) => (
               <View
                 key={routine.id}
-                style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+                style={[styles.chip, { backgroundColor: loud.panel, borderColor: loud.rule }]}
               >
-                <Text style={{ fontFamily: font.ui, color: colors.text, fontSize: 13 }}>{routine.name}</Text>
+                <Text style={{ fontFamily: font.ui, color: loud.figure, fontSize: 13 }}>{routine.name}</Text>
               </View>
             ))}
           </View>
         )}
         <Button
+          tone="loud"
           label={routines.length ? 'Manage routines' : 'Create a routine'}
           variant="subtle"
           onPress={() => router.push('/routines')}
@@ -196,8 +200,8 @@ export default function TrainScreen() {
       </Card>
 
       {totalSets === 0 && (
-        <Card title="Bringing history over">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
+        <Card loud title="Bringing history over">
+          <Text style={[styles.note, { color: loud.figureFaint }]}>
             Already training elsewhere? Settings → Your data imports a Hevy export, so your
             progression starts full rather than empty.
           </Text>

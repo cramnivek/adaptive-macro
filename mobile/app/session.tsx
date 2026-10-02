@@ -485,7 +485,7 @@ export default function SessionScreen() {
 
   if (loading) {
     return (
-      <Screen background={loud.ground}>
+      <Screen tone="loud">
         <ActivityIndicator color={loud.loud} />
       </Screen>
     );
@@ -493,7 +493,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <Screen background={loud.ground}>
+      <Screen tone="loud">
         <Text style={styles.screenTitle}>WORKOUT</Text>
         <Text style={[styles.note, { marginBottom: space.lg }]}>
           Start an empty workout, or pick one of your routines.
@@ -536,7 +536,7 @@ export default function SessionScreen() {
   );
 
   return (
-    <Screen background={loud.ground}>
+    <Screen tone="loud">
       <Text style={styles.screenTitle} numberOfLines={1}>
         {session.name.toUpperCase()}
       </Text>

@@ -127,9 +127,12 @@ export default function RootLayout() {
             options={{
               presentation: 'modal',
               headerShown: true,
-              title: 'Routines',
-              headerStyle: { backgroundColor: colors.surface },
-              headerTintColor: colors.text,
+              // The training side's modals carry its ground, so the bar above them
+              // is not a strip of a different dark. Titles drop: the screen below
+              // already says it in display type.
+              title: '',
+              headerStyle: { backgroundColor: loud.ground },
+              headerTintColor: loud.figure,
             }}
           />
           <Stack.Screen
@@ -150,9 +153,9 @@ export default function RootLayout() {
             options={{
               presentation: 'modal',
               headerShown: true,
-              title: 'Progression',
-              headerStyle: { backgroundColor: colors.surface },
-              headerTintColor: colors.text,
+              title: '',
+              headerStyle: { backgroundColor: loud.ground },
+              headerTintColor: loud.figure,
             }}
           />
           <Stack.Screen

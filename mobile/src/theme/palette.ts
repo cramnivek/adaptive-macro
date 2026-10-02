@@ -58,6 +58,19 @@ export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 export const radius = { sm: 4, md: 6, lg: 8, pill: 999 } as const;
 
 /**
+ * The lean.
+ *
+ * Started life in the workout logger and is now the whole app's: primary
+ * actions carry it everywhere, the loud screens build their panels from it.
+ * A shape token, so nothing hard-codes the angle and a pair of slabs set to
+ * meet actually meet.
+ *
+ * It goes on background layers only. Skewing content as well would be closer
+ * to the reference and would also make a column of weights unreadable.
+ */
+export const SKEW = '-8deg';
+
+/**
  * Family names, so no screen spells out a font.
  *
  * Figures get a mono face because most of this app is columns of numbers, and
