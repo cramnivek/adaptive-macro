@@ -18,3 +18,4 @@ coverage/
 .claude/hillclimb/**/trajectory/
 evals/**/results*.jsonl
 evals/**/errors.jsonl
+glyphs.html
