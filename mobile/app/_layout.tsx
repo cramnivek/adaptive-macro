@@ -159,6 +159,16 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="overview"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              title: '',
+              headerStyle: { backgroundColor: loud.ground },
+              headerTintColor: loud.figure,
+            }}
+          />
+          <Stack.Screen
             name="import-workouts"
             options={{
               presentation: 'modal',

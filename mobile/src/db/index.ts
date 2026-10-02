@@ -1630,3 +1630,36 @@ export const setSetRpe = async (id: string, rpe: number | null): Promise<void> =
   const db = await getDb();
   await db.runAsync('UPDATE sets SET rpe = ? WHERE id = ?', rpe, id);
 };
+
+/**
+ * Muscle regions for every exercise that has them, keyed by recorded name.
+ *
+ * One query rather than one per exercise: the overview lights a body map from
+ * a whole month of training, and a lookup per exercise would be a query per
+ * row of that month. Mirrors `cataloguePatternsByExerciseName`, which does the
+ * same for the glyphs.
+ */
+export const catalogueRegionsByExerciseName = async (): Promise<
+  Record<string, { primary: MuscleRegion; secondary: MuscleRegion[] }>
+> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    name: string;
+    primary_region: string | null;
+    secondary_regions: string | null;
+  }>(
+    `SELECT e.name, c.primary_region, c.secondary_regions
+       FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
+      WHERE c.primary_region IS NOT NULL`,
+  );
+
+  const byName: Record<string, { primary: MuscleRegion; secondary: MuscleRegion[] }> = {};
+  for (const row of rows) {
+    if (row.primary_region === null) continue;
+    byName[row.name] = {
+      primary: normaliseRegion(row.primary_region),
+      secondary: parseList(row.secondary_regions).map(normaliseRegion),
+    };
+  }
+  return byName;
+};

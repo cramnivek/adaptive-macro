@@ -279,3 +279,72 @@ export const bodyweightForDates = (
 
   return map;
 };
+
+export interface PeriodSummary {
+  /** Days inside the period with at least one scoreable working set. */
+  sessions: number;
+  workingSets: number;
+  /** Effective load × reps, summed across the period's working sets. */
+  volumeKg: number;
+  /** Exercise-days inside the period that beat every earlier day. */
+  records: number;
+  /** Distinct exercises trained in the period, first appearance first. */
+  exercises: string[];
+}
+
+/**
+ * What a week or a month actually came to.
+ *
+ * Takes the whole history rather than the period's sets alone, because a
+ * record is a claim about everything that came before it. Handed only the
+ * period, every first session in it would look like a record.
+ *
+ * Dates are ISO, so the range test is a string comparison; both ends are
+ * inclusive. Everything is computed on effective load, so bodyweight work
+ * counts for what it actually moved, and warmups are excluded throughout —
+ * the same rule `progressionFor` uses, so the two never disagree about what a
+ * set was worth.
+ */
+export const summarisePeriod = (
+  allSets: DatedSet[],
+  bodyweightByDate: ReadonlyMap<ISODate, number>,
+  from: ISODate,
+  to: ISODate,
+): PeriodSummary => {
+  const within = (date: ISODate) => date >= from && date <= to;
+
+  const dates = new Set<ISODate>();
+  const exercises: string[] = [];
+  let workingSets = 0;
+  let volumeKg = 0;
+
+  for (const { date, set } of allSets) {
+    if (!within(date) || !isWorkingSet(set)) continue;
+    if (set.reps === null || set.reps <= 0) continue;
+    const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
+    if (load === null) continue;
+
+    dates.add(date);
+    workingSets += 1;
+    volumeKg += load * set.reps;
+    if (!exercises.includes(set.exerciseName)) exercises.push(set.exerciseName);
+  }
+
+  // Records are resolved per exercise across all of history, then counted
+  // only where they land inside the period.
+  const byExercise = new Map<string, DatedSet[]>();
+  for (const entry of allSets) {
+    const existing = byExercise.get(entry.set.exerciseName);
+    if (existing) existing.push(entry);
+    else byExercise.set(entry.set.exerciseName, [entry]);
+  }
+
+  let records = 0;
+  for (const sets of byExercise.values()) {
+    for (const point of progressionFor(sets, bodyweightByDate)) {
+      if (point.isRecord && within(point.date)) records += 1;
+    }
+  }
+
+  return { sessions: dates.size, workingSets, volumeKg, records, exercises };
+};

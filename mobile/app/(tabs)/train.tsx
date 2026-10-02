@@ -98,6 +98,12 @@ export default function TrainScreen() {
 
   return (
     <Screen title="Train" tone="loud">
+      <Button
+        tone="loud"
+        label="See what you have done"
+        onPress={() => router.push('/overview')}
+      />
+
       {open ? (
         <Card loud title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
           <Text style={[styles.note, { color: loud.figureFaint }]}>
