@@ -2,7 +2,7 @@ import type { Food, Meal, Nutrients } from '@adaptive-macros/engine';
 import { roundTo } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   type EstimatedItem,
   type MealEstimate,
@@ -62,6 +62,18 @@ export default function DescribeScreen() {
   const [text, setText] = useState(params.text ?? '');
   const [photo, setPhoto] = useState<MealPhoto | null>(null);
   const [camera, setCamera] = useState(false);
+  /**
+   * Whether the sheet can show a live camera, or only a shot already taken.
+   *
+   * On web it cannot: expo-camera asks getUserMedia for no resolution, so the
+   * preview is a low-res crop. The phone's camera app takes the picture
+   * instead, which also means there is nothing to show until it returns — open
+   * the sheet first and it is a black screen with a button on it.
+   */
+  const livePreview = Platform.OS !== 'web';
+
+  /** Opens whichever camera this runtime has. */
+  const openCamera = () => (livePreview ? setCamera(true) : void systemCapture());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
@@ -96,7 +108,7 @@ export default function DescribeScreen() {
   };
 
   useEffect(() => {
-    if (params.capture === 'camera') setCamera(true);
+    if (params.capture === 'camera') openCamera();
     // Mount only. Re-running when the param object's identity changes would
     // reopen the camera behind the user on every re-render of this screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,8 +142,11 @@ export default function DescribeScreen() {
     setDrafts([]);
     try {
       const shot = await captureWithSystemCamera();
+      // Cancelled at the camera app, which is not an error and not a reason to
+      // open an empty sheet.
       if (!shot) return;
       setPhoto(shot);
+      setCamera(true);
       await run(shot);
     } catch (e) {
       setError((e as Error).message);
@@ -144,6 +159,12 @@ export default function DescribeScreen() {
     setEstimate(null);
     setDrafts([]);
     setError(null);
+    // Web has no live view to return to, so "shoot again" means the camera app
+    // again rather than an empty sheet.
+    if (!livePreview) {
+      setCamera(false);
+      void systemCapture();
+    }
   };
 
   const run = async (withPhoto?: MealPhoto) => {
@@ -306,7 +327,7 @@ export default function DescribeScreen() {
         ) : (
           <View style={styles.photoRow}>
             <View style={{ flex: 1 }}>
-              <Button label="Take a photo" variant="subtle" onPress={() => setCamera(true)} />
+              <Button label="Take a photo" variant="subtle" onPress={openCamera} />
             </View>
             <View style={{ flex: 1 }}>
               <Button label="Choose a photo" variant="subtle" onPress={() => void pick(chooseMealPhoto)} />

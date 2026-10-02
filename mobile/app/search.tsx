@@ -204,8 +204,25 @@ export default function SearchScreen() {
    * Collapsed rather than removed, and one tap brings them back, because the
    * check is a guess and a guess must not take away a right answer.
    */
+  /**
+   * A lookup is coming for this query, even if it has not started yet.
+   *
+   * Waiting for `lookingUp` meant the rows the check had already rejected
+   * flashed up for the 1.2 seconds of the settle delay and then vanished —
+   * long enough to read, and exactly the wrong thing to read.
+   */
+  const lookupComing =
+    !showingFrequent &&
+    !loading &&
+    settled &&
+    !answered &&
+    query.trim().length >= 2 &&
+    (autoAttempts.current.get(query.trim()) ?? 0) < MAX_ATTEMPTS;
+
   const hiddenWhileLooking =
-    lookingUp && !answered && !showNonMatching && !showingFrequent ? ranked.length : 0;
+    (lookingUp || lookupComing) && !answered && !showNonMatching && !showingFrequent
+      ? ranked.length
+      : 0;
 
   const shown = showingFrequent ? frequent : hiddenWhileLooking > 0 ? [] : ranked;
 
@@ -330,14 +347,18 @@ export default function SearchScreen() {
         ListHeaderComponent={
           shown.length > 0 && showingFrequent ? (
             <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>Your frequent foods</Text>
-          ) : (shown.length > 0 || hiddenWhileLooking > 0) && lookingUp ? (
+          ) : (shown.length > 0 || hiddenWhileLooking > 0) && (lookingUp || lookupComing) ? (
             // Only say they look wrong when the check actually said so — after
             // a manual tap on results it judged relevant, that would be a lie.
             <View>
               <Text style={[styles.lookupNote, { color: colors.warning }]}>
                 {answered
                   ? `Looking it up… ${lookupElapsed}s`
-                  : `These do not look like what you searched. Looking it up… ${lookupElapsed}s`}
+                  : lookingUp
+                    ? `These do not look like what you searched. Looking it up… ${lookupElapsed}s`
+                    : // The settle second, before the call starts. Saying
+                      // "looking it up… 0s" here would be a lie for a moment.
+                      'These do not look like what you searched. Looking it up…'}
               </Text>
               {hiddenWhileLooking > 0 && (
                 <Pressable onPress={() => setShowNonMatching(true)} style={styles.reveal}>

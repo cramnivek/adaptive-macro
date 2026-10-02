@@ -668,8 +668,13 @@ export default function SessionScreen() {
                 onPress={() => void addExercise(item.name)}
                 style={[styles.pickRow, { borderColor: colors.border }]}
               >
-                {/* The icon's slot, so these line up with the rows above it. */}
-                <View style={{ width: 20 }} />
+                {/*
+                  These used to render an empty 20px slot, so a picker opened
+                  with nothing typed was a column of plain text. Once the
+                  catalogue has been built these names are catalogued too, and
+                  the glyph is already loaded for the block headers.
+                */}
+                <ExerciseIcon pattern={patterns[item.name]} size={20} color={colors.textMuted} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.text, fontFamily: font.ui }}>{item.name}</Text>
                 </View>
