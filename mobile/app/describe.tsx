@@ -11,7 +11,7 @@ import {
   estimateCostUsd,
   estimateMeal,
 } from '../src/ai/describeMeal';
-import { chooseMealPhoto, preparePhoto } from '../src/ai/mealPhoto';
+import { captureWithSystemCamera, chooseMealPhoto, preparePhoto } from '../src/ai/mealPhoto';
 import { MealCameraSheet } from '../src/components/MealCameraSheet';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
@@ -113,6 +113,24 @@ export default function DescribeScreen() {
     setDrafts([]);
     try {
       const shot = await preparePhoto(uri);
+      setPhoto(shot);
+      await run(shot);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  /**
+   * Web: the phone's camera app takes the shot, then the sheet shows it with
+   * the estimate over it, the same as a shot taken in the preview.
+   */
+  const systemCapture = async () => {
+    setError(null);
+    setEstimate(null);
+    setDrafts([]);
+    try {
+      const shot = await captureWithSystemCamera();
+      if (!shot) return;
       setPhoto(shot);
       await run(shot);
     } catch (e) {
@@ -269,6 +287,7 @@ export default function DescribeScreen() {
         busy={busy}
         elapsed={elapsed}
         onCapture={(uri) => void captureFromCamera(uri)}
+        onSystemCapture={() => void systemCapture()}
         onRetake={retake}
         onClose={() => setCamera(false)}
       />

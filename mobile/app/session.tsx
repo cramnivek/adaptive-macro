@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { EnrichmentParseError } from '../src/ai/exercises';
 import { GroundedLookupError, enrichExercises } from '../src/api/gemini';
+import type { MovementPattern } from '../src/ai/exercises';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
@@ -26,6 +27,7 @@ import {
   lastSessionSets,
   listExerciseNames,
   catalogueEntryForExercise,
+  cataloguePatternsByExerciseName,
   linkExerciseToCatalogue,
   listRoutines,
   searchCatalogue,
@@ -109,6 +111,8 @@ export default function SessionScreen() {
   // flickering as the only thing that ever happened.
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [info, setInfo] = useState<CatalogueEntry | null>(null);
+  /** Movement pattern per recorded name, for the glyph on each block header. */
+  const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   // Same guard as the food search: one automatic call per distinct term, so a
   // failed enrichment cannot refire and retyping costs nothing.
   const autoEnriched = useRef<Set<string>>(new Set());
@@ -175,6 +179,12 @@ export default function SessionScreen() {
 
     return () => clearTimeout(timer);
   }, [search, picking, enriching, matches.length, known, settings.foodLookup.geminiApiKey]);
+
+  // Reloaded whenever a block is added, because a newly catalogued exercise has
+  // no entry in the map that was fetched when the screen mounted.
+  useEffect(() => {
+    void cataloguePatternsByExerciseName().then(setPatterns);
+  }, [blocks.length]);
 
   // The header clock. One second is the resolution anyone reads it at.
   useEffect(() => {
@@ -418,7 +428,7 @@ export default function SessionScreen() {
     }
 
     await finishSession(session.id);
-    notify('Workout saved', `${logged} sets logged.`);
+    notify('Workout saved', `${logged} ${logged === 1 ? 'set' : 'sets'} logged.`);
     router.back();
   };
 
@@ -493,9 +503,10 @@ export default function SessionScreen() {
           <View style={styles.blockHeader}>
             <Pressable
               onPress={() => void showInfoFor(block.name)}
-              style={{ flex: 1, minHeight: TOUCH_TARGET, justifyContent: 'center' }}
+              style={styles.blockTitle}
               accessibilityLabel={`How to do ${block.name}`}
             >
+              <ExerciseIcon pattern={patterns[block.name]} size={18} color={colors.textMuted} />
               <Text style={{ color: colors.accent, fontSize: 16, fontFamily: font.uiStrong }}>
                 {block.name}
               </Text>
@@ -726,6 +737,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   block: { marginBottom: space.lg },
+  blockTitle: {
+    flex: 1,
+    minHeight: TOUCH_TARGET,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
   blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.xs },
   columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 4 },
   col: { fontFamily: font.uiStrong, fontSize: 11, letterSpacing: 0.5 },

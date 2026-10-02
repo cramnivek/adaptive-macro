@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, StyleSheet, Text, View } from 'react-native';
 import type { EstimatedItem, MealEstimate, MealPhoto } from '../ai/describeMeal';
 import { font, radius, space, useTheme } from '../theme';
 import { Button } from './Controls';
@@ -13,6 +13,8 @@ interface MealCameraSheetProps {
   busy: boolean;
   elapsed: number;
   onCapture: (uri: string) => void;
+  /** Web only: hand the shot to the phone's camera app and return its result. */
+  onSystemCapture: () => void;
   onRetake: () => void;
   onClose: () => void;
 }
@@ -41,10 +43,21 @@ export const MealCameraSheet = ({
   busy,
   elapsed,
   onCapture,
+  onSystemCapture,
   onRetake,
   onClose,
 }: MealCameraSheetProps) => {
   const { colors } = useTheme();
+  /**
+   * The in-app preview is native-only.
+   *
+   * expo-camera's web build asks getUserMedia for no resolution at all, so the
+   * browser gives its default — around 640x480 — and a 4:3 stream cropped to
+   * fill a tall screen is what makes it look zoomed. The phone's own camera app
+   * has the sensor, the autofocus and the zoom, so on web it takes the picture
+   * and this sheet shows the result.
+   */
+  const livePreview = Platform.OS !== 'web';
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   /**
@@ -86,7 +99,7 @@ export const MealCameraSheet = ({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {!permission?.granted ? (
+        {livePreview && !permission?.granted ? (
           <View style={styles.centre}>
             <Text style={[styles.message, { color: colors.text }]}>Camera access is off</Text>
             <Text style={[styles.hint, { color: colors.textMuted }]}>
@@ -97,7 +110,7 @@ export const MealCameraSheet = ({
           </View>
         ) : (
           <>
-            {photo ? (
+            {!livePreview && !photo ? null : photo ? (
               // The still replaces the preview the moment the shutter fires, so
               // the frame being judged is visibly the frame that was sent.
               <Image
@@ -132,7 +145,7 @@ export const MealCameraSheet = ({
                 {!photo && (
                   <>
                     <Text style={[styles.hint, { color: colors.textMuted }]}>
-                      {ready
+                      {!livePreview || ready
                         ? 'Fill the frame with the plate. A fork or a hand nearby helps it judge the portion.'
                         : 'Starting the camera…'}
                     </Text>
@@ -141,8 +154,8 @@ export const MealCameraSheet = ({
                     )}
                     <Button
                       label="Take the photo"
-                      disabled={!ready}
-                      onPress={() => void shoot()}
+                      disabled={livePreview && !ready}
+                      onPress={() => (livePreview ? void shoot() : onSystemCapture())}
                     />
                   </>
                 )}

@@ -74,3 +74,26 @@ const firstAsset = async (result: ImagePicker.ImagePickerResult): Promise<MealPh
  */
 export const chooseMealPhoto = async (): Promise<MealPhoto | null> =>
   firstAsset(await ImagePicker.launchImageLibraryAsync({ quality: 1 }));
+
+/**
+ * The phone's own camera app, used on web in place of the in-app preview.
+ *
+ * expo-camera's web implementation calls getUserMedia with no resolution at
+ * all — `getPreferredStreamDevice(preferredType)`, no width, no height — so the
+ * browser hands back its default, usually 640x480. There is no CameraView prop
+ * that changes it. A 4:3 stream stretched over a tall screen is also what makes
+ * the preview look zoomed in: it is cropped to fill.
+ *
+ * On web this renders an `<input type="file" capture>`, which hands off to the
+ * real camera app: full sensor resolution, the autofocus and zoom the phone
+ * already has, and a shutter the user knows. The overlay is unaffected — the
+ * shot comes back here and the sheet draws the estimate over it exactly as
+ * before.
+ */
+export const captureWithSystemCamera = async (): Promise<MealPhoto | null> => {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error('Camera access is off for this app. You can still describe the meal.');
+  }
+  return firstAsset(await ImagePicker.launchCameraAsync({ quality: 1 }));
+};
