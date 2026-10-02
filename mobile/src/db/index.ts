@@ -1618,3 +1618,15 @@ export const updateSetValues = async (
     id,
   );
 };
+
+/**
+ * Records how hard a set felt. Null clears it.
+ *
+ * Separate from `updateSetValues` rather than another parameter on it: that
+ * one fires on every blur of a weight or rep field, and folding RPE into it
+ * would mean every stray focus rewrote a rating the lifter had already given.
+ */
+export const setSetRpe = async (id: string, rpe: number | null): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('UPDATE sets SET rpe = ? WHERE id = ?', rpe, id);
+};

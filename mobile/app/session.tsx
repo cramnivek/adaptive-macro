@@ -21,6 +21,7 @@ import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
 import { SlashPanel } from '../src/components/SlashPanel';
+import { RpeSheet } from '../src/components/RpeSheet';
 import { Tappable } from '../src/components/Tappable';
 import { impactContent } from '../src/components/setImpact';
 import type { ImpactContent } from '../src/components/setImpact';
@@ -38,12 +39,14 @@ import {
   listRoutines,
   searchCatalogue,
   startSession,
+  setSetRpe,
   updateSetValues,
   upsertCatalogueEntry,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
+import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space } from '../src/theme';
 // Aliased: `session` is already the active-workout state in this component.
@@ -57,6 +60,8 @@ interface Row {
   reps: string;
   setType: SetType;
   done: boolean;
+  /** How hard it felt, 6-10 in halves. Null until rated; rating is optional. */
+  rpe: number | null;
 }
 
 interface Block {
@@ -125,6 +130,8 @@ export default function SessionScreen() {
   const [landed, setLanded] = useState<{ rowKey: string; content: ImpactContent } | null>(null);
   // Stable, so the once-a-second clock re-render cannot restart a frame mid-flight.
   const clearLanded = useCallback(() => setLanded(null), []);
+  /** Which row the RPE sheet is rating, if it is open. */
+  const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
   /** Movement pattern per recorded name, for the glyph on each block header. */
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   // Same guard as the food search: one automatic call per distinct term, so a
@@ -236,6 +243,7 @@ export default function SessionScreen() {
                 s.weightKg === null ? '' : String(displayWeight(s.weightKg, settings.units).toFixed(1)),
               reps: String(s.reps),
               setType: s.setType,
+              rpe: s.rpe,
               done: true,
             })),
           );
@@ -307,6 +315,7 @@ export default function SessionScreen() {
                   : String(displayWeight(previous.weightKg, settings.units).toFixed(1))),
               reps: last?.reps ?? (previous ? String(previous.reps) : ''),
               setType: 'normal',
+              rpe: null,
               done: false,
             },
           ],
@@ -322,7 +331,9 @@ export default function SessionScreen() {
 
     if (row.done && row.id) {
       await deleteSet(row.id);
-      editRow(blockIndex, rowIndex, { done: false, id: null });
+      // The rating belonged to the set that was just deleted, not to the draft
+      // row left behind, so it goes with it.
+      editRow(blockIndex, rowIndex, { done: false, id: null, rpe: null });
       return;
     }
 
@@ -416,6 +427,21 @@ export default function SessionScreen() {
       'No how-to yet',
       `Nothing is catalogued for ${name}. Settings can build the catalogue from your history.`,
     );
+  };
+
+  /**
+   * Records a rating against the written set.
+   *
+   * Only reachable from a ticked row, so `id` is present — but it is checked
+   * anyway rather than asserted, because the row could be unticked underneath
+   * an open sheet.
+   */
+  const rateRow = async (blockIndex: number, rowIndex: number, rpe: number | null) => {
+    setRating(null);
+    const row = blocks[blockIndex]?.rows[rowIndex];
+    if (!row?.id) return;
+    await setSetRpe(row.id, rpe);
+    editRow(blockIndex, rowIndex, { rpe });
   };
 
   const removeExercise = async (blockIndex: number) => {
@@ -574,15 +600,24 @@ export default function SessionScreen() {
               <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
               <Text style={[styles.col, styles.colNum]}>{unit.toUpperCase()}</Text>
               <Text style={[styles.col, styles.colNum]}>REPS</Text>
+              <Text style={[styles.col, styles.colRpe]}>RPE</Text>
               <View style={styles.colTick} />
             </View>
 
             {block.rows.map((row, rowIndex) => {
               const previous = block.previous[rowIndex];
+              /*
+                The rating is appended when the last session recorded one. A
+                Hevy import has always parsed RPE and written it, so a history
+                brought over from Hevy may already be full of these — this is
+                the first place in the app they have ever been visible.
+              */
               const previousLabel = previous
-                ? previous.weightKg === null
-                  ? `BW × ${previous.reps}`
-                  : `${displayWeight(previous.weightKg, settings.units).toFixed(1)} × ${previous.reps}`
+                ? `${
+                    previous.weightKg === null
+                      ? 'BW'
+                      : displayWeight(previous.weightKg, settings.units).toFixed(1)
+                  } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
                 : '—';
               /*
                 A completed set inverts to red rather than acquiring a green
@@ -660,6 +695,31 @@ export default function SessionScreen() {
                       { color: on },
                     ]}
                   />
+
+                  {/*
+                    Blank until the set is written, so the column holds its
+                    width and nothing jumps when a row is ticked — and so an
+                    optional field never sits there looking required on a row
+                    you have not done yet.
+                  */}
+                  {row.done ? (
+                    <Tappable
+                      onPress={() => setRating({ blockIndex, rowIndex })}
+                      scaleTo={0.82}
+                      style={styles.colRpe}
+                      accessibilityLabel={
+                        row.rpe === null
+                          ? 'Rate how hard this set felt'
+                          : `Rated ${formatRpe(row.rpe)}. Change it.`
+                      }
+                    >
+                      <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
+                        {formatRpe(row.rpe)}
+                      </Text>
+                    </Tappable>
+                  ) : (
+                    <View style={styles.colRpe} />
+                  )}
 
                   <Tappable
                     onPress={() => void toggleRow(blockIndex, rowIndex)}
@@ -775,6 +835,15 @@ export default function SessionScreen() {
 
       <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
 
+      <RpeSheet
+        open={rating !== null}
+        current={rating ? (blocks[rating.blockIndex]?.rows[rating.rowIndex]?.rpe ?? null) : null}
+        onChoose={(rpe) => {
+          if (rating) void rateRow(rating.blockIndex, rating.rowIndex, rpe);
+        }}
+        onClose={() => setRating(null)}
+      />
+
       <Text style={styles.note}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
@@ -851,6 +920,7 @@ const styles = StyleSheet.create({
   colSet: { width: 34, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },
   colPrev: { flex: 1, textAlign: 'center' },
   colNum: { width: 64, textAlign: 'center', marginHorizontal: 3 },
+  colRpe: { width: 44, alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
   colTick: { width: 40, alignItems: 'center', justifyContent: 'center' },
 
   row: {
@@ -869,6 +939,7 @@ const styles = StyleSheet.create({
   },
   previous: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   tick: { fontSize: 19, textAlign: 'center' },
+  rpeValue: { fontFamily: font.figure, fontSize: 13, fontVariant: ['tabular-nums'] },
   input: {
     minHeight: TOUCH_TARGET - 10,
     borderRadius: radius.sm,
