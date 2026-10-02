@@ -84,3 +84,16 @@ finish(draw_mark(scale=0.70), SIZE).save(f"{OUT}/splash-icon.png")
 finish(draw_mark(), 64, INK).save(f"{OUT}/favicon.png")
 
 print("wrote icon.png, android-icon-{foreground,background,monochrome}.png, splash-icon.png, favicon.png")
+
+# The iOS PWA does not read app.json at all. `mobile/public/` is copied into
+# the export verbatim, and its icons were hand-made — which is how the old
+# placeholder survived three deploys of a new icon everywhere else.
+#
+# One file serves both the "any" and "maskable" purposes: a maskable icon must
+# keep its content inside the central 80% of the canvas, and the ring's outer
+# edge sits at radius 362 of 512, comfortably inside the 409 that allows.
+PUBLIC = "mobile/public"
+finish(draw_mark(), 512, INK).save(f"{PUBLIC}/icon-512.png")
+finish(draw_mark(), 192, INK).save(f"{PUBLIC}/icon-192.png")
+
+print("wrote public/icon-192.png, public/icon-512.png")
