@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,10 +13,17 @@ import {
 import { EnrichmentParseError } from '../src/ai/exercises';
 import { GroundedLookupError, enrichExercises } from '../src/api/gemini';
 import type { MovementPattern } from '../src/ai/exercises';
-import { Button, TOUCH_TARGET } from '../src/components/Controls';
+import { TOUCH_TARGET } from '../src/components/Controls';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
+import { FadeIn } from '../src/components/FadeIn';
+import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
+import { ImpactFrame } from '../src/components/ImpactFrame';
+import { SlashPanel } from '../src/components/SlashPanel';
+import { Tappable } from '../src/components/Tappable';
+import { impactContent } from '../src/components/setImpact';
+import type { ImpactContent } from '../src/components/setImpact';
 import {
   activeSession,
   addSetToSession,
@@ -39,7 +45,9 @@ import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/d
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
-import { font, radius, space, useTheme } from '../src/theme';
+import { font, radius, space } from '../src/theme';
+// Aliased: `session` is already the active-workout state in this component.
+import { session as loud } from '../src/theme/sessionTheme';
 
 /** One editable row. `id` is present once the set has been written. */
 interface Row {
@@ -87,7 +95,6 @@ const elapsed = (startedAt: string, now: number): string => {
  * half typed and abandoned leaves no trace.
  */
 export default function SessionScreen() {
-  const { colors } = useTheme();
   const router = useRouter();
   const { settings } = useApp();
   const unit = weightUnit(settings.units);
@@ -111,6 +118,13 @@ export default function SessionScreen() {
   // flickering as the only thing that ever happened.
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [info, setInfo] = useState<CatalogueEntry | null>(null);
+  /**
+   * The set that just went down, and what to shout about it. Keyed on the row
+   * so each tick mounts a fresh frame rather than reusing a half-finished one.
+   */
+  const [landed, setLanded] = useState<{ rowKey: string; content: ImpactContent } | null>(null);
+  // Stable, so the once-a-second clock re-render cannot restart a frame mid-flight.
+  const clearLanded = useCallback(() => setLanded(null), []);
   /** Movement pattern per recorded name, for the glyph on each block header. */
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   // Same guard as the food search: one automatic call per distinct term, so a
@@ -337,6 +351,17 @@ export default function SessionScreen() {
     setSession(refreshed);
     const written = refreshed?.sets.filter((s) => s.exerciseName === block.name) ?? [];
     editRow(blockIndex, rowIndex, { done: true, id: written[written.length - 1]?.id ?? null });
+
+    // Written, so now say so. The frame draws itself over the row and takes no
+    // touches, so ticking the next set during it behaves as normal.
+    setLanded({
+      rowKey: row.key,
+      content: impactContent(
+        kg === null ? null : displayWeight(kg, settings.units),
+        reps,
+        row.setType,
+      ),
+    });
   };
 
   /** Keeps an already-written set in step with an edited row. */
@@ -434,29 +459,34 @@ export default function SessionScreen() {
 
   if (loading) {
     return (
-      <Screen title="Workout">
-        <ActivityIndicator color={colors.accent} />
+      <Screen background={loud.ground}>
+        <ActivityIndicator color={loud.loud} />
       </Screen>
     );
   }
 
   if (!session) {
     return (
-      <Screen title="Workout">
-        <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+      <Screen background={loud.ground}>
+        <Text style={styles.screenTitle}>WORKOUT</Text>
+        <Text style={[styles.note, { marginBottom: space.lg }]}>
           Start an empty workout, or pick one of your routines.
         </Text>
-        <Button
-          label="Start an empty workout"
-          onPress={() => router.replace('/session?start=blank')}
-        />
-        {routines.map((routine) => (
-          <Button
-            key={routine.id}
-            label={routine.name}
-            variant="subtle"
-            onPress={() => router.replace(`/session?routine=${routine.id}`)}
-          />
+        <Tappable onPress={() => router.replace('/session?start=blank')} scaleTo={0.97}>
+          <SlashPanel color={loud.loud} style={styles.slab}>
+            <Text style={[styles.slabLabel, { color: loud.onLoud }]}>START AN EMPTY WORKOUT</Text>
+          </SlashPanel>
+        </Tappable>
+        {routines.map((routine, index) => (
+          <FadeIn key={routine.id} delay={Math.min(index, 5) * 40}>
+            <Tappable onPress={() => router.replace(`/session?routine=${routine.id}`)} scaleTo={0.97}>
+              <SlashPanel color={loud.panel} style={styles.slab}>
+                <Text style={[styles.slabLabel, { color: loud.figure }]}>
+                  {routine.name.toUpperCase()}
+                </Text>
+              </SlashPanel>
+            </Tappable>
+          </FadeIn>
         ))}
       </Screen>
     );
@@ -480,193 +510,220 @@ export default function SessionScreen() {
   );
 
   return (
-    <Screen title={session.name}>
-      <View style={[styles.header, { borderColor: colors.border }]}>
-        <View>
-          <Text style={{ color: colors.text, fontSize: 20, fontFamily: font.figure, fontVariant: ['tabular-nums'] }}>
-            {elapsed(session.startedAt, now)}
-          </Text>
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            {loggedCount} {loggedCount === 1 ? 'set' : 'sets'}
-          </Text>
+    <Screen background={loud.ground}>
+      <Text style={styles.screenTitle} numberOfLines={1}>
+        {session.name.toUpperCase()}
+      </Text>
+
+      {/*
+        The clock is the hero figure now. It was 20px with the set count as a
+        footnote beneath it, which for a screen you glance at from arm's length
+        between sets had the emphasis exactly backwards.
+      */}
+      <View style={styles.hero}>
+        <View style={styles.heroFigures}>
+          <Text style={styles.clock}>{elapsed(session.startedAt, now)}</Text>
+          <View style={styles.heroCount}>
+            <CountUp value={loggedCount} style={styles.countFigure} />
+            <Text style={styles.countLabel}>{loggedCount === 1 ? 'SET' : 'SETS'}</Text>
+          </View>
         </View>
-        <Pressable
-          onPress={() => void finish()}
-          style={[styles.finish, { backgroundColor: colors.accent }]}
-        >
-          <Text style={{ color: colors.onFill, fontFamily: font.uiStrong }}>Finish</Text>
-        </Pressable>
+        <Tappable onPress={() => void finish()} scaleTo={0.93}>
+          <SlashPanel color={loud.loud} style={styles.finish}>
+            <Text style={styles.finishLabel}>FINISH</Text>
+          </SlashPanel>
+        </Tappable>
       </View>
 
       {blocks.map((block, blockIndex) => (
-        <View key={block.name} style={styles.block}>
-          <View style={styles.blockHeader}>
-            <Pressable
-              onPress={() => void showInfoFor(block.name)}
-              style={styles.blockTitle}
-              accessibilityLabel={`How to do ${block.name}`}
-            >
-              <ExerciseIcon pattern={patterns[block.name]} size={18} color={colors.textMuted} />
-              <Text style={{ color: colors.accent, fontSize: 16, fontFamily: font.uiStrong }}>
-                {block.name}
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => void removeExercise(blockIndex)} style={styles.iconBtn}>
-              <Text style={{ color: colors.textFaint }}>✕</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.columns}>
-            <Text style={[styles.col, styles.colSet, { color: colors.textFaint }]}>SET</Text>
-            <Text style={[styles.col, styles.colPrev, { color: colors.textFaint }]}>PREVIOUS</Text>
-            <Text style={[styles.col, styles.colNum, { color: colors.textFaint }]}>
-              {unit.toUpperCase()}
-            </Text>
-            <Text style={[styles.col, styles.colNum, { color: colors.textFaint }]}>REPS</Text>
-            <View style={styles.colTick} />
-          </View>
-
-          {block.rows.map((row, rowIndex) => {
-            const previous = block.previous[rowIndex];
-            const previousLabel = previous
-              ? previous.weightKg === null
-                ? `BW × ${previous.reps}`
-                : `${displayWeight(previous.weightKg, settings.units).toFixed(1)} × ${previous.reps}`
-              : '—';
-
-            return (
-              <View
-                key={row.key}
-                style={[
-                  styles.row,
-                  {
-                    borderColor: colors.border,
-                    backgroundColor: row.done ? colors.surfaceRaised : 'transparent',
-                  },
-                ]}
+        <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
+          <View style={styles.block}>
+            {/*
+              A red tab holding the movement glyph, then the name on its own
+              leaning slab. The name was 16px semibold beside a muted glyph,
+              which is most of why this screen read as a spreadsheet with a
+              title on it.
+            */}
+            <View style={styles.blockHeader}>
+              <Tappable
+                onPress={() => void showInfoFor(block.name)}
+                style={styles.blockTitle}
+                scaleTo={0.985}
+                accessibilityLabel={`How to do ${block.name}`}
               >
-                <Pressable
-                  onPress={() =>
-                    editRow(blockIndex, rowIndex, {
-                      setType: row.setType === 'normal' ? 'warmup' : 'normal',
-                    })
-                  }
-                  style={styles.colSet}
-                >
-                  <Text
-                    style={{
-                      color: row.setType === 'warmup' ? colors.warning : colors.text,
-                      fontFamily: font.figure,
-                      fontVariant: ['tabular-nums'],
-                      textAlign: 'center',
-                    }}
-                  >
-                    {row.setType === 'warmup' ? 'W' : rowIndex + 1}
+                <SlashPanel color={loud.loud} style={styles.glyphTab}>
+                  <ExerciseIcon pattern={patterns[block.name]} size={18} color={loud.onLoud} />
+                </SlashPanel>
+                <SlashPanel color={loud.panel} style={styles.nameSlab}>
+                  <Text style={styles.blockName} numberOfLines={1}>
+                    {block.name.toUpperCase()}
                   </Text>
-                </Pressable>
+                </SlashPanel>
+              </Tappable>
+              <Tappable
+                onPress={() => void removeExercise(blockIndex)}
+                style={styles.iconBtn}
+                scaleTo={0.85}
+              >
+                <Text style={styles.remove}>✕</Text>
+              </Tappable>
+            </View>
 
-                <Text
-                  style={[styles.colPrev, { color: colors.textFaint, fontSize: 12, fontFamily: font.figure, fontVariant: ['tabular-nums'] }]}
-                  numberOfLines={1}
+            <View style={styles.columns}>
+              <Text style={[styles.col, styles.colSet]}>SET</Text>
+              <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
+              <Text style={[styles.col, styles.colNum]}>{unit.toUpperCase()}</Text>
+              <Text style={[styles.col, styles.colNum]}>REPS</Text>
+              <View style={styles.colTick} />
+            </View>
+
+            {block.rows.map((row, rowIndex) => {
+              const previous = block.previous[rowIndex];
+              const previousLabel = previous
+                ? previous.weightKg === null
+                  ? `BW × ${previous.reps}`
+                  : `${displayWeight(previous.weightKg, settings.units).toFixed(1)} × ${previous.reps}`
+                : '—';
+              /*
+                A completed set inverts to red rather than acquiring a green
+                tick. With three colours on the screen inversion is the loudest
+                signal available, and it still reads at a glance from a bench,
+                which a recoloured tick does not.
+              */
+              const on = row.done ? loud.onLoud : loud.figure;
+
+              return (
+                <View
+                  key={row.key}
+                  style={[
+                    styles.row,
+                    row.done
+                      ? { backgroundColor: loud.loud, borderColor: loud.loud }
+                      : { backgroundColor: 'transparent', borderColor: loud.rule },
+                  ]}
                 >
-                  {previousLabel}
-                </Text>
-
-                <TextInput
-                  value={row.weight}
-                  onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
-                  onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                  keyboardType="decimal-pad"
-                  placeholder={block.bodyweightBased ? 'BW' : '—'}
-                  placeholderTextColor={colors.textFaint}
-                  style={[
-                    styles.input,
-                    styles.colNum,
-                    { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                />
-                <TextInput
-                  value={row.reps}
-                  onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
-                  onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                  keyboardType="number-pad"
-                  placeholder="—"
-                  placeholderTextColor={colors.textFaint}
-                  style={[
-                    styles.input,
-                    styles.colNum,
-                    { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
-                  ]}
-                />
-
-                <Pressable onPress={() => void toggleRow(blockIndex, rowIndex)} style={styles.colTick}>
-                  <Text
-                    style={{
-                      color: row.done ? colors.positive : colors.textFaint,
-                      fontSize: 18,
-                      textAlign: 'center',
-                    }}
+                  <Tappable
+                    onPress={() =>
+                      editRow(blockIndex, rowIndex, {
+                        setType: row.setType === 'normal' ? 'warmup' : 'normal',
+                      })
+                    }
+                    scaleTo={0.8}
+                    style={styles.colSet}
                   >
-                    ✓
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
+                    <Text
+                      style={[
+                        styles.setFigure,
+                        { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
+                      ]}
+                    >
+                      {row.setType === 'warmup' ? 'W' : rowIndex + 1}
+                    </Text>
+                  </Tappable>
 
-          <Pressable
-            onPress={() => addRow(blockIndex)}
-            style={[styles.addSet, { borderColor: colors.border }]}
-          >
-            <Text style={{ color: colors.accent, fontFamily: font.uiStrong }}>+ Add set</Text>
-          </Pressable>
-        </View>
+                  <Text
+                    style={[
+                      styles.previous,
+                      styles.colPrev,
+                      { color: row.done ? loud.onLoud : loud.figureFaint },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {previousLabel}
+                  </Text>
+
+                  <TextInput
+                    value={row.weight}
+                    onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
+                    onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                    keyboardType="decimal-pad"
+                    placeholder={block.bodyweightBased ? 'BW' : '—'}
+                    placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                    style={[
+                      styles.input,
+                      styles.colNum,
+                      row.done ? styles.inputOnLoud : styles.inputOnGround,
+                      { color: on },
+                    ]}
+                  />
+                  <TextInput
+                    value={row.reps}
+                    onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
+                    onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                    keyboardType="number-pad"
+                    placeholder="—"
+                    placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                    style={[
+                      styles.input,
+                      styles.colNum,
+                      row.done ? styles.inputOnLoud : styles.inputOnGround,
+                      { color: on },
+                    ]}
+                  />
+
+                  <Tappable
+                    onPress={() => void toggleRow(blockIndex, rowIndex)}
+                    scaleTo={0.78}
+                    style={styles.colTick}
+                    accessibilityLabel={row.done ? 'Undo this set' : 'Record this set'}
+                  >
+                    <Text style={[styles.tick, { color: row.done ? loud.onLoud : loud.figureFaint }]}>
+                      ✓
+                    </Text>
+                  </Tappable>
+
+                  {landed?.rowKey === row.key && (
+                    <ImpactFrame content={landed.content} onDone={clearLanded} />
+                  )}
+                </View>
+              );
+            })}
+
+            <Tappable onPress={() => addRow(blockIndex)} style={styles.addSet} scaleTo={0.98}>
+              <Text style={styles.addSetLabel}>+ ADD SET</Text>
+            </Tappable>
+          </View>
+        </FadeIn>
       ))}
 
       {picking ? (
-        <View style={[styles.picker, { borderColor: colors.border }]}>
+        <View style={[styles.picker, { borderColor: loud.rule }]}>
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search or type a new exercise"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={loud.figureFaint}
             autoFocus
-            style={[
-              styles.input,
-              { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
+            style={[styles.input, styles.inputOnGround, styles.pickInput]}
           />
           <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
-            {matches.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() =>
-                  void addExercise(item.recordedName ?? item.canonicalName, item.bodyweightBased)
-                }
-                style={[styles.pickRow, { borderColor: colors.border }]}
-              >
-                <ExerciseIcon pattern={item.movementPattern} size={20} color={colors.textMuted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontFamily: font.ui }}>
-                    {item.canonicalName}
-                  </Text>
-                  <Text
-                    style={{ color: colors.textFaint, fontSize: 12, fontFamily: font.ui }}
-                  >
-                    {item.primaryMuscle} · {item.equipment}
-                    {item.bodyweightBased ? ' · bodyweight' : ''}
-                  </Text>
-                </View>
-              </Pressable>
+            {matches.map((item, index) => (
+              <FadeIn key={item.id} delay={Math.min(index, 6) * 25}>
+                <Tappable
+                  onPress={() =>
+                    void addExercise(item.recordedName ?? item.canonicalName, item.bodyweightBased)
+                  }
+                  scaleTo={0.985}
+                  style={[styles.pickRow, { borderColor: loud.rule }]}
+                >
+                  <ExerciseIcon pattern={item.movementPattern} size={20} color={loud.loud} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickName}>{item.canonicalName}</Text>
+                    <Text style={styles.pickMeta}>
+                      {item.primaryMuscle} · {item.equipment}
+                      {item.bodyweightBased ? ' · bodyweight' : ''}
+                    </Text>
+                  </View>
+                </Tappable>
+              </FadeIn>
             ))}
-            {knownMatches.length > 0 && (
-              <Text style={[styles.pickGroup, { color: colors.textFaint }]}>FROM YOUR HISTORY</Text>
-            )}
+            {knownMatches.length > 0 && <Text style={styles.pickGroup}>FROM YOUR HISTORY</Text>}
             {knownMatches.map((item) => (
-              <Pressable
+              <Tappable
                 key={`known:${item.name}`}
                 onPress={() => void addExercise(item.name)}
-                style={[styles.pickRow, { borderColor: colors.border }]}
+                scaleTo={0.985}
+                style={[styles.pickRow, { borderColor: loud.rule }]}
               >
                 {/*
                   These used to render an empty 20px slot, so a picker opened
@@ -674,31 +731,17 @@ export default function SessionScreen() {
                   catalogue has been built these names are catalogued too, and
                   the glyph is already loaded for the block headers.
                 */}
-                <ExerciseIcon pattern={patterns[item.name]} size={20} color={colors.textMuted} />
+                <ExerciseIcon pattern={patterns[item.name]} size={20} color={loud.loud} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontFamily: font.ui }}>{item.name}</Text>
+                  <Text style={styles.pickName}>{item.name}</Text>
                 </View>
-              </Pressable>
+              </Tappable>
             ))}
-            {enriching && (
-              <Text
-                style={{
-                  color: colors.textFaint,
-                  fontSize: 12,
-                  fontFamily: font.ui,
-                  padding: space.md,
-                }}
-              >
-                Looking that exercise up…
-              </Text>
-            )}
-            {enrichNote !== null && !enriching && (
-              <Text style={[styles.pickNote, { color: colors.textFaint }]}>{enrichNote}</Text>
-            )}
+            {enriching && <Text style={styles.pickNote}>Looking that exercise up…</Text>}
+            {enrichNote !== null && !enriching && <Text style={styles.pickNote}>{enrichNote}</Text>}
           </ScrollView>
           {search.trim() !== '' && (
-            <Button
-              label={`Add "${search.trim()}"`}
+            <Tappable
               onPress={() => {
                 // Typing a catalogue name out in full is the same tap by another
                 // route, so it has to resolve to the same recorded name.
@@ -707,17 +750,32 @@ export default function SessionScreen() {
                 );
                 void addExercise(exact?.recordedName ?? search, exact?.bodyweightBased);
               }}
-            />
+              scaleTo={0.97}
+            >
+              <SlashPanel color={loud.loud} style={styles.slab}>
+                <Text style={[styles.slabLabel, { color: loud.onLoud }]} numberOfLines={1}>
+                  ADD {search.trim().toUpperCase()}
+                </Text>
+              </SlashPanel>
+            </Tappable>
           )}
-          <Button label="Cancel" variant="subtle" onPress={() => setPicking(false)} />
+          <Tappable onPress={() => setPicking(false)} scaleTo={0.97}>
+            <SlashPanel color={loud.panel} style={styles.slab}>
+              <Text style={[styles.slabLabel, { color: loud.figureMuted }]}>CANCEL</Text>
+            </SlashPanel>
+          </Tappable>
         </View>
       ) : (
-        <Button label="Add exercise" onPress={() => setPicking(true)} />
+        <Tappable onPress={() => setPicking(true)} scaleTo={0.97}>
+          <SlashPanel color={loud.panel} style={styles.slab}>
+            <Text style={[styles.slabLabel, { color: loud.figure }]}>+ ADD EXERCISE</Text>
+          </SlashPanel>
+        </Tappable>
       )}
 
       <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
 
-      <Text style={[styles.note, { color: colors.textFaint }]}>
+      <Text style={styles.note}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
       </Text>
@@ -725,85 +783,156 @@ export default function SessionScreen() {
   );
 }
 
+/**
+ * Everything here reads from `loud` rather than from the theme hook, because
+ * this screen is deliberately the same in both colour schemes — the reasoning
+ * is in `theme/sessionTheme.ts`.
+ */
 const styles = StyleSheet.create({
-  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 6 },
-  header: {
+  screenTitle: {
+    fontFamily: font.display,
+    fontSize: 26,
+    letterSpacing: -0.4,
+    color: loud.figure,
+    marginBottom: space.sm,
+  },
+  note: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: space.md,
+    color: loud.figureFaint,
+  },
+
+  hero: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: space.md,
-    marginBottom: space.md,
+    marginBottom: space.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
   },
+  heroFigures: { flex: 1 },
+  clock: {
+    fontFamily: font.figure,
+    fontSize: 40,
+    lineHeight: 44,
+    letterSpacing: -2,
+    color: loud.figure,
+    fontVariant: ['tabular-nums'],
+  },
+  heroCount: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  countFigure: {
+    fontFamily: font.figure,
+    fontSize: 14,
+    color: loud.loud,
+    fontVariant: ['tabular-nums'],
+  },
+  countLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 2, color: loud.figureFaint },
   finish: {
     minHeight: TOUCH_TARGET,
-    justifyContent: 'center',
-    paddingHorizontal: space.lg,
-    borderRadius: radius.md,
-  },
-  block: { marginBottom: space.lg },
-  blockTitle: {
-    flex: 1,
-    minHeight: TOUCH_TARGET,
-    flexDirection: 'row',
+    paddingHorizontal: space.lg + 2,
     alignItems: 'center',
-    gap: space.sm,
+    justifyContent: 'center',
   },
-  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.xs },
-  columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 4 },
-  col: { fontFamily: font.uiStrong, fontSize: 11, letterSpacing: 0.5 },
-  colSet: { width: 34, textAlign: 'center' },
+  finishLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6, color: loud.onLoud },
+
+  block: { marginBottom: space.xl },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.sm },
+  blockTitle: { flex: 1, flexDirection: 'row', alignItems: 'stretch', gap: 3, minHeight: 38 },
+  glyphTab: { width: 38, alignItems: 'center', justifyContent: 'center' },
+  nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
+  blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
+  remove: { color: loud.figureFaint, fontSize: 15 },
+
+  columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 5 },
+  col: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.4, color: loud.figureFaint },
+  colSet: { width: 34, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },
   colPrev: { flex: 1, textAlign: 'center' },
   colNum: { width: 64, textAlign: 'center', marginHorizontal: 3 },
   colTick: { width: 40, alignItems: 'center', justifyContent: 'center' },
+
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: TOUCH_TARGET,
     borderRadius: radius.sm,
-    marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 5,
   },
+  setFigure: {
+    fontFamily: font.figure,
+    fontSize: 14,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+  previous: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
+  tick: { fontSize: 19, textAlign: 'center' },
   input: {
-    minHeight: TOUCH_TARGET - 8,
+    minHeight: TOUCH_TARGET - 10,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 6,
     textAlign: 'center',
+    fontFamily: font.figure,
   },
+  inputOnGround: { backgroundColor: loud.panel, borderColor: loud.rule },
+  // On an inverted row the boxes have to lift off the red without introducing
+  // a fourth colour, so they are the same white at low opacity.
+  inputOnLoud: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)' },
+
   addSet: {
-    minHeight: TOUCH_TARGET,
+    minHeight: TOUCH_TARGET - 6,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
-    marginTop: 4,
+    borderColor: loud.rule,
+    marginTop: 2,
   },
-  iconBtn: {
+  addSetLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.6, color: loud.loud },
+
+  slab: {
     minHeight: TOUCH_TARGET,
-    minWidth: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    marginBottom: space.sm,
   },
+  slabLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, textAlign: 'center' },
+
   picker: {
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.sm,
     marginBottom: space.md,
   },
+  pickInput: { textAlign: 'left', paddingHorizontal: space.md, marginBottom: space.sm },
   pickGroup: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
-    letterSpacing: 0.5,
+    fontFamily: font.display,
+    fontSize: 9,
+    letterSpacing: 1.4,
+    color: loud.figureFaint,
     paddingTop: space.md,
     paddingBottom: 4,
   },
-  pickNote: { fontFamily: font.ui, fontSize: 12, padding: space.md },
+  pickNote: { fontFamily: font.ui, fontSize: 12, padding: space.md, color: loud.figureFaint },
+  pickName: { fontFamily: font.uiStrong, fontSize: 14, color: loud.figure },
+  pickMeta: { fontFamily: font.ui, fontSize: 12, color: loud.figureFaint },
   pickRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: space.sm,
     minHeight: TOUCH_TARGET,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+
+  iconBtn: {
+    minHeight: TOUCH_TARGET,
+    minWidth: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

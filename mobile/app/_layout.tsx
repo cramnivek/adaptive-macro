@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Toaster } from '../src/components/Toaster';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
+import { session as loud } from '../src/theme/sessionTheme';
 
 export default function RootLayout() {
   const { colors, isDark } = useTheme();
@@ -136,9 +137,12 @@ export default function RootLayout() {
             options={{
               presentation: 'modal',
               headerShown: true,
-              title: 'Workout',
-              headerStyle: { backgroundColor: colors.surface },
-              headerTintColor: colors.text,
+              // No title and the logger's own ground, so the modal bar is not
+              // a strip of a different dark above a screen that has already
+              // said "WORKOUT" in 26px. The chevron still dismisses it.
+              title: '',
+              headerStyle: { backgroundColor: loud.ground },
+              headerTintColor: loud.figure,
             }}
           />
           <Stack.Screen
