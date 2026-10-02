@@ -1,6 +1,6 @@
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { Animated, StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { thud } from '../platform/haptics';
 import { SKEW, font } from '../theme';
 import { ease, exit, impact } from '../theme/motion';
 import { session } from '../theme/sessionTheme';
@@ -68,11 +68,9 @@ export const ImpactFrame = ({ content, onDone }: ImpactFrameProps) => {
   }, [onDone]);
 
   useEffect(() => {
-    // expo-haptics has nothing to drive on the web build, where this screen
-    // also runs as the iOS PWA. Guarded rather than left to warn per set.
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
+    // Native gets a real impact; an Android browser gets a vibration; iOS web
+    // gets nothing, because Safari has no Vibration API to call.
+    thud('heavy');
 
     const run = Animated.sequence([
       Animated.parallel([

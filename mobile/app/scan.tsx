@@ -1,6 +1,6 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
+import { thud } from '../src/platform/haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -35,7 +35,7 @@ export default function ScanScreen() {
     if (busy.current) return;
     busy.current = true;
     setStatus({ kind: 'looking-up' });
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    thud('light');
 
     try {
       // The local cache is checked first: a food you have scanned before should
