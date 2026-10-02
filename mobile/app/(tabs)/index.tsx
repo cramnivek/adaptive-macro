@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { FadeIn } from '../../src/components/FadeIn';
+import { Tappable } from '../../src/components/Tappable';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
@@ -141,59 +143,70 @@ export default function TodayScreen() {
                 one says what it does by looking like it.
               */
               <View style={styles.mealActions}>
-                <Pressable
+                <Tappable
                   onPress={() =>
                     router.push({ pathname: '/describe', params: { meal, capture: 'camera' } })
                   }
+                  scaleTo={0.9}
                   style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
                   accessibilityLabel={`Photograph something to add to ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="camera-outline" size={18} color={colors.text} />
-                </Pressable>
-                <Pressable
+                </Tappable>
+                <Tappable
                   onPress={() => router.push({ pathname: '/describe', params: { meal } })}
+                  scaleTo={0.9}
                   style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
                   accessibilityLabel={`Describe something to add to ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="sparkles-outline" size={18} color={colors.text} />
-                </Pressable>
-                <Pressable
+                </Tappable>
+                <Tappable
                   onPress={() => router.push({ pathname: '/scan', params: { meal } })}
+                  scaleTo={0.9}
                   style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
                   accessibilityLabel={`Scan a barcode to add to ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="barcode-outline" size={18} color={colors.text} />
-                </Pressable>
-                <Pressable
+                </Tappable>
+                <Tappable
                   onPress={() => router.push({ pathname: '/search', params: { meal } })}
+                  scaleTo={0.9}
                   style={[styles.iconButton, { backgroundColor: colors.accent }]}
                   accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
                 >
                   <Ionicons name="add" size={18} color={colors.onFill} />
-                </Pressable>
+                </Tappable>
               </View>
             }
           >
-            {mealEntries.map((entry) => (
-              <Pressable
-                key={entry.id}
-                onPress={() => setEditing(entry)}
-                onLongPress={() => void confirmDelete(entry)}
-                style={({ pressed }) => [styles.entry, { opacity: pressed ? 0.6 : 1 }]}
-              >
-                <View style={styles.entryText}>
-                  <Text style={[styles.entryName, { color: colors.text }]} numberOfLines={1}>
-                    {entry.foodName}
+            {/*
+              Each entry arrives rather than appearing. The stagger is small and
+              capped: a logged food should slide in, but a meal with eight items
+              must not take most of a second to finish drawing itself.
+            */}
+            {mealEntries.map((entry, entryIndex) => (
+              <FadeIn key={entry.id} delay={Math.min(entryIndex, 5) * 30}>
+                <Tappable
+                  onPress={() => setEditing(entry)}
+                  onLongPress={() => void confirmDelete(entry)}
+                  scaleTo={0.985}
+                  style={styles.entry}
+                >
+                  <View style={styles.entryText}>
+                    <Text style={[styles.entryName, { color: colors.text }]} numberOfLines={1}>
+                      {entry.foodName}
+                    </Text>
+                    <Text style={[styles.entryMeta, { color: colors.textFaint }]}>
+                      {Math.round(entry.grams)} g · P {Math.round(entry.nutrients.proteinG)} ·
+                      {' '}C {Math.round(entry.nutrients.carbsG)} · F {Math.round(entry.nutrients.fatG)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.entryKcal, { color: colors.textMuted }]}>
+                    {Math.round(entry.nutrients.kcal)}
                   </Text>
-                  <Text style={[styles.entryMeta, { color: colors.textFaint }]}>
-                    {Math.round(entry.grams)} g · P {Math.round(entry.nutrients.proteinG)} ·
-                    {' '}C {Math.round(entry.nutrients.carbsG)} · F {Math.round(entry.nutrients.fatG)}
-                  </Text>
-                </View>
-                <Text style={[styles.entryKcal, { color: colors.textMuted }]}>
-                  {Math.round(entry.nutrients.kcal)}
-                </Text>
-              </Pressable>
+                </Tappable>
+              </FadeIn>
             ))}
             {mealEntries.length > 0 && (
               <Text style={[styles.deleteHint, { color: colors.textFaint }]}>

@@ -7,6 +7,7 @@ import {
   type KeyboardTypeOptions,
 } from 'react-native';
 import { font, radius, space, useTheme } from '../theme';
+import { Tappable } from './Tappable';
 
 interface ButtonProps {
   label: string;
@@ -22,16 +23,15 @@ export const Button = ({ label, onPress, variant = 'primary', disabled }: Button
   const textColor = variant === 'subtle' ? colors.text : colors.onFill;
 
   return (
-    <Pressable
+    // `Tappable` rather than `Pressable`: the press used to register only as a
+    // drop in opacity, which on a filled slab is barely visible. It sinks now.
+    <Tappable
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        styles.button,
-        { backgroundColor: background, opacity: disabled ? 0.4 : pressed ? 0.75 : 1 },
-      ]}
+      style={[styles.button, { backgroundColor: background, opacity: disabled ? 0.4 : 1 }]}
     >
       <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
-    </Pressable>
+    </Tappable>
   );
 };
 

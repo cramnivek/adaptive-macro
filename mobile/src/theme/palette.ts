@@ -67,4 +67,6 @@ export const font = {
   ui: 'SpaceGrotesk_400Regular',
   uiStrong: 'SpaceGrotesk_600SemiBold',
   figure: 'IBMPlexMono_500Medium',
+  /** Heaviest weight, for type that is meant to be the loudest thing on screen. */
+  display: 'SpaceGrotesk_700Bold',
 } as const;

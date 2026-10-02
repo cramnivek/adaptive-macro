@@ -9,6 +9,8 @@ interface ScreenProps {
   children: React.ReactNode;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Overrides the page ground. The workout logger uses its own, much darker. */
+  background?: string;
 }
 
 /**
@@ -18,13 +20,13 @@ interface ScreenProps {
  * card clears the home indicator on a notched phone and is not left under the
  * tab bar on a flat one — measured, not a fixed guess.
  */
-export const Screen = ({ title, subtitle, children, onRefresh, refreshing }: ScreenProps) => {
+export const Screen = ({ title, subtitle, children, onRefresh, refreshing, background }: ScreenProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <ScrollView
-      style={{ backgroundColor: colors.background }}
+      style={{ backgroundColor: background ?? colors.background }}
       contentContainerStyle={[
         styles.content,
         { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl },

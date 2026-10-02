@@ -1,7 +1,9 @@
 import type { Nutrients } from '@adaptive-macros/engine';
-import { StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { font, radius, space, useTheme } from '../theme';
+import { useAnimatedTo } from '../theme/motion';
+import { CountUp } from './CountUp';
 
 interface ProgressBarProps {
   label: string;
@@ -14,6 +16,9 @@ export const MacroBar = ({ label, consumedG, targetG, color }: ProgressBarProps)
   const { colors } = useTheme();
   const ratio = targetG > 0 ? consumedG / targetG : 0;
   const over = ratio > 1;
+  // Clamped so an overshoot cannot render past the track; the number above it
+  // still shows the true amount.
+  const fill = useAnimatedTo(Math.min(Math.max(ratio, 0), 1));
 
   return (
     <View style={styles.barRow}>
@@ -24,13 +29,17 @@ export const MacroBar = ({ label, consumedG, targetG, color }: ProgressBarProps)
         </Text>
       </View>
       <View style={[styles.barTrack, { backgroundColor: colors.surfaceRaised }]}>
-        <View
+        {/*
+          Grows to its new length rather than appearing at it. Width is a
+          layout property, so this one cannot run on the native driver — which
+          is fine, because it fires when the day's totals change and not
+          continuously.
+        */}
+        <Animated.View
           style={[
             styles.barFill,
             {
-              // Clamped so an overshoot cannot render past the track; the
-              // number above it still shows the true amount.
-              width: `${Math.min(Math.max(ratio, 0), 1) * 100}%`,
+              width: fill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
               backgroundColor: over ? colors.danger : color,
             },
           ]}
@@ -46,6 +55,8 @@ interface CalorieRingProps {
   size?: number;
 }
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRingProps) => {
   const { colors } = useTheme();
   const stroke = 12;
@@ -54,6 +65,7 @@ export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRin
   const ratio = targetKcal > 0 ? Math.min(Math.max(consumedKcal / targetKcal, 0), 1) : 0;
   const remaining = targetKcal - consumedKcal;
   const over = remaining < 0;
+  const progress = useAnimatedTo(ratio);
 
   return (
     <View style={{ width: size, height: size }}>
@@ -66,7 +78,7 @@ export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRin
           strokeWidth={stroke}
           fill="none"
         />
-        <Circle
+        <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={r}
@@ -75,15 +87,21 @@ export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRin
           fill="none"
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - ratio)}
+          // The arc sweeps to the new figure. Paired with the CountUp below,
+          // which travels over the same duration so the two agree.
+          strokeDashoffset={progress.interpolate({
+            inputRange: [0, 1],
+            outputRange: [circumference, 0],
+          })}
           // Rotate so the arc starts at 12 o'clock rather than 3 o'clock.
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
       <View style={[StyleSheet.absoluteFill, styles.ringCentre]}>
-        <Text style={[styles.ringValue, { color: over ? colors.danger : colors.text }]}>
-          {Math.abs(Math.round(remaining))}
-        </Text>
+        <CountUp
+          value={Math.abs(remaining)}
+          style={[styles.ringValue, { color: over ? colors.danger : colors.text }]}
+        />
         <Text style={[styles.ringLabel, { color: colors.textMuted }]}>
           {over ? 'kcal over' : 'kcal left'}
         </Text>
