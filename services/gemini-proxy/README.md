@@ -146,8 +146,14 @@ and views the JavaScript. That is survivable for one user and not survivable
 with users.
 
 `rateLimit.ts` does not fix that; only per-user credentials can. It caps what
-one extracted token is worth: a sliding window per client IP, taken from the
-head of `x-forwarded-for`, which Cloud Run sets.
+one extracted token is worth: a sliding window per client IP.
+
+The address is read as the **second from last** entry of `x-forwarded-for`,
+not the first. The header is a list the caller is free to start, and Google's
+front end appends the address it saw and then its own — so the head is
+untrusted and the tail is not. Keying on the head is the obvious reading and
+is worthless: setting the header yourself lands you in a fresh bucket every
+request. That was measured against the deployed service, not reasoned about.
 
 - `/api/gemini` — 20 per 10 minutes. A grounded lookup takes most of a minute,
   so this is already far beyond any human pace.
@@ -158,10 +164,11 @@ run *before* the token check, so a caller with a bad token cannot hammer the
 service either. Pages and assets are never limited: a rate-limited API must not
 blank the app.
 
-Callers with no `x-forwarded-for` share one bucket. That is the conservative
-way round — a caller that hides its address gets the strictest treatment rather
-than an exemption — but it means that if Cloud Run ever stops setting the
-header, every user shares one allowance.
+Anything that does not arrive with at least two hops shares one bucket, as
+does a request with no header at all. That is the conservative way round — a
+caller whose address cannot be established gets the strictest treatment rather
+than an exemption — but it means that if this ever runs somewhere that does not
+put the client in that position, every user shares one allowance.
 
 The limits live in the process, so each Cloud Run instance counts separately;
 scaling to N instances multiplies the effective limit by N. Good enough for a

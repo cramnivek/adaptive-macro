@@ -94,21 +94,52 @@ describe('callerKey', () => {
   const withHeaders = (headers: Record<string, string>) =>
     new Request('https://example.test/api/gemini', { headers });
 
-  it('takes the client from the head of x-forwarded-for, not the proxy hops', () => {
-    expect(callerKey(withHeaders({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1, 10.0.0.2' }))).toBe(
+  /**
+   * Google's front end appends the address it saw and then its own, so a
+   * request that arrived with nothing still carries these two.
+   */
+  it('takes the client as the proxy saw it, not as the caller claimed', () => {
+    expect(callerKey(withHeaders({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1' }))).toBe(
       '203.0.113.9',
     );
   });
 
-  it('trims whitespace around the address', () => {
-    expect(callerKey(withHeaders({ 'x-forwarded-for': '  203.0.113.9 , 10.0.0.1' }))).toBe(
+  it('ignores anything the caller prepended, which is the whole point', () => {
+    // An abuser invents a head to land in a fresh bucket. It must change
+    // nothing: both of these are the same caller.
+    const one = callerKey(
+      withHeaders({ 'x-forwarded-for': '198.51.100.77, 203.0.113.9, 10.0.0.1' }),
+    );
+    const two = callerKey(
+      withHeaders({ 'x-forwarded-for': '203.0.113.55, 203.0.113.9, 10.0.0.1' }),
+    );
+    expect(one).toBe('203.0.113.9');
+    expect(one).toBe(two);
+  });
+
+  it('is not fooled by a long invented chain either', () => {
+    expect(
+      callerKey({
+        headers: new Headers({ 'x-forwarded-for': 'a, b, c, d, 203.0.113.9, 10.0.0.1' }),
+      } as Request),
+    ).toBe('203.0.113.9');
+  });
+
+  it('trims whitespace around the addresses', () => {
+    expect(callerKey(withHeaders({ 'x-forwarded-for': '  203.0.113.9 ,  10.0.0.1 ' }))).toBe(
       '203.0.113.9',
     );
   });
 
-  it('buckets an unidentifiable caller rather than exempting it', () => {
+  it('buckets together rather than exempting when the header is missing', () => {
     expect(callerKey(withHeaders({}))).toBe('unknown');
     expect(callerKey(withHeaders({ 'x-forwarded-for': '' }))).toBe('unknown');
     expect(callerKey(withHeaders({ 'x-forwarded-for': '  ' }))).toBe('unknown');
+  });
+
+  it('buckets together when there is only one hop, which is not the shape it expects', () => {
+    // Not behind the front end: safer to share one allowance than to trust a
+    // value the caller fully controls.
+    expect(callerKey(withHeaders({ 'x-forwarded-for': '198.51.100.77' }))).toBe('unknown');
   });
 });

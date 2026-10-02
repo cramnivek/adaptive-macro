@@ -74,13 +74,28 @@ export const createRateLimiter = (rule: RateLimitRule, now: () => number = Date.
 /**
  * Who is calling, as far as this service can tell.
  *
- * Cloud Run puts the caller at the head of `x-forwarded-for` and appends its
- * own hops, so only the first entry is the client. Everything unidentifiable
- * shares one bucket, which is the conservative way round: a caller that hides
- * its address gets the strictest treatment rather than an exemption.
+ * Counted from the RIGHT, not the left. `x-forwarded-for` is a list the client
+ * is free to start: Google's front end appends the address it actually saw and
+ * then its own, so the head of the list is untrusted and the tail is not.
+ *
+ * Keying on the first entry is the obvious reading, and it is what this did
+ * first. It is also useless: an abuser sets the header themselves and lands in
+ * a fresh bucket on every request. That was measured against the deployed
+ * service rather than reasoned about — twenty calls carrying one invented
+ * address hit the limit, and a twenty-first carrying a different invented
+ * address went straight through.
+ *
+ * So the second from last, which is the client as Google saw it. A caller who
+ * supplies nothing still produces those two entries. Anything shorter means
+ * this is not running behind the front end it expects, and sharing one bucket
+ * is the safe way to be wrong.
  */
 export const callerKey = (request: Request): string => {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const first = forwarded?.split(',')[0]?.trim();
-  return first !== undefined && first !== '' ? first : 'unknown';
+  const hops = (request.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((hop) => hop.trim())
+    .filter((hop) => hop !== '');
+
+  const client = hops.length >= 2 ? hops[hops.length - 2] : undefined;
+  return client !== undefined && client !== '' ? client : 'unknown';
 };

@@ -201,7 +201,9 @@ describe('rate limiting', () => {
       headers: {
         'Content-Type': 'application/json',
         'x-proxy-token': 'wrong-on-purpose',
-        'x-forwarded-for': ip,
+        // Two hops, as Google's front end actually delivers them: the client
+        // it saw, then itself. callerKey reads the second from last.
+        'x-forwarded-for': `${ip}, 10.0.0.1`,
       },
       body: '{"contents":[]}',
     });
@@ -235,5 +237,33 @@ describe('rate limiting', () => {
       new Request('https://x.test/', { headers: { 'x-forwarded-for': '198.51.100.9' } }),
     );
     expect(page.status).toBe(200);
+  });
+});
+
+describe('rate limiting cannot be shaken off', () => {
+  /** The same caller, each time pretending to be somewhere new. */
+  const spoofing = (invented: string) =>
+    new Request('https://x.test/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-proxy-token': 'wrong-on-purpose',
+        // The head is whatever the caller sent; Google appends what it saw.
+        'x-forwarded-for': `${invented}, 198.51.100.200, 10.0.0.1`,
+      },
+      body: '{"contents":[]}',
+    });
+
+  it('ignores an invented address, so a new one per request buys nothing', async () => {
+    const router = createRouter({ env, webRoot });
+
+    for (let i = 0; i < 20; i += 1) {
+      expect((await router(spoofing(`203.0.113.${i}`))).status).toBe(401);
+    }
+
+    // A twenty-first, from a twenty-first invented address. Keyed on the head
+    // this is a fresh bucket and sails through; keyed on what the proxy saw it
+    // is the same caller, over their limit.
+    expect((await router(spoofing('203.0.113.250'))).status).toBe(429);
   });
 });
