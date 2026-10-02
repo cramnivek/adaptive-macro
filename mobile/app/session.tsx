@@ -713,9 +713,25 @@ export default function SessionScreen() {
                           : `Rated ${formatRpe(row.rpe)}. Change it.`
                       }
                     >
-                      <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
-                        {formatRpe(row.rpe)}
-                      </Text>
+                      {/*
+                        A chip, not a bare glyph. An em dash sitting in a cell
+                        reads as "nothing here" rather than "tap me" — so an
+                        unrated set gets a dashed outline and a plus, which is
+                        the same language "+ ADD SET" already uses two rows
+                        down, and a rated one gets the same filled box as the
+                        weight and rep fields beside it, which says editable
+                        without spending a word on it.
+                      */}
+                      <View
+                        style={[
+                          styles.rpeChip,
+                          row.rpe === null ? styles.rpeChipEmpty : styles.rpeChipSet,
+                        ]}
+                      >
+                        <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
+                          {row.rpe === null ? '+' : formatRpe(row.rpe)}
+                        </Text>
+                      </View>
                     </Tappable>
                   ) : (
                     <View style={styles.colRpe} />
@@ -939,7 +955,19 @@ const styles = StyleSheet.create({
   },
   previous: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   tick: { fontSize: 19, textAlign: 'center' },
-  rpeValue: { fontFamily: font.figure, fontSize: 13, fontVariant: ['tabular-nums'] },
+  rpeValue: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
+  rpeChip: {
+    minWidth: 36,
+    paddingHorizontal: 3,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The same box as the weight and rep inputs on an inverted row.
+  rpeChipSet: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)' },
+  rpeChipEmpty: { borderColor: 'rgba(255,255,255,0.45)', borderStyle: 'dashed' },
   input: {
     minHeight: TOUCH_TARGET - 10,
     borderRadius: radius.sm,

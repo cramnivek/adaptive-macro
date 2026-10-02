@@ -1,7 +1,17 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import { font, space, useTheme } from '../theme';
+import { duration, ease } from '../theme/motion';
+import { polylineLength } from './chartPath';
+
+/*
+  Both animate SVG attributes, which the native driver cannot touch — so these
+  run on the JS thread. Acceptable: each fires once when a screen of data
+  arrives, not continuously.
+*/
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const AnimatedG = Animated.createAnimatedComponent(G);
 
 export interface ChartPoint {
   x: number;
@@ -86,6 +96,7 @@ export const LineChart = ({
 }: LineChartProps) => {
   const { colors } = useTheme();
   const [width, setWidth] = useState(0);
+  const draw = useRef(new Animated.Value(0)).current;
 
   const allY = [
     ...series.flatMap((s) => s.points.map((p) => p.y)),
@@ -119,6 +130,24 @@ export const LineChart = ({
 
   const xMin = hasData ? Math.min(...allX) : 0;
   const xMax = hasData ? Math.max(...allX) : 1;
+
+  /*
+    Redrawn when the chart first has a width to draw into, and not on every
+    render after that — a trend line that redraws itself each time its screen
+    re-renders is a fidget, not a flourish.
+  */
+  useEffect(() => {
+    if (width === 0 || !hasData) return;
+    draw.setValue(0);
+    const run = Animated.timing(draw, {
+      toValue: 1,
+      duration: duration.draw,
+      easing: ease,
+      useNativeDriver: false,
+    });
+    run.start();
+    return () => run.stop();
+  }, [width, hasData, draw]);
 
   const plotWidth = Math.max(width - gutterLeft - space.sm, 1);
   const plotHeight = Math.max(height - gutterBottom - space.sm, 1);
@@ -182,6 +211,14 @@ export const LineChart = ({
             />
           )}
 
+          {/*
+            Dots and the confidence band arrive once the line has drawn, so
+            the reading lands before its supporting detail rather than the
+            whole chart appearing at once with a line crawling through it.
+          */}
+          <AnimatedG
+            opacity={draw.interpolate({ inputRange: [0, 0.65, 1], outputRange: [0, 0, 1] })}
+          >
           {scatter?.flatMap((layer, layerIndex) =>
             layer.points.map((point) => (
               <Circle
@@ -194,10 +231,23 @@ export const LineChart = ({
               />
             )),
           )}
+          </AnimatedG>
 
-          {series.map((line, index) =>
-            line.points.length > 1 ? (
-              <Path
+          {series.map((line, index) => {
+            if (line.points.length <= 1) return null;
+            /*
+              The line draws itself in: a dash as long as the whole path, with
+              the gap pulled back from its full length to nothing. The length
+              is summed from the segments rather than read off the node —
+              getTotalLength has no dependable equivalent across this library's
+              three platforms, and these paths are straight segments, so the
+              sum is exact.
+            */
+            const length = polylineLength(
+              line.points.map((point) => ({ x: toX(point.x), y: toY(point.y) })),
+            );
+            return (
+              <AnimatedPath
                 key={`line-${index}`}
                 d={linePath(line.points)}
                 stroke={line.color}
@@ -205,9 +255,14 @@ export const LineChart = ({
                 fill="none"
                 strokeLinejoin="round"
                 strokeLinecap="round"
+                strokeDasharray={length}
+                strokeDashoffset={draw.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [length, 0],
+                })}
               />
-            ) : null,
-          )}
+            );
+          })}
 
           {formatX && (
             <>

@@ -19,8 +19,15 @@ export const duration = {
   press: 90,
   /** Entrances, bars filling, the toast arriving. */
   enter: 220,
-  /** A panel crossing a row. The longest thing here. */
+  /** A panel crossing a row. */
   sweep: 300,
+  /**
+   * A chart drawing itself in. The one long duration here, and deliberately
+   * so: it runs once when a screen of data arrives, you are reading rather
+   * than operating, and a trend line that snaps into place reads as a picture
+   * where one that draws reads as a measurement being taken.
+   */
+  draw: 650,
 } as const;
 
 /** Decelerates into place. For anything arriving or settling. */
