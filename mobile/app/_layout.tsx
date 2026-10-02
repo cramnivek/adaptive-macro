@@ -6,6 +6,7 @@ import { SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold } from '@expo-google-
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Toaster } from '../src/components/Toaster';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 
@@ -43,6 +44,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Toaster />
         <Stack
           screenOptions={{
             headerShown: false,

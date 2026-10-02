@@ -1,11 +1,11 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
-import { isNutritionallyConsistent, resultsAnswerQuery } from '@adaptive-macros/engine';
+import { byQueryCoverage, isNutritionallyConsistent, resultsAnswerQuery } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { UngroundedResponseError, lookupFood } from '../src/api/gemini';
+import { PartialFiguresError, UngroundedResponseError, lookupFood } from '../src/api/gemini';
 import { searchFoods } from '../src/api/search';
-import { Button, Field } from '../src/components/Controls';
+import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
 import { getFoodById, listFrequentFoods, saveFood } from '../src/db';
@@ -45,6 +45,10 @@ export default function SearchScreen() {
    * about to answer.
    */
   const [settled, setSettled] = useState(true);
+  /** Set by the user tapping through the collapsed non-matching results. */
+  const [showNonMatching, setShowNonMatching] = useState(false);
+  /** A lookup that found the item but not enough of its figures to log. */
+  const [partial, setPartial] = useState<PartialFiguresError | null>(null);
 
   // The grounded lookup can take up to 90s. Without a visible clock that reads
   // as a hang, and the user taps again or gives up on the feature. Mirrors the
@@ -117,6 +121,8 @@ export default function SearchScreen() {
 
     setLoading(true);
     setSettled(false);
+    setShowNonMatching(false);
+    setPartial(null);
     debounce.current = setTimeout(async () => {
       const found = await searchFoods(
         trimmed,
@@ -156,7 +162,6 @@ export default function SearchScreen() {
     [logFood, router],
   );
 
-  const shown = query.trim().length < 2 ? frequent : results;
   const showingFrequent = query.trim().length < 2;
 
   // One or two results, where the relevance check was satisfied but a thin
@@ -169,8 +174,6 @@ export default function SearchScreen() {
   const AUTO_LOOKUP_DELAY_MS = 1200;
   /** Two attempts per query: the first, and one retry if that one failed. */
   const MAX_ATTEMPTS = 2;
-  const canLookUp =
-    !showingFrequent && !loading && settled && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
 
   /**
    * Whether the rows on screen are plausible answers to what was typed.
@@ -182,6 +185,32 @@ export default function SearchScreen() {
     () => results.length > 0 && resultsAnswerQuery(query.trim(), results),
     [query, results],
   );
+
+  /**
+   * Ranked by how much of the query each result accounts for.
+   *
+   * Worst-first is what made this unusable: `mang inasal pecho` put `Guava
+   * mang` and `Mang Tomas` at the top, because they matched one common word.
+   * Nothing is dropped — a weak match is still a match, and hiding rows on a
+   * guess is how a search stops being trustworthy.
+   */
+  const ranked = useMemo(() => byQueryCoverage(query.trim(), results), [query, results]);
+
+  /**
+   * Rows step aside while a lookup runs against them.
+   *
+   * They are a page the check has already judged wrong, and reading past them
+   * for the length of a grounded call is what makes this feel broken.
+   * Collapsed rather than removed, and one tap brings them back, because the
+   * check is a guess and a guess must not take away a right answer.
+   */
+  const hiddenWhileLooking =
+    lookingUp && !answered && !showNonMatching && !showingFrequent ? ranked.length : 0;
+
+  const shown = showingFrequent ? frequent : hiddenWhileLooking > 0 ? [] : ranked;
+
+  const canLookUp =
+    !showingFrequent && !loading && settled && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
 
   const runLookup = useCallback(async () => {
     const trimmed = query.trim();
@@ -220,11 +249,19 @@ export default function SearchScreen() {
         return;
       }
       if (!mounted.current || latestQuery.current !== trimmed) return;
-      setErrors([
-        error instanceof UngroundedResponseError
-          ? 'Could not find published figures for that. Try a more specific name, or add it yourself.'
-          : (error as Error).message,
-      ]);
+      // A found item whose figures cannot be logged is not a failure to report
+      // and forget: the estimate path needs no published figures, so the name
+      // and the calorie count it did find are carried into it.
+      if (error instanceof PartialFiguresError) {
+        setPartial(error);
+        setErrors([]);
+      } else {
+        setErrors([
+          error instanceof UngroundedResponseError
+            ? 'Could not find published figures for that. Try a more specific name, or add it yourself.'
+            : (error as Error).message,
+        ]);
+      }
     } finally {
       // Only the lookup still being waited on may clear the flag. A superseded
       // one finishing later must not take the clock off a live call — which a
@@ -293,17 +330,23 @@ export default function SearchScreen() {
         ListHeaderComponent={
           shown.length > 0 && showingFrequent ? (
             <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>Your frequent foods</Text>
-          ) : shown.length > 0 && lookingUp ? (
-            // The rows stay visible and selectable underneath. The relevance
-            // check is a guess, and a guess must not take away an answer that
-            // might have been right. Only say they look wrong when the check
-            // actually said so — after a manual tap on results it judged
-            // relevant, that sentence would be a lie.
-            <Text style={[styles.lookupNote, { color: colors.warning }]}>
-              {answered
-                ? `Looking it up… ${lookupElapsed}s`
-                : `These do not look like what you searched. Looking it up… ${lookupElapsed}s`}
-            </Text>
+          ) : (shown.length > 0 || hiddenWhileLooking > 0) && lookingUp ? (
+            // Only say they look wrong when the check actually said so — after
+            // a manual tap on results it judged relevant, that would be a lie.
+            <View>
+              <Text style={[styles.lookupNote, { color: colors.warning }]}>
+                {answered
+                  ? `Looking it up… ${lookupElapsed}s`
+                  : `These do not look like what you searched. Looking it up… ${lookupElapsed}s`}
+              </Text>
+              {hiddenWhileLooking > 0 && (
+                <Pressable onPress={() => setShowNonMatching(true)} style={styles.reveal}>
+                  <Text style={[styles.revealText, { color: colors.textFaint }]}>
+                    Show the {hiddenWhileLooking} results that do not match
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           ) : null
         }
         ListEmptyComponent={
@@ -328,16 +371,33 @@ export default function SearchScreen() {
                 variant="subtle"
                 onPress={() => router.push({ pathname: '/food-new', params: { meal } })}
               />
+              {partial !== null && (
+                <Text style={[styles.lookupNote, { color: colors.warning }]}>
+                  {partial.message} An estimate can fill in the rest.
+                </Text>
+              )}
               {!showingFrequent && query.trim().length >= 2 && (
                 // The way out of a lookup that is going to say no. A grounded
                 // call can spend sixty seconds establishing that a restaurant
                 // publishes no figures — true, and useless. An estimate needs
                 // none, takes about five seconds, and says what it assumed.
                 <Button
-                  label="Estimate it instead"
-                  variant="subtle"
+                  label={partial === null ? 'Estimate it instead' : 'Estimate the macros'}
+                  variant={partial === null ? 'subtle' : 'primary'}
                   onPress={() =>
-                    router.push({ pathname: '/describe', params: { meal, text: query.trim() } })
+                    router.push({
+                      pathname: '/describe',
+                      params: {
+                        meal,
+                        // The item's real name, and the one figure that was
+                        // published, so the estimate starts from what the
+                        // lookup actually established rather than from scratch.
+                        text:
+                          partial === null
+                            ? query.trim()
+                            : `${partial.foodName}${partial.kcal === null ? '' : ` (${Math.round(partial.kcal)} kcal published)`}`,
+                      },
+                    })
                   }
                 />
               )}
@@ -445,6 +505,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   lookupNote: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginBottom: space.sm },
+  reveal: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginBottom: space.sm },
+  revealText: { fontFamily: font.ui, fontSize: 12, textDecorationLine: 'underline' },
   empty: { fontFamily: font.ui, fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
   footer: { marginTop: space.lg, gap: space.sm },
   footerNote: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },

@@ -215,10 +215,14 @@ const STOPWORDS = new Set(['and', 'the', 'with', 'for', 'from']);
  * direction worth being wrong in — it withholds a charged lookup rather than
  * spending one.
  */
-export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
-  const tokens = normalise(query)
+/** The words of a query that are worth matching on. */
+const queryTokens = (query: string): string[] =>
+  normalise(query)
     .split(' ')
     .filter((token) => token.length >= MIN_TOKEN_LENGTH && !STOPWORDS.has(token));
+
+export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
+  const tokens = queryTokens(query);
 
   // Nothing to judge. Not a miss — a query of "of the" has told us nothing.
   if (tokens.length === 0) return true;
@@ -229,3 +233,34 @@ export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
     variantsOf(token).some((variant) => haystacks.some((hay) => hay.includes(variant))),
   );
 };
+
+/**
+ * How many of the query's words a single food accounts for.
+ *
+ * `resultsAnswerQuery` asks whether the list as a whole covers the query, which
+ * is the right question for deciding to spend a lookup and the wrong one for
+ * ordering. Searching `mang inasal pecho` returns `Guava mang`, `Mang Tomas`
+ * and `st. mang Limburger`: every one matches on `mang` alone, and they fill
+ * the screen above anything useful.
+ */
+export const queryCoverage = (query: string, food: Food): number => {
+  const tokens = queryTokens(query);
+  if (tokens.length === 0) return 0;
+  const hay = normalise(`${food.name} ${food.brand ?? ''}`);
+  return tokens.filter((token) => variantsOf(token).some((v) => hay.includes(v))).length;
+};
+
+/**
+ * Results ordered by how much of the query they actually account for.
+ *
+ * A stable sort, so foods covering the same number of words keep the order the
+ * sources put them in — which already means cached first, then USDA, then Open
+ * Food Facts. Nothing is removed: a one-word match is still the right answer
+ * for a one-word query, and hiding rows on a guess is how a search stops being
+ * trustworthy.
+ */
+export const byQueryCoverage = (query: string, foods: Food[]): Food[] =>
+  foods
+    .map((food, index) => ({ food, index, score: queryCoverage(query, food) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.food);

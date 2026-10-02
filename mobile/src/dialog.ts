@@ -53,8 +53,45 @@ export const confirm = ({
   });
 };
 
-/** Shows a message with a single dismiss action. */
+export interface Notice {
+  title: string;
+  message?: string;
+  /** Distinguishes two identical notices, so the second still restarts the clock. */
+  at: number;
+}
+
+type NoticeListener = (notice: Notice) => void;
+let listener: NoticeListener | null = null;
+
+/**
+ * Registers the one thing that draws notices. Returns its unsubscribe.
+ *
+ * A single slot rather than a set: there is one `Toaster`, mounted at the root,
+ * and a second subscriber would mean every notice drawn twice.
+ */
+export const subscribeToNotices = (next: NoticeListener): (() => void) => {
+  listener = next;
+  return () => {
+    if (listener === next) listener = null;
+  };
+};
+
+/**
+ * Says something, without taking the screen hostage to do it.
+ *
+ * This was `window.alert` on web, which puts the Cloud Run hostname above every
+ * message — "gemini-proxy-297164004726.asia-southeast1.run.app says" — so a
+ * saved workout read like a system error. It also blocks the page until
+ * dismissed, which is how one stray notice freezes everything behind it.
+ *
+ * Falls back to the dialog when nothing is listening: a notice raised before
+ * the tree has mounted is still worth seeing.
+ */
 export const notify = (title: string, message?: string): void => {
+  if (listener !== null) {
+    listener({ title, message, at: Date.now() });
+    return;
+  }
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
       window.alert(message ? `${title}\n\n${message}` : title);

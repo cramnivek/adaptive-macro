@@ -5,6 +5,8 @@ import {
   kcalFromMacros,
   per100gFromPortion,
   remainingAgainst,
+  byQueryCoverage,
+  queryCoverage,
   resultsAnswerQuery,
   scaleNutrients,
   sumNutrients,
@@ -213,5 +215,50 @@ describe('resultsAnswerQuery', () => {
 
   it('still rejects a miss that merely looks like a plural', () => {
     expect(resultsAnswerQuery('crispykings', poultry)).toBe(false);
+  });
+});
+
+describe('byQueryCoverage', () => {
+  it('puts the result that accounts for more of the query first', () => {
+    // The real complaint: "Guava mang" and "Mang Tomas" matched on "mang"
+    // alone and filled the screen above anything useful.
+    const ranked = byQueryCoverage('mang inasal pecho', [
+      result('Guava mang'),
+      result('Mang Tomas'),
+      result('Mang Inasal Pecho Meal'),
+      result('Crispy Bangus Inasal Marinade'),
+    ]);
+    expect(ranked[0].name).toBe('Mang Inasal Pecho Meal');
+    // The other three each cover exactly one word, so they tie and keep the
+    // order the sources gave them. Only the real match moves.
+    expect(ranked.slice(1).map((r) => r.name)).toEqual([
+      'Guava mang',
+      'Mang Tomas',
+      'Crispy Bangus Inasal Marinade',
+    ]);
+  });
+
+  it('keeps the source order among results that score the same', () => {
+    // Cached first, then USDA, then Open Food Facts — the order searchFoods
+    // already established, which a ranking must not quietly undo.
+    const ranked = byQueryCoverage('mang', [
+      result('Guava mang'),
+      result('Mang Tomas'),
+      result('st. mang Limburger'),
+    ]);
+    expect(ranked.map((r) => r.name)).toEqual(['Guava mang', 'Mang Tomas', 'st. mang Limburger']);
+  });
+
+  it('removes nothing, because a weak match is still a match', () => {
+    const foods = [result('Guava mang'), result('Mang Inasal Pecho')];
+    expect(byQueryCoverage('mang inasal pecho', foods)).toHaveLength(2);
+  });
+
+  it('scores a brand the same as a name', () => {
+    expect(queryCoverage('oscar mayer turkey', result('Turkey Breast', 'Oscar Mayer'))).toBe(3);
+  });
+
+  it('scores nothing when the query has no usable words', () => {
+    expect(queryCoverage('of a', result('Anything'))).toBe(0);
   });
 });

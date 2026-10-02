@@ -349,6 +349,34 @@ const textOf = (response: unknown): string => {
  * language model's output and the user's diary, and a silently-wrong number
  * here becomes a silently-wrong calorie target weeks later.
  */
+/**
+ * The lookup found the item and the figures are not enough to log.
+ *
+ * A real case rather than a hypothetical: searching a Mang Inasal menu item
+ * finds it, because calorie counts are posted on menus under a Quezon City
+ * ordinance — and that is all that is published. No serving weight, no macros.
+ * The guards below are right to refuse it, since a food with a zero portion and
+ * zero macros would quietly corrupt a day's tracking.
+ *
+ * But refusing after sixty seconds of waiting, with nothing to show for it, is
+ * a dead end where an answer exists: the estimate path needs no published
+ * figures at all. So this carries what was learned — the item's real name, and
+ * the calorie figure if there was one — for the screen to offer onwards.
+ */
+export class PartialFiguresError extends GroundedLookupError {
+  constructor(
+    readonly foodName: string,
+    readonly kcal: number | null,
+  ) {
+    super(
+      kcal === null
+        ? `Only part of the figures are published for ${foodName}.`
+        : `Only calories are published for ${foodName} — ${Math.round(kcal)} kcal, with no serving weight or macros.`,
+    );
+    this.name = 'PartialFiguresError';
+  }
+}
+
 export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
   if (!raw || typeof raw !== 'object') {
     throw new GroundedLookupError('The lookup returned no usable data');
@@ -359,7 +387,7 @@ export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
   if (!name) throw new GroundedLookupError('The lookup returned a food with no name');
 
   if (!isFiniteNumber(r.portionGrams) || r.portionGrams <= 0) {
-    throw new GroundedLookupError('The lookup returned no usable serving weight');
+    throw new PartialFiguresError(name, isFiniteNumber(r.kcal) ? r.kcal : null);
   }
   for (const key of ['kcal', 'proteinG', 'carbsG', 'fatG'] as const) {
     if (!isFiniteNumber(r[key]) || (r[key] as number) < 0) {
@@ -378,9 +406,7 @@ export const toCandidateFood = (raw: unknown, sources: string[]): Food => {
   // figure is near zero to match.
   const macrosAllZero = r.proteinG === 0 && r.carbsG === 0 && r.fatG === 0;
   if (macrosAllZero && (r.kcal as number) > ZERO_MACRO_KCAL_FLOOR) {
-    throw new GroundedLookupError(
-      'The lookup returned calories with no macros, which no source states. Try a more specific name, or add it yourself.',
-    );
+    throw new PartialFiguresError(name, r.kcal as number);
   }
 
   const portionGrams = r.portionGrams;
