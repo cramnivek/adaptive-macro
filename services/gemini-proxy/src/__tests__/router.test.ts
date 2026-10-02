@@ -267,3 +267,41 @@ describe('rate limiting cannot be shaken off', () => {
     expect((await router(spoofing('203.0.113.250'))).status).toBe(429);
   });
 });
+
+describe('the daily ceiling', () => {
+  /** Each request from a different invented address AND a different real one. */
+  const stranger = (n: number) =>
+    new Request('https://x.test/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-proxy-token': 'wrong-on-purpose',
+        'x-forwarded-for': `203.0.113.${n % 250}, 198.51.${n % 250}.${(n * 7) % 250}, 10.0.0.1`,
+      },
+      body: '{"contents":[]}',
+    });
+
+  it('caps Gemini across everyone, however many callers it is spread over', async () => {
+    const router = createRouter({ env, webRoot });
+
+    // Every one of these is a different caller as far as the per-caller limit
+    // is concerned, so only a ceiling that ignores identity can stop them.
+    for (let i = 0; i < 300; i += 1) {
+      expect((await router(stranger(i))).status).toBe(401);
+    }
+
+    expect((await router(stranger(1000))).status).toBe(429);
+  });
+
+  it('leaves the food lookups alone, which are not what costs money', async () => {
+    const router = createRouter({ env, webRoot });
+    for (let i = 0; i < 300; i += 1) await router(stranger(i));
+
+    const usda = await router(
+      new Request('https://x.test/api/usda/search?q=chicken', {
+        headers: { 'x-forwarded-for': '198.51.100.1, 10.0.0.1' },
+      }),
+    );
+    expect(usda.status).not.toBe(429);
+  });
+});

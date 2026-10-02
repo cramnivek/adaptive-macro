@@ -13,6 +13,28 @@ import { serveStatic } from './staticFiles.js';
 const GEMINI_LIMIT = { windowMs: 10 * 60_000, max: 20 };
 const LOOKUP_LIMIT = { windowMs: 10 * 60_000, max: 150 };
 
+/*
+  The ceiling that does not depend on knowing who is calling.
+
+  Per-caller limiting cannot be made spoof-proof here. On Cloud Run the front
+  end appends only its own hop, so the client's own entry in `x-forwarded-for`
+  stays caller-controlled — measured against the deployed service: twenty-one
+  calls with no header hit the limit exactly, while twenty-one carrying a
+  different invented address each sailed through on twenty-one fresh buckets.
+
+  What is actually being protected is the bill, and the bill does not care who
+  spent it. So Gemini also has a flat daily ceiling across every caller. A real
+  user is nowhere near 300 grounded calls in a day — each takes most of a
+  minute — and an abuser with the extracted token is capped at a bounded,
+  affordable number instead of an open tab.
+
+  The cost of this is honest and deliberate: someone flooding the service can
+  exhaust the day's allowance and lock the real user out of lookups until it
+  rolls. Protecting the wallet is worth more than protecting availability here,
+  and per-user credentials are what remove the trade-off.
+*/
+const GEMINI_DAILY_CEILING = { windowMs: 24 * 60 * 60_000, max: 300 };
+
 const tooMany = (retryAfterSeconds: number) =>
   Response.json(
     { error: 'Too many requests' },
@@ -31,6 +53,7 @@ const tooMany = (retryAfterSeconds: number) =>
 export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
   // One limiter per route family, held across requests by the closure.
   const geminiLimiter = createRateLimiter(GEMINI_LIMIT);
+  const geminiCeiling = createRateLimiter(GEMINI_DAILY_CEILING);
   const lookupLimiter = createRateLimiter(LOOKUP_LIMIT);
 
   return async (request: Request): Promise<Response> => {
@@ -44,6 +67,8 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       }
       const verdict = geminiLimiter.check(callerKey(request));
       if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
+      const ceiling = geminiCeiling.check('all');
+      if (!ceiling.allowed) return tooMany(ceiling.retryAfterSeconds);
       return handleGeminiProxy(request, opts.env);
     }
 

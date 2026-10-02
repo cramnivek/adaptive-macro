@@ -146,14 +146,30 @@ and views the JavaScript. That is survivable for one user and not survivable
 with users.
 
 `rateLimit.ts` does not fix that; only per-user credentials can. It caps what
-one extracted token is worth: a sliding window per client IP.
+one extracted token is worth.
 
-The address is read as the **second from last** entry of `x-forwarded-for`,
-not the first. The header is a list the caller is free to start, and Google's
-front end appends the address it saw and then its own — so the head is
-untrusted and the tail is not. Keying on the head is the obvious reading and
-is worthless: setting the header yourself lands you in a fresh bucket every
-request. That was measured against the deployed service, not reasoned about.
+The address is read as the second-from-last entry of `x-forwarded-for`, which
+is right for an honest caller and **cannot be made spoof-proof here**. Measured
+against the deployed service, twice:
+
+- Twenty-one calls carrying no header hit the limit exactly on the twenty-first.
+- Twenty-one calls each carrying a different invented address all went through,
+  on twenty-one fresh buckets.
+
+Cloud Run's front end appends only its own hop, so the client's own entry stays
+caller-controlled whichever end you read from. Per-caller limiting here stops
+accidental overuse and nothing else. Treat it as such.
+
+What does hold is the **daily ceiling**: 300 Gemini calls across every caller,
+every 24 hours. It does not depend on knowing who is calling, which is the only
+reason it works. A real user is nowhere near that — each grounded call takes
+most of a minute — and an abuser with the extracted token is capped at a
+bounded bill instead of an open tab.
+
+The cost is deliberate: a flood can exhaust the day's allowance and lock the
+real user out of lookups until it rolls. Protecting the wallet is worth more
+than protecting availability here. Per-user credentials are what remove the
+trade-off, and until they exist this is a spend cap, not access control.
 
 - `/api/gemini` — 20 per 10 minutes. A grounded lookup takes most of a minute,
   so this is already far beyond any human pace.
