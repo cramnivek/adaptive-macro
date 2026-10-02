@@ -1,7 +1,23 @@
 import { type ProxyEnv, handleGeminiProxy } from './geminiProxy.js';
 import { handleOffProxy } from './offProxy.js';
 import { handleUsdaProxy } from './usdaProxy.js';
+import { callerKey, createRateLimiter } from './rateLimit.js';
 import { serveStatic } from './staticFiles.js';
+
+/*
+  Gemini is the expensive one and the slow one: a grounded lookup takes most of
+  a minute, so 20 in ten minutes is already far beyond any human pace and well
+  under what an abuser with the extracted token would want. The data lookups
+  are cheap and get typed at, so they are far looser.
+*/
+const GEMINI_LIMIT = { windowMs: 10 * 60_000, max: 20 };
+const LOOKUP_LIMIT = { windowMs: 10 * 60_000, max: 150 };
+
+const tooMany = (retryAfterSeconds: number) =>
+  Response.json(
+    { error: 'Too many requests' },
+    { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+  );
 
 /**
  * Dispatches one origin between the API and the web build.
@@ -13,6 +29,10 @@ import { serveStatic } from './staticFiles.js';
  * have needed an allowlist kept correct forever.
  */
 export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
+  // One limiter per route family, held across requests by the closure.
+  const geminiLimiter = createRateLimiter(GEMINI_LIMIT);
+  const lookupLimiter = createRateLimiter(LOOKUP_LIMIT);
+
   return async (request: Request): Promise<Response> => {
     const { pathname } = new URL(request.url);
 
@@ -22,6 +42,8 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       if (request.method !== 'POST') {
         return new Response('Method not allowed', { status: 405 });
       }
+      const verdict = geminiLimiter.check(callerKey(request));
+      if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
       return handleGeminiProxy(request, opts.env);
     }
 
@@ -29,6 +51,8 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       if (request.method !== 'GET') {
         return new Response('Method not allowed', { status: 405 });
       }
+      const verdict = lookupLimiter.check(callerKey(request));
+      if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
       return handleOffProxy(
         request,
         opts.env,
@@ -40,6 +64,8 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       if (request.method !== 'GET') {
         return new Response('Method not allowed', { status: 405 });
       }
+      const verdict = lookupLimiter.check(callerKey(request));
+      if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
       return handleUsdaProxy(request, opts.env);
     }
 

@@ -137,3 +137,32 @@ request never arrived and co-hosting did not take effect.
 - The `preview` EAS environment has no variables set. A preview build will
   inline an empty `EXPO_PUBLIC_PROXY_TOKEN` and every proxy call will 401
   until someone adds `EXPO_PUBLIC_PROXY_TOKEN` and `GEMINI_API_KEY` to it.
+
+## Rate limits
+
+`PROXY_TOKEN` is inlined into the client bundle by Expo — the browser needs it
+to call this service, so it is readable by anyone who opens the deployed page
+and views the JavaScript. That is survivable for one user and not survivable
+with users.
+
+`rateLimit.ts` does not fix that; only per-user credentials can. It caps what
+one extracted token is worth: a sliding window per client IP, taken from the
+head of `x-forwarded-for`, which Cloud Run sets.
+
+- `/api/gemini` — 20 per 10 minutes. A grounded lookup takes most of a minute,
+  so this is already far beyond any human pace.
+- `/api/usda/*` and `/api/off/*` — 150 per 10 minutes. Cheap, and typed at.
+
+Over the limit answers `429` with a `Retry-After` in whole seconds. The checks
+run *before* the token check, so a caller with a bad token cannot hammer the
+service either. Pages and assets are never limited: a rate-limited API must not
+blank the app.
+
+Callers with no `x-forwarded-for` share one bucket. That is the conservative
+way round — a caller that hides its address gets the strictest treatment rather
+than an exemption — but it means that if Cloud Run ever stops setting the
+header, every user shares one allowance.
+
+The limits live in the process, so each Cloud Run instance counts separately;
+scaling to N instances multiplies the effective limit by N. Good enough for a
+spend cap, not a security boundary.

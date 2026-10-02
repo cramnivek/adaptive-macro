@@ -192,3 +192,48 @@ describe('createRouter', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('rate limiting', () => {
+  /** A caller the limiter can tell apart from the other tests' requests. */
+  const from = (ip: string) =>
+    new Request('https://x.test/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-proxy-token': 'wrong-on-purpose',
+        'x-forwarded-for': ip,
+      },
+      body: '{"contents":[]}',
+    });
+
+  it('refuses a caller past the Gemini limit, before the token is even checked', async () => {
+    const router = createRouter({ env, webRoot });
+
+    // A bad token answers 401 while the caller is under the limit. Nothing
+    // reaches Google either way, so this never spends the real quota.
+    for (let i = 0; i < 20; i += 1) {
+      expect((await router(from('198.51.100.7'))).status).toBe(401);
+    }
+
+    const refused = await router(from('198.51.100.7'));
+    expect(refused.status).toBe(429);
+    expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThan(0);
+  });
+
+  it('does not punish a second caller for the first one burning the budget', async () => {
+    const router = createRouter({ env, webRoot });
+    for (let i = 0; i < 25; i += 1) await router(from('198.51.100.8'));
+
+    expect((await router(from('203.0.113.4'))).status).toBe(401);
+  });
+
+  it('leaves the page itself unlimited, so a rate-limited API never blanks the app', async () => {
+    const router = createRouter({ env, webRoot });
+    for (let i = 0; i < 25; i += 1) await router(from('198.51.100.9'));
+
+    const page = await router(
+      new Request('https://x.test/', { headers: { 'x-forwarded-for': '198.51.100.9' } }),
+    );
+    expect(page.status).toBe(200);
+  });
+});
