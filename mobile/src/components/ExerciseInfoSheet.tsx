@@ -1,8 +1,10 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogueEntry } from '../db';
-import { font, radius, space, useTheme } from '../theme';
-import { Button } from './Controls';
+import { font, radius, space } from '../theme';
+import { session as loud } from '../theme/sessionTheme';
+import { SlashPanel } from './SlashPanel';
+import { Tappable } from './Tappable';
 import { ExerciseIcon } from './ExerciseIcon';
 import { MuscleFigure } from './MuscleFigure';
 import { REGION_LABELS } from './muscleMap';
@@ -21,7 +23,6 @@ interface ExerciseInfoSheetProps {
  * costs more.
  */
 export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) => {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
@@ -31,8 +32,8 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
         style={[
           styles.sheet,
           {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
+            backgroundColor: loud.panel,
+            borderColor: loud.rule,
             paddingBottom: insets.bottom + space.lg,
           },
         ]}
@@ -40,9 +41,9 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
         {entry && (
           <ScrollView>
             <View style={styles.header}>
-              <ExerciseIcon pattern={entry.movementPattern} size={28} color={colors.text} />
+              <ExerciseIcon pattern={entry.movementPattern} size={28} color={loud.figure} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: colors.text }]}>{entry.canonicalName}</Text>
+                <Text style={[styles.name, { color: loud.figure }]}>{entry.canonicalName}</Text>
                 {/*
                   The free-text muscle only appears when there is no diagram.
                   The model answers the two separately and they disagree — a
@@ -50,7 +51,7 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
                   "glutes" — so showing both put two answers to one question
                   four lines apart. The legend below is the validated one.
                 */}
-                <Text style={[styles.meta, { color: colors.textFaint }]}>
+                <Text style={[styles.meta, { color: loud.figureFaint }]}>
                   {entry.primaryRegion === null ? `${entry.primaryMuscle} · ` : ''}
                   {entry.equipment}
                   {entry.bodyweightBased ? ' · bodyweight' : ''}
@@ -70,23 +71,23 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
                   primary={entry.primaryRegion}
                   secondary={entry.secondaryRegions}
                   size={96}
-                  outline={colors.border}
-                  fill={colors.accent}
+                  outline={loud.rule}
+                  fill={loud.loud}
                 />
                 <MuscleFigure
                   view="back"
                   primary={entry.primaryRegion}
                   secondary={entry.secondaryRegions}
                   size={96}
-                  outline={colors.border}
-                  fill={colors.accent}
+                  outline={loud.rule}
+                  fill={loud.loud}
                 />
                 <View style={styles.legend}>
-                  <Text style={[styles.legendPrimary, { color: colors.text }]}>
+                  <Text style={[styles.legendPrimary, { color: loud.figure }]}>
                     {REGION_LABELS[entry.primaryRegion]}
                   </Text>
                   {entry.secondaryRegions.length > 0 && (
-                    <Text style={[styles.legendSecondary, { color: colors.textFaint }]}>
+                    <Text style={[styles.legendSecondary, { color: loud.figureFaint }]}>
                       also {entry.secondaryRegions.map((r) => REGION_LABELS[r].toLowerCase()).join(', ')}
                     </Text>
                   )}
@@ -98,28 +99,32 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               entry.steps.map((step, index) => (
                 // Index, not the text: a model emitting "Repeat." twice would collide.
                 <View key={index} style={styles.step}>
-                  <Text style={[styles.stepNumber, { color: colors.textFaint }]}>{index + 1}</Text>
-                  <Text style={[styles.stepText, { color: colors.textMuted }]}>{step}</Text>
+                  <Text style={[styles.stepNumber, { color: loud.loud }]}>{index + 1}</Text>
+                  <Text style={[styles.stepText, { color: loud.figureMuted }]}>{step}</Text>
                 </View>
               ))
             ) : entry.instructions ? (
               // An entry catalogued before steps existed still has its prose,
               // and showing that beats showing nothing while a backfill waits.
-              <Text style={[styles.body, { color: colors.textMuted }]}>{entry.instructions}</Text>
+              <Text style={[styles.body, { color: loud.figureMuted }]}>{entry.instructions}</Text>
             ) : (
-              <Text style={[styles.body, { color: colors.textFaint }]}>
+              <Text style={[styles.body, { color: loud.figureFaint }]}>
                 No instructions for this one yet.
               </Text>
             )}
 
             {(entry.instructions || entry.steps.length > 0) && (
-              <Text style={[styles.caveat, { color: colors.warning }]}>
+              <Text style={[styles.caveat, { color: loud.warn }]}>
                 Written by a model. Check it against a source you trust before loading a bar.
               </Text>
             )}
 
             <View style={{ height: space.md }} />
-            <Button label="Close" variant="subtle" onPress={onClose} />
+            <Tappable onPress={onClose} scaleTo={0.97}>
+              <SlashPanel color={loud.loud} style={styles.close}>
+                <Text style={styles.closeLabel}>CLOSE</Text>
+              </SlashPanel>
+            </Tappable>
           </ScrollView>
         )}
       </View>
@@ -137,7 +142,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
-  name: { fontFamily: font.uiStrong, fontSize: 17 },
+  name: { fontFamily: font.display, fontSize: 18, letterSpacing: 0.1 },
   meta: { fontFamily: font.ui, fontSize: 12, marginTop: 2 },
   body: { fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
   map: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
@@ -146,6 +151,8 @@ const styles = StyleSheet.create({
   legendSecondary: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   step: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
   stepNumber: { fontFamily: font.figure, fontSize: 13, minWidth: 14 },
+  close: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  closeLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.onLoud },
   stepText: { flex: 1, fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
   caveat: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.md },
 });
