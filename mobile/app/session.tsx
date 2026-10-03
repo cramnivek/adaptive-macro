@@ -139,10 +139,22 @@ export default function SessionScreen() {
   /**
    * The running rest, as the wall-clock time it ends at.
    *
-   * An end time rather than a remaining count, so it is driven by the clock
-   * that already ticks for the header rather than a second interval, and so it
-   * stays correct across a re-render, a backgrounded app or a locked phone —
-   * a decrementing counter would quietly lose time in all three.
+   * An end time rather than a remaining count, so it rides the clock that
+   * already ticks for the header instead of starting a second interval, and so
+   * the value stays true across a re-render, a backgrounded app or a locked
+   * phone. A decrementing counter would quietly lose time in all three.
+   *
+   * What it does NOT survive is the *display* being live while hidden: browsers
+   * throttle timers in a background tab, so the face freezes. Measured on the
+   * deployed build — five real seconds passed with the countdown reading the
+   * same value and `document.hidden` true. Because the end time is wall-clock,
+   * coming back jumps straight to the truth rather than resuming from where it
+   * froze, which is the whole reason for storing it this way.
+   *
+   * The cost is that the rest ending while you are elsewhere is announced late,
+   * when you return, rather than at the moment it ends. Signalling on time from
+   * the background needs a scheduled local notification, which is its own
+   * feature — and one the iOS PWA cannot have at all.
    */
   const [rest, setRest] = useState<{ endsAt: number; total: number } | null>(null);
   /** Which rest has already announced itself, so the thud fires once. */
