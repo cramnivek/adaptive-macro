@@ -53,6 +53,14 @@ export interface AppSettings {
   foodLookup: {
     geminiApiKey: string;
   };
+  /**
+   * How long the rest timer runs after a set is ticked.
+   *
+   * Stored rather than held for the session: adjusting it mid-workout is
+   * almost always a correction to the default, and asking for that same
+   * correction every workout is how a timer becomes something people turn off.
+   */
+  restSeconds: number;
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
 }
@@ -68,6 +76,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   kcalPerKgTissue: DEFAULT_MODEL_OPTIONS.kcalPerKgTissue,
   scaleNoiseKg: DEFAULT_MODEL_OPTIONS.scaleNoiseKg,
   expenditureVolatilityKcal: DEFAULT_MODEL_OPTIONS.expenditureVolatilityKcal,
+  restSeconds: 120,
   usdaApiKey: USDA_DEMO_KEY,
   foodCountry: DEFAULT_FOOD_COUNTRY,
   aiProvider: 'gemini',

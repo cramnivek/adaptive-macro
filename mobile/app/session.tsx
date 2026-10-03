@@ -21,6 +21,7 @@ import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
 import { SlashPanel } from '../src/components/SlashPanel';
+import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
 import { Tappable } from '../src/components/Tappable';
 import { impactContent } from '../src/components/setImpact';
@@ -46,6 +47,8 @@ import {
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
+import { thud } from '../src/platform/haptics';
+import { adjustRest } from '../src/rest';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space } from '../src/theme';
@@ -101,7 +104,7 @@ const elapsed = (startedAt: string, now: number): string => {
  */
 export default function SessionScreen() {
   const router = useRouter();
-  const { settings } = useApp();
+  const { settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
   const params = useLocalSearchParams<{ start?: string; routine?: string }>();
 
@@ -132,6 +135,18 @@ export default function SessionScreen() {
   const clearLanded = useCallback(() => setLanded(null), []);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
+
+  /**
+   * The running rest, as the wall-clock time it ends at.
+   *
+   * An end time rather than a remaining count, so it is driven by the clock
+   * that already ticks for the header rather than a second interval, and so it
+   * stays correct across a re-render, a backgrounded app or a locked phone —
+   * a decrementing counter would quietly lose time in all three.
+   */
+  const [rest, setRest] = useState<{ endsAt: number; total: number } | null>(null);
+  /** Which rest has already announced itself, so the thud fires once. */
+  const announced = useRef<number | null>(null);
   /** Movement pattern per recorded name, for the glyph on each block header. */
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   // Same guard as the food search: one automatic call per distinct term, so a
@@ -212,6 +227,39 @@ export default function SessionScreen() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  /** Seconds left on the rest, derived from the clock above rather than counted. */
+  const restRemaining = rest === null ? null : Math.max(0, Math.ceil((rest.endsAt - now) / 1000));
+
+  useEffect(() => {
+    if (rest === null || restRemaining !== 0) return;
+    if (announced.current === rest.endsAt) return;
+    announced.current = rest.endsAt;
+    thud('heavy');
+
+    // Left on screen for a moment rather than cleared at once. On the iOS PWA
+    // there is no vibration API, so this bar is the only thing those users get
+    // telling them the rest is up.
+    const id = setTimeout(() => setRest(null), 6000);
+    return () => clearTimeout(id);
+  }, [rest, restRemaining]);
+
+  /**
+   * Moves the running rest, and the stored default with it.
+   *
+   * Reaching for +15 says the default is wrong, not that this one set was
+   * unusual — so the change sticks rather than being asked for again next
+   * workout. The end time shifts by the difference instead of restarting:
+   * "+15" means fifteen more seconds, not back to the top.
+   */
+  const nudgeRest = (steps: number) => {
+    const next = adjustRest(settings.restSeconds, steps);
+    const delta = (next - settings.restSeconds) * 1000;
+    void updateSettings({ restSeconds: next });
+    setRest((current) =>
+      current === null ? null : { endsAt: current.endsAt + delta, total: next },
+    );
+  };
 
   const blockFor = useCallback(
     async (name: string, bodyweightBased: boolean, rows: Row[] = []): Promise<Block> => ({
@@ -373,6 +421,10 @@ export default function SessionScreen() {
         row.setType,
       ),
     });
+
+    // Rest starts itself. The alternative is tapping "start rest" after every
+    // set, which nobody does twice.
+    setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
   };
 
   /** Keeps an already-written set in step with an edited row. */
@@ -560,6 +612,21 @@ export default function SessionScreen() {
           </SlashPanel>
         </Tappable>
       </View>
+
+      {/*
+        Above the exercises rather than pinned to the screen: it belongs to the
+        set you just finished, and the thing you look at next is the row under
+        it. A floating bar would cover a row at the exact moment you want to
+        read it.
+      */}
+      {rest !== null && restRemaining !== null && (
+        <RestBar
+          remaining={restRemaining}
+          total={rest.total}
+          onAdjust={nudgeRest}
+          onSkip={() => setRest(null)}
+        />
+      )}
 
       {blocks.map((block, blockIndex) => (
         <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
