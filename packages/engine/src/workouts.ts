@@ -348,3 +348,111 @@ export const summarisePeriod = (
 
   return { sessions: dates.size, workingSets, volumeKg, records, exercises };
 };
+
+export type MilestoneKind = 'load' | 'volume' | 'sessions';
+
+export interface Milestone {
+  kind: MilestoneKind;
+  /** The landmark that was crossed, in the units its ladder was given in. */
+  value: number;
+  /** Which lift crossed it. Only a `load` milestone has one. */
+  exercise?: string;
+}
+
+export interface MilestoneLadders {
+  /** Effective loads worth reaching, in kg, ascending. */
+  loadKg: number[];
+  /** Lifetime volume worth reaching, in kg, ascending. */
+  volumeKg: number[];
+  /** Session counts worth reaching, ascending. */
+  sessions: number[];
+}
+
+/** Rarest first, so a day that crosses several has an obvious headline. */
+const RANK: Record<MilestoneKind, number> = { load: 3, volume: 2, sessions: 1 };
+
+/** The highest rung passed by `to` that `from` had not already passed. */
+const crossed = (ladder: number[], from: number, to: number): number | null => {
+  let found: number | null = null;
+  for (const rung of ladder) {
+    if (rung > from && rung <= to) found = rung;
+  }
+  return found;
+};
+
+/**
+ * What happened on this date that is worth telling someone about.
+ *
+ * The bar is deliberately that high. A medal for finishing five sets is
+ * forgettable precisely because it is always available, and a reward handed
+ * out for logging rather than for training quietly encourages logging. Every
+ * rung here is something a person would actually mention: a round number on a
+ * lift, a lifetime of weight moved, a count of sessions that took months.
+ *
+ * Both sides of every comparison come from the same history, so a landmark
+ * only counts the first time it is passed — repeating a 100 kg squat next week
+ * is not news.
+ *
+ * The ladders are the caller's, in kg, because which numbers are round depends
+ * on the unit someone thinks in: 100 and 140 in kilos, 225 and 315 in pounds.
+ * This has no opinion on that.
+ */
+export const milestonesOn = (
+  allSets: DatedSet[],
+  bodyweightByDate: ReadonlyMap<ISODate, number>,
+  date: ISODate,
+  ladders: MilestoneLadders,
+): Milestone[] => {
+  const found: Milestone[] = [];
+
+  const scored = allSets.filter(
+    (entry) =>
+      isWorkingSet(entry.set) &&
+      entry.set.reps !== null &&
+      entry.set.reps > 0 &&
+      effectiveLoadKg(entry.set, bodyweightByDate.get(entry.date) ?? null) !== null,
+  );
+
+  const loadOf = (entry: DatedSet) =>
+    effectiveLoadKg(entry.set, bodyweightByDate.get(entry.date) ?? null) ?? 0;
+
+  // One per lift: the heaviest it went today, against the heaviest it had ever
+  // gone before today.
+  const exercises = new Set(
+    scored.filter((entry) => entry.date === date).map((entry) => entry.set.exerciseName),
+  );
+  for (const exercise of exercises) {
+    const mine = scored.filter((entry) => entry.set.exerciseName === exercise);
+    const best = (entries: DatedSet[]) =>
+      entries.reduce((max, entry) => Math.max(max, loadOf(entry)), 0);
+
+    const rung = crossed(
+      ladders.loadKg,
+      best(mine.filter((entry) => entry.date < date)),
+      best(mine.filter((entry) => entry.date === date)),
+    );
+    if (rung !== null) found.push({ kind: 'load', value: rung, exercise });
+  }
+
+  const volume = (entries: DatedSet[]) =>
+    entries.reduce((total, entry) => total + loadOf(entry) * (entry.set.reps ?? 0), 0);
+
+  const volumeRung = crossed(
+    ladders.volumeKg,
+    volume(scored.filter((entry) => entry.date < date)),
+    volume(scored.filter((entry) => entry.date <= date)),
+  );
+  if (volumeRung !== null) found.push({ kind: 'volume', value: volumeRung });
+
+  const dates = (upTo: (entryDate: ISODate) => boolean) =>
+    new Set(scored.filter((entry) => upTo(entry.date)).map((entry) => entry.date)).size;
+
+  const sessionRung = crossed(
+    ladders.sessions,
+    dates((entryDate) => entryDate < date),
+    dates((entryDate) => entryDate <= date),
+  );
+  if (sessionRung !== null) found.push({ kind: 'sessions', value: sessionRung });
+
+  return found.sort((a, b) => RANK[b.kind] - RANK[a.kind] || b.value - a.value);
+};

@@ -1,5 +1,5 @@
-import { todayISO } from '@adaptive-macros/engine';
-import type { SetType } from '@adaptive-macros/engine';
+import { bodyweightForDates, milestonesOn, todayISO } from '@adaptive-macros/engine';
+import type { Milestone, SetType } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -21,6 +21,7 @@ import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
 import { SlashPanel } from '../src/components/SlashPanel';
+import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
 import { Tappable } from '../src/components/Tappable';
@@ -33,6 +34,7 @@ import {
   discardSession,
   finishSession,
   lastSessionSets,
+  listAllSets,
   listExerciseNames,
   catalogueEntryForExercise,
   cataloguePatternsByExerciseName,
@@ -48,6 +50,7 @@ import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/d
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { thud } from '../src/platform/haptics';
+import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
@@ -104,7 +107,7 @@ const elapsed = (startedAt: string, now: number): string => {
  */
 export default function SessionScreen() {
   const router = useRouter();
-  const { settings, updateSettings } = useApp();
+  const { series, settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
   const params = useLocalSearchParams<{ start?: string; routine?: string }>();
 
@@ -157,6 +160,8 @@ export default function SessionScreen() {
    * feature — and one the iOS PWA cannot have at all.
    */
   const [rest, setRest] = useState<{ endsAt: number; total: number } | null>(null);
+  /** Shown once the workout is saved, when the day was worth marking. */
+  const [milestone, setMilestone] = useState<Milestone | null>(null);
   /** Which rest has already announced itself, so the thud fires once. */
   const announced = useRef<number | null>(null);
   /** Movement pattern per recorded name, for the glyph on each block header. */
@@ -544,6 +549,32 @@ export default function SessionScreen() {
 
     await finishSession(session.id);
     notify('Workout saved', `${logged} ${logged === 1 ? 'set' : 'sets'} logged.`);
+
+    /*
+      Checked after the session is written, so today's sets are part of the
+      history being judged against. At most one is shown — the list comes back
+      rarest first, and a day that happens to cross three rungs is still one
+      moment, not three dialogs.
+
+      A failure here must not strand someone in a finished workout, so it falls
+      through to leaving: the milestone is the reward, not the receipt.
+    */
+    try {
+      const allSets = await listAllSets();
+      const reached = milestonesOn(
+        allSets,
+        bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true }),
+        session.date,
+        laddersFor(settings.units),
+      );
+      if (reached[0] !== undefined) {
+        setMilestone(reached[0]);
+        return;
+      }
+    } catch {
+      // Nothing to say, and nothing worth blocking the exit for.
+    }
+
     router.back();
   };
 
@@ -929,6 +960,17 @@ export default function SessionScreen() {
       )}
 
       <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
+
+      {/* The workout is already saved by the time this shows; dismissing it
+          is what leaves the screen. */}
+      <MilestoneSheet
+        milestone={milestone}
+        units={settings.units}
+        onDismiss={() => {
+          setMilestone(null);
+          router.back();
+        }}
+      />
 
       <RpeSheet
         open={rating !== null}
