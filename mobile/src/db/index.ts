@@ -19,6 +19,7 @@ import {
   PATTERNS_BY_CANONICAL_NAME,
   PATTERNS_BY_LINKED_NAME,
 } from './catalogueQueries';
+import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
 import { DELETE_ROUTINE_STEPS } from './routineQueries';
 import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 
@@ -421,16 +422,14 @@ export const listLogEntries = async (date: ISODate): Promise<LogEntry[]> => {
  * Every day's totals plus every weigh-in, merged into the one shape the
  * estimator consumes.
  *
- * A day appears with `intakeKcal` only if something was logged that day. That
- * distinction is load-bearing: the filter treats a missing intake as unknown,
- * not as a zero-calorie day.
+ * A day appears with `intakeKcal` only if something was logged that day, and
+ * was not marked as not fully logged. That distinction is load-bearing: the
+ * filter treats a missing intake as unknown, not as a zero-calorie day.
  */
 export const loadObservations = async (): Promise<DailyObservation[]> => {
   const db = await getDb();
 
-  const intake = await db.getAllAsync<{ date: string; kcal: number }>(
-    'SELECT date, SUM(kcal) AS kcal FROM log_entries GROUP BY date',
-  );
+  const intake = await db.getAllAsync<{ date: string; kcal: number }>(DAILY_INTAKE_FOR_ESTIMATE);
   const weights = await listWeights();
 
   const byDate = new Map<ISODate, DailyObservation>();
@@ -442,6 +441,34 @@ export const loadObservations = async (): Promise<DailyObservation[]> => {
   }
 
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+};
+
+/**
+ * What has been said about each day's log: true for "that was everything",
+ * false for "not fully logged". A day nobody has answered for is absent.
+ */
+export const listDayStatus = async (): Promise<Map<ISODate, boolean>> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ date: ISODate; complete: number }>(
+    'SELECT date, complete FROM day_status',
+  );
+  return new Map(rows.map((row) => [row.date, row.complete === 1]));
+};
+
+/** Records whether a day's log is complete; null forgets the answer. */
+export const setDayStatus = async (date: ISODate, complete: boolean | null): Promise<void> => {
+  const db = await getDb();
+  if (complete === null) {
+    await db.runAsync('DELETE FROM day_status WHERE date = ?', date);
+    return;
+  }
+  await db.runAsync(
+    `INSERT INTO day_status (date, complete, marked_at) VALUES (?, ?, ?)
+     ON CONFLICT (date) DO UPDATE SET complete = excluded.complete, marked_at = excluded.marked_at`,
+    date,
+    complete ? 1 : 0,
+    new Date().toISOString(),
+  );
 };
 
 export const dailyTotals = async (date: ISODate): Promise<Nutrients> => {
@@ -491,6 +518,7 @@ export interface Backup {
   routineExercises?: Record<string, unknown>[];
   sessions?: Record<string, unknown>[];
   sets?: Record<string, unknown>[];
+  dayStatus?: Record<string, unknown>[];
 }
 
 /**
@@ -513,6 +541,7 @@ export const exportBackup = async (): Promise<Backup> => {
     routineExercises: await db.getAllAsync('SELECT * FROM routine_exercises'),
     sessions: await db.getAllAsync('SELECT * FROM sessions'),
     sets: await db.getAllAsync('SELECT * FROM sets'),
+    dayStatus: await db.getAllAsync('SELECT * FROM day_status'),
   };
 };
 
@@ -598,6 +627,7 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       'foods',
       'weights',
       'settings',
+      'day_status',
     ]) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
@@ -612,6 +642,7 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
     await insertRows(db, 'routine_exercises', backup.routineExercises);
     await insertRows(db, 'sessions', backup.sessions);
     await insertRows(db, 'sets', backup.sets);
+    await insertRows(db, 'day_status', backup.dayStatus);
   });
 };
 

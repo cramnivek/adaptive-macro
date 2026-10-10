@@ -12,6 +12,7 @@ import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
+import { shouldAskAbout } from '../../src/dayStatus';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
@@ -32,6 +33,9 @@ export default function TodayScreen() {
     editEntry,
     usingSeedEstimate,
     ready,
+    observations,
+    dayStatus,
+    markDay,
   } = useApp();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
@@ -53,6 +57,14 @@ export default function TodayScreen() {
   };
 
   const isToday = selectedDate === todayISO();
+
+  // Asked on today's screen about yesterday, because that is where people are:
+  // almost nobody goes back through past days to tidy them.
+  const yesterday = addDays(todayISO(), -1);
+  const yesterdayKcal = observations.find((o) => o.date === yesterday)?.intakeKcal;
+  const askAboutYesterday =
+    ready && isToday && shouldAskAbout(yesterdayKcal, dayStatus.get(yesterday), program.calories.kcal);
+  const leftOut = dayStatus.get(selectedDate) === false;
 
   return (
     <Screen title="Today" subtitle={formatDateLong(selectedDate)}>
@@ -95,7 +107,50 @@ export default function TodayScreen() {
           {program.calories.adjustmentKcal !== 0 &&
             ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
         </Text>
+        {/*
+          A day missing a meal reads to the estimator as a deficit the scale
+          never showed, and the target drops to explain it. This takes the day
+          out of the estimate without touching the diary.
+        */}
+        {entries.length > 0 && (
+          <Pressable
+            onPress={() => void markDay(selectedDate, leftOut ? null : false)}
+            accessibilityRole="button"
+            style={styles.completeness}
+          >
+            <Text style={[styles.completenessText, { color: leftOut ? colors.warning : colors.textFaint }]}>
+              {leftOut
+                ? 'Not fully logged · left out of your expenditure estimate. Tap to count it again.'
+                : 'Not everything logged? Tap to leave this day out of the estimate.'}
+            </Text>
+          </Pressable>
+        )}
       </Card>
+
+      {askAboutYesterday && yesterdayKcal !== undefined && (
+        <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
+          <Text style={[styles.questionTitle, { color: colors.text }]}>
+            Yesterday's log came to {Math.round(yesterdayKcal)} kcal. Was that everything?
+          </Text>
+          <Text style={[styles.bannerText, { color: colors.textMuted }]}>
+            If a meal is missing, leaving the day out stops it from lowering your target.
+          </Text>
+          <View style={styles.questionActions}>
+            <Pressable
+              onPress={() => void markDay(yesterday, true)}
+              style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text style={[styles.dayActionLabel, { color: colors.text }]}>That was all</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void markDay(yesterday, false)}
+              style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.warning }]}
+            >
+              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Leave it out</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {ready && usingSeedEstimate && (
         <Pressable onPress={() => router.push('/trends')}>
@@ -258,6 +313,11 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   bannerText: { fontFamily: font.ui, flex: 1, fontSize: 12, lineHeight: 17 },
+  question: { flexDirection: 'column', alignItems: 'stretch' },
+  questionTitle: { fontFamily: font.uiStrong, fontSize: 14, lineHeight: 19 },
+  questionActions: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },
+  completeness: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginTop: space.xs },
+  completenessText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   mealActions: { flexDirection: 'row', gap: space.sm },
   // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
   // hits reliably, and they are two adjacent targets on one row.

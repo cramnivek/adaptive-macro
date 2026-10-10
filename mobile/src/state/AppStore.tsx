@@ -83,6 +83,15 @@ interface AppState {
   /** Copies a previous day's entries onto the selected day. Returns how many. */
   copyDay: (from: ISODate, meals?: Meal[]) => Promise<number>;
 
+  /** Each day's logged intake as the estimate sees it, oldest first. */
+  observations: DailyObservation[];
+  /**
+   * Answers to "was that the whole day?": true for everything, false for not
+   * fully logged, which keeps the day out of the expenditure estimate.
+   */
+  dayStatus: Map<ISODate, boolean>;
+  markDay: (date: ISODate, complete: boolean | null) => Promise<void>;
+
   weights: db.WeightRow[];
   recordWeight: (date: ISODate, kg: number) => Promise<void>;
   removeWeight: (date: ISODate) => Promise<void>;
@@ -117,6 +126,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weights, setWeights] = useState<db.WeightRow[]>([]);
   const [observations, setObservations] = useState<DailyObservation[]>([]);
+  const [dayStatus, setDayStatus] = useState<Map<ISODate, boolean>>(new Map());
 
   const reloadDiary = useCallback(async (date: ISODate) => {
     setEntries(await db.listLogEntries(date));
@@ -128,7 +138,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const reloadHistory = useCallback(async () => {
     setWeights(await db.listWeights());
     setObservations(await db.loadObservations());
+    setDayStatus(await db.listDayStatus());
   }, []);
+
+  const markDay = useCallback(
+    async (date: ISODate, complete: boolean | null) => {
+      await db.setDayStatus(date, complete);
+      await reloadHistory();
+    },
+    [reloadHistory],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -325,6 +344,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     removeEntry,
     editEntry,
     copyDay,
+    observations,
+    dayStatus,
+    markDay,
     weights,
     recordWeight,
     removeWeight,

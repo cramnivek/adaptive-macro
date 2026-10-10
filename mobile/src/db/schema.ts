@@ -158,4 +158,19 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE routine_exercises ADD COLUMN target_reps TEXT;
   `,
+  // v7 — whether a day's food log is the whole day
+  //
+  // The estimator reads a logged day as everything eaten. A day with dinner
+  // forgotten therefore reads as a big deficit the scale never showed, and the
+  // only way to explain that is a lower expenditure — so the target drops.
+  // `complete = 0` takes the day's intake out of the estimate; `complete = 1`
+  // records that a light day really was light, so the app stops asking. No
+  // row means nobody has said, which is every day before this.
+  `
+  CREATE TABLE IF NOT EXISTS day_status (
+    date      TEXT PRIMARY KEY NOT NULL,
+    complete  INTEGER NOT NULL,
+    marked_at TEXT NOT NULL
+  );
+  `,
 ];
