@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
@@ -18,7 +19,7 @@ import { formatDate } from '../src/format';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
-type Draft = { name: string; bodyweightBased: boolean; targetSets: number };
+type Draft = { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null };
 
 /**
  * Routines: named, ordered exercise lists with a target set count each.
@@ -28,6 +29,7 @@ type Draft = { name: string; bodyweightBased: boolean; targetSets: number };
  * already in the history.
  */
 export default function RoutinesScreen() {
+  const router = useRouter();
 
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
@@ -45,9 +47,12 @@ export default function RoutinesScreen() {
     setPast(await recentSessions(15));
   };
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  // On focus, so routines saved by the programme import show on return.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, []),
+  );
 
   const startNew = (name: string, exercises: Draft[]) => {
     setEditing('new');
@@ -63,6 +68,7 @@ export default function RoutinesScreen() {
         name: e.name,
         bodyweightBased: e.bodyweightBased,
         targetSets: e.targetSets,
+        targetReps: e.targetReps,
       })),
     );
   };
@@ -150,7 +156,8 @@ export default function RoutinesScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{item.name}</Text>
                 <Text style={[styles.note, { color: loud.figureFaint }]}>
-                  {item.targetSets} sets{item.bodyweightBased ? ' · bodyweight' : ''}
+                  {item.targetSets} sets{item.targetReps ? ` of ${item.targetReps}` : ''}
+                  {item.bodyweightBased ? ' · bodyweight' : ''}
                 </Text>
               </View>
               <Pressable onPress={() => move(index, -1)} style={styles.iconBtn}>
@@ -224,7 +231,9 @@ export default function RoutinesScreen() {
       {routines.map((routine, index) => (
         <Card key={routine.id} title={routine.name}>
           <Text style={[styles.note, { color: loud.figureFaint }]}>
-            {routine.exercises.map((e) => `${e.name} × ${e.targetSets}`).join(' · ') ||
+            {routine.exercises
+              .map((e) => `${e.name} × ${e.targetSets}${e.targetReps ? ` (${e.targetReps})` : ''}`)
+              .join(' · ') ||
               'No exercises'}
           </Text>
           <View style={styles.actions}>
@@ -250,6 +259,12 @@ export default function RoutinesScreen() {
       ))}
 
       <Button tone="loud" label="New routine" onPress={() => startNew('', [])} />
+      <Button
+        tone="loud"
+        label="Import a programme (PDF or image)"
+        variant="subtle"
+        onPress={() => router.push('/import-routine')}
+      />
 
       {past.length > 0 && (
         <Card loud title="Build one from a past session">

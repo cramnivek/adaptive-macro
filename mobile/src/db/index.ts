@@ -1393,7 +1393,14 @@ export interface Routine {
   id: string;
   name: string;
   position: number;
-  exercises: { name: string; bodyweightBased: boolean; targetSets: number; position: number }[];
+  exercises: {
+    name: string;
+    bodyweightBased: boolean;
+    targetSets: number;
+    /** As the programme wrote it — "8", "8-10", "AMRAP" — or null when none was given. */
+    targetReps: string | null;
+    position: number;
+  }[];
 }
 
 export const listRoutines = async (): Promise<Routine[]> => {
@@ -1408,9 +1415,10 @@ export const listRoutines = async (): Promise<Routine[]> => {
       name: string;
       bodyweight_based: number;
       target_sets: number;
+      target_reps: string | null;
       position: number;
     }>(
-      `SELECT e.name, e.bodyweight_based, re.target_sets, re.position
+      `SELECT e.name, e.bodyweight_based, re.target_sets, re.target_reps, re.position
          FROM routine_exercises re JOIN exercises e ON e.id = re.exercise_id
         WHERE re.routine_id = ? ORDER BY re.position`,
       row.id,
@@ -1423,6 +1431,7 @@ export const listRoutines = async (): Promise<Routine[]> => {
         name: e.name,
         bodyweightBased: e.bodyweight_based === 1,
         targetSets: e.target_sets,
+        targetReps: e.target_reps,
         position: e.position,
       })),
     });
@@ -1432,7 +1441,7 @@ export const listRoutines = async (): Promise<Routine[]> => {
 
 export const createRoutine = async (
   name: string,
-  exercises: { name: string; bodyweightBased: boolean; targetSets: number }[],
+  exercises: { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null }[],
 ): Promise<string> => {
   const db = await getDb();
   const id = newId();
@@ -1453,13 +1462,15 @@ export const createRoutine = async (
     for (const [index, exercise] of exercises.entries()) {
       const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
       await db.runAsync(
-        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets)
-         VALUES (?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
-           SET position = excluded.position, target_sets = excluded.target_sets`,
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
+           SET position = excluded.position, target_sets = excluded.target_sets,
+               target_reps = excluded.target_reps`,
         id,
         exerciseId,
         index,
         exercise.targetSets,
+        exercise.targetReps ?? null,
       );
     }
   });
@@ -1475,7 +1486,7 @@ export const renameRoutine = async (id: string, name: string): Promise<void> => 
 /** Rewrites a routine's exercise list wholesale, which is how the editor saves. */
 export const setRoutineExercises = async (
   id: string,
-  exercises: { name: string; bodyweightBased: boolean; targetSets: number }[],
+  exercises: { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null }[],
 ): Promise<void> => {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
@@ -1483,12 +1494,13 @@ export const setRoutineExercises = async (
     for (const [index, exercise] of exercises.entries()) {
       const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
       await db.runAsync(
-        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps)
+         VALUES (?, ?, ?, ?, ?)`,
         id,
         exerciseId,
         index,
         exercise.targetSets,
+        exercise.targetReps ?? null,
       );
     }
   });

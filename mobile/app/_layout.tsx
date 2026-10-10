@@ -152,6 +152,16 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="import-routine"
+              options={{
+                presentation: 'modal',
+                headerShown: true,
+                title: '',
+                headerStyle: { backgroundColor: loud.ground },
+                headerTintColor: loud.figure,
+              }}
+            />
+            <Stack.Screen
               name="progression"
               options={{
                 presentation: 'modal',

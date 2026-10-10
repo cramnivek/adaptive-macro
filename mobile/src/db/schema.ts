@@ -150,4 +150,12 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE exercise_catalogue ADD COLUMN secondary_regions TEXT;
   ALTER TABLE exercise_catalogue ADD COLUMN instruction_steps TEXT;
   `,
+  // v6 — a rep target per routine exercise
+  //
+  // Free text, because programmes write it as "8", "8-10", "AMRAP" or "30s",
+  // and no one number covers those. Nullable: every routine built before this
+  // has none, and a routine built by hand still need not give one.
+  `
+  ALTER TABLE routine_exercises ADD COLUMN target_reps TEXT;
+  `,
 ];

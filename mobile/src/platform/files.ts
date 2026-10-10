@@ -30,6 +30,47 @@ export const pickTextFile = async (): Promise<{ name: string; text: string } | n
   return { name: asset.name ?? 'file', text };
 };
 
+/**
+ * A file the user picked, to be sent as bytes rather than read as text.
+ *
+ * The contents are read only on `readBase64`, so a file too large to send can
+ * be turned away on its size without first being held in memory as base64.
+ */
+export const pickBinaryFile = async (): Promise<{
+  name: string;
+  mimeType: string;
+  size: number | null;
+  readBase64: () => Promise<string>;
+} | null> => {
+  const result = await DocumentPicker.getDocumentAsync({
+    // Unfiltered, for the same iOS Safari reason as `pickTextFile`.
+    type: '*/*',
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled) return null;
+
+  const asset = result.assets[0];
+  return {
+    name: asset.name ?? 'file',
+    mimeType: asset.mimeType ?? asset.file?.type ?? '',
+    size: asset.size ?? asset.file?.size ?? null,
+    readBase64: async () => {
+      if (Platform.OS !== 'web') {
+        return FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      }
+      const blob: Blob = asset.file ? asset.file : await (await fetch(asset.uri)).blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      // A data URL is "data:<type>;base64,<data>"; only the data is wanted.
+      return dataUrl.slice(dataUrl.indexOf(',') + 1);
+    },
+  };
+};
+
 export const readAsset = async (
   asset: DocumentPicker.DocumentPickerAsset,
 ): Promise<string> => {
