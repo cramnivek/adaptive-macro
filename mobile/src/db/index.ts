@@ -13,6 +13,12 @@ import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
+import {
+  CATALOGUE_BY_CANONICAL_NAME,
+  CATALOGUE_BY_LINKED_NAME,
+  PATTERNS_BY_CANONICAL_NAME,
+  PATTERNS_BY_LINKED_NAME,
+} from './catalogueQueries';
 
 /**
  * The open in flight, not the opened database.
@@ -1084,22 +1090,14 @@ export const catalogueEntryForExercise = async (
   exerciseName: string,
 ): Promise<CatalogueEntry | null> => {
   const db = await getDb();
-  const columns = `c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
-            c.instruction_steps`;
-
   const linked = await db.getFirstAsync<CatalogueRow>(
-    `SELECT ${columns}, e.name AS recorded_name
-       FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
-      WHERE e.name = ?`,
+    CATALOGUE_BY_LINKED_NAME,
     exerciseName,
   );
   if (linked) return toCatalogueEntry(linked);
 
   const byName = await db.getFirstAsync<CatalogueRow>(
-    `SELECT ${columns}, NULL AS recorded_name
-       FROM exercise_catalogue c
-      WHERE c.canonical_name = ?`,
+    CATALOGUE_BY_CANONICAL_NAME,
     exerciseName,
   );
   return byName ? toCatalogueEntry(byName) : null;
@@ -1123,11 +1121,10 @@ export const cataloguePatternsByExerciseName = async (): Promise<
   // header is actually keyed by.
   const [catalogue, linked] = await Promise.all([
     db.getAllAsync<{ name: string; movement_pattern: string }>(
-      'SELECT c.canonical_name AS name, c.movement_pattern FROM exercise_catalogue c',
+      PATTERNS_BY_CANONICAL_NAME,
     ),
     db.getAllAsync<{ name: string; movement_pattern: string }>(
-      `SELECT e.name, c.movement_pattern
-         FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id`,
+      PATTERNS_BY_LINKED_NAME,
     ),
   ]);
 
