@@ -60,6 +60,7 @@ export default function TodayScreen() {
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
+          accessibilityLabel="Go to the previous day"
           style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <Ionicons name="chevron-back" size={18} color={colors.text} />
@@ -77,6 +78,7 @@ export default function TodayScreen() {
           // Logging into the future would feed the estimator days that have not
           // happened yet, so forward navigation stops at today.
           disabled={isToday}
+          accessibilityLabel="Go to the next day"
           style={[
             styles.navButton,
             { backgroundColor: colors.surface, borderColor: colors.border, opacity: isToday ? 0.35 : 1 },
