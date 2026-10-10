@@ -9,6 +9,7 @@ import type {
   Nutrients,
   SetType,
 } from '@adaptive-macros/engine';
+import { addDays } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
@@ -20,6 +21,7 @@ import {
   PATTERNS_BY_LINKED_NAME,
 } from './catalogueQueries';
 import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
+import { LAST_MEALS_BEFORE } from './mealQueries';
 import { DELETE_ROUTINE_STEPS } from './routineQueries';
 import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 
@@ -371,6 +373,24 @@ export const listLoggedDates = async (limit = 30, excluding?: ISODate): Promise<
  * from. Meals can be filtered so "repeat yesterday's breakfast" does not drag
  * dinner along with it.
  */
+/** A meal as last logged: the day, its total, and how many items it had. */
+export interface RecentMeal {
+  date: ISODate;
+  kcal: number;
+  items: number;
+}
+
+/** Each meal's most recent earlier day in the week before `date`. */
+export const lastMealsBefore = async (date: ISODate): Promise<Map<Meal, RecentMeal>> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ meal: Meal; date: ISODate; kcal: number; items: number }>(
+    LAST_MEALS_BEFORE,
+    date,
+    addDays(date, -7),
+  );
+  return new Map(rows.map((row) => [row.meal, { date: row.date, kcal: row.kcal, items: row.items }]));
+};
+
 export const copyEntriesToDay = async (
   from: ISODate,
   to: ISODate,

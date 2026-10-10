@@ -1,8 +1,8 @@
-import type { LogEntry, Meal } from '@adaptive-macros/engine';
+import type { ISODate, LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CheckInCard } from '../../src/components/CheckInCard';
@@ -14,6 +14,8 @@ import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
 import { Screen } from '../../src/components/Screen';
 import { shouldAskAbout } from '../../src/dayStatus';
+import { lastMealsBefore, type RecentMeal } from '../../src/db';
+import { sameAsLabel } from '../../src/mealRepeat';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
@@ -37,9 +39,34 @@ export default function TodayScreen() {
     observations,
     dayStatus,
     markDay,
+    copyDay,
   } = useApp();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
+  const [recentMeals, setRecentMeals] = useState<Map<Meal, RecentMeal>>(new Map());
+  // The meal being copied, so a second tap before the diary reloads cannot
+  // copy it twice.
+  const [repeating, setRepeating] = useState<Meal | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void lastMealsBefore(selectedDate).then((found) => {
+      if (live) setRecentMeals(found);
+    });
+    return () => {
+      live = false;
+    };
+  }, [selectedDate, entries]);
+
+  const repeatMeal = async (meal: Meal, from: ISODate) => {
+    if (repeating !== null) return;
+    setRepeating(meal);
+    try {
+      await copyDay(from, [meal]);
+    } finally {
+      setRepeating(null);
+    }
+  };
 
   const byMeal = useMemo(() => {
     const groups = new Map<Meal, LogEntry[]>(MEAL_ORDER.map((meal) => [meal, []]));
@@ -268,6 +295,30 @@ export default function TodayScreen() {
                 </Tappable>
               </FadeIn>
             ))}
+            {/*
+              Most people eat the same breakfast most days. An empty meal offers
+              the last one logged this week in one tap, and only an empty one,
+              so a meal cannot be doubled by accident.
+            */}
+            {mealEntries.length === 0 && recentMeals.has(meal) && (() => {
+              const recent = recentMeals.get(meal)!;
+              const label = sameAsLabel(recent.date, selectedDate);
+              return (
+                <Tappable
+                  onPress={() => void repeatMeal(meal, recent.date)}
+                  disabled={repeating !== null}
+                  scaleTo={0.97}
+                  accessibilityLabel={`${label} for ${MEAL_LABELS[meal]}`}
+                  style={[styles.repeatChip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+                >
+                  <Ionicons name="repeat-outline" size={15} color={colors.accent} />
+                  <Text style={[styles.repeatLabel, { color: colors.text }]}>{label}</Text>
+                  <Text style={[styles.repeatMeta, { color: colors.textFaint }]}>
+                    {recent.items === 1 ? '1 item' : `${recent.items} items`} · {Math.round(recent.kcal)} kcal
+                  </Text>
+                </Tappable>
+              );
+            })()}
             {mealEntries.length > 0 && (
               <Text style={[styles.deleteHint, { color: colors.textFaint }]}>
                 Tap an item to change the amount, hold to remove it
@@ -342,6 +393,17 @@ const styles = StyleSheet.create({
   entryName: { fontFamily: font.uiStrong, fontSize: 15 },
   entryMeta: { fontFamily: font.ui, fontSize: 11, marginTop: 1 },
   entryKcal: { fontFamily: font.figure, fontSize: 15, fontVariant: ['tabular-nums'] },
+  repeatChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  repeatLabel: { fontFamily: font.uiStrong, fontSize: 13 },
+  repeatMeta: { fontFamily: font.ui, fontSize: 12, marginLeft: 'auto' },
   deleteHint: { fontFamily: font.ui, fontSize: 11, marginTop: space.xs, textAlign: 'center' },
   dayActions: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   dayAction: {
