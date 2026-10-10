@@ -37,6 +37,18 @@ export const formatDate = (iso: string): string => {
   return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
 };
 
+/**
+ * Day and month, for a chart axis: "2 Oct".
+ *
+ * No weekday and no year. An axis has room for a few characters, and the
+ * weekday is the least useful part of a date you are reading a trend against —
+ * two labels ninety days apart both reading "Fri" say nothing at all.
+ */
+export const formatDayMonth = (iso: string): string => {
+  const date = new Date(`${iso}T00:00:00Z`);
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]}`;
+};
+
 export const formatDateLong = (iso: string): string => {
   const date = new Date(`${iso}T00:00:00Z`);
   return `${WEEKDAYS[date.getUTCDay()]}, ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;

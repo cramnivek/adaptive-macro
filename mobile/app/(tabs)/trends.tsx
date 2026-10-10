@@ -1,43 +1,73 @@
-import { diffDays, projectedDate, todayISO } from '@adaptive-macros/engine';
-import { useMemo } from 'react';
+import { addDays, diffDays, projectedDate, todayISO } from '@adaptive-macros/engine';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { LineChart } from '../../src/components/LineChart';
+import { MethodSheet } from '../../src/components/MethodSheet';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
+import { Tappable } from '../../src/components/Tappable';
 import { TrainingCrossReference } from '../../src/components/TrainingCrossReference';
-import { formatDateLong, formatRate, formatWeight } from '../../src/format';
+import { dailyKcalBetween } from '../../src/db';
+import {
+  displayWeight,
+  formatDateLong,
+  formatDayMonth,
+  formatRate,
+  formatWeight,
+  weightUnit,
+} from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
-import { font, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
 
-const CONFIDENCE_COPY = {
-  insufficient: 'Not enough data yet — still leaning on the formula estimate.',
-  low: 'Rough. Keep logging; it tightens quickly.',
-  moderate: 'Usable. Good enough to set targets from.',
-  high: 'Solid. This is measured from your own data.',
-} as const;
+/** How far back every chart on this screen looks. */
+const WINDOW_DAYS = 90;
 
-const CONFIDENCE_TONE = {
-  insufficient: 'danger',
-  low: 'warning',
-  moderate: 'default',
-  high: 'positive',
-} as const;
-
+/**
+ * What the data says, in charts.
+ *
+ * This screen used to be mostly prose: a sentence under every heading, a
+ * paragraph about clamping, and a hundred and fifty words explaining the
+ * method — with exactly one chart among it. Opening it to check a number meant
+ * reading. The explanation has not been thrown away; it is a tap behind the
+ * heading, where reference material belongs, and the room it freed has gone to
+ * the two charts that were missing.
+ */
 export default function TrendsScreen() {
   const { colors } = useTheme();
   const { settings, series, latest, trend, program, confidence } = useApp();
+  const [intake, setIntake] = useState<{ date: string; kcal: number }[]>([]);
+  const [method, setMethod] = useState(false);
+  const unit = weightUnit(settings.units);
 
-  // The chart shows the last 90 days: far enough back to see a real shift in
-  // expenditure, recent enough that the early wide-uncertainty warm-up does not
-  // flatten the scale for everything after it.
-  const chart = useMemo(() => {
-    if (series.length < 2) return null;
-    const window = series.slice(-90);
-    const origin = window[0].date;
+  const today = todayISO();
+  const from = addDays(today, -(WINDOW_DAYS - 1));
+
+  useFocusEffect(
+    useCallback(() => {
+      let current = true;
+      void dailyKcalBetween(from, today).then((rows) => {
+        if (current) setIntake(rows);
+      });
+      return () => {
+        current = false;
+      };
+    }, [from, today]),
+  );
+
+  /**
+   * Ninety days: far enough back to see a real shift in expenditure, recent
+   * enough that the early wide-uncertainty warm-up does not flatten the scale
+   * for everything after it.
+   */
+  const window = useMemo(() => series.slice(-WINDOW_DAYS), [series]);
+  const origin = window[0]?.date ?? null;
+
+  const energy = useMemo(() => {
+    if (origin === null || window.length < 2) return null;
     return {
-      origin,
-      line: window.map((point) => ({
+      expenditure: window.map((point) => ({
         x: diffDays(origin, point.date),
         y: point.expenditureKcal,
       })),
@@ -46,22 +76,41 @@ export default function TrendsScreen() {
         lo: point.expenditureKcal - point.expenditureSdKcal,
         hi: point.expenditureKcal + point.expenditureSdKcal,
       })),
+      // Scattered rather than joined: intake is a daily fact with gaps, and a
+      // line across a missing day would invent a value for it.
+      intake: intake
+        .filter((row) => row.date >= origin)
+        .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
     };
-  }, [series]);
+  }, [window, origin, intake]);
+
+  const weight = useMemo(() => {
+    if (origin === null || window.length < 2) return null;
+    return window.map((point) => ({
+      x: diffDays(origin, point.date),
+      y: displayWeight(point.trendWeightKg, settings.units),
+    }));
+  }, [window, origin, settings.units]);
 
   const projection = useMemo(() => {
     if (!latest || !trend || settings.goalWeightKg === null) return null;
-    return projectedDate(todayISO(), latest.trendWeightKg, settings.goalWeightKg, trend.rateKgPerWeek);
-  }, [latest, trend, settings.goalWeightKg]);
+    return projectedDate(today, latest.trendWeightKg, settings.goalWeightKg, trend.rateKgPerWeek);
+  }, [latest, trend, settings.goalWeightKg, today]);
+
+  const dayLabel = (x: number) =>
+    origin === null ? '' : formatDayMonth(addDays(origin, x));
 
   return (
-    <Screen title="Trends" subtitle="What your data says your body is actually burning">
+    <Screen title="Trends">
       <View style={styles.tiles}>
         <StatTile
           label="Expenditure"
           value={latest ? String(Math.round(latest.expenditureKcal)) : '—'}
           unit="kcal/day"
-          hint={latest ? `±${Math.round(latest.expenditureSdKcal)} kcal` : 'No estimate yet'}
+          // The confidence sentence used to be its own card with its own tile
+          // repeating this same number. It is the hint on the figure it
+          // qualifies, which is where someone reading the figure is looking.
+          hint={latest ? `± ${Math.round(latest.expenditureSdKcal)} · ${confidence}` : 'No estimate yet'}
         />
         <StatTile
           label="Target"
@@ -75,43 +124,43 @@ export default function TrendsScreen() {
         />
       </View>
 
-      <Card title="Estimate confidence" subtitle={CONFIDENCE_COPY[confidence]}>
-        <StatTile
-          label="Uncertainty"
-          value={latest ? `±${Math.round(latest.expenditureSdKcal)}` : '—'}
-          unit="kcal"
-          tone={CONFIDENCE_TONE[confidence]}
-        />
-      </Card>
-
-      <Card
-        title="Expenditure over time"
-        subtitle="Shaded band is the estimate's uncertainty; dashed line is your current target"
-      >
+      <Card title="Energy">
+        <View style={styles.legend}>
+          <Key color={colors.positive} label="burning" />
+          <Key color={colors.carbs} label="eaten" dotted />
+          <Key color={colors.accent} label="target" dashed />
+        </View>
         <LineChart
-          series={chart ? [{ points: chart.line, color: colors.positive, strokeWidth: 2.5 }] : []}
-          band={chart ? { points: chart.band, color: colors.positive } : undefined}
-          referenceY={{ value: program.calories.kcal, color: colors.accent, label: 'target' }}
-          formatY={(value) => String(Math.round(value))}
+          series={energy ? [{ points: energy.expenditure, color: colors.positive, strokeWidth: 2.5 }] : []}
+          band={energy ? { points: energy.band, color: colors.positive } : undefined}
+          scatter={energy ? [{ points: energy.intake, color: colors.carbs, radius: 2.5, opacity: 0.8 }] : undefined}
+          referenceY={{ value: program.calories.kcal, color: colors.accent }}
+          formatX={dayLabel}
           emptyMessage="Log weight and food for a couple of weeks"
-          height={200}
+          height={190}
         />
+        {/*
+          The one chart that answers "why is my weight doing this". The gap
+          between the dots and the line is the deficit, drawn rather than
+          described.
+        */}
       </Card>
 
-      {program.calories.clamps.length > 0 && (
-        <Card title="Your goal rate was adjusted">
-          <Text style={[styles.body, { color: colors.textMuted }]}>
-            {program.calories.clamps.includes('deficitCapped') &&
-              'The requested rate needed a deficit larger than 25% of your expenditure, which is hard to hold and costs lean mass. '}
-            {program.calories.clamps.includes('surplusCapped') &&
-              'The requested rate needed a surplus larger than 20% of your expenditure, most of which would be fat. '}
-            {program.calories.clamps.includes('calorieFloor') &&
-              'The target hit the minimum calorie floor. '}
-            At {program.calories.kcal} kcal you should actually see{' '}
-            {formatRate(program.calories.achievableRateKgPerWeek, settings.units)}.
-          </Text>
-        </Card>
-      )}
+      <Card title="Trend weight">
+        <LineChart
+          series={weight ? [{ points: weight, color: colors.accent, strokeWidth: 2.5 }] : []}
+          includeY={settings.goalWeightKg === null ? [] : [displayWeight(settings.goalWeightKg, settings.units)]}
+          referenceY={
+            settings.goalWeightKg === null
+              ? undefined
+              : { value: displayWeight(settings.goalWeightKg, settings.units), color: colors.protein }
+          }
+          formatY={(value) => value.toFixed(1)}
+          formatX={dayLabel}
+          emptyMessage="Weigh in for a couple of weeks"
+          height={170}
+        />
+      </Card>
 
       <Card title="Progress">
         <View style={styles.tiles}>
@@ -128,32 +177,79 @@ export default function TrendsScreen() {
         {settings.goalWeightKg !== null && (
           <Text style={[styles.body, { color: colors.textMuted, marginTop: space.md }]}>
             {projection
-              ? `At your current rate you reach ${formatWeight(settings.goalWeightKg, settings.units)} around ${formatDateLong(projection)}.`
-              : `Your trend is not currently moving toward ${formatWeight(settings.goalWeightKg, settings.units)}, so there is no date to project.`}
+              ? `At this rate you reach ${formatWeight(settings.goalWeightKg, settings.units)} around ${formatDateLong(projection)}.`
+              : `Your trend is not moving toward ${formatWeight(settings.goalWeightKg, settings.units)}, so there is no date to project.`}
           </Text>
         )}
       </Card>
 
+      {program.calories.clamps.length > 0 && (
+        <Card title="Rate adjusted">
+          {/* Trimmed to the part that changes what you do. The reasoning behind
+              each cap was three sentences nobody needed twice. */}
+          <Text style={[styles.body, { color: colors.textMuted }]}>
+            {program.calories.clamps.includes('deficitCapped') && 'Deficit capped at 25%. '}
+            {program.calories.clamps.includes('surplusCapped') && 'Surplus capped at 20%. '}
+            {program.calories.clamps.includes('calorieFloor') && 'Hit the calorie floor. '}
+            At {program.calories.kcal} kcal expect{' '}
+            {formatRate(program.calories.achievableRateKgPerWeek, settings.units)}.
+          </Text>
+        </Card>
+      )}
+
       <TrainingCrossReference series={series} />
 
-      <Card title="How this number is worked out">
-        <Text style={[styles.body, { color: colors.textMuted }]}>
-          There is only one equation linking expenditure to anything you can measure:{'\n\n'}
-          weight change = (intake − expenditure) ÷ 7700 kcal per kg{'\n\n'}
-          Expenditure is the unknown. A Kalman filter tracks it alongside your true trend weight, moving it to
-          whatever value keeps explaining what your scale actually did. Day-to-day water and gut-content swings
-          are treated as measurement noise, so only changes that persist move the trend.{'\n\n'}
-          It adapts on its own — metabolic adaptation, activity drifting down in a deficit, a new training
-          block all show up without being modelled by name.{'\n\n'}
-          The catch: it believes your food log. Consistent under-reporting looks exactly like a lower
-          expenditure, and the estimate will follow it down.
-        </Text>
-      </Card>
+      <Tappable onPress={() => setMethod(true)} scaleTo={0.98}>
+        <View style={[styles.method, { borderColor: colors.border }]}>
+          <Text style={[styles.methodLabel, { color: colors.textMuted }]}>
+            Where this number comes from
+          </Text>
+          <Text style={{ color: colors.textFaint, fontFamily: font.ui }}>›</Text>
+        </View>
+      </Tappable>
+
+      <MethodSheet open={method} onClose={() => setMethod(false)} />
+      <Text style={[styles.unitNote, { color: colors.textFaint }]}>Weights in {unit}.</Text>
     </Screen>
   );
 }
 
+const Key = ({ color, label, dashed = false, dotted = false }: {
+  color: string;
+  label: string;
+  dashed?: boolean;
+  dotted?: boolean;
+}) => (
+  <View style={styles.key}>
+    <View
+      style={[
+        dotted ? styles.keyDot : styles.keyLine,
+        { backgroundColor: color, opacity: dashed ? 0.6 : 1 },
+      ]}
+    />
+    <Text style={[styles.keyLabel, { color }]}>{label}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', gap: space.md, marginBottom: space.md },
   body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
+  // A legend of three words, in place of the sentence that used to describe
+  // the same three things above the chart.
+  legend: { flexDirection: 'row', gap: space.md, marginBottom: space.sm },
+  key: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  keyLine: { width: 14, height: 2, borderRadius: 1 },
+  keyDot: { width: 6, height: 6, borderRadius: 3 },
+  keyLabel: { fontFamily: font.uiStrong, fontSize: 11 },
+  method: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  methodLabel: { fontFamily: font.uiStrong, fontSize: 13 },
+  unitNote: { fontFamily: font.ui, fontSize: 11, textAlign: 'center', marginTop: space.md },
 });

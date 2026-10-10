@@ -1663,3 +1663,30 @@ export const catalogueRegionsByExerciseName = async (): Promise<
   }
   return byName;
 };
+
+/**
+ * Calories logged per day across a span, for charting intake against the
+ * expenditure estimate.
+ *
+ * One query rather than `dailyTotals` ninety times. Days with nothing logged
+ * are absent rather than zero: a zero would draw a line to the floor and read
+ * as a day of fasting, when it was a day nobody opened the app.
+ */
+export const dailyKcalBetween = async (
+  from: ISODate,
+  to: ISODate,
+): Promise<{ date: ISODate; kcal: number }[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ date: ISODate; kcal: number | null }>(
+    `SELECT date, SUM(kcal) AS kcal
+       FROM log_entries
+      WHERE date BETWEEN ? AND ?
+      GROUP BY date
+      ORDER BY date`,
+    from,
+    to,
+  );
+  return rows
+    .filter((row) => row.kcal !== null && row.kcal > 0)
+    .map((row) => ({ date: row.date, kcal: row.kcal ?? 0 }));
+};

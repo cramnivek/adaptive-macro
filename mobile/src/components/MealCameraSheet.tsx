@@ -1,6 +1,16 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { EstimatedItem, MealEstimate, MealPhoto } from '../ai/describeMeal';
 import { font, radius, space, useTheme } from '../theme';
 import { Button } from './Controls';
@@ -48,6 +58,7 @@ export const MealCameraSheet = ({
   onClose,
 }: MealCameraSheetProps) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   /**
    * The in-app preview is native-only.
    *
@@ -131,7 +142,16 @@ export const MealCameraSheet = ({
               />
             )}
 
-            <View style={styles.overlay} pointerEvents="box-none">
+            <View
+              style={[
+                styles.overlay,
+                // The sheet is a full-screen modal, so nothing else is keeping
+                // the close button out of the notch or the actions off the
+                // home indicator.
+                { paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.lg },
+              ]}
+              pointerEvents="box-none"
+            >
               <View style={styles.top}>
                 <Button label="Close" variant="subtle" onPress={onClose} />
               </View>
@@ -170,7 +190,16 @@ export const MealCameraSheet = ({
                 )}
 
                 {photo && !busy && items.length > 0 && (
-                  <>
+                  /*
+                    Scrolls once there are more items than fit.
+
+                    A flex child does not shrink by default in React Native, so
+                    a panel with six items and two buttons simply grew past the
+                    bottom of the screen and the rest was gone — no clipping, no
+                    scrollbar, just missing. Which is exactly the half holding
+                    "Use this".
+                  */
+                  <ScrollView style={styles.items} contentContainerStyle={styles.itemsContent}>
                     {items.map((item) => (
                       <View key={`${item.name}:${item.grams}`} style={styles.row}>
                         <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
@@ -193,7 +222,7 @@ export const MealCameraSheet = ({
                     <Text style={[styles.hint, { color: colors.textFaint }]}>
                       What it assumed, and the portions, are on the screen behind this.
                     </Text>
-                  </>
+                  </ScrollView>
                 )}
 
                 {photo && !busy && items.length === 0 && (
@@ -232,6 +261,10 @@ const styles = StyleSheet.create({
     padding: space.lg,
     gap: space.sm,
   },
+  // About five rows. Past that the panel would start eating the photo it is
+  // describing, which is the thing you are checking it against.
+  items: { maxHeight: 220 },
+  itemsContent: { gap: space.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   itemName: { flex: 1, fontFamily: font.uiStrong, fontSize: 14 },
   figure: { fontFamily: font.figure, fontSize: 12 },
