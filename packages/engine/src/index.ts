@@ -8,3 +8,4 @@ export * from './targets.ts';
 export * from './foods.ts';
 export * from './simulate.ts';
 export * from './workouts.ts';
+export * from './checkIn.ts';

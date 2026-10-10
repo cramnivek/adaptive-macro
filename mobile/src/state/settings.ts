@@ -1,4 +1,4 @@
-import type { ActivityLevel, Goal, UserProfile } from '@adaptive-macros/engine';
+import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { defaultOllamaHost } from '../ai/ollama';
 import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
@@ -63,6 +63,8 @@ export interface AppSettings {
   restSeconds: number;
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
+  /** The Monday of the last week whose check-in was dismissed, so each is shown once. */
+  checkInSeenWeek: ISODate | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -85,6 +87,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   foodLookup: { geminiApiKey: '' },
   onboarded: false,
+  checkInSeenWeek: null,
 };
 
 export const SETTINGS_KEY = 'app.settings';

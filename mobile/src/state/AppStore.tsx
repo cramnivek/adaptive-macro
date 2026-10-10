@@ -19,8 +19,9 @@ import {
   seedExpenditure,
   todayISO,
   trendRate,
+  weeklyCheckIn,
 } from '@adaptive-macros/engine';
-import type { TrendSummary } from '@adaptive-macros/engine';
+import type { TrendSummary, WeeklyCheckIn } from '@adaptive-macros/engine';
 import React, {
   createContext,
   useCallback,
@@ -106,6 +107,8 @@ interface AppState {
   program: DailyProgram;
   /** True while the program comes from the BMR seed rather than from data. */
   usingSeedEstimate: boolean;
+  /** Last week's review, or null before the estimate is worth reviewing. */
+  checkIn: WeeklyCheckIn | null;
   confidence: ReturnType<typeof expenditureConfidence>;
 }
 
@@ -291,7 +294,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // The whole filter is re-run from scratch whenever the inputs change. Over a
   // multi-year history this is still well under a millisecond, and it removes
   // any possibility of the displayed estimate drifting from the stored data.
-  const { series, latest } = useMemo(
+  const { series, filtered, latest } = useMemo(
     () =>
       estimateExpenditure(observations, {
         ...DEFAULT_MODEL_OPTIONS,
@@ -316,19 +319,42 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // than presenting a measured number the data does not support yet.
   const usingSeedEstimate = latest === null || confidence === 'insufficient';
 
+  const targetOptions = useMemo(
+    () => ({
+      ...DEFAULT_TARGET_OPTIONS,
+      kcalPerKgTissue: settings.kcalPerKgTissue,
+      proteinGPerKg: settings.proteinGPerKg,
+      minFatGPerKg: settings.minFatGPerKg,
+    }),
+    [settings.kcalPerKgTissue, settings.proteinGPerKg, settings.minFatGPerKg],
+  );
+
+  // Not while the estimate is still the formula's: "the target moved because
+  // the data did" is only true once there is data behind it.
+  const checkIn = useMemo(
+    () =>
+      usingSeedEstimate
+        ? null
+        : weeklyCheckIn({
+            today: todayISO(),
+            observations,
+            series,
+            filtered,
+            latest,
+            goal: settings.goal,
+            options: targetOptions,
+          }),
+    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions],
+  );
+
   const program = useMemo(() => {
     const referenceWeightKg = latest?.trendWeightKg ?? latestWeightKg ?? 80;
     const expenditure =
       latest?.expenditureKcal ??
       seedExpenditure(settings.profile, referenceWeightKg, settings.activity);
 
-    return buildProgram(expenditure, referenceWeightKg, settings.goal, {
-      ...DEFAULT_TARGET_OPTIONS,
-      kcalPerKgTissue: settings.kcalPerKgTissue,
-      proteinGPerKg: settings.proteinGPerKg,
-      minFatGPerKg: settings.minFatGPerKg,
-    });
-  }, [latest, latestWeightKg, settings]);
+    return buildProgram(expenditure, referenceWeightKg, settings.goal, targetOptions);
+  }, [latest, latestWeightKg, settings, targetOptions]);
 
   const value: AppState = {
     ready,
@@ -356,6 +382,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     trend,
     program,
     usingSeedEstimate,
+    checkIn,
     confidence,
   };
 

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { CheckInCard } from '../../src/components/CheckInCard';
 import { FadeIn } from '../../src/components/FadeIn';
 import { Tappable } from '../../src/components/Tappable';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -126,6 +127,8 @@ export default function TodayScreen() {
           </Pressable>
         )}
       </Card>
+
+      {isToday && <CheckInCard />}
 
       {askAboutYesterday && yesterdayKcal !== undefined && (
         <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
