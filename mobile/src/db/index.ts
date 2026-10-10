@@ -1065,19 +1065,44 @@ export const searchCatalogue = async (term: string, limit = 30): Promise<Catalog
   return rows.map(toCatalogueEntry);
 };
 
+/**
+ * The catalogue entry behind an exercise name.
+ *
+ * Two lookups, and the second one is the point. The link between a recorded
+ * name and a catalogue entry lives on the `exercises` row, and that row is
+ * only written when a set is — so for an exercise you have added to a session
+ * but not yet lifted, the join finds nothing and the how-to was unavailable.
+ * Which is exactly backwards: the instructions matter most *before* your first
+ * set of a movement, not after it.
+ *
+ * So the link is tried first, because a recorded name can differ from the
+ * canonical one ("Pull Up" against "Pull-Up") and only the link knows that.
+ * Failing that, the name is matched against the catalogue directly, which is
+ * what it will be for anything just picked out of the picker.
+ */
 export const catalogueEntryForExercise = async (
   exerciseName: string,
 ): Promise<CatalogueEntry | null> => {
   const db = await getDb();
-  const row = await db.getFirstAsync<CatalogueRow>(
-    `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
+  const columns = `c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
             c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
-            c.instruction_steps, e.name AS recorded_name
+            c.instruction_steps`;
+
+  const linked = await db.getFirstAsync<CatalogueRow>(
+    `SELECT ${columns}, e.name AS recorded_name
        FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id
       WHERE e.name = ?`,
     exerciseName,
   );
-  return row ? toCatalogueEntry(row) : null;
+  if (linked) return toCatalogueEntry(linked);
+
+  const byName = await db.getFirstAsync<CatalogueRow>(
+    `SELECT ${columns}, NULL AS recorded_name
+       FROM exercise_catalogue c
+      WHERE c.canonical_name = ?`,
+    exerciseName,
+  );
+  return byName ? toCatalogueEntry(byName) : null;
 };
 
 /**
@@ -1090,11 +1115,25 @@ export const cataloguePatternsByExerciseName = async (): Promise<
   Record<string, MovementPattern>
 > => {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ name: string; movement_pattern: string }>(
-    `SELECT e.name, c.movement_pattern
-       FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id`,
+
+  // Canonical names first, so anything in the catalogue has a glyph whether or
+  // not it has ever been lifted — the block header was a blank red tab until
+  // the first set of a new exercise was written. Recorded names are layered
+  // over the top, because where the two differ the recorded one is what the
+  // header is actually keyed by.
+  const [catalogue, linked] = await Promise.all([
+    db.getAllAsync<{ name: string; movement_pattern: string }>(
+      'SELECT c.canonical_name AS name, c.movement_pattern FROM exercise_catalogue c',
+    ),
+    db.getAllAsync<{ name: string; movement_pattern: string }>(
+      `SELECT e.name, c.movement_pattern
+         FROM exercises e JOIN exercise_catalogue c ON c.id = e.catalogue_id`,
+    ),
+  ]);
+
+  return Object.fromEntries(
+    [...catalogue, ...linked].map((row) => [row.name, normalisePattern(row.movement_pattern)]),
   );
-  return Object.fromEntries(rows.map((r) => [r.name, normalisePattern(r.movement_pattern)]));
 };
 
 // --- logging a session ----------------------------------------------------
