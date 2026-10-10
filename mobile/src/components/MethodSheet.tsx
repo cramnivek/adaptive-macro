@@ -61,6 +61,20 @@ export const MethodSheet = ({ open, onClose }: MethodSheetProps) => {
             lower expenditure, and the estimate will follow it down.
           </Text>
 
+          <Text style={[styles.title, { color: colors.text, marginTop: space.md }]}>
+            And the training charts
+          </Text>
+          <Text style={[styles.body, { color: colors.textMuted }]}>
+            The band is a rough estimate of what your sessions cost — bodyweight × duration × an
+            activity constant, which for lifting spans about ±40%. The line is your total weekly
+            expenditure as the filter measures it.
+          </Text>
+          <Text style={[styles.body, { color: colors.textMuted }]}>
+            None of it feeds your target. Your expenditure estimate already includes training: it
+            is measured from what your weight actually did, so counting these calories again would
+            raise your target for work already accounted for.
+          </Text>
+
           <View style={{ height: space.md }} />
           <Button label="Close" variant="subtle" onPress={onClose} />
         </ScrollView>
@@ -80,10 +94,12 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: font.display, fontSize: 18, marginBottom: space.sm },
   body: { fontFamily: font.ui, fontSize: 14, lineHeight: 21, marginBottom: space.md },
+  // Sized to clear a narrow phone without wrapping: a line of algebra broken
+  // across two lines stops reading as one statement.
   equation: {
     fontFamily: font.figure,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 19,
     marginBottom: space.md,
   },
 });

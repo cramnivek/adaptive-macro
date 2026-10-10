@@ -11,6 +11,7 @@ import { Tappable } from '../../src/components/Tappable';
 import { TrainingCrossReference } from '../../src/components/TrainingCrossReference';
 import { dailyKcalBetween } from '../../src/db';
 import {
+  axisDecimals,
   displayWeight,
   formatDateLong,
   formatDayMonth,
@@ -92,6 +93,16 @@ export default function TrendsScreen() {
     }));
   }, [window, origin, settings.units]);
 
+  /** Includes the goal line, since the axis has to span that too. */
+  const weightDecimals = useMemo(() => {
+    if (weight === null) return 1;
+    const values = weight.map((point) => point.y);
+    if (settings.goalWeightKg !== null) {
+      values.push(displayWeight(settings.goalWeightKg, settings.units));
+    }
+    return axisDecimals(Math.max(...values) - Math.min(...values));
+  }, [weight, settings.goalWeightKg, settings.units]);
+
   const projection = useMemo(() => {
     if (!latest || !trend || settings.goalWeightKg === null) return null;
     return projectedDate(today, latest.trendWeightKg, settings.goalWeightKg, trend.rateKgPerWeek);
@@ -155,7 +166,7 @@ export default function TrendsScreen() {
               ? undefined
               : { value: displayWeight(settings.goalWeightKg, settings.units), color: colors.protein }
           }
-          formatY={(value) => value.toFixed(1)}
+          formatY={(value) => value.toFixed(weightDecimals)}
           formatX={dayLabel}
           emptyMessage="Weigh in for a couple of weeks"
           height={170}

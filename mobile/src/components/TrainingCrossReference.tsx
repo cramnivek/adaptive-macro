@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { listAllSets, listSessionSpans } from '../db';
 import { formatDate } from '../format';
-import { font, useTheme } from '../theme';
+import { font, space, useTheme } from '../theme';
 import { Card } from './Card';
 import { LineChart } from './LineChart';
 
@@ -130,50 +130,64 @@ export const TrainingCrossReference = ({ series }: { series: DailyEstimate[] }) 
 
   const label = (value: number) => formatDate(shiftWeeks(chart.origin, value));
 
+  /*
+    A chart with fewer than two points draws its own "not enough data" message,
+    and used to do it under a heading and above a paragraph explaining a chart
+    that was not there. Three pieces of furniture for no information. Below the
+    threshold the card simply does not appear.
+  */
+  const hasVolume = chart.volume.length >= 2;
+  const hasEnergy = chart.expenditure.length >= 2;
+  if (!hasVolume && !hasEnergy) return null;
+
   return (
     <>
-      <Card title="Weekly training volume">
-        <LineChart
-          series={[{ points: chart.volume, color: colors.accent, strokeWidth: 2 }]}
-          formatY={(value) => `${Math.round(value / 1000)}t`}
-          formatX={label}
-        />
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          Load × reps across working sets, in tonnes lifted per week. Bodyweight work counts at
-          your weight trend on the day.
-        </Text>
-      </Card>
+      {hasVolume && (
+        <Card title="Weekly training volume">
+          <Text style={[styles.legend, { color: colors.textFaint }]}>
+            tonnes lifted per week
+          </Text>
+          <LineChart
+            series={[{ points: chart.volume, color: colors.accent, strokeWidth: 2 }]}
+            formatY={(value) => `${Math.round(value / 1000)}t`}
+            formatX={label}
+          />
+        </Card>
+      )}
 
-      <Card title="Training energy against the estimate">
-        <LineChart
-          series={[{ points: chart.expenditure, color: colors.textMuted, strokeWidth: 2 }]}
-          band={{ points: chart.band, color: colors.accent }}
-          formatY={(value) => `${Math.round(value / 1000)}k`}
-          formatX={label}
-        />
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          The band is a rough estimate of what your sessions cost — bodyweight × duration × an
-          activity constant, which for lifting spans about ±40%. The line is your total weekly
-          expenditure as the filter measures it.
-        </Text>
-        <Text style={[styles.note, { color: colors.textFaint }]}>
-          Nothing here feeds your target. Your expenditure estimate already includes training:
-          it is measured from what your weight actually did, so counting these calories again
-          would raise your target for work already accounted for.
-        </Text>
-        {bodyweightByDate.extendedCount > 0 && (
-          <Text style={[styles.note, { color: colors.warning }]}>
-            Some of this predates your weight history and assumes your nearest recorded
-            weight, so volume and energy there rest on an assumed bodyweight.
+      {hasEnergy && (
+        <Card title="Training energy">
+          <Text style={[styles.legend, { color: colors.textFaint }]}>
+            what sessions cost, against weekly expenditure
           </Text>
-        )}
-        {chart.sessionsWithoutDuration > 0 && (
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            {chart.sessionsWithoutDuration} sessions have no recorded duration and are left out
-            of the band rather than estimated.
-          </Text>
-        )}
-      </Card>
+          <LineChart
+            series={[{ points: chart.expenditure, color: colors.textMuted, strokeWidth: 2 }]}
+            band={{ points: chart.band, color: colors.accent }}
+            formatY={(value) => `${Math.round(value / 1000)}k`}
+            formatX={label}
+          />
+          {/*
+            The two paragraphs that explained how the band is estimated, and
+            why none of this feeds your target, now live in the method sheet
+            with the rest of the reasoning — read once, not every time.
+
+            These two stay, because they are not explanation. They are facts
+            about *this* data that change how much of it to believe, and they
+            only appear when they are true.
+          */}
+          {bodyweightByDate.extendedCount > 0 && (
+            <Text style={[styles.note, { color: colors.warning }]}>
+              Some of this predates your weight history and rests on an assumed bodyweight.
+            </Text>
+          )}
+          {chart.sessionsWithoutDuration > 0 && (
+            <Text style={[styles.note, { color: colors.textFaint }]}>
+              {chart.sessionsWithoutDuration} sessions have no duration and are left out of the
+              band rather than estimated.
+            </Text>
+          )}
+        </Card>
+      )}
     </>
   );
 };
@@ -185,4 +199,5 @@ const shiftWeeks = (origin: string, weeks: number): string =>
 
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 6 },
+  legend: { fontFamily: font.uiStrong, fontSize: 11, marginBottom: space.xs },
 });

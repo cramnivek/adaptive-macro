@@ -60,3 +60,19 @@ export const MEAL_LABELS = {
   dinner: 'Dinner',
   snack: 'Snacks',
 } as const;
+
+/**
+ * How many decimals an axis needs to tell its own labels apart.
+ *
+ * A trend weight that moves 200 g across the window gets ticks a few grams
+ * apart, and one decimal renders them all as "75.0" — an axis of four
+ * identical numbers, which looks broken rather than precise. Scaled to the
+ * span rather than fixed, because the same chart holds a 200 g week and a
+ * 15 kg year.
+ */
+export const axisDecimals = (span: number): number => {
+  if (!Number.isFinite(span) || span <= 0) return 1;
+  if (span >= 20) return 0;
+  if (span >= 2) return 1;
+  return 2;
+};
