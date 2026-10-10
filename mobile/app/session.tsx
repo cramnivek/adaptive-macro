@@ -47,6 +47,7 @@ import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { thud } from '../src/platform/haptics';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
+import { nextLoadHint } from '../src/suggestion';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space } from '../src/theme';
@@ -607,6 +608,16 @@ export default function SessionScreen() {
               </Tappable>
             </View>
 
+            {/*
+              What to load, from how the last top set felt. Only when that set
+              was rated — the hint is RPE paying for itself, and with no rating
+              there is nothing honest to say.
+            */}
+            {(() => {
+              const hint = nextLoadHint(block.previous, settings.units);
+              return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
+            })()}
+
             <View style={styles.columns}>
               <Text style={[styles.col, styles.colSet]}>SET</Text>
               <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
@@ -883,6 +894,7 @@ const styles = StyleSheet.create({
   blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
 
+  hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
   columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 5 },
   col: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.4, color: loud.figureFaint },
   colSet: { width: 34, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },

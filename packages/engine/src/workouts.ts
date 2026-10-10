@@ -456,3 +456,47 @@ export const milestonesOn = (
 
   return found.sort((a, b) => RANK[b.kind] - RANK[a.kind] || b.value - a.value);
 };
+
+export interface LoadSuggestion {
+  /** What to put on the bar next, in kg, already rounded to a loadable step. */
+  weightKg: number;
+  /** Why, in the terms the lifter rated it in. */
+  reason: 'room-to-add' | 'small-step' | 'hold';
+}
+
+/**
+ * What to load next, from how hard the last top set felt.
+ *
+ * RPE was stored on every set and fed nothing — rated, displayed, and then
+ * ignored, which makes rating it a chore with no return. This is the return:
+ * the standard reps-in-reserve reading of it, turned into a weight.
+ *
+ * - 7 or easier means three or more reps were left. There is room to add, so
+ *   the suggestion moves about 5%.
+ * - 7.5 to 8.5 means one to two left: the right zone, so it moves the smallest
+ *   step the plates allow rather than a percentage.
+ * - 9 or harder means the set was near the limit. Hold the weight and own it
+ *   before adding to it.
+ *
+ * No rating, no suggestion. Guessing an effort the lifter did not record would
+ * be inventing the one input this depends on.
+ *
+ * `stepKg` is the smallest jump the bar can make — 2.5 kg in kilos, 5 lb in
+ * pounds — so the answer is always something that can actually be loaded.
+ */
+export const suggestNextLoad = (
+  lastWeightKg: number | null,
+  rpe: number | null,
+  stepKg: number,
+): LoadSuggestion | null => {
+  if (lastWeightKg === null || lastWeightKg <= 0 || rpe === null || stepKg <= 0) return null;
+
+  const snap = (kg: number) => Math.round(kg / stepKg) * stepKg;
+
+  if (rpe >= 9) return { weightKg: snap(lastWeightKg), reason: 'hold' };
+  if (rpe >= 7.5) return { weightKg: snap(lastWeightKg) + stepKg, reason: 'small-step' };
+
+  // At least one full step, so a light weight still moves at all.
+  const target = Math.max(lastWeightKg * 1.05, lastWeightKg + stepKg);
+  return { weightKg: snap(target), reason: 'room-to-add' };
+};
