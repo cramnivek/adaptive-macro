@@ -261,9 +261,9 @@ export default function RoutinesScreen() {
       <Button tone="loud" label="New routine" onPress={() => startNew('', [])} />
       <Button
         tone="loud"
-        label="Import a programme (PDF or image)"
+        label="Build or import routines"
         variant="subtle"
-        onPress={() => router.push('/import-routine')}
+        onPress={() => router.push('/add-routines')}
       />
 
       {past.length > 0 && (

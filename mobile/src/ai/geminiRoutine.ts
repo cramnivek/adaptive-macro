@@ -1,4 +1,5 @@
 import { routeFor } from '../api/gemini';
+import { buildRoutinePrompt, ROUTINE_BUILD_SYSTEM, type RoutineFocus } from './routineBuild';
 import {
   ROUTINE_IMPORT_PROMPT,
   ROUTINE_RESPONSE_SCHEMA,
@@ -80,15 +81,21 @@ const textOf = (response: unknown): string => {
     .trim();
 };
 
-const UNREADABLE = 'The programme could not be read from that file. Try a clearer PDF or screenshot.';
+/** What differs between reading a file and building from scratch. */
+interface RoutineRequest {
+  system: string;
+  parts: unknown[];
+  timeoutMs: number;
+  /** Shown when the answer holds no usable routine. */
+  unusable: string;
+  /** Shown when the request ran out of time. */
+  slow: string;
+}
 
-export const readRoutinesWithGemini = async (
-  document: ProgrammeDocument,
-  apiKey: string,
-): Promise<RoutineDraft[]> => {
+const requestRoutines = async (request: RoutineRequest, apiKey: string): Promise<RoutineImport> => {
   const route = routeFor(MODEL, apiKey);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs);
 
   let payload: any;
   try {
@@ -97,15 +104,8 @@ export const readRoutinesWithGemini = async (
       signal: controller.signal,
       headers: route.headers,
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: ROUTINE_IMPORT_PROMPT }] },
-        contents: [
-          {
-            parts: [
-              { text: 'Extract the routines from this programme.' },
-              { inlineData: { mimeType: document.mimeType, data: document.base64 } },
-            ],
-          },
-        ],
+        systemInstruction: { parts: [{ text: request.system }] },
+        contents: [{ parts: request.parts }],
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: ROUTINE_RESPONSE_SCHEMA,
@@ -117,27 +117,45 @@ export const readRoutinesWithGemini = async (
       throw new RoutineResponseError('Too many requests just now. Wait a few minutes and try again.');
     }
     if (!response.ok) {
-      throw new RoutineResponseError(`The import service returned ${response.status}.`);
+      throw new RoutineResponseError(`The routine service returned ${response.status}.`);
     }
     payload = await response.json();
   } catch (error) {
     if (error instanceof RoutineResponseError) throw error;
-    if ((error as Error)?.name === 'AbortError') {
-      throw new Error('Reading the programme took too long. Try a shorter file, or a screenshot of one week.');
-    }
-    throw new Error('Could not reach the import service. Check your connection.');
+    if ((error as Error)?.name === 'AbortError') throw new Error(request.slow);
+    throw new Error('Could not reach the routine service. Check your connection.');
   } finally {
     clearTimeout(timer);
   }
 
   // zod, not Gemini, is the boundary; its message is a JSON dump, so it is
   // replaced with a sentence rather than shown.
-  let parsed: RoutineImport;
   try {
-    parsed = RoutineImportSchema.parse(JSON.parse(textOf(payload)));
+    return RoutineImportSchema.parse(JSON.parse(textOf(payload)));
   } catch {
-    throw new Error(UNREADABLE);
+    throw new Error(request.unusable);
   }
+};
+
+const UNREADABLE = 'The programme could not be read from that file. Try a clearer PDF or screenshot.';
+
+export const readRoutinesWithGemini = async (
+  document: ProgrammeDocument,
+  apiKey: string,
+): Promise<RoutineDraft[]> => {
+  const parsed = await requestRoutines(
+    {
+      system: ROUTINE_IMPORT_PROMPT,
+      parts: [
+        { text: 'Extract the routines from this programme.' },
+        { inlineData: { mimeType: document.mimeType, data: document.base64 } },
+      ],
+      timeoutMs: TIMEOUT_MS,
+      unusable: UNREADABLE,
+      slow: 'Reading the programme took too long. Try a shorter file, or a screenshot of one week.',
+    },
+    apiKey,
+  );
 
   if (parsed.notProgram) {
     throw new Error('That file does not look like a training programme.');
@@ -145,5 +163,32 @@ export const readRoutinesWithGemini = async (
 
   const drafts = toRoutineDrafts(parsed);
   if (drafts.length === 0) throw new Error(UNREADABLE);
+  return drafts;
+};
+
+/** Text only and a short answer, so this is quick next to reading a PDF. */
+const BUILD_TIMEOUT_MS = 45_000;
+
+const UNBUILDABLE = 'Could not build a routine just now. Try again.';
+
+export const buildRoutinesWithGemini = async (
+  focuses: RoutineFocus[],
+  known: string[],
+  apiKey: string,
+): Promise<RoutineDraft[]> => {
+  const parsed = await requestRoutines(
+    {
+      system: ROUTINE_BUILD_SYSTEM,
+      parts: [{ text: buildRoutinePrompt(focuses, known) }],
+      timeoutMs: BUILD_TIMEOUT_MS,
+      unusable: UNBUILDABLE,
+      slow: 'Building the routine took too long. Try again.',
+    },
+    apiKey,
+  );
+
+  // notProgram means nothing here; the routines are what was asked for.
+  const drafts = toRoutineDrafts({ ...parsed, notProgram: false });
+  if (drafts.length === 0) throw new Error(UNBUILDABLE);
   return drafts;
 };

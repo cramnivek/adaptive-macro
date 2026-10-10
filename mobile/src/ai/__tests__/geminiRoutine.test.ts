@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { documentKindOf, readRoutinesWithGemini } from '../geminiRoutine';
+import { buildRoutinesWithGemini, documentKindOf, readRoutinesWithGemini } from '../geminiRoutine';
 
 const pdf = { mimeType: 'application/pdf', base64: 'JVBERi0xLjQK' };
 
@@ -80,7 +80,7 @@ describe('readRoutinesWithGemini', () => {
       throw new TypeError('Failed to fetch');
     }));
 
-    await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow('Could not reach the import service');
+    await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow('Could not reach the routine service');
   });
 });
 
@@ -111,5 +111,59 @@ describe('documentKindOf', () => {
   it('turns away anything else', () => {
     expect(documentKindOf('plan.docx', '')).toEqual({ problem: 'unsupported' });
     expect(documentKindOf('notes.txt', 'text/plain')).toEqual({ problem: 'unsupported' });
+  });
+});
+
+describe('buildRoutinesWithGemini', () => {
+  const built = {
+    notProgram: false,
+    routines: [
+      { name: 'Push', exercises: [{ name: 'Bench Press (Barbell)', sets: 4, reps: '6-8' }] },
+      { name: 'Pull', exercises: [{ name: 'Lat Pulldown', sets: 3, reps: '8-10' }] },
+    ],
+  };
+
+  it('returns one draft per routine built', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => geminiResponse(built)));
+
+    const drafts = await buildRoutinesWithGemini(['push', 'pull'], [], '');
+
+    expect(drafts.map((d) => d.name)).toEqual(['Push', 'Pull']);
+    expect(drafts[0].exercises[0]).toEqual({ name: 'Bench Press (Barbell)', sets: 4, reps: '6-8' });
+  });
+
+  it('sends the slot plan and the person’s own exercises, with no file attached', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => geminiResponse(built));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await buildRoutinesWithGemini(['push'], ['Bench Press (Barbell)'], '');
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.contents[0].parts).toHaveLength(1);
+    expect(body.contents[0].parts[0].text).toContain('Routine named exactly "Push"');
+    expect(body.contents[0].parts[0].text).toContain('- Bench Press (Barbell)');
+    expect(body.systemInstruction.parts[0].text).toContain('strength coach');
+  });
+
+  it('ignores a stray notProgram, since nothing was uploaded to judge', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => geminiResponse({ ...built, notProgram: true })));
+
+    await expect(buildRoutinesWithGemini(['push'], [], '')).resolves.toHaveLength(2);
+  });
+
+  it('says it could not build one when nothing usable came back', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => geminiResponse({ notProgram: false, routines: [] })));
+
+    await expect(buildRoutinesWithGemini(['legs'], [], '')).rejects.toThrow('Could not build a routine just now');
+  });
+
+  it('words a timeout for building, not for reading a file', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    }));
+
+    await expect(buildRoutinesWithGemini(['legs'], [], '')).rejects.toThrow('Building the routine took too long');
   });
 });

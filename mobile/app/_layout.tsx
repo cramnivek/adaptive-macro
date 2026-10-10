@@ -152,7 +152,7 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
-              name="import-routine"
+              name="add-routines"
               options={{
                 presentation: 'modal',
                 headerShown: true,

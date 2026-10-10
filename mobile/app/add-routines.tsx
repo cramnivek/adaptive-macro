@@ -1,8 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { documentKindOf, MAX_DOCUMENT_BYTES, readRoutinesWithGemini } from '../src/ai/geminiRoutine';
-import { type ResolvedExercise, resolveAgainstLog } from '../src/ai/routineImport';
+import {
+  buildRoutinesWithGemini,
+  documentKindOf,
+  MAX_DOCUMENT_BYTES,
+  readRoutinesWithGemini,
+} from '../src/ai/geminiRoutine';
+import { FOCUS_LABEL, ROUTINE_FOCUSES, type RoutineFocus } from '../src/ai/routineBuild';
+import { type ResolvedExercise, type RoutineDraft, resolveAgainstLog } from '../src/ai/routineImport';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
@@ -10,33 +16,62 @@ import { createRoutine, listExerciseNames } from '../src/db';
 import { notify } from '../src/dialog';
 import { pickBinaryFile } from '../src/platform/files';
 import { useApp } from '../src/state/AppStore';
-import { font, space } from '../src/theme';
+import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
 type Found = { name: string; exercises: ResolvedExercise[]; include: boolean };
 
 /**
- * Routines read out of a programme someone was handed — a coach's PDF, a
- * screenshot of a spreadsheet.
+ * New routines, built for the person or read out of a programme they were given.
  *
- * Nothing is saved until the list has been seen. The model reads a document
- * well but not perfectly, and a routine that quietly drops a lift is worse than
- * typing it in, so every exercise is shown, with which ones join existing
- * history and which start new.
+ * Both end on the same list, and nothing is saved until it has been seen. The
+ * model is good at this but not perfect, and a routine that quietly drops a
+ * lift is worse than typing it in, so every exercise is shown, with which ones
+ * join existing history and which start new.
  */
-export default function ImportRoutineScreen() {
+export default function AddRoutinesScreen() {
   const router = useRouter();
   const { settings } = useApp();
 
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
+  const [focuses, setFocuses] = useState<RoutineFocus[]>([]);
   const [found, setFound] = useState<Found[] | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [reading, setReading] = useState(false);
+  const [source, setSource] = useState('');
+  const [working, setWorking] = useState<{ title: string; detail: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void listExerciseNames().then(setKnown);
   }, []);
+
+  const show = (drafts: RoutineDraft[]) => {
+    const names = known.map((k) => k.name);
+    setFound(drafts.map((draft) => ({ ...resolveAgainstLog(draft, names), include: true })));
+  };
+
+  const toggleFocus = (focus: RoutineFocus) =>
+    // Kept in the order of the chips, so "Push, Pull, Legs" comes back in that order.
+    setFocuses((current) =>
+      ROUTINE_FOCUSES.filter((f) => (f === focus ? !current.includes(f) : current.includes(f))),
+    );
+
+  const build = async () => {
+    setWorking({ title: 'Building your routines', detail: focuses.map((f) => FOCUS_LABEL[f]).join(', ') });
+    try {
+      show(
+        await buildRoutinesWithGemini(
+          focuses,
+          known.map((k) => k.name),
+          settings.foodLookup.geminiApiKey,
+        ),
+      );
+      setSource('built');
+    } catch (error) {
+      notify('Could not build the routines', (error as Error).message);
+    } finally {
+      setWorking(null);
+    }
+  };
 
   const pick = async () => {
     const picked = await pickBinaryFile().catch((error: Error) => {
@@ -58,20 +93,15 @@ export default function ImportRoutineScreen() {
       return notify('That file is too large', 'Pick a file under 14 MB, or a screenshot of the part with the routines.');
     }
 
-    setReading(true);
-    setFileName(picked.name);
+    setWorking({ title: 'Reading the programme', detail: picked.name });
     try {
       const base64 = await picked.readBase64();
-      const drafts = await readRoutinesWithGemini(
-        { mimeType: kind.mimeType, base64 },
-        settings.foodLookup.geminiApiKey,
-      );
-      const names = known.map((k) => k.name);
-      setFound(drafts.map((draft) => ({ ...resolveAgainstLog(draft, names), include: true })));
+      show(await readRoutinesWithGemini({ mimeType: kind.mimeType, base64 }, settings.foodLookup.geminiApiKey));
+      setSource(picked.name);
     } catch (error) {
       notify('Could not read the programme', (error as Error).message);
     } finally {
-      setReading(false);
+      setWorking(null);
     }
   };
 
@@ -100,37 +130,74 @@ export default function ImportRoutineScreen() {
     }
   };
 
+  const count = (n: number) => (n === 1 ? '1 routine' : `${n} routines`);
+
   return (
-    <Screen title="Import a programme" tone="loud">
-      {!found && !reading && (
-        <Card loud title="From a PDF or a screenshot">
-          <Text style={[styles.note, { color: loud.figureMuted }]}>
-            Pick the programme you were given. Each day in it becomes a routine, with its sets and
-            rep targets. Nothing is saved until you have checked what it found.
-          </Text>
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            A spreadsheet? Save it as a PDF or screenshot it first.
-          </Text>
-          <Button tone="loud" label="Choose a file" onPress={pick} />
-        </Card>
+    <Screen title="New routines" tone="loud">
+      {!found && !working && (
+        <>
+          <Card loud title="Build them for me">
+            <Text style={[styles.note, { color: loud.figureMuted }]}>
+              Pick the days you want. Each becomes a balanced routine, using the exercises you
+              already do wherever they fit.
+            </Text>
+            <View style={styles.chips}>
+              {ROUTINE_FOCUSES.map((focus) => {
+                const on = focuses.includes(focus);
+                return (
+                  <Pressable
+                    key={focus}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    onPress={() => toggleFocus(focus)}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: on ? loud.loud : loud.panel, borderColor: on ? loud.loud : loud.rule },
+                    ]}
+                  >
+                    <Text style={{ fontFamily: font.uiStrong, fontSize: 14, color: on ? loud.onLoud : loud.figure }}>
+                      {FOCUS_LABEL[focus]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Button
+              tone="loud"
+              label={focuses.length === 0 ? 'Pick at least one' : `Build ${count(focuses.length)}`}
+              onPress={build}
+              disabled={focuses.length === 0}
+            />
+          </Card>
+
+          <Card loud title="From a PDF or a screenshot">
+            <Text style={[styles.note, { color: loud.figureMuted }]}>
+              Pick a programme you were given. Each day in it becomes a routine, with its sets and
+              rep targets.
+            </Text>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
+              A spreadsheet? Save it as a PDF or screenshot it first.
+            </Text>
+            <Button tone="loud" label="Choose a file" variant="subtle" onPress={pick} />
+          </Card>
+        </>
       )}
 
-      {reading && (
-        <Card loud title="Reading the programme">
+      {working && (
+        <Card loud title={working.title}>
           <Text style={[styles.note, { color: loud.figureMuted }]} numberOfLines={1}>
-            {fileName}
+            {working.detail}
           </Text>
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            A long PDF can take up to a minute.
-          </Text>
+          <Text style={[styles.note, { color: loud.figureFaint }]}>This can take up to a minute.</Text>
           <ActivityIndicator style={{ marginTop: space.md }} color={loud.loud} />
         </Card>
       )}
 
-      {found && !reading && (
+      {found && !working && (
         <>
           <Text style={[styles.note, { color: loud.figureMuted }]}>
-            Found {found.length} {found.length === 1 ? 'routine' : 'routines'} in {fileName}. Tap one to leave it out.
+            {source === 'built' ? `Built ${count(found.length)}.` : `Found ${count(found.length)} in ${source}.`}{' '}
+            Nothing is saved yet. Tap one to leave it out.
           </Text>
 
           {found.map((routine, index) => (
@@ -177,17 +244,11 @@ export default function ImportRoutineScreen() {
 
           <Button
             tone="loud"
-            label={
-              saving
-                ? 'Saving…'
-                : chosen.length === 1
-                  ? 'Save 1 routine'
-                  : `Save ${chosen.length} routines`
-            }
+            label={saving ? 'Saving…' : `Save ${count(chosen.length)}`}
             onPress={save}
             disabled={saving || chosen.length === 0}
           />
-          <Button tone="loud" label="Choose a different file" variant="subtle" onPress={pick} disabled={saving} />
+          <Button tone="loud" label="Start over" variant="subtle" onPress={() => setFound(null)} disabled={saving} />
         </>
       )}
     </Screen>
@@ -196,6 +257,14 @@ export default function ImportRoutineScreen() {
 
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4, marginBottom: space.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginVertical: space.sm },
+  chip: {
+    minHeight: TOUCH_TARGET - 8,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
