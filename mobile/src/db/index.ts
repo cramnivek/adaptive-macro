@@ -19,6 +19,7 @@ import {
   PATTERNS_BY_CANONICAL_NAME,
   PATTERNS_BY_LINKED_NAME,
 } from './catalogueQueries';
+import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 
 /**
  * The open in flight, not the opened database.
@@ -54,8 +55,7 @@ export const getDb = (): Promise<SQLite.SQLiteDatabase> => {
   return databasePromise;
 };
 
-const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
-  const db = await SQLite.openDatabaseAsync('adaptive-macros.db');
+const migrate = async (db: SQLite.SQLiteDatabase): Promise<void> => {
   await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -67,8 +67,33 @@ const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
       await db.execAsync(`PRAGMA user_version = ${version + 1}`);
     });
   }
+};
 
-  return db;
+/**
+ * Opens and migrates, waiting out the browser's storage lock if it is held.
+ *
+ * Only that one error is retried — see `storageLock.ts` for why it happens and
+ * why it clears on its own. Anything else throws at once, because retrying a
+ * real failure only delays the message about it.
+ *
+ * A database that opened but then hit the lock is closed before the next try,
+ * so a retry never stacks a second handle on the first. Migrations are safe to
+ * repeat: each runs in its own transaction, so a failed one rolled back.
+ */
+const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
+  for (let attempt = 0; ; attempt += 1) {
+    let db: SQLite.SQLiteDatabase | null = null;
+    try {
+      db = await SQLite.openDatabaseAsync('adaptive-macros.db');
+      await migrate(db);
+      return db;
+    } catch (error) {
+      const wait = STORAGE_LOCK_RETRY_MS[attempt];
+      if (!isStorageLockError(error) || wait === undefined) throw error;
+      await db?.closeAsync().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 };
 
 // --- settings -------------------------------------------------------------

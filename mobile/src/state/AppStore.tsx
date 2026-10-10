@@ -57,6 +57,17 @@ const scaleFromTotals = (
 
 interface AppState {
   ready: boolean;
+  /**
+   * Set when the first load could not reach the database at all.
+   *
+   * Without it a failed open left `ready` false forever and every screen drew
+   * its empty defaults — no weigh-ins, no diary, no workouts — which looks
+   * exactly like having lost everything. The data was never at risk; the app
+   * just could not ask for it, and said nothing.
+   */
+  loadError: Error | null;
+  /** Tries the first load again, after whatever was holding the database lets go. */
+  retryLoad: () => void;
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 
@@ -99,6 +110,8 @@ export const useApp = (): AppState => {
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(withDefaults(null));
   const [selectedDate, setSelectedDate] = useState<ISODate>(todayISO());
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -120,19 +133,29 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = await db.readSetting<Partial<AppSettings>>(SETTINGS_KEY);
-      if (cancelled) return;
-      setSettings(withDefaults(stored));
-      await reloadHistory();
-      await reloadDiary(selectedDate);
-      if (!cancelled) setReady(true);
+      try {
+        setLoadError(null);
+        const stored = await db.readSetting<Partial<AppSettings>>(SETTINGS_KEY);
+        if (cancelled) return;
+        setSettings(withDefaults(stored));
+        await reloadHistory();
+        await reloadDiary(selectedDate);
+        if (!cancelled) setReady(true);
+      } catch (error) {
+        // The open already waited out a held lock before getting here, so this
+        // is a real failure — most often a second tab that will not let go.
+        if (!cancelled) setLoadError(error instanceof Error ? error : new Error(String(error)));
+      }
     })();
     return () => {
       cancelled = true;
     };
-    // Runs once: later reloads are driven by the mutation helpers below.
+    // Runs once, and again on `retryLoad`: later reloads are driven by the
+    // mutation helpers below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
+
+  const retryLoad = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
     if (ready) void reloadDiary(selectedDate);
@@ -290,6 +313,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   const value: AppState = {
     ready,
+    loadError,
+    retryLoad,
     settings,
     updateSettings,
     selectedDate,
