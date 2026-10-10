@@ -47,6 +47,7 @@ import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { thud } from '../src/platform/haptics';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
+import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
 import { nextLoadHint } from '../src/suggestion';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
@@ -72,6 +73,8 @@ interface Block {
   rows: Row[];
   /** The same exercise's sets from the last finished session, by index. */
   previous: LoggedSet[];
+  /** What the routine asks for, when the exercise came from one. */
+  target: { sets: number; reps: string | null } | null;
 }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -198,28 +201,65 @@ export default function SessionScreen() {
   };
 
   const blockFor = useCallback(
-    async (name: string, bodyweightBased: boolean, rows: Row[] = []): Promise<Block> => ({
+    async (
+      name: string,
+      bodyweightBased: boolean,
+      rows: Row[] = [],
+      target: Block['target'] = null,
+    ): Promise<Block> => ({
       name,
       bodyweightBased,
       rows,
       previous: await lastSessionSets(name),
+      target,
     }),
     [],
   );
 
+  /**
+   * Draft rows up to the routine's target, each prefilled from the same set
+   * last time. Drafts are not written, so an untouched one costs nothing.
+   */
+  const withTargetRows = useCallback(
+    (block: Block): Block => {
+      const target = block.target;
+      if (target === null) return block;
+      const start = block.rows.length;
+      const drafts: Row[] = Array.from({ length: draftsToAdd(target.sets, start) }, (_, offset) => {
+        const previous = block.previous[start + offset];
+        return {
+          key: newKey(),
+          id: null,
+          weight:
+            previous?.weightKg == null
+              ? ''
+              : String(displayWeight(previous.weightKg, settings.units).toFixed(1)),
+          reps: repsPrefill(previous?.reps, target.reps),
+          setType: 'normal',
+          rpe: null,
+          done: false,
+        };
+      });
+      return { ...block, rows: [...block.rows, ...drafts] };
+    },
+    [settings.units],
+  );
+
   /** Rebuilds the on-screen blocks from what is already written. */
   const blocksFromSession = useCallback(
-    async (open: ActiveSession, plan: string[] = []): Promise<Block[]> => {
-      const names: string[] = [];
-      for (const set of open.sets) if (!names.includes(set.exerciseName)) names.push(set.exerciseName);
-      for (const name of plan) if (!names.includes(name)) names.push(name);
+    async (open: ActiveSession, plan: Routine['exercises'] = []): Promise<Block[]> => {
+      const names = resumeOrder(
+        plan.map((e) => e.name),
+        open.sets.map((s) => s.exerciseName),
+      );
 
       return Promise.all(
         names.map(async (name) => {
           const mine = open.sets.filter((s) => s.exerciseName === name);
-          return blockFor(
+          const planned = plan.find((e) => e.name === name);
+          const block = await blockFor(
             name,
-            mine[0]?.bodyweightBased ?? false,
+            mine[0]?.bodyweightBased ?? planned?.bodyweightBased ?? false,
             mine.map((s) => ({
               key: s.id,
               id: s.id,
@@ -230,11 +270,13 @@ export default function SessionScreen() {
               rpe: s.rpe,
               done: true,
             })),
+            planned ? { sets: planned.targetSets, reps: planned.targetReps } : null,
           );
+          return withTargetRows(block);
         }),
       );
     },
-    [blockFor, settings.units],
+    [blockFor, withTargetRows, settings.units],
   );
 
   useEffect(() => {
@@ -248,22 +290,30 @@ export default function SessionScreen() {
       setKnown(names);
 
       if (existing) {
+        // The routine's exercises come back too, not only those with a set
+        // logged: on iOS the browser can drop a backgrounded page mid-workout,
+        // and reopening it used to lose everything not yet started.
+        const routine = loadedRoutines.find((r) => r.id === existing.routineId);
         setSession(existing);
-        setBlocks(await blocksFromSession(existing));
+        setBlocks(await blocksFromSession(existing, routine?.exercises ?? []));
       } else if (!started.current && (params.start === 'blank' || params.routine)) {
         started.current = true;
         const routine = loadedRoutines.find((r) => r.id === params.routine);
-        const fresh = await startSession(routine?.name ?? 'Workout', todayISO());
+        const fresh = await startSession(routine?.name ?? 'Workout', todayISO(), routine?.id ?? null);
         setSession(fresh);
         setBlocks(
           await Promise.all(
-            (routine?.exercises ?? []).map((e) => blockFor(e.name, e.bodyweightBased)),
+            (routine?.exercises ?? []).map(async (e) =>
+              withTargetRows(
+                await blockFor(e.name, e.bodyweightBased, [], { sets: e.targetSets, reps: e.targetReps }),
+              ),
+            ),
           ),
         );
       }
       setLoading(false);
     })();
-  }, [params.start, params.routine, blockFor, blocksFromSession]);
+  }, [params.start, params.routine, blockFor, blocksFromSession, withTargetRows]);
 
   const editRow = (blockIndex: number, rowIndex: number, patch: Partial<Row>) =>
     setBlocks((current) =>
@@ -617,6 +667,9 @@ export default function SessionScreen() {
               const hint = nextLoadHint(block.previous, settings.units);
               return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
             })()}
+            {block.target && (
+              <Text style={styles.target}>{targetLabel(block.target.sets, block.target.reps)}</Text>
+            )}
 
             <View style={styles.columns}>
               <Text style={[styles.col, styles.colSet]}>SET</Text>
@@ -895,6 +948,13 @@ const styles = StyleSheet.create({
   remove: { color: loud.figureFaint, fontSize: 15 },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
+  target: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: loud.figureMuted,
+    marginBottom: space.sm,
+  },
   columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 5 },
   col: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.4, color: loud.figureFaint },
   colSet: { width: 34, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },

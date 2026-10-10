@@ -19,6 +19,7 @@ import {
   PATTERNS_BY_CANONICAL_NAME,
   PATTERNS_BY_LINKED_NAME,
 } from './catalogueQueries';
+import { DELETE_ROUTINE_STEPS } from './routineQueries';
 import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 
 /**
@@ -1164,6 +1165,12 @@ export interface ActiveSession {
   id: string;
   date: ISODate;
   name: string;
+  /**
+   * The routine it was started from, so a session reopened after the app was
+   * closed can bring back the exercises not yet started, not only the ones
+   * with a set logged.
+   */
+  routineId: string | null;
   startedAt: string;
   sets: LoggedSet[];
 }
@@ -1192,9 +1199,10 @@ export const activeSession = async (): Promise<ActiveSession | null> => {
     id: string;
     date: ISODate;
     name: string;
+    routine_id: string | null;
     started_at: string;
   }>(
-    `SELECT id, date, name, started_at FROM sessions
+    `SELECT id, date, name, routine_id, started_at FROM sessions
       WHERE finished_at IS NULL ORDER BY started_at DESC LIMIT 1`,
   );
   if (!row) return null;
@@ -1203,6 +1211,7 @@ export const activeSession = async (): Promise<ActiveSession | null> => {
     id: row.id,
     date: row.date,
     name: row.name,
+    routineId: row.routine_id,
     startedAt: row.started_at,
     sets: await sessionSets(row.id),
   };
@@ -1240,21 +1249,26 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
   }));
 };
 
-export const startSession = async (name: string, date: ISODate): Promise<ActiveSession> => {
+export const startSession = async (
+  name: string,
+  date: ISODate,
+  routineId: string | null = null,
+): Promise<ActiveSession> => {
   const db = await getDb();
   const id = newId();
   const startedAt = localStamp();
 
   await db.runAsync(
     `INSERT INTO sessions (id, date, routine_id, name, started_at, finished_at, notes)
-     VALUES (?, ?, NULL, ?, ?, NULL, NULL)`,
+     VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
     id,
     date,
+    routineId,
     name,
     startedAt,
   );
 
-  return { id, date, name, startedAt, sets: [] };
+  return { id, date, name, routineId, startedAt, sets: [] };
 };
 
 /**
@@ -1509,8 +1523,7 @@ export const setRoutineExercises = async (
 export const deleteRoutine = async (id: string): Promise<void> => {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?', id);
-    await db.runAsync('DELETE FROM routines WHERE id = ?', id);
+    for (const step of DELETE_ROUTINE_STEPS) await db.runAsync(step, id);
   });
 };
 
