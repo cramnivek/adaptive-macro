@@ -50,7 +50,8 @@ is one routine, named the way the document names it.
 For each routine, list its exercises in the order they appear, with:
 - name: the exercise as written, with abbreviations expanded ("DB" to Dumbbell,
   "BB" to Barbell, "OHP" to Overhead Press). Do not rename an exercise into a
-  different one.
+  different one. A back-off, top or drop set of an exercise is that exercise:
+  give it the same name, with no "(back-off)" or similar.
 - sets: the number of working sets, as an integer. Count warm-up sets only if
   the document lists them as sets to do.
 - reps: the rep target as written — "8", "8-10", "AMRAP", "30s". Empty string if
