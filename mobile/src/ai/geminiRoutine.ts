@@ -1,5 +1,6 @@
 import { routeFor } from '../api/gemini';
 import {
+  applyPrescription,
   type BuildOptions,
   buildRoutinePrompt,
   DEFAULT_BUILD_OPTIONS,
@@ -194,8 +195,9 @@ export const buildRoutinesWithGemini = async (
     apiKey,
   );
 
-  // notProgram means nothing here; the routines are what was asked for.
-  const drafts = toRoutineDrafts({ ...parsed, notProgram: false });
+  // notProgram means nothing here; the routines are what was asked for. The
+  // level's sets and reps go back on before anything else reads them.
+  const drafts = toRoutineDrafts(applyPrescription({ ...parsed, notProgram: false }, focuses, options.level));
   if (drafts.length === 0) throw new Error(UNBUILDABLE);
   return drafts;
 };

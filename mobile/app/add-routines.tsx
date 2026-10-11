@@ -9,10 +9,12 @@ import {
 } from '../src/ai/geminiRoutine';
 import {
   type BuildOptions,
+  estimateMinutes,
   EQUIPMENT_ITEMS,
   EQUIPMENT_LABEL,
   FOCUS_LABEL,
   isBodyweightOnly,
+  LEVEL_COACHING,
   LEVEL_LABEL,
   missingEquipment,
   ROUTINE_FOCUSES,
@@ -281,12 +283,25 @@ export default function AddRoutinesScreen() {
             {source === 'built' ? `Built ${count(found.length)}.` : `Found ${count(found.length)} in ${source}.`}{' '}
             Nothing is saved yet. Tap an exercise to see how it is done.
           </Text>
+          {builtWith && (
+            <View style={[styles.coaching, { borderColor: loud.rule }]}>
+              <Text style={[styles.label, { color: loud.loud, marginTop: 0 }]}>
+                {LEVEL_LABEL[builtWith.level].toUpperCase()}
+              </Text>
+              <Text style={[styles.note, { color: loud.figureMuted }]}>{LEVEL_COACHING[builtWith.level]}</Text>
+            </View>
+          )}
 
           {found.map((routine, routineIndex) => (
             <View key={`${routine.name}-${routineIndex}`} style={{ opacity: routine.include ? 1 : 0.4 }}>
               <Card
                 loud
                 title={routine.name}
+                subtitle={(() => {
+                  // Of the exercises still kept, so dropping one shows what it saves.
+                  const sets = routine.exercises.filter((e) => e.include).reduce((sum, e) => sum + e.sets, 0);
+                  return `${sets} sets · about ${estimateMinutes(sets)} min`;
+                })()}
                 right={
                   <Tappable
                     onPress={() => toggleRoutine(routineIndex)}
@@ -423,6 +438,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   rowMain: { flex: 1, paddingVertical: space.xs },
+  coaching: { borderLeftWidth: 2, paddingLeft: space.sm, marginVertical: space.sm },
   target: { fontFamily: font.figure, fontSize: 15 },
   toggle: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
 });
