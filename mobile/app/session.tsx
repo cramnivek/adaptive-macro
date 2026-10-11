@@ -45,6 +45,8 @@ import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/d
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { thud } from '../src/platform/haptics';
+import { usesBarbell } from '../src/plates';
+import { PlateSheet } from '../src/components/PlateSheet';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
@@ -127,6 +129,8 @@ export default function SessionScreen() {
   const clearLanded = useCallback(() => setLanded(null), []);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
+  /** The weight the plate sheet is showing, in the display unit; null when closed. */
+  const [plating, setPlating] = useState<number | null>(null);
 
   /**
    * The running rest, as the wall-clock time it ends at.
@@ -356,6 +360,19 @@ export default function SessionScreen() {
         };
       }),
     );
+
+  /**
+   * The plates for the set about to be done: the first one not yet ticked that
+   * has a weight in it, or failing that the last weight entered.
+   */
+  const openPlates = (block: Block) => {
+    const weightOf = (row: Row) => Number.parseFloat(row.weight.replace(',', '.'));
+    const next = block.rows.find((row) => !row.done && weightOf(row) > 0);
+    const last = [...block.rows].reverse().find((row) => weightOf(row) > 0);
+    const chosen = next ?? last;
+    if (!chosen) return notify('No weight yet', 'Enter a weight in a set, then tap PLATES.');
+    setPlating(weightOf(chosen));
+  };
 
   /** Ticking writes the set; unticking removes it. */
   const toggleRow = async (blockIndex: number, rowIndex: number) => {
@@ -649,6 +666,20 @@ export default function SessionScreen() {
                   </Text>
                 </SlashPanel>
               </Tappable>
+              {/*
+                Barbell lifts only, recognised by name: a plate count on a bar of
+                unknown weight would be confidently wrong.
+              */}
+              {!block.bodyweightBased && usesBarbell(block.name) && (
+                <Tappable
+                  onPress={() => openPlates(block)}
+                  style={styles.iconBtn}
+                  scaleTo={0.85}
+                  accessibilityLabel={`Plates for ${block.name}`}
+                >
+                  <Text style={styles.platesLabel}>PLATES</Text>
+                </Tappable>
+              )}
               <Tappable
                 onPress={() => void removeExercise(blockIndex)}
                 style={styles.iconBtn}
@@ -867,6 +898,14 @@ export default function SessionScreen() {
         }}
       />
 
+      <PlateSheet
+        weight={plating}
+        units={settings.units}
+        bar={settings.barbell}
+        onBarChange={(barbell) => void updateSettings({ barbell })}
+        onClose={() => setPlating(null)}
+      />
+
       <RpeSheet
         open={rating !== null}
         current={rating ? (blocks[rating.blockIndex]?.rows[rating.rowIndex]?.rpe ?? null) : null}
@@ -946,6 +985,7 @@ const styles = StyleSheet.create({
   nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
   blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
+  platesLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 1, color: loud.loud },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
   target: {

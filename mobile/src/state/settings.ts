@@ -3,6 +3,7 @@ import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/
 import { defaultOllamaHost } from '../ai/ollama';
 import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
+import type { BarChoice } from '../plates';
 
 export type UnitSystem = 'metric' | 'imperial';
 
@@ -65,6 +66,8 @@ export interface AppSettings {
   onboarded: boolean;
   /** The Monday of the last week whose check-in was dismissed, so each is shown once. */
   checkInSeenWeek: ISODate | null;
+  /** The bar the plate calculator assumes: 20 kg / 45 lb, or the 15 kg / 35 lb one. */
+  barbell: BarChoice;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -88,6 +91,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   foodLookup: { geminiApiKey: '' },
   onboarded: false,
   checkInSeenWeek: null,
+  barbell: 'standard',
 };
 
 export const SETTINGS_KEY = 'app.settings';
