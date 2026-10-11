@@ -44,6 +44,7 @@ import {
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
+import { playChime, primeChime } from '../src/platform/chime';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
 import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
@@ -179,12 +180,25 @@ export default function SessionScreen() {
     if (announced.current === rest.endsAt) return;
     announced.current = rest.endsAt;
     thud('heavy');
+    if (settings.restSound) playChime();
+
+    // Said where it will be seen wherever the screen is scrolled: the bar sits
+    // at the top of the workout, often off screen while the next set is set up.
+    const nextBlock = blocks.find((block) => block.rows.some((row) => !row.done));
+    const nextRow = nextBlock ? nextBlock.rows.findIndex((row) => !row.done) : -1;
+    notify(
+      'Rest is up',
+      nextBlock ? `Next: ${nextBlock.name}, set ${nextRow + 1}.` : 'On to the next one.',
+    );
 
     // Left on screen for a moment rather than cleared at once. On the iOS PWA
     // there is no vibration API, so this bar is the only thing those users get
     // telling them the rest is up.
     const id = setTimeout(() => setRest(null), 6000);
     return () => clearTimeout(id);
+    // `announced` holds it to once per rest, so the extra dependencies cannot
+    // make it fire twice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rest, restRemaining]);
 
   /**
@@ -431,7 +445,9 @@ export default function SessionScreen() {
     });
 
     // Rest starts itself. The alternative is tapping "start rest" after every
-    // set, which nobody does twice.
+    // set, which nobody does twice. The tick is a tap, which is what a browser
+    // needs before it will let the chime play when the rest runs out.
+    if (settings.restSound) primeChime();
     setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
   };
 
@@ -643,6 +659,13 @@ export default function SessionScreen() {
           total={rest.total}
           onAdjust={nudgeRest}
           onSkip={() => setRest(null)}
+          soundOn={settings.restSound}
+          onToggleSound={() => {
+            const next = !settings.restSound;
+            // Switching it on is a tap too, so the chime can play this rest.
+            if (next) primeChime();
+            void updateSettings({ restSound: next });
+          }}
         />
       )}
 

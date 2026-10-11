@@ -72,6 +72,8 @@ export interface AppSettings {
   /** What routine building may use, and who it is for. Remembered so the next build starts there. */
   routineEquipment: EquipmentItem[];
   trainingLevel: TrainingLevel;
+  /** Whether the rest timer chimes when it runs out. Off for anyone training in headphones. */
+  restSound: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -98,6 +100,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   barbell: 'standard',
   routineEquipment: [...EQUIPMENT_ITEMS],
   trainingLevel: 'intermediate',
+  restSound: true,
 };
 
 export const SETTINGS_KEY = 'app.settings';

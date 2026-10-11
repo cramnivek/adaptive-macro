@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { formatRest } from '../rest';
 import { font, radius, space } from '../theme';
@@ -12,6 +13,9 @@ interface RestBarProps {
   total: number;
   onAdjust: (steps: number) => void;
   onSkip: () => void;
+  /** Whether the end of the rest chimes, and the switch for it. */
+  soundOn: boolean;
+  onToggleSound: () => void;
 }
 
 /**
@@ -25,7 +29,7 @@ interface RestBarProps {
  * matters more than it sounds — on the iOS PWA there is no vibration API at
  * all, so for those users this is the only signal the rest is up.
  */
-export const RestBar = ({ remaining, total, onAdjust, onSkip }: RestBarProps) => {
+export const RestBar = ({ remaining, total, onAdjust, onSkip, soundOn, onToggleSound }: RestBarProps) => {
   const done = remaining <= 0;
   const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
   const width = useAnimatedTo(fraction);
@@ -43,6 +47,20 @@ export const RestBar = ({ remaining, total, onAdjust, onSkip }: RestBarProps) =>
       )}
 
       <View style={styles.content} pointerEvents="box-none">
+        <Tappable
+          onPress={onToggleSound}
+          scaleTo={0.85}
+          style={styles.bell}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: soundOn }}
+          accessibilityLabel={soundOn ? 'Rest chime on' : 'Rest chime off'}
+        >
+          <Ionicons
+            name={soundOn ? 'notifications' : 'notifications-off-outline'}
+            size={16}
+            color={done ? loud.onLoud : soundOn ? loud.figure : loud.figureFaint}
+          />
+        </Tappable>
         <Text style={[styles.label, { color: done ? loud.onLoud : loud.figureFaint }]}>
           {done ? 'REST DONE' : 'REST'}
         </Text>
@@ -90,6 +108,7 @@ export const RestBar = ({ remaining, total, onAdjust, onSkip }: RestBarProps) =>
 };
 
 const styles = StyleSheet.create({
+  bell: { minWidth: 32, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   wrap: {
     minHeight: 48,
     borderRadius: radius.sm,
