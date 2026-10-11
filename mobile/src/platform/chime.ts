@@ -16,6 +16,53 @@ import { chimeWav } from './chimeSound';
  */
 
 let element: HTMLAudioElement | null = null;
+let audioCtx: any = null;
+
+const getAudioContext = (): any => {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) {
+    audioCtx = new Ctx();
+  }
+  return audioCtx;
+};
+
+/** Synthesizes the two-tone chime via Web Audio when HTMLAudioElement cannot play. */
+const playWebAudioFallback = (): void => {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+    const now = ctx.currentTime;
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.frequency.setValueAtTime(880, now);
+    gain1.gain.setValueAtTime(0.001, now);
+    gain1.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.12);
+
+    const start2 = now + 0.16;
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.frequency.setValueAtTime(1320, start2);
+    gain2.gain.setValueAtTime(0.001, start2);
+    gain2.gain.exponentialRampToValueAtTime(0.25, start2 + 0.02);
+    gain2.gain.exponentialRampToValueAtTime(0.001, start2 + 0.12);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(start2);
+    osc2.stop(start2 + 0.12);
+  } catch {
+    // Ignore audio errors silently
+  }
+};
 
 const audio = (): HTMLAudioElement | null => {
   if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
@@ -30,25 +77,38 @@ const audio = (): HTMLAudioElement | null => {
 /** Call from a tap. Plays the chime silently so the browser will allow it later. */
 export const primeChime = (): void => {
   const a = audio();
-  if (a === null) return;
-  a.muted = true;
-  void a
-    .play()
-    .then(() => {
-      a.pause();
-      a.currentTime = 0;
-      a.muted = false;
-    })
-    .catch(() => {
-      a.muted = false;
-    });
+  if (a !== null) {
+    a.muted = true;
+    void a
+      .play()
+      .then(() => {
+        a.pause();
+        a.currentTime = 0;
+        a.muted = false;
+      })
+      .catch(() => {
+        a.muted = false;
+      });
+  }
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    void ctx.resume();
+  }
 };
 
 /** Plays the chime, if a tap has primed it. Quietly nothing if the browser still says no. */
 export const playChime = (): void => {
   const a = audio();
-  if (a === null) return;
-  a.muted = false;
-  a.currentTime = 0;
-  void a.play().catch(() => undefined);
+  if (a !== null) {
+    a.muted = false;
+    a.currentTime = 0;
+    const playPromise = a.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        playWebAudioFallback();
+      });
+      return;
+    }
+  }
+  playWebAudioFallback();
 };

@@ -26,6 +26,7 @@ import { Screen } from '../../src/components/Screen';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useSocial } from '../../src/social/session';
+import { playChime, primeChime } from '../../src/platform/chime';
 import { useApp } from '../../src/state/AppStore';
 import { font, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -501,8 +502,8 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Units">
-        <Card>
+      <Section title="Units & Training">
+        <Card title="Units">
           <Segmented
             value={settings.units}
             onChange={(units) => void updateSettings({ units })}
@@ -511,6 +512,27 @@ export default function SettingsScreen() {
               { value: 'imperial' as const, label: 'lb / in' },
             ]}
           />
+        </Card>
+
+        <Card title="Rest timer alert">
+          <Segmented
+            value={settings.restSound ? 'on' : 'off'}
+            onChange={(val) => {
+              const on = val === 'on';
+              if (on) {
+                primeChime();
+                playChime();
+              }
+              void updateSettings({ restSound: on });
+            }}
+            options={[
+              { value: 'on' as const, label: 'Alert on' },
+              { value: 'off' as const, label: 'Silent' },
+            ]}
+          />
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            Plays a chime every time the rest period finishes between sets. Can also be toggled directly in the session view.
+          </Text>
         </Card>
       </Section>
 
