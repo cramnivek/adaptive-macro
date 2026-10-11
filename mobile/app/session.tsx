@@ -294,7 +294,7 @@ export default function SessionScreen() {
       <Tappable
         onPress={toggleUnits}
         scaleTo={0.92}
-        style={styles.unitToggle}
+        style={[styles.unitToggle, styles.headerHit]}
         accessibilityRole="button"
         accessibilityLabel={`Switch units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
       >
@@ -335,27 +335,26 @@ export default function SessionScreen() {
       <Tappable
         onPress={toggleAlert}
         scaleTo={0.9}
-        style={[
-          styles.alertBtn,
-          settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive,
-        ]}
+        style={styles.headerHit}
         accessibilityRole="switch"
         accessibilityState={{ checked: settings.restSound }}
         accessibilityLabel={settings.restSound ? 'Rest alert on' : 'Rest alert off'}
       >
-        <Ionicons
-          name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
-          size={15}
-          color={settings.restSound ? loud.onLoud : loud.figureMuted}
-        />
-        <Text
-          style={[
-            styles.alertBtnLabel,
-            { color: settings.restSound ? loud.onLoud : loud.figureMuted },
-          ]}
-        >
-          ALERT
-        </Text>
+        <View style={[styles.alertBtn, settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive]}>
+          <Ionicons
+            name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
+            size={15}
+            color={settings.restSound ? loud.onLoud : loud.figureMuted}
+          />
+          <Text
+            style={[
+              styles.alertBtnLabel,
+              { color: settings.restSound ? loud.onLoud : loud.figureMuted },
+            ]}
+          >
+            ALERT
+          </Text>
+        </View>
       </Tappable>
     </View>
   );
@@ -1159,6 +1158,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: space.sm,
     gap: space.sm,
+  },
+  /**
+   * The header's controls are drawn about 28 high to sit beside the title, but a
+   * finger needs the app's 44. Padding makes the touch area and the negative margin
+   * gives the height back, so the header does not grow. Padding, not hitSlop: the
+   * web build, which is what iPhones run, ignores hitSlop.
+   */
+  headerHit: {
+    paddingVertical: 8,
+    marginVertical: -8,
   },
   headerControls: {
     flexDirection: 'row',
