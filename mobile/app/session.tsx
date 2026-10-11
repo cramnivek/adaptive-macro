@@ -439,7 +439,18 @@ export default function SessionScreen() {
     [blockFor, withTargetRows, settings.units],
   );
 
+  /**
+   * Which `start`/`routine` the blocks were last loaded for. The loaders depend on
+   * the units, so switching kg/lb mid-workout re-runs this effect — and reloading
+   * from the database would drop every set not yet ticked. Loading is for arriving,
+   * not for a change of units; `toggleUnits` converts the rows on screen itself.
+   */
+  const loadedFor = useRef<string | null>(null);
+
   useEffect(() => {
+    const key = `${params.start ?? ''}|${params.routine ?? ''}`;
+    if (loadedFor.current === key) return;
+    loadedFor.current = key;
     void (async () => {
       const [existing, loadedRoutines, names] = await Promise.all([
         activeSession(),
