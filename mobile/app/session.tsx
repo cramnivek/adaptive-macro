@@ -13,6 +13,8 @@ import type { MovementPattern } from '../src/ai/exercises';
 import { TOUCH_TARGET } from '../src/components/Controls';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
+import { FinishSheet } from '../src/components/FinishSheet';
+import { type ShareSummary, shareSummary } from '../src/shareCard';
 import { ExercisePicker } from '../src/components/ExercisePicker';
 import { FadeIn } from '../src/components/FadeIn';
 import { CountUp } from '../src/components/CountUp';
@@ -37,6 +39,7 @@ import {
   catalogueEntryForExercise,
   cataloguePatternsByExerciseName,
   listRoutines,
+  sessionSets,
   startSession,
   setSetRpe,
   updateSetValues,
@@ -156,6 +159,8 @@ export default function SessionScreen() {
   const [rest, setRest] = useState<{ endsAt: number; total: number } | null>(null);
   /** Shown once the workout is saved, when the day was worth marking. */
   const [milestone, setMilestone] = useState<Milestone | null>(null);
+  /** The finished workout, for the sheet that offers to share it. */
+  const [finished, setFinished] = useState<ShareSummary | null>(null);
   /** Which rest has already announced itself, so the thud fires once. */
   const announced = useRef<number | null>(null);
   /** Movement pattern per recorded name, for the glyph on each block header. */
@@ -554,7 +559,6 @@ export default function SessionScreen() {
     }
 
     await finishSession(session.id);
-    notify('Workout saved', `${logged} ${logged === 1 ? 'set' : 'sets'} logged.`);
 
     /*
       Checked after the session is written, so today's sets are part of the
@@ -573,14 +577,25 @@ export default function SessionScreen() {
         session.date,
         laddersFor(settings.units),
       );
-      if (reached[0] !== undefined) {
-        setMilestone(reached[0]);
-        return;
-      }
+      if (reached[0] !== undefined) setMilestone(reached[0]);
+      // The milestone's celebration comes first; the share sheet waits behind it.
+      setFinished(
+        shareSummary({
+          title: session.name,
+          date: session.date,
+          startedAt: session.startedAt,
+          finishedAt: new Date(),
+          sets: await sessionSets(session.id),
+          units: settings.units,
+          milestone: reached[0] ?? null,
+        }),
+      );
+      return;
     } catch {
       // Nothing to say, and nothing worth blocking the exit for.
     }
 
+    notify('Workout saved', `${logged} ${logged === 1 ? 'set' : 'sets'} logged.`);
     router.back();
   };
 
@@ -920,6 +935,14 @@ export default function SessionScreen() {
         units={settings.units}
         onDismiss={() => {
           setMilestone(null);
+          if (finished === null) router.back();
+        }}
+      />
+
+      <FinishSheet
+        summary={milestone === null ? finished : null}
+        onDone={() => {
+          setFinished(null);
           router.back();
         }}
       />
