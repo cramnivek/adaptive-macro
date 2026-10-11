@@ -96,7 +96,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
 
 export type PostView = ShareSummary & { caption: string | null };
 
-const formatDuration = (minutes: number): string => {
+export const formatDuration = (minutes: number): string => {
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

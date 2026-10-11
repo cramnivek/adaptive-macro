@@ -1669,6 +1669,35 @@ export const sessionsBetween = async (
   );
 };
 
+/**
+ * When each finished session started and ended, from a date on, for the
+ * week-by-week chart.
+ *
+ * Only the times are returned. The sets for the same weeks come from
+ * `listAllSets`, which the overview has already loaded, so the chart does not
+ * ask the database for them a second time.
+ */
+export const finishedSessionTimes = async (
+  from: ISODate,
+): Promise<{ id: string; date: ISODate; startedAt: string; finishedAt: string }[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    date: ISODate;
+    started_at: string;
+    finished_at: string;
+  }>(
+    'SELECT id, date, started_at, finished_at FROM sessions WHERE finished_at IS NOT NULL AND date >= ?',
+    from,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    date: row.date,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+  }));
+};
+
 // --- cross-reference ------------------------------------------------------
 
 /** Every recorded set with its session date, for whole-history aggregates. */
