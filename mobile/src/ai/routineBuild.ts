@@ -87,8 +87,10 @@ export const EQUIPMENT_LABEL: Record<Equipment, string> = {
 const EQUIPMENT_TEXT: Record<Equipment, string> = {
   gym: 'Equipment: a full gym — barbells, dumbbells, cables and machines.',
   dumbbells:
-    'Equipment: dumbbells and an adjustable bench, nothing else — no barbell, no cables, no machines. ' +
-    'Every exercise must be done with dumbbells or bodyweight.',
+    'Equipment: dumbbells and an adjustable bench, nothing else — no barbell, no cables, no machines, ' +
+    'and no pull-up bar. Every exercise must be done with dumbbells or bodyweight on the floor or the ' +
+    'bench; where a slot would need a bar to hang from, use the closest dumbbell movement, such as a ' +
+    'pullover for a vertical pull.',
   bodyweight:
     'Equipment: none beyond a pull-up bar and a sturdy bench or chair. Every exercise must be bodyweight. ' +
     'Make a slot harder with a harder variation — single-leg, slower, deficit — rather than with load, ' +

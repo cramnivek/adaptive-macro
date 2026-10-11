@@ -65,6 +65,8 @@ describe('equipment', () => {
   it('rules out everything but dumbbells, by name, for a dumbbell-only routine', () => {
     const prompt = buildRoutinePrompt(['legs'], [], 'dumbbells');
     expect(prompt).toContain('no barbell, no cables, no machines');
+    // A live build with only 'or bodyweight' to go on came back with a pull-up.
+    expect(prompt).toContain('no pull-up bar');
     expect(prompt).not.toContain('a full gym');
   });
 
