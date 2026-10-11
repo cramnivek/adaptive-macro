@@ -1626,6 +1626,30 @@ export const recentSessions = async (
   return out;
 };
 
+/**
+ * One finished session, for looking at it again. Null for an id that is not in
+ * the log and for one still being logged: an unfinished session belongs to the
+ * logger, not to this view, and its sets are not yet a record.
+ */
+export const pastSession = async (
+  id: string,
+): Promise<{ id: string; name: string; date: ISODate; startedAt: string; finishedAt: string } | null> => {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{
+    id: string;
+    name: string;
+    date: ISODate;
+    started_at: string;
+    finished_at: string;
+  }>(
+    'SELECT id, name, date, started_at, finished_at FROM sessions WHERE id = ? AND finished_at IS NOT NULL',
+    id,
+  );
+  return row
+    ? { id: row.id, name: row.name, date: row.date, startedAt: row.started_at, finishedAt: row.finished_at }
+    : null;
+};
+
 // --- cross-reference ------------------------------------------------------
 
 /** Every recorded set with its session date, for whole-history aggregates. */

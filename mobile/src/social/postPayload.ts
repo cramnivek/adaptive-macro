@@ -103,7 +103,7 @@ const formatDuration = (minutes: number): string => {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 };
 
-const trim = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+export const trim = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
 export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): PostView => {
   const unit = units === 'metric' ? 'kg' : 'lb';
