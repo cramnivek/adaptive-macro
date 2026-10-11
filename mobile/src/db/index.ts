@@ -1650,6 +1650,25 @@ export const pastSession = async (
     : null;
 };
 
+/**
+ * The finished sessions whose date falls in a range, both ends included, for
+ * the calendar. Only the identity of each is returned: the calendar marks days
+ * and opens a workout, and loading every set of a month to do that would be
+ * slow for no gain.
+ */
+export const sessionsBetween = async (
+  from: ISODate,
+  to: ISODate,
+): Promise<{ id: string; name: string; date: ISODate }[]> => {
+  const db = await getDb();
+  return db.getAllAsync<{ id: string; name: string; date: ISODate }>(
+    `SELECT id, name, date FROM sessions
+      WHERE finished_at IS NOT NULL AND date BETWEEN ? AND ? ORDER BY started_at`,
+    from,
+    to,
+  );
+};
+
 // --- cross-reference ------------------------------------------------------
 
 /** Every recorded set with its session date, for whole-history aggregates. */

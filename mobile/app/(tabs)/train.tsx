@@ -186,6 +186,12 @@ export default function TrainScreen() {
               <Ionicons name="chevron-forward" size={16} color={loud.figureFaint} />
             </Tappable>
           ))}
+          <Button
+            tone="loud"
+            label="All workouts"
+            variant="subtle"
+            onPress={() => router.push('/calendar')}
+          />
         </Card>
       )}
 

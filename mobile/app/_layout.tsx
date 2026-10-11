@@ -184,6 +184,16 @@ export default function RootLayout() {
                 }}
               />
               <Stack.Screen
+                name="calendar"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
                 name="workout"
                 options={{
                   presentation: 'modal',
