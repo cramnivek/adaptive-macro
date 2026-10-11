@@ -1895,20 +1895,31 @@ export const updateSetValues = async (
 ): Promise<void> => {
   const db = await getDb();
   if (cardio) {
-    await db.runAsync(
-      `UPDATE sets
-          SET weight_kg = ?, reps = ?, speed_kph = ?, incline_pct = ?,
-              duration_seconds = ?, distance_km = ?, cardio_mode = ?
-        WHERE id = ?`,
-      weightKg,
-      reps,
-      cardio.speedKph ?? null,
-      cardio.inclinePct ?? null,
-      cardio.durationSeconds ?? null,
-      cardio.distanceKm ?? null,
-      cardio.cardioMode ?? null,
-      id,
-    );
+    const fields: string[] = ['weight_kg = ?', 'reps = ?'];
+    const values: (string | number | null)[] = [weightKg, reps];
+
+    if (cardio.speedKph !== undefined) {
+      fields.push('speed_kph = ?');
+      values.push(cardio.speedKph);
+    }
+    if (cardio.inclinePct !== undefined) {
+      fields.push('incline_pct = ?');
+      values.push(cardio.inclinePct);
+    }
+    if (cardio.durationSeconds !== undefined) {
+      fields.push('duration_seconds = ?');
+      values.push(cardio.durationSeconds);
+    }
+    if (cardio.distanceKm !== undefined) {
+      fields.push('distance_km = ?');
+      values.push(cardio.distanceKm);
+    }
+    if (cardio.cardioMode !== undefined) {
+      fields.push('cardio_mode = ?');
+      values.push(cardio.cardioMode);
+    }
+    values.push(id);
+    await db.runAsync(`UPDATE sets SET ${fields.join(', ')} WHERE id = ?`, ...values);
   } else {
     await db.runAsync(
       'UPDATE sets SET weight_kg = ?, reps = ? WHERE id = ?',

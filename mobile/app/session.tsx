@@ -777,8 +777,12 @@ export default function SessionScreen() {
         rowKey: row.key,
         content: {
           figure: isOutside
-            ? `${row.distance ?? ''} ${distanceUnit(settings.units).toUpperCase()}`
-            : `${row.speed ?? ''} ${speedUnit(settings.units).toUpperCase()}`,
+            ? row.distance?.trim()
+              ? `${row.distance.trim()} ${distanceUnit(settings.units).toUpperCase()}`
+              : `${row.time?.trim() ?? ''} MIN`
+            : row.speed?.trim()
+              ? `${row.speed.trim()} ${speedUnit(settings.units).toUpperCase()}`
+              : `${row.time?.trim() ?? ''} MIN`,
           verdict: 'CARDIO DONE',
         },
       });
