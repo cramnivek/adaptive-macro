@@ -133,7 +133,7 @@ export default function TrainScreen() {
       )}
 
       {headline.length > 0 && (
-        <Card loud title="Where you are" subtitle={`${totalSets} sets on record`}>
+        <Card loud title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
           {headline.map(({ name, last }) => (
             <Pressable
               key={name}
