@@ -1,10 +1,14 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
+import { ExercisePicker } from '../src/components/ExercisePicker';
+import { SlashPanel } from '../src/components/SlashPanel';
+import { Tappable } from '../src/components/Tappable';
 import { Screen } from '../src/components/Screen';
 import {
+  cataloguePatternsByExerciseName,
   createRoutine,
   deleteRoutine,
   listExerciseNames,
@@ -14,9 +18,11 @@ import {
   setRoutineExercises,
 } from '../src/db';
 import type { Routine } from '../src/db';
+import type { MovementPattern } from '../src/ai/exercises';
 import { confirm, notify } from '../src/dialog';
+import { useApp } from '../src/state/AppStore';
 import { formatDate } from '../src/format';
-import { font, radius, space } from '../src/theme';
+import { font, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
 type Draft = { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null };
@@ -38,13 +44,19 @@ export default function RoutinesScreen() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [draft, setDraft] = useState<Draft[]>([]);
-  const [adding, setAdding] = useState('');
+  // The same picker as a session: search the log and the catalogue, and look
+  // up a name neither knows. A plain text box here saved whatever was typed,
+  // misspellings included, as a new exercise with no how-to.
+  const [picking, setPicking] = useState(false);
+  const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
+  const { settings } = useApp();
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
     setRoutines(await listRoutines());
     setKnown(await listExerciseNames());
     setPast(await recentSessions(15));
+    setPatterns(await cataloguePatternsByExerciseName());
   };
 
   // On focus, so routines saved by the programme import show on return.
@@ -73,8 +85,9 @@ export default function RoutinesScreen() {
     );
   };
 
-  const addToDraft = (name: string) => {
+  const addToDraft = (name: string, catalogueBodyweight?: boolean) => {
     const trimmed = name.trim();
+    setPicking(false);
     if (!trimmed) return;
     if (draft.some((d) => d.name === trimmed)) {
       return notify('Already in this routine', `${trimmed} is already listed.`);
@@ -83,11 +96,11 @@ export default function RoutinesScreen() {
       ...current,
       {
         name: trimmed,
-        bodyweightBased: known.find((k) => k.name === trimmed)?.bodyweightBased ?? false,
+        // A flag on record beats the catalogue's guess, as in a session.
+        bodyweightBased: known.find((k) => k.name === trimmed)?.bodyweightBased ?? catalogueBodyweight ?? false,
         targetSets: 3,
       },
     ]);
-    setAdding('');
   };
 
   const move = (index: number, direction: -1 | 1) => {
@@ -187,27 +200,22 @@ export default function RoutinesScreen() {
             </View>
           ))}
 
-          <Field
-            label="Add an exercise"
-            value={adding}
-            onChangeText={setAdding}
-            placeholder="Bench Press (Barbell)"
-            hint="Names match exactly, so reuse one below to keep history joined up."
-          />
-          <Button tone="loud" label="Add" variant="subtle" onPress={() => addToDraft(adding)} />
-
-          {known.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
-              {known.slice(0, 20).map((item) => (
-                <Pressable
-                  key={item.name}
-                  onPress={() => addToDraft(item.name)}
-                  style={[styles.chip, { backgroundColor: loud.panel, borderColor: loud.rule }]}
-                >
-                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure, fontSize: 13 }}>{item.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+          {picking ? (
+            <ExercisePicker
+              known={known}
+              patterns={patterns}
+              geminiApiKey={settings.foodLookup.geminiApiKey}
+              onPick={addToDraft}
+              onCancel={() => setPicking(false)}
+            />
+          ) : (
+            <Tappable onPress={() => setPicking(true)} scaleTo={0.97} style={styles.addExercise}>
+              <SlashPanel color={loud.panel} style={styles.addSlab}>
+                <Text style={{ fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.figure }}>
+                  + ADD EXERCISE
+                </Text>
+              </SlashPanel>
+            </Tappable>
           )}
         </Card>
 
@@ -316,13 +324,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chips: { marginTop: space.sm },
-  chip: {
-    minHeight: TOUCH_TARGET - 14,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    marginRight: space.xs,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  addExercise: { marginTop: space.sm },
+  addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
 });
