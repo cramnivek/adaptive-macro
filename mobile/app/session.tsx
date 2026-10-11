@@ -46,7 +46,7 @@ import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
-import { PlateSheet } from '../src/components/PlateSheet';
+import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
@@ -365,13 +365,18 @@ export default function SessionScreen() {
    * The plates for the set about to be done: the first one not yet ticked that
    * has a weight in it, or failing that the last weight entered.
    */
-  const openPlates = (block: Block) => {
+  const plateWeightFor = (block: Block): number | null => {
     const weightOf = (row: Row) => Number.parseFloat(row.weight.replace(',', '.'));
     const next = block.rows.find((row) => !row.done && weightOf(row) > 0);
     const last = [...block.rows].reverse().find((row) => weightOf(row) > 0);
     const chosen = next ?? last;
-    if (!chosen) return notify('No weight yet', 'Enter a weight in a set, then tap PLATES.');
-    setPlating(weightOf(chosen));
+    return chosen ? weightOf(chosen) : null;
+  };
+
+  const openPlates = (block: Block) => {
+    const weight = plateWeightFor(block);
+    if (weight === null) return notify('No weight yet', 'Enter a weight in a set to see its plates.');
+    setPlating(weight);
   };
 
   /** Ticking writes the set; unticking removes it. */
@@ -666,20 +671,6 @@ export default function SessionScreen() {
                   </Text>
                 </SlashPanel>
               </Tappable>
-              {/*
-                Barbell lifts only, recognised by name: a plate count on a bar of
-                unknown weight would be confidently wrong.
-              */}
-              {!block.bodyweightBased && usesBarbell(block.name) && (
-                <Tappable
-                  onPress={() => openPlates(block)}
-                  style={styles.iconBtn}
-                  scaleTo={0.85}
-                  accessibilityLabel={`Plates for ${block.name}`}
-                >
-                  <Text style={styles.platesLabel}>PLATES</Text>
-                </Tappable>
-              )}
               <Tappable
                 onPress={() => void removeExercise(blockIndex)}
                 style={styles.iconBtn}
@@ -700,6 +691,18 @@ export default function SessionScreen() {
             })()}
             {block.target && (
               <Text style={styles.target}>{targetLabel(block.target.sets, block.target.reps)}</Text>
+            )}
+            {/*
+              Barbell lifts only, recognised by name: a plate count on a bar of
+              unknown weight would be confidently wrong.
+            */}
+            {!block.bodyweightBased && usesBarbell(block.name) && (
+              <PlatePreview
+                weight={plateWeightFor(block)}
+                units={settings.units}
+                bar={settings.barbell}
+                onPress={() => openPlates(block)}
+              />
             )}
 
             <View style={styles.columns}>
@@ -985,7 +988,6 @@ const styles = StyleSheet.create({
   nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
   blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
-  platesLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 1, color: loud.loud },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
   target: {

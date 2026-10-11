@@ -124,3 +124,90 @@ const styles = StyleSheet.create({
   barChoice: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   barLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.2 },
 });
+
+interface PlatePreviewProps {
+  /** The next set's weight, in the display unit; null when none is entered yet. */
+  weight: number | null;
+  units: UnitSystem;
+  bar: BarChoice;
+  onPress: () => void;
+}
+
+/**
+ * What goes on the bar for the next set, right in the exercise block.
+ *
+ * It was a small PLATES label beside the exercise name, easy to miss and a tap
+ * away from any answer. The answer is the point, so it is shown: one side of
+ * the bar in plate colours and the plates in words, updating as the weight is
+ * typed. A tap still opens the full sheet, with the bar choice.
+ */
+export const PlatePreview = ({ weight, units, bar, onPress }: PlatePreviewProps) => {
+  const unit = units === 'metric' ? 'kg' : 'lb';
+  const load = weight === null ? null : platesFor(weight, units, bar);
+  const plates = PLATE_SETS[units];
+  const largest = plates[0];
+
+  const words =
+    load === null
+      ? 'Enter a weight to see the plates'
+      : load.belowBar
+        ? `Lighter than the ${load.bar} ${unit} bar`
+        : load.perSide.length === 0
+          ? 'Just the bar'
+          : `${describePlates(load.perSide)} each side`;
+
+  return (
+    <Tappable
+      onPress={onPress}
+      scaleTo={0.98}
+      style={[previewStyles.wrap, { backgroundColor: loud.panel, borderColor: loud.rule }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Plates: ${words}. Opens the plate calculator.`}
+    >
+      <View style={previewStyles.bar}>
+        <View style={[previewStyles.sleeve, { backgroundColor: loud.rule }]} />
+        <View style={[previewStyles.collar, { backgroundColor: loud.figureMuted }]} />
+        {(load?.perSide ?? []).map((plate, index) => (
+          <View
+            key={`${plate}-${index}`}
+            style={{
+              width: plate >= plates[2] ? 6 : 4,
+              height: 12 + 22 * (plate / largest),
+              borderRadius: 1,
+              backgroundColor: PLATE_COLOURS[plates.indexOf(plate)] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1],
+            }}
+          />
+        ))}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[previewStyles.label, { color: loud.loud }]}>
+          PLATES{weight !== null ? ` · ${weight} ${unit.toUpperCase()}` : ''}
+        </Text>
+        <Text style={[previewStyles.words, { color: load ? loud.figure : loud.figureFaint }]} numberOfLines={1}>
+          {words}
+        </Text>
+      </View>
+      <Text style={[previewStyles.chevron, { color: loud.figureMuted }]}>›</Text>
+    </Tappable>
+  );
+};
+
+const previewStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    minHeight: 52,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: space.sm,
+  },
+  bar: { width: 64, height: 36, flexDirection: 'row', alignItems: 'center', gap: 1.5 },
+  sleeve: { position: 'absolute', left: 0, right: 0, height: 3, top: 16.5 },
+  collar: { width: 4, height: 14, marginRight: 2 },
+  label: { fontFamily: font.display, fontSize: 10, letterSpacing: 1.2 },
+  words: { fontFamily: font.figure, fontSize: 15, marginTop: 2 },
+  chevron: { fontSize: 22, marginLeft: space.xs },
+});
