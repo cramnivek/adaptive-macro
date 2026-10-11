@@ -45,4 +45,11 @@ describe('messageFor on a timed-out request', () => {
       'The server took too long to answer. Try again.',
     );
   });
+
+  it('says the same when auth-js wraps the abort as a retryable fetch error', () => {
+    // auth-js keeps only the raw abort text, so the name is the only other hint and it reads as offline.
+    expect(messageFor({ name: 'AuthRetryableFetchError', message: 'signal is aborted without reason' })).toBe(
+      'The server took too long to answer. Try again.',
+    );
+  });
 });

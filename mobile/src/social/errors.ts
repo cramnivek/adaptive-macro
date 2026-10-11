@@ -31,8 +31,10 @@ export const messageFor = (error: ServerError): string => {
       ? 'The sign-in email could not be sent. Try again in a few minutes.'
       : 'Something went wrong on the server. Try again in a few minutes.';
   }
-  // Our own time limit on a request (see timeoutFetch.ts), as postgrest-js reports it.
-  if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+  // Our own time limit on a request (see timeoutFetch.ts). postgrest-js reports it as
+  // "AbortError: ..."; auth-js wraps it as a retryable fetch error carrying only the raw abort
+  // text ("signal is aborted without reason"), so this must come before the offline branch.
+  if (error.name === 'AbortError' || /abort/i.test(error.message ?? '')) {
     return 'The server took too long to answer. Try again.';
   }
   if (

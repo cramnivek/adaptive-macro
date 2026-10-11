@@ -20,6 +20,18 @@ import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
 type Past = NonNullable<Awaited<ReturnType<typeof pastSession>>>;
+interface Loaded {
+  past: Past | null;
+  sets: LoggedSet[];
+}
+
+/** Whether a reload found the workout it already had: same session, same sets in the same order. */
+const sameWorkout = (a: Loaded, b: Loaded): boolean =>
+  a.past?.id === b.past?.id &&
+  a.past?.name === b.past?.name &&
+  a.past?.finishedAt === b.past?.finishedAt &&
+  a.sets.length === b.sets.length &&
+  a.sets.every((set, index) => set.id === b.sets[index]?.id);
 
 /**
  * A finished workout, looked at again.
@@ -35,7 +47,7 @@ export default function WorkoutScreen() {
   const { settings } = useApp();
   const social = useSocial();
 
-  const [loaded, setLoaded] = useState<{ past: Past | null; sets: LoggedSet[] } | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   /** The share and post sheet is open. */
   const [sharing, setSharing] = useState(false);
   /** Sign-in is open over the sheet. */
@@ -49,7 +61,12 @@ export default function WorkoutScreen() {
       void (async () => {
         const past = id ? await pastSession(id) : null;
         const sets = past ? await sessionSets(past.id) : [];
-        if (current) setLoaded({ past, sets });
+        if (!current) return;
+        // The same workout comes back as the same objects. Returning from sign-in reloads on
+        // focus, and a fresh summary would make the finish sheet clear the caption typed so far.
+        setLoaded((before) =>
+          before !== null && sameWorkout(before, { past, sets }) ? before : { past, sets },
+        );
       })();
       return () => {
         current = false;
@@ -138,7 +155,10 @@ export default function WorkoutScreen() {
           {group.sets.map((set, index) => (
             <View key={set.id} style={[styles.row, { borderColor: loud.rule }]}>
               <Text style={[styles.number, set.setType === 'warmup' && { color: loud.warn }]}>
-                {set.setType === 'warmup' ? 'W' : index + 1}
+                {/* Working sets are counted without the warm-ups before them, as in the logger. */}
+                {set.setType === 'warmup'
+                  ? 'W'
+                  : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
               </Text>
               <Text style={styles.line}>{setLine(set, settings.units)}</Text>
             </View>
