@@ -223,6 +223,16 @@ export default function RootLayout() {
                   headerTintColor: colors.text,
                 }}
               />
+              <Stack.Screen
+                name="my-posts"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Your posts',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
             </Stack>
           </StorageGate>
         </SocialProvider>
