@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { shareCardFile, shareWorkout } from '../platform/shareImage';
 import type { ShareSummary } from '../shareCard';
+import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { SlashPanel } from './SlashPanel';
@@ -11,7 +12,15 @@ import { Tappable } from './Tappable';
 interface FinishSheetProps {
   /** The finished workout, or null when the sheet is closed. */
   summary: ShareSummary | null;
-  onDone: () => void;
+  /** Out of the way while sign-in is open over it, keeping the caption typed so far. */
+  hidden: boolean;
+  /** Whether posting is possible, and if not, what stands in the way. */
+  account: 'unavailable' | 'signed-out' | 'needs-profile' | 'ready';
+  /** Lead with POST and an open caption: what this person did last time. */
+  postFirst: boolean;
+  onPost: (caption: string) => Promise<void>;
+  onNeedAccount: () => void;
+  onDone: (posted: boolean) => void;
 }
 
 /**
@@ -22,17 +31,24 @@ interface FinishSheetProps {
  * you see is what gets sent, and it is ready before the tap, which is the only
  * moment a browser will open the share sheet.
  */
-export const FinishSheet = ({ summary, onDone }: FinishSheetProps) => {
+export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNeedAccount, onDone }: FinishSheetProps) => {
   const insets = useSafeAreaInsets();
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [caption, setCaption] = useState('');
+  const [writing, setWriting] = useState(postFirst);
+  const [posting, setPosting] = useState(false);
+  const [posted, setPosted] = useState(false);
 
   useEffect(() => {
     if (summary === null) return;
     let live = true;
     setDrawing(true);
     setNote(null);
+    setCaption('');
+    setPosted(false);
+    setWriting(postFirst);
     void shareCardFile(summary)
       .then((drawn) => live && setCard(drawn))
       .finally(() => live && setDrawing(false));
@@ -47,8 +63,43 @@ export const FinishSheet = ({ summary, onDone }: FinishSheetProps) => {
     if (outcome === 'downloaded') setNote('Saved to your downloads.');
   };
 
+  const post = async () => {
+    if (account === 'signed-out' || account === 'needs-profile') {
+      onNeedAccount();
+      return;
+    }
+    // Someone who does not usually post sees the caption only once they ask to.
+    if (!writing) {
+      setWriting(true);
+      return;
+    }
+    setPosting(true);
+    setNote(null);
+    try {
+      await onPost(caption);
+      setPosted(true);
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const postLeads = account !== 'unavailable' && writing;
+  const height = writing ? 240 : 360;
+
+  const postButton = account === 'unavailable' ? null : (
+    <Tappable onPress={() => { if (!posting && !posted) void post(); }} scaleTo={0.97} style={styles.action}>
+      <SlashPanel color={postLeads ? loud.loud : loud.panel} style={styles.button}>
+        <Text style={[styles.buttonLabel, { color: postLeads ? loud.onLoud : loud.figure }]}>
+          {posted ? 'POSTED' : posting ? 'POSTING…' : 'POST'}
+        </Text>
+      </SlashPanel>
+    </Tappable>
+  );
+
   return (
-    <Modal visible={summary !== null} animationType="slide" transparent onRequestClose={onDone}>
+    <Modal visible={summary !== null && !hidden} animationType="slide" transparent onRequestClose={() => onDone(posted)}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
           <Text style={styles.title}>WORKOUT DONE</Text>
@@ -58,21 +109,35 @@ export const FinishSheet = ({ summary, onDone }: FinishSheetProps) => {
             </Text>
           )}
 
-          <View style={styles.preview}>
+          <View style={[styles.preview, { height }]}>
             {card ? (
-              <Image source={{ uri: card.url }} style={styles.image} resizeMode="contain" accessibilityLabel="The card that will be shared" />
+              <Image source={{ uri: card.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
             ) : drawing ? (
               <ActivityIndicator color={loud.loud} />
             ) : null}
           </View>
 
+          {account !== 'unavailable' && writing && !posted && (
+            <TextInput
+              value={caption}
+              onChangeText={setCaption}
+              placeholder="Say something about it (optional)"
+              placeholderTextColor={loud.figureFaint}
+              maxLength={MAX_CAPTION}
+              multiline
+              style={[styles.caption, { color: loud.figure, borderColor: loud.rule, backgroundColor: loud.panel }]}
+            />
+          )}
+
+          {postLeads && postButton}
           <Tappable onPress={() => void share()} scaleTo={0.97} style={styles.action}>
-            <SlashPanel color={loud.loud} style={styles.button}>
-              <Text style={[styles.buttonLabel, { color: loud.onLoud }]}>SHARE</Text>
+            <SlashPanel color={postLeads ? loud.panel : loud.loud} style={styles.button}>
+              <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>SHARE</Text>
             </SlashPanel>
           </Tappable>
+          {!postLeads && postButton}
           {note && <Text style={styles.note}>{note}</Text>}
-          <Tappable onPress={onDone} scaleTo={0.97} style={styles.action}>
+          <Tappable onPress={() => onDone(posted)} scaleTo={0.97} style={styles.action}>
             <SlashPanel color={loud.panel} style={styles.button}>
               <Text style={[styles.buttonLabel, { color: loud.figure }]}>DONE</Text>
             </SlashPanel>
@@ -98,6 +163,7 @@ const styles = StyleSheet.create({
   // A story is 9:16; the preview keeps that shape at a size that leaves the buttons on screen.
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
+  caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
   button: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   buttonLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6 },

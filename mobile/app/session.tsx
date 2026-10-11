@@ -1,6 +1,6 @@
 import { bodyweightForDates, milestonesOn, todayISO } from '@adaptive-macros/engine';
 import type { Milestone, SetType } from '@adaptive-macros/engine';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,9 @@ import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { type ShareSummary, shareSummary } from '../src/shareCard';
+import { createPost } from '../src/social/api';
+import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
+import { useSocial } from '../src/social/session';
 import { ExercisePicker } from '../src/components/ExercisePicker';
 import { FadeIn } from '../src/components/FadeIn';
 import { CountUp } from '../src/components/CountUp';
@@ -171,8 +174,13 @@ export default function SessionScreen() {
   const [rest, setRest] = useState<{ endsAt: number; total: number } | null>(null);
   /** Shown once the workout is saved, when the day was worth marking. */
   const [milestone, setMilestone] = useState<Milestone | null>(null);
-  /** The finished workout, for the sheet that offers to share it. */
-  const [finished, setFinished] = useState<ShareSummary | null>(null);
+  /** The finished workout and its card, for the sheet that offers to share and post it. */
+  const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareSummary } | null>(null);
+  /** Sign-in is open over the finish sheet. */
+  const [signingIn, setSigningIn] = useState(false);
+  const social = useSocial();
+  // Back from sign-in (or profile setup), the sheet comes back with its caption.
+  useFocusEffect(useCallback(() => setSigningIn(false), []));
   /** Which rest has already announced itself, so the thud fires once. */
   const announced = useRef<number | null>(null);
   /** Movement pattern per recorded name, for the glyph on each block header. */
@@ -591,17 +599,16 @@ export default function SessionScreen() {
       );
       if (reached[0] !== undefined) setMilestone(reached[0]);
       // The milestone's celebration comes first; the share sheet waits behind it.
-      setFinished(
-        shareSummary({
-          title: session.name,
-          date: session.date,
-          startedAt: session.startedAt,
-          finishedAt: new Date(),
-          sets: await sessionSets(session.id),
-          units: settings.units,
-          milestone: reached[0] ?? null,
-        }),
-      );
+      const workout: FinishedWorkout = {
+        sessionId: session.id,
+        title: session.name,
+        date: session.date,
+        startedAt: session.startedAt,
+        finishedAt: new Date(),
+        sets: await sessionSets(session.id),
+        milestone: reached[0] ?? null,
+      };
+      setFinished({ workout, summary: shareSummary({ ...workout, units: settings.units }) });
       return;
     } catch {
       // Nothing to say, and nothing worth blocking the exit for.
@@ -954,8 +961,29 @@ export default function SessionScreen() {
       />
 
       <FinishSheet
-        summary={milestone === null ? finished : null}
-        onDone={() => {
+        summary={milestone === null ? (finished?.summary ?? null) : null}
+        hidden={signingIn}
+        account={
+          !social.configured
+            ? 'unavailable'
+            : !social.session
+              ? 'signed-out'
+              : social.profile === null
+                ? 'needs-profile'
+                : 'ready'
+        }
+        postFirst={settings.postWorkouts}
+        onPost={async (caption) => {
+          if (finished === null) return;
+          await createPost(postPayload(finished.workout, caption));
+          if (!settings.postWorkouts) void updateSettings({ postWorkouts: true });
+        }}
+        onNeedAccount={() => {
+          setSigningIn(true);
+          router.push(social.session ? '/profile-setup' : '/sign-in');
+        }}
+        onDone={(posted) => {
+          if (social.configured && !posted && settings.postWorkouts) void updateSettings({ postWorkouts: false });
           setFinished(null);
           router.back();
         }}
