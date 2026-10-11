@@ -121,7 +121,7 @@ export const drawShareCard = (summary: ShareSummary): HTMLCanvasElement => {
   slab(ctx, PAD - 10, H - 190, 26, 64, 8);
   ctx.fillStyle = loud.figureMuted;
   ctx.font = `600 34px ${font.uiStrong}`;
-  ctx.fillText('Logged with Adaptive Macros', PAD + 40, H - 145);
+  ctx.fillText('Logged with Ascend', PAD + 40, H - 145);
 
   return canvas;
 };

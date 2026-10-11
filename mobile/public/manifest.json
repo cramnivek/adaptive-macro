@@ -1,6 +1,6 @@
 {
-  "name": "Adaptive Macros",
-  "short_name": "Macros",
+  "name": "Ascend",
+  "short_name": "Ascend",
   "description": "Local-first nutrition tracker with an adaptive TDEE engine",
   "start_url": "/",
   "scope": "/",

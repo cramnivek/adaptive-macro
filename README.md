@@ -1,4 +1,4 @@
-# adaptive-macros
+# Ascend
 
 A local-first nutrition tracker with an **adaptive TDEE engine**: it infers your
 actual energy expenditure from your logged intake and your weight trend, then
@@ -247,9 +247,9 @@ macros you type by more than 15%, it says so and offers the implied figure,
 but never applies it for you: the label might be right and a macro mistyped,
 and guessing which would invent a number.
 
-Storage is SQLite on the device, migrated on `PRAGMA user_version`. There is no
-account and no server, so the JSON export is the only backup and the only path
-to a new phone.
+Storage is SQLite on the device, migrated on `PRAGMA user_version`. The log has no
+copy on a server, so the JSON export is the only backup and the only path to a
+new phone.
 
 ## Layout
 

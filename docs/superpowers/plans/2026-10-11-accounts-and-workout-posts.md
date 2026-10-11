@@ -1936,7 +1936,7 @@ From `mobile/`: `rm -rf dist && npx expo export --platform web`, copy `dist` to 
 
 ### Task 8: Google sign-in
 
-**Blocked until the owner has:** created an OAuth client (Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type *Web application*, authorised redirect URI `https://eigtmrtavtpzzjzfcskc.supabase.co/auth/v1/callback`), entered its id and secret in Supabase → Authentication → Providers → Google, and added to Supabase → Authentication → URL Configuration → Redirect URLs: the Cloud Run origin, `http://localhost:*/**` for development, and `adaptivemacros://**`. Ask before starting; do not proceed without it.
+**Blocked until the owner has:** created an OAuth client (Google Cloud Console → APIs & Services → Credentials → OAuth client ID, type *Web application*, authorised redirect URI `https://eigtmrtavtpzzjzfcskc.supabase.co/auth/v1/callback`), entered its id and secret in Supabase → Authentication → Providers → Google, and added to Supabase → Authentication → URL Configuration → Redirect URLs: the Cloud Run origin, `http://localhost:*/**` for development, and `ascend://**`. Ask before starting; do not proceed without it.
 
 **Files:**
 - Modify: `mobile/src/social/api.ts` (`signInWithGoogle`)
@@ -1970,7 +1970,7 @@ export const signInWithGoogle = async (): Promise<void> => {
     if (error) fail(error);
     return;
   }
-  const redirectTo = makeRedirectUri({ scheme: 'adaptivemacros', path: 'account' });
+  const redirectTo = makeRedirectUri({ scheme: 'ascend', path: 'account' });
   const { data, error } = await client().auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo, skipBrowserRedirect: true },

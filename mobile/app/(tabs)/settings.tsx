@@ -198,7 +198,7 @@ export default function SettingsScreen() {
       const stamp = new Date().toISOString().slice(0, 10);
 
       const how = await saveTextFile(
-        `adaptive-macros-backup-${stamp}.json`,
+        `ascend-backup-${stamp}.json`,
         JSON.stringify(backup, null, 2),
       );
 

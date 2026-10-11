@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Adaptive Macros",
+    "name": "Ascend",
     "slug": "adaptive-macros",
     "owner": "zeldrich",
-    "scheme": "adaptivemacros",
+    "scheme": "ascend",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,14 +11,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cramnivek.adaptivemacros",
+      "bundleIdentifier": "com.cramnivek.ascend",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan barcodes on food packaging, and photograph a meal or a printed programme so the app can estimate it or read it.",
         "NSPhotoLibraryUsageDescription": "Choose a photo of a meal, or a screenshot of a training programme, for the app to estimate or read."
       }
     },
     "android": {
-      "package": "com.cramnivek.adaptivemacros",
+      "package": "com.cramnivek.ascend",
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0B",
         "foregroundImage": "./assets/android-icon-foreground.png",
