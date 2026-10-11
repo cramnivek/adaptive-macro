@@ -25,6 +25,7 @@ import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Con
 import { Screen } from '../../src/components/Screen';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
+import { useSocial } from '../../src/social/session';
 import { useApp } from '../../src/state/AppStore';
 import { font, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -118,6 +119,7 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { settings, updateSettings, refreshAll } = useApp();
+  const social = useSocial();
   const metric = settings.units === 'metric';
 
   // Holds the label to show while a bulk write runs. Seeding four months is
@@ -634,6 +636,18 @@ export default function SettingsScreen() {
               </Text>
             </>
           )}
+        </Card>
+      </Section>
+
+      <Section title="Account">
+        <Card
+          subtitle={
+            social.profile
+              ? `Signed in as @${social.profile.username}`
+              : 'Sign in to post workouts. Everything else works without an account.'
+          }
+        >
+          <Button label={social.profile ? 'Open account' : 'Sign in'} onPress={() => router.push('/account')} />
         </Card>
       </Section>
 

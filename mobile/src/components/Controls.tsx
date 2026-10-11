@@ -83,6 +83,9 @@ interface FieldProps {
    * sentence behind a scroll.
    */
   multiline?: boolean;
+  /** Emails, usernames and codes must not be capitalised by the keyboard. */
+  autoCapitalize?: 'none' | 'sentences';
+  maxLength?: number;
 }
 
 export const Field = ({
@@ -95,6 +98,8 @@ export const Field = ({
   hint,
   onBlurCommit,
   multiline = false,
+  autoCapitalize = 'sentences',
+  maxLength,
 }: FieldProps) => {
   const { colors } = useTheme();
   return (
@@ -108,6 +113,8 @@ export const Field = ({
           onChangeText={onChangeText}
           onBlur={onBlurCommit}
           keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          maxLength={maxLength}
           placeholder={placeholder}
           placeholderTextColor={colors.textFaint}
           // The visible label lives in a sibling Text, so without this the

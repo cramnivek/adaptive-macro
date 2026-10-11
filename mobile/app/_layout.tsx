@@ -193,6 +193,36 @@ export default function RootLayout() {
                   headerTintColor: colors.text,
                 }}
               />
+              <Stack.Screen
+                name="sign-in"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Sign in',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="profile-setup"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Your profile',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="account"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Account',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
             </Stack>
           </StorageGate>
         </SocialProvider>
