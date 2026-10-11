@@ -64,8 +64,12 @@ const styles = StyleSheet.create({
   wrap: { gap: space.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   label: { fontFamily: font.uiStrong, fontSize: 11, width: 38 },
-  squares: { flex: 1, flexDirection: 'row', gap: 3 },
-  square: { flex: 1, aspectRatio: 1, maxHeight: 18, borderRadius: radius.sm, borderWidth: 1.5 },
-  count: { fontFamily: font.figure, fontSize: 12, width: 40, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  // Packed together, the row reads as one strip at any width. Fourteen 14px
+  // cells with 3px gaps plus the label and count come to 329px, inside the
+  // 343px a 375px phone leaves after its gutters.
+  squares: { flexDirection: 'row', gap: 3, flexShrink: 1 },
+  // Fixed, not flexed: a flexed cell stretched into a pill on a wide screen.
+  square: { width: 14, height: 14, borderRadius: radius.sm, borderWidth: 1.5 },
+  count: { fontFamily: font.figure, fontSize: 12, width: 40, fontVariant: ['tabular-nums'] },
   note: { fontFamily: font.ui, fontSize: 11, marginTop: 2 },
 });
