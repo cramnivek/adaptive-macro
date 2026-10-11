@@ -1,35 +1,30 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
-import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
-import { normalisePattern } from '../ai/exercises';
-import { FLOOR_Y, MOVEMENTS, figureAt, repProgress } from '../movementFigure';
+import Svg, { Circle, Path } from 'react-native-svg';
+import { type Load, type MotionId, type Tone, loadFor, marksFor, repProgress } from '../exerciseMotion';
 
 interface MovementFigureProps {
-  pattern: unknown;
+  motion: MotionId;
+  exerciseName: string;
+  /** Catalogued equipment, when the name alone does not say what is held. */
+  equipment?: string;
   size?: number;
-  /** The body. */
-  color: string;
-  /** The load, and only the load: it is what the movement moves. */
-  accent: string;
-  /** The floor and the bench. */
-  ground: string;
+  colours: Record<Tone, string>;
 }
 
-type Point = [number, number];
-const line = (...points: Point[]) =>
+const line = (points: [number, number][]) =>
   points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
 
 /**
- * One rep of the exercise's movement pattern, looping, side on.
+ * One rep of the exercise, looping.
  *
- * Drawn every frame from `figureAt`, which keeps every bone its length and the
- * feet planted; the tests on that module are what make it safe to watch. With
- * reduced motion on it holds the far end of the rep — the bottom of the squat,
- * the lockout of the press — which is the position that says the most.
+ * Draws exactly what `marksFor` lists, so the figure on screen is the figure
+ * the motion tests and the review contact sheet were checked against. With
+ * reduced motion on it holds the far end of the rep, the position that says
+ * the most. The caller decides whether there is a motion to draw at all.
  */
-export const MovementFigure = ({ pattern, size = 140, color, accent, ground }: MovementFigureProps) => {
-  const movementPattern = normalisePattern(pattern);
-  const movement = MOVEMENTS[movementPattern];
+export const MovementFigure = ({ motion, exerciseName, equipment, size = 150, colours }: MovementFigureProps) => {
+  const load: Load = loadFor(motion, exerciseName, equipment);
   const [progress, setProgress] = useState(1);
   const [still, setStill] = useState<boolean | null>(null);
 
@@ -61,35 +56,26 @@ export const MovementFigure = ({ pattern, size = 140, color, accent, ground }: M
     return () => cancelAnimationFrame(frame);
   }, [still]);
 
-  const j = figureAt(movementPattern, progress);
-  const stroke = { strokeLinecap: 'square' as const, strokeLinejoin: 'miter' as const, fill: 'none' };
-
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`A figure doing a ${movementPattern}`}>
-      <Line x1={4} y1={FLOOR_Y + 2.5} x2={96} y2={FLOOR_Y + 2.5} stroke={ground} strokeWidth={1.5} />
-      {movement.prop === 'bench' && (
-        <>
-          <Rect x={30} y={66.5} width={52} height={4} fill={ground} />
-          <Line x1={36} y1={70} x2={36} y2={FLOOR_Y + 2.5} stroke={ground} strokeWidth={2.5} />
-          <Line x1={76} y1={70} x2={76} y2={FLOOR_Y + 2.5} stroke={ground} strokeWidth={2.5} />
-        </>
+    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`A figure doing ${exerciseName}`}>
+      {marksFor(motion, progress, load).map((mark, index) =>
+        mark.kind === 'path' ? (
+          <Path
+            key={index}
+            d={line(mark.points)}
+            stroke={colours[mark.tone]}
+            strokeWidth={mark.width}
+            strokeLinecap="square"
+            strokeLinejoin="miter"
+            fill="none"
+            opacity={mark.tone === 'far' ? 0.45 : 1}
+          />
+        ) : mark.ring ? (
+          <Circle key={index} cx={mark.at[0]} cy={mark.at[1]} r={mark.r} stroke={colours[mark.tone]} strokeWidth={3} fill="none" />
+        ) : (
+          <Circle key={index} cx={mark.at[0]} cy={mark.at[1]} r={mark.r} fill={colours[mark.tone]} />
+        ),
       )}
-
-      {/* The far leg, set back so the near one reads as in front. */}
-      <Path d={line(j.hip, j.backKnee, j.backAnkle)} stroke={color} strokeWidth={4.5} opacity={0.45} {...stroke} />
-      <Path d={line(j.hip, j.shoulder)} stroke={color} strokeWidth={6} {...stroke} />
-      <Path d={line(j.hip, j.frontKnee, j.frontAnkle)} stroke={color} strokeWidth={4.5} {...stroke} />
-      <Path d={line(j.shoulder, j.elbow, j.hand)} stroke={color} strokeWidth={4} {...stroke} />
-      <Circle cx={j.head[0]} cy={j.head[1]} r={5.5} fill={color} />
-
-      {movement.load === 'bar' && (
-        // A bar seen end on is its plate.
-        <>
-          <Circle cx={j.hand[0]} cy={j.hand[1]} r={7} stroke={accent} strokeWidth={3} fill="none" />
-          <Circle cx={j.hand[0]} cy={j.hand[1]} r={1.8} fill={accent} />
-        </>
-      )}
-      {movement.load === 'dumbbell' && <Circle cx={j.hand[0]} cy={j.hand[1]} r={4} fill={accent} />}
     </Svg>
   );
 };

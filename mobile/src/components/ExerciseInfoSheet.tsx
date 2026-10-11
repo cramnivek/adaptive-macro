@@ -6,6 +6,7 @@ import { session as loud } from '../theme/sessionTheme';
 import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { ExerciseIcon } from './ExerciseIcon';
+import { motionFor } from '../exerciseMotion';
 import { MovementFigure } from './MovementFigure';
 import { MuscleFigure } from './MuscleFigure';
 import { REGION_LABELS } from './muscleMap';
@@ -61,12 +62,23 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
             </View>
 
             {/*
-              One rep of the movement, looping. It shows the pattern — a squat,
-              a hinge — rather than this exact variant, the same way the glyph does.
+              One rep of this exercise, looping — recognised from its name, and
+              left out when it is not, because a figure of a different movement
+              would be shown as how to do this one.
             */}
-            <View style={[styles.demo, { backgroundColor: loud.ground, borderColor: loud.rule }]}>
-              <MovementFigure pattern={entry.movementPattern} size={150} color={loud.figure} accent={loud.loud} ground={loud.rule} />
-            </View>
+            {(() => {
+              const motion = motionFor(entry.canonicalName);
+              return motion === null ? null : (
+                <View style={[styles.demo, { backgroundColor: loud.ground, borderColor: loud.rule }]}>
+                  <MovementFigure
+                    motion={motion}
+                    exerciseName={entry.canonicalName}
+                    equipment={entry.equipment}
+                    colours={{ body: loud.figure, far: loud.figure, ground: loud.rule, accent: loud.loud }}
+                  />
+                </View>
+              );
+            })()}
 
             {entry.primaryRegion !== null && (
               <View style={styles.map}>
