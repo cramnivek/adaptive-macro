@@ -6,6 +6,7 @@ import { session as loud } from '../theme/sessionTheme';
 import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { ExerciseIcon } from './ExerciseIcon';
+import { MovementFigure } from './MovementFigure';
 import { MuscleFigure } from './MuscleFigure';
 import { REGION_LABELS } from './muscleMap';
 
@@ -57,6 +58,14 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
                   {entry.bodyweightBased ? ' · bodyweight' : ''}
                 </Text>
               </View>
+            </View>
+
+            {/*
+              One rep of the movement, looping. It shows the pattern — a squat,
+              a hinge — rather than this exact variant, the same way the glyph does.
+            */}
+            <View style={[styles.demo, { backgroundColor: loud.ground, borderColor: loud.rule }]}>
+              <MovementFigure pattern={entry.movementPattern} size={150} color={loud.figure} accent={loud.loud} ground={loud.rule} />
             </View>
 
             {entry.primaryRegion !== null && (
@@ -133,6 +142,13 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
 };
 
 const styles = StyleSheet.create({
+  demo: {
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: space.sm,
+    marginBottom: space.md,
+  },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
     maxHeight: '78%',
