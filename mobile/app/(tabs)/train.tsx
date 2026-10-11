@@ -120,6 +120,12 @@ export default function TrainScreen() {
             label="Start a session"
             onPress={() => router.push('/session?start=blank')}
           />
+          <Button
+            tone="loud"
+            label="Start cardio activity"
+            variant="subtle"
+            onPress={() => router.push('/session?start=blank&cardio=1')}
+          />
           {routines.map((routine) => (
             <Button
               tone="loud"

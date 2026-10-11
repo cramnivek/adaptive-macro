@@ -1235,6 +1235,12 @@ export interface LoggedSet {
   reps: number;
   setType: SetType;
   rpe: number | null;
+  isCardio?: boolean;
+  cardioMode?: 'treadmill' | 'outside' | null;
+  speedKph?: number | null;
+  inclinePct?: number | null;
+  durationSeconds?: number | null;
+  distanceKm?: number | null;
 }
 
 /**
@@ -1279,9 +1285,16 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     reps: number;
     set_type: string;
     rpe: number | null;
+    is_cardio: number | null;
+    cardio_mode: string | null;
+    speed_kph: number | null;
+    incline_pct: number | null;
+    duration_seconds: number | null;
+    distance_km: number | null;
   }>(
     `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
-            s.reps, s.set_type, s.rpe
+            s.reps, s.set_type, s.rpe, s.is_cardio, s.cardio_mode, s.speed_kph,
+            s.incline_pct, s.duration_seconds, s.distance_km
        FROM sets s JOIN exercises e ON e.id = s.exercise_id
       WHERE s.session_id = ?
       ORDER BY s.created_at, s.set_index`,
@@ -1297,6 +1310,12 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     reps: row.reps,
     setType: row.set_type as SetType,
     rpe: row.rpe,
+    isCardio: row.is_cardio === 1,
+    cardioMode: (row.cardio_mode as 'treadmill' | 'outside') ?? null,
+    speedKph: row.speed_kph,
+    inclinePct: row.incline_pct,
+    durationSeconds: row.duration_seconds,
+    distanceKm: row.distance_km,
   }));
 };
 
@@ -1339,16 +1358,22 @@ const exerciseIdFor = async (
   db: SQLite.SQLiteDatabase,
   name: string,
   bodyweightBased: boolean,
+  isCardio = false,
+  cardioMode: 'treadmill' | 'outside' | null = null,
 ): Promise<string> => {
   await db.runAsync(
-    `INSERT INTO exercises (id, name, bodyweight_based, catalogue_id, created_at)
-     VALUES (?, ?, ?,
+    `INSERT INTO exercises (id, name, bodyweight_based, is_cardio, cardio_mode, catalogue_id, created_at)
+     VALUES (?, ?, ?, ?, ?,
              (SELECT id FROM exercise_catalogue WHERE canonical_name = ? COLLATE NOCASE),
              ?)
-     ON CONFLICT (name) DO NOTHING`,
+     ON CONFLICT (name) DO UPDATE SET
+       is_cardio = CASE WHEN excluded.is_cardio = 1 THEN 1 ELSE exercises.is_cardio END,
+       cardio_mode = COALESCE(excluded.cardio_mode, exercises.cardio_mode)`,
     newId(),
     name,
     bodyweightBased ? 1 : 0,
+    isCardio ? 1 : 0,
+    cardioMode ?? null,
     name,
     new Date().toISOString(),
   );
@@ -1370,14 +1395,27 @@ export const addSetToSession = async (
     reps: number;
     setType: SetType;
     rpe: number | null;
+    isCardio?: boolean;
+    cardioMode?: 'treadmill' | 'outside' | null;
+    speedKph?: number | null;
+    inclinePct?: number | null;
+    durationSeconds?: number | null;
+    distanceKm?: number | null;
   },
 ): Promise<void> => {
   const db = await getDb();
-  const exerciseId = await exerciseIdFor(db, set.exerciseName, set.bodyweightBased);
+  const exerciseId = await exerciseIdFor(
+    db,
+    set.exerciseName,
+    set.bodyweightBased,
+    set.isCardio ?? false,
+    set.cardioMode ?? null,
+  );
 
   await db.runAsync(
-    `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe,
+                       is_cardio, cardio_mode, speed_kph, incline_pct, duration_seconds, distance_km, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     newId(),
     sessionId,
     exerciseId,
@@ -1387,6 +1425,12 @@ export const addSetToSession = async (
     set.reps,
     set.setType,
     set.rpe,
+    set.isCardio ? 1 : 0,
+    set.cardioMode ?? null,
+    set.speedKph ?? null,
+    set.inclinePct ?? null,
+    set.durationSeconds ?? null,
+    set.distanceKm ?? null,
     new Date().toISOString(),
   );
 };
@@ -1441,31 +1485,49 @@ export const lastWorkingSet = async (
 
 /** Every exercise name on record, for the picker. Most-used first. */
 export const listExerciseNames = async (): Promise<
-  { name: string; bodyweightBased: boolean }[]
+  { name: string; bodyweightBased: boolean; isCardio: boolean; cardioMode?: 'treadmill' | 'outside' | null }[]
 > => {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ name: string; bodyweight_based: number }>(
-    `SELECT e.name, e.bodyweight_based
+  const rows = await db.getAllAsync<{
+    name: string;
+    bodyweight_based: number;
+    is_cardio: number | null;
+    cardio_mode: string | null;
+  }>(
+    `SELECT e.name, e.bodyweight_based, e.is_cardio, e.cardio_mode
        FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
       GROUP BY e.id ORDER BY COUNT(s.id) DESC, e.name`,
   );
-  return rows.map((r) => ({ name: r.name, bodyweightBased: r.bodyweight_based === 1 }));
+  return rows.map((r) => ({
+    name: r.name,
+    bodyweightBased: r.bodyweight_based === 1,
+    isCardio: r.is_cardio === 1,
+    cardioMode: (r.cardio_mode as 'treadmill' | 'outside') ?? null,
+  }));
 };
 
 // --- routines -------------------------------------------------------------
+
+export interface RoutineExerciseItem {
+  name: string;
+  bodyweightBased: boolean;
+  targetSets: number;
+  /** As the programme wrote it — "8", "8-10", "AMRAP" — or null when none was given. */
+  targetReps: string | null;
+  position: number;
+  isCardio?: boolean;
+  cardioMode?: 'treadmill' | 'outside' | null;
+  targetTime?: string | null;
+  targetDistance?: number | null;
+  targetSpeed?: number | null;
+  targetIncline?: number | null;
+}
 
 export interface Routine {
   id: string;
   name: string;
   position: number;
-  exercises: {
-    name: string;
-    bodyweightBased: boolean;
-    targetSets: number;
-    /** As the programme wrote it — "8", "8-10", "AMRAP" — or null when none was given. */
-    targetReps: string | null;
-    position: number;
-  }[];
+  exercises: RoutineExerciseItem[];
 }
 
 export const listRoutines = async (): Promise<Routine[]> => {
@@ -1482,8 +1544,15 @@ export const listRoutines = async (): Promise<Routine[]> => {
       target_sets: number;
       target_reps: string | null;
       position: number;
+      is_cardio: number | null;
+      cardio_mode: string | null;
+      target_time: string | null;
+      target_distance: number | null;
+      target_speed: number | null;
+      target_incline: number | null;
     }>(
-      `SELECT e.name, e.bodyweight_based, re.target_sets, re.target_reps, re.position
+      `SELECT e.name, e.bodyweight_based, re.target_sets, re.target_reps, re.position,
+              re.is_cardio, re.cardio_mode, re.target_time, re.target_distance, re.target_speed, re.target_incline
          FROM routine_exercises re JOIN exercises e ON e.id = re.exercise_id
         WHERE re.routine_id = ? ORDER BY re.position`,
       row.id,
@@ -1498,6 +1567,12 @@ export const listRoutines = async (): Promise<Routine[]> => {
         targetSets: e.target_sets,
         targetReps: e.target_reps,
         position: e.position,
+        isCardio: e.is_cardio === 1,
+        cardioMode: (e.cardio_mode as 'treadmill' | 'outside') ?? null,
+        targetTime: e.target_time,
+        targetDistance: e.target_distance,
+        targetSpeed: e.target_speed,
+        targetIncline: e.target_incline,
       })),
     });
   }
@@ -1506,7 +1581,18 @@ export const listRoutines = async (): Promise<Routine[]> => {
 
 export const createRoutine = async (
   name: string,
-  exercises: { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null }[],
+  exercises: {
+    name: string;
+    bodyweightBased: boolean;
+    targetSets: number;
+    targetReps?: string | null;
+    isCardio?: boolean;
+    cardioMode?: 'treadmill' | 'outside' | null;
+    targetTime?: string | null;
+    targetDistance?: number | null;
+    targetSpeed?: number | null;
+    targetIncline?: number | null;
+  }[],
 ): Promise<string> => {
   const db = await getDb();
   const id = newId();
@@ -1525,17 +1611,33 @@ export const createRoutine = async (
     );
 
     for (const [index, exercise] of exercises.entries()) {
-      const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
+      const exerciseId = await exerciseIdFor(
+        db,
+        exercise.name,
+        exercise.bodyweightBased,
+        exercise.isCardio ?? false,
+        exercise.cardioMode ?? null,
+      );
       await db.runAsync(
-        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps)
-         VALUES (?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
            SET position = excluded.position, target_sets = excluded.target_sets,
-               target_reps = excluded.target_reps`,
+               target_reps = excluded.target_reps, is_cardio = excluded.is_cardio,
+               cardio_mode = excluded.cardio_mode, target_time = excluded.target_time,
+               target_distance = excluded.target_distance, target_speed = excluded.target_speed,
+               target_incline = excluded.target_incline`,
         id,
         exerciseId,
         index,
         exercise.targetSets,
         exercise.targetReps ?? null,
+        exercise.isCardio ? 1 : 0,
+        exercise.cardioMode ?? null,
+        exercise.targetTime ?? null,
+        exercise.targetDistance ?? null,
+        exercise.targetSpeed ?? null,
+        exercise.targetIncline ?? null,
       );
     }
   });
@@ -1551,21 +1653,45 @@ export const renameRoutine = async (id: string, name: string): Promise<void> => 
 /** Rewrites a routine's exercise list wholesale, which is how the editor saves. */
 export const setRoutineExercises = async (
   id: string,
-  exercises: { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null }[],
+  exercises: {
+    name: string;
+    bodyweightBased: boolean;
+    targetSets: number;
+    targetReps?: string | null;
+    isCardio?: boolean;
+    cardioMode?: 'treadmill' | 'outside' | null;
+    targetTime?: string | null;
+    targetDistance?: number | null;
+    targetSpeed?: number | null;
+    targetIncline?: number | null;
+  }[],
 ): Promise<void> => {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM routine_exercises WHERE routine_id = ?', id);
     for (const [index, exercise] of exercises.entries()) {
-      const exerciseId = await exerciseIdFor(db, exercise.name, exercise.bodyweightBased);
+      const exerciseId = await exerciseIdFor(
+        db,
+        exercise.name,
+        exercise.bodyweightBased,
+        exercise.isCardio ?? false,
+        exercise.cardioMode ?? null,
+      );
       await db.runAsync(
-        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         exerciseId,
         index,
         exercise.targetSets,
         exercise.targetReps ?? null,
+        exercise.isCardio ? 1 : 0,
+        exercise.cardioMode ?? null,
+        exercise.targetTime ?? null,
+        exercise.targetDistance ?? null,
+        exercise.targetSpeed ?? null,
+        exercise.targetIncline ?? null,
       );
     }
   });
@@ -1719,9 +1845,16 @@ export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]
     reps: number;
     set_type: string;
     rpe: number | null;
+    is_cardio: number | null;
+    cardio_mode: string | null;
+    speed_kph: number | null;
+    incline_pct: number | null;
+    duration_seconds: number | null;
+    distance_km: number | null;
   }>(
     `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
-            s.reps, s.set_type, s.rpe
+            s.reps, s.set_type, s.rpe, s.is_cardio, s.cardio_mode, s.speed_kph,
+            s.incline_pct, s.duration_seconds, s.distance_km
        FROM sets s JOIN exercises e ON e.id = s.exercise_id
       WHERE s.session_id = ? AND s.exercise_name = ?
       ORDER BY s.set_index`,
@@ -1738,6 +1871,12 @@ export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]
     reps: row.reps,
     setType: row.set_type as SetType,
     rpe: row.rpe,
+    isCardio: row.is_cardio === 1,
+    cardioMode: (row.cardio_mode as 'treadmill' | 'outside') ?? null,
+    speedKph: row.speed_kph,
+    inclinePct: row.incline_pct,
+    durationSeconds: row.duration_seconds,
+    distanceKm: row.distance_km,
   }));
 };
 
@@ -1746,14 +1885,38 @@ export const updateSetValues = async (
   id: string,
   weightKg: number | null,
   reps: number,
+  cardio?: {
+    speedKph?: number | null;
+    inclinePct?: number | null;
+    durationSeconds?: number | null;
+    distanceKm?: number | null;
+    cardioMode?: 'treadmill' | 'outside' | null;
+  },
 ): Promise<void> => {
   const db = await getDb();
-  await db.runAsync(
-    'UPDATE sets SET weight_kg = ?, reps = ? WHERE id = ?',
-    weightKg,
-    reps,
-    id,
-  );
+  if (cardio) {
+    await db.runAsync(
+      `UPDATE sets
+          SET weight_kg = ?, reps = ?, speed_kph = ?, incline_pct = ?,
+              duration_seconds = ?, distance_km = ?, cardio_mode = ?
+        WHERE id = ?`,
+      weightKg,
+      reps,
+      cardio.speedKph ?? null,
+      cardio.inclinePct ?? null,
+      cardio.durationSeconds ?? null,
+      cardio.distanceKm ?? null,
+      cardio.cardioMode ?? null,
+      id,
+    );
+  } else {
+    await db.runAsync(
+      'UPDATE sets SET weight_kg = ?, reps = ? WHERE id = ?',
+      weightKg,
+      reps,
+      id,
+    );
+  }
 };
 
 /**
