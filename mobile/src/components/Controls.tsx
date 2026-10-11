@@ -50,7 +50,10 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: 
     // app's one piece of shared visual language, and spending it on the single
     // action a screen most wants you to take is what makes it mean anything —
     // a screen where Cancel leans as hard as Save says nothing at all.
-    <Tappable onPress={onPress} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
+    //
+    // The bottom margin is the button's own, as a field's is: with none, every
+    // stack of buttons touched, and a section heading under one sat on it.
+    <Tappable onPress={onPress} disabled={disabled} style={[styles.buttonSpacing, { opacity: disabled ? 0.4 : 1 }]}>
       {variant === 'primary' ? (
         <SlashPanel color={background} style={styles.button}>
           <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
@@ -292,6 +295,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   squared: { borderRadius: radius.md },
+  buttonSpacing: { marginBottom: space.md },
   buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },
   field: { gap: space.xs, marginBottom: space.md },
   fieldLabel: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },

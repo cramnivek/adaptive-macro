@@ -8,25 +8,36 @@ import {
   readRoutinesWithGemini,
 } from '../src/ai/geminiRoutine';
 import {
+  type BuildOptions,
+  EQUIPMENT_ITEMS,
   EQUIPMENT_LABEL,
-  EQUIPMENT_OPTIONS,
-  type Equipment,
   FOCUS_LABEL,
+  isBodyweightOnly,
+  LEVEL_LABEL,
+  missingEquipment,
   ROUTINE_FOCUSES,
   type RoutineFocus,
+  TRAINING_LEVELS,
 } from '../src/ai/routineBuild';
 import { type ResolvedExercise, type RoutineDraft, resolveAgainstLog } from '../src/ai/routineImport';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
+import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { Screen } from '../src/components/Screen';
-import { createRoutine, listExerciseNames } from '../src/db';
+import { Tappable } from '../src/components/Tappable';
+import { type CatalogueEntry, createRoutine, listExerciseNames } from '../src/db';
 import { notify } from '../src/dialog';
+import { exerciseInfoFor } from '../src/exerciseInfo';
 import { pickBinaryFile } from '../src/platform/files';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
-type Found = { name: string; exercises: ResolvedExercise[]; include: boolean };
+type FoundExercise = ResolvedExercise & { include: boolean };
+type Found = { name: string; exercises: FoundExercise[]; include: boolean };
+
+/** A routine is saved only if it is kept and still has an exercise in it. */
+const kept = (routine: Found) => routine.include && routine.exercises.some((e) => e.include);
 
 /**
  * New routines, built for the person or read out of a programme they were given.
@@ -34,22 +45,28 @@ type Found = { name: string; exercises: ResolvedExercise[]; include: boolean };
  * Both end on the same list, and nothing is saved until it has been seen. The
  * model is good at this but not perfect, and a routine that quietly drops a
  * lift is worse than typing it in, so every exercise is shown, with which ones
- * join existing history and which start new.
+ * join existing history and which start new — and each can be dropped on its
+ * own, or tapped to see what it is before deciding.
  */
 export default function AddRoutinesScreen() {
   const router = useRouter();
-  const { settings } = useApp();
+  const { settings, updateSettings } = useApp();
+  const apiKey = settings.foodLookup.geminiApiKey;
 
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
   const [focuses, setFocuses] = useState<RoutineFocus[]>([]);
-  const [equipment, setEquipment] = useState<Equipment>('gym');
-  // What the drafts on screen were built for, so a bodyweight routine saves its
-  // new exercises as bodyweight ones rather than as lifts with no load.
-  const [builtFor, setBuiltFor] = useState<Equipment | null>(null);
+  // What the drafts on screen were built with: for the equipment warnings, and
+  // so a bodyweight routine saves its new exercises as bodyweight ones.
+  const [builtWith, setBuiltWith] = useState<BuildOptions | null>(null);
   const [found, setFound] = useState<Found[] | null>(null);
   const [source, setSource] = useState('');
   const [working, setWorking] = useState<{ title: string; detail: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [info, setInfo] = useState<CatalogueEntry | null>(null);
+  const [lookingUp, setLookingUp] = useState<string | null>(null);
+
+  const equipment = settings.routineEquipment;
+  const level = settings.trainingLevel;
 
   useEffect(() => {
     void listExerciseNames().then(setKnown);
@@ -57,7 +74,12 @@ export default function AddRoutinesScreen() {
 
   const show = (drafts: RoutineDraft[]) => {
     const names = known.map((k) => k.name);
-    setFound(drafts.map((draft) => ({ ...resolveAgainstLog(draft, names), include: true })));
+    setFound(
+      drafts.map((draft) => {
+        const resolved = resolveAgainstLog(draft, names);
+        return { ...resolved, include: true, exercises: resolved.exercises.map((e) => ({ ...e, include: true })) };
+      }),
+    );
   };
 
   const toggleFocus = (focus: RoutineFocus) =>
@@ -66,19 +88,18 @@ export default function AddRoutinesScreen() {
       ROUTINE_FOCUSES.filter((f) => (f === focus ? !current.includes(f) : current.includes(f))),
     );
 
+  const toggleEquipment = (item: (typeof EQUIPMENT_ITEMS)[number]) =>
+    void updateSettings({
+      routineEquipment: EQUIPMENT_ITEMS.filter((i) => (i === item ? !equipment.includes(i) : equipment.includes(i))),
+    });
+
   const build = async () => {
+    const options: BuildOptions = { equipment, level };
     setWorking({ title: 'Building your routines', detail: focuses.map((f) => FOCUS_LABEL[f]).join(', ') });
     try {
-      show(
-        await buildRoutinesWithGemini(
-          focuses,
-          known.map((k) => k.name),
-          settings.foodLookup.geminiApiKey,
-          equipment,
-        ),
-      );
+      show(await buildRoutinesWithGemini(focuses, known.map((k) => k.name), apiKey, options));
       setSource('built');
-      setBuiltFor(equipment);
+      setBuiltWith(options);
     } catch (error) {
       notify('Could not build the routines', (error as Error).message);
     } finally {
@@ -109,9 +130,9 @@ export default function AddRoutinesScreen() {
     setWorking({ title: 'Reading the programme', detail: picked.name });
     try {
       const base64 = await picked.readBase64();
-      show(await readRoutinesWithGemini({ mimeType: kind.mimeType, base64 }, settings.foodLookup.geminiApiKey));
+      show(await readRoutinesWithGemini({ mimeType: kind.mimeType, base64 }, apiKey));
       setSource(picked.name);
-      setBuiltFor(null);
+      setBuiltWith(null);
     } catch (error) {
       notify('Could not read the programme', (error as Error).message);
     } finally {
@@ -119,21 +140,50 @@ export default function AddRoutinesScreen() {
     }
   };
 
-  const chosen = found?.filter((f) => f.include) ?? [];
+  const showInfo = async (name: string) => {
+    if (lookingUp !== null) return;
+    setLookingUp(name);
+    try {
+      const entry = await exerciseInfoFor(name, apiKey);
+      if (entry) setInfo(entry);
+      else notify('No how-to yet', `Could not look up ${name} just now.`);
+    } catch {
+      notify('No how-to yet', `Could not look up ${name} just now. Check your connection.`);
+    } finally {
+      setLookingUp(null);
+    }
+  };
+
+  const toggleRoutine = (index: number) =>
+    setFound((current) => current?.map((r, i) => (i === index ? { ...r, include: !r.include } : r)) ?? null);
+
+  const toggleExercise = (routineIndex: number, exerciseIndex: number) =>
+    setFound(
+      (current) =>
+        current?.map((r, i) =>
+          i !== routineIndex
+            ? r
+            : { ...r, exercises: r.exercises.map((e, j) => (j === exerciseIndex ? { ...e, include: !e.include } : e)) },
+        ) ?? null,
+    );
+
+  const chosen = found?.filter(kept) ?? [];
 
   const save = async () => {
     setSaving(true);
     try {
+      const bodyweightOnly = builtWith !== null && isBodyweightOnly(builtWith.equipment);
       for (const routine of chosen) {
         await createRoutine(
           routine.name,
-          routine.exercises.map((e) => ({
-            name: e.name,
-            bodyweightBased:
-              known.find((k) => k.name === e.name)?.bodyweightBased ?? builtFor === 'bodyweight',
-            targetSets: e.sets,
-            targetReps: e.reps,
-          })),
+          routine.exercises
+            .filter((e) => e.include)
+            .map((e) => ({
+              name: e.name,
+              bodyweightBased: known.find((k) => k.name === e.name)?.bodyweightBased ?? bodyweightOnly,
+              targetSets: e.sets,
+              targetReps: e.reps,
+            })),
         );
       }
       notify('Saved', chosen.length === 1 ? `${chosen[0].name} is in your routines.` : `${chosen.length} routines added.`);
@@ -157,56 +207,46 @@ export default function AddRoutinesScreen() {
               already do wherever they fit.
             </Text>
             <View style={styles.chips}>
-              {ROUTINE_FOCUSES.map((focus) => {
-                const on = focuses.includes(focus);
-                return (
-                  <Pressable
-                    key={focus}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: on }}
-                    onPress={() => toggleFocus(focus)}
-                    style={[
-                      styles.chip,
-                      { backgroundColor: on ? loud.loud : loud.panel, borderColor: on ? loud.loud : loud.rule },
-                    ]}
-                  >
-                    <Text style={{ fontFamily: font.uiStrong, fontSize: 14, color: on ? loud.onLoud : loud.figure }}>
-                      {FOCUS_LABEL[focus]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {ROUTINE_FOCUSES.map((focus) => (
+                <Chip key={focus} label={FOCUS_LABEL[focus]} on={focuses.includes(focus)} onPress={() => toggleFocus(focus)} />
+              ))}
             </View>
-            <Text style={[styles.note, { color: loud.figureFaint }]}>With</Text>
+
+            <Text style={[styles.label, { color: loud.figureMuted }]}>WHAT YOU HAVE</Text>
             <View style={styles.chips}>
-              {EQUIPMENT_OPTIONS.map((option) => {
-                const on = equipment === option;
-                return (
-                  <Pressable
-                    key={option}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: on }}
-                    onPress={() => setEquipment(option)}
-                    style={[
-                      styles.chip,
-                      { backgroundColor: on ? loud.figure : loud.panel, borderColor: on ? loud.figure : loud.rule },
-                    ]}
-                  >
-                    <Text style={{ fontFamily: font.uiStrong, fontSize: 14, color: on ? loud.ground : loud.figure }}>
-                      {EQUIPMENT_LABEL[option]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              {EQUIPMENT_ITEMS.map((item) => (
+                <Chip
+                  key={item}
+                  label={EQUIPMENT_LABEL[item]}
+                  on={equipment.includes(item)}
+                  onPress={() => toggleEquipment(item)}
+                  quiet
+                />
+              ))}
             </View>
-            {equipment === 'bodyweight' && (
+            {isBodyweightOnly(equipment) && (
               <Text style={[styles.note, { color: loud.figureFaint }]}>
-                Assumes a pull-up bar and a bench or sturdy chair.
+                Nothing that adds load, so every exercise will be bodyweight.
               </Text>
             )}
+
+            <Text style={[styles.label, { color: loud.figureMuted }]}>YOUR LEVEL</Text>
+            <View style={styles.chips}>
+              {TRAINING_LEVELS.map((option) => (
+                <Chip
+                  key={option}
+                  label={LEVEL_LABEL[option]}
+                  on={level === option}
+                  onPress={() => void updateSettings({ trainingLevel: option })}
+                  quiet
+                  radio
+                />
+              ))}
+            </View>
+
             <Button
               tone="loud"
-              label={focuses.length === 0 ? 'Pick at least one' : `Build ${count(focuses.length)}`}
+              label={focuses.length === 0 ? 'Pick at least one day' : `Build ${count(focuses.length)}`}
               onPress={build}
               disabled={focuses.length === 0}
             />
@@ -239,49 +279,79 @@ export default function AddRoutinesScreen() {
         <>
           <Text style={[styles.note, { color: loud.figureMuted }]}>
             {source === 'built' ? `Built ${count(found.length)}.` : `Found ${count(found.length)} in ${source}.`}{' '}
-            Nothing is saved yet. Tap one to leave it out.
+            Nothing is saved yet. Tap an exercise to see how it is done.
           </Text>
 
-          {found.map((routine, index) => (
-            <Pressable
-              key={`${routine.name}-${index}`}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: routine.include }}
-              onPress={() =>
-                setFound((current) =>
-                  current?.map((r, i) => (i === index ? { ...r, include: !r.include } : r)) ?? null,
-                )
-              }
-              style={{ opacity: routine.include ? 1 : 0.4 }}
-            >
+          {found.map((routine, routineIndex) => (
+            <View key={`${routine.name}-${routineIndex}`} style={{ opacity: routine.include ? 1 : 0.4 }}>
               <Card
                 loud
                 title={routine.name}
                 right={
-                  <Text style={{ fontFamily: font.uiStrong, color: routine.include ? loud.loud : loud.figureFaint }}>
-                    {routine.include ? 'ADD' : 'SKIP'}
-                  </Text>
+                  <Tappable
+                    onPress={() => toggleRoutine(routineIndex)}
+                    scaleTo={0.9}
+                    style={styles.toggle}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: routine.include }}
+                    accessibilityLabel={`${routine.include ? 'Leave out' : 'Keep'} ${routine.name}`}
+                  >
+                    <Text style={{ fontFamily: font.uiStrong, color: routine.include ? loud.loud : loud.figureFaint }}>
+                      {routine.include ? 'KEEP' : 'SKIP'}
+                    </Text>
+                  </Tappable>
                 }
               >
-                {routine.exercises.map((exercise) => (
-                  <View key={exercise.name} style={[styles.row, { borderColor: loud.rule }]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{exercise.name}</Text>
-                      <Text style={[styles.note, { color: loud.figureFaint }]}>
-                        {exercise.known
-                          ? exercise.importedAs
-                            ? `“${exercise.importedAs}” · joins your history`
-                            : 'joins your history'
-                          : 'new exercise'}
+                {routine.exercises.map((exercise, exerciseIndex) => {
+                  const lacking = builtWith ? missingEquipment(exercise.name, builtWith.equipment) : [];
+                  return (
+                    <View
+                      key={exercise.name}
+                      style={[styles.row, { borderColor: loud.rule, opacity: exercise.include ? 1 : 0.4 }]}
+                    >
+                      <Pressable
+                        onPress={() => void showInfo(exercise.name)}
+                        style={styles.rowMain}
+                        accessibilityRole="button"
+                        accessibilityLabel={`How to do ${exercise.name}`}
+                      >
+                        <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{exercise.name}</Text>
+                        <Text style={[styles.note, { color: loud.figureFaint }]}>
+                          {lookingUp === exercise.name
+                            ? 'Looking it up…'
+                            : exercise.known
+                              ? exercise.importedAs
+                                ? `“${exercise.importedAs}” · joins your history`
+                                : 'joins your history'
+                              : 'new exercise'}
+                        </Text>
+                        {lacking.length > 0 && (
+                          <Text style={[styles.note, { color: loud.warn }]}>
+                            Needs {lacking.map((item) => EQUIPMENT_LABEL[item].toLowerCase()).join(' and ')}, which
+                            you did not pick
+                          </Text>
+                        )}
+                      </Pressable>
+                      <Text style={[styles.target, { color: loud.figure }]}>
+                        {exercise.sets} × {exercise.reps ?? '—'}
                       </Text>
+                      <Tappable
+                        onPress={() => toggleExercise(routineIndex, exerciseIndex)}
+                        scaleTo={0.85}
+                        style={styles.toggle}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: exercise.include }}
+                        accessibilityLabel={`${exercise.include ? 'Leave out' : 'Keep'} ${exercise.name}`}
+                      >
+                        <Text style={{ fontSize: 16, color: exercise.include ? loud.figureFaint : loud.loud }}>
+                          {exercise.include ? '✕' : '+'}
+                        </Text>
+                      </Tappable>
                     </View>
-                    <Text style={[styles.target, { color: loud.figure }]}>
-                      {exercise.sets} × {exercise.reps ?? '—'}
-                    </Text>
-                  </View>
-                ))}
+                  );
+                })}
               </Card>
-            </Pressable>
+            </View>
           ))}
 
           <Button
@@ -293,12 +363,49 @@ export default function AddRoutinesScreen() {
           <Button tone="loud" label="Start over" variant="subtle" onPress={() => setFound(null)} disabled={saving} />
         </>
       )}
+
+      <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
     </Screen>
   );
 }
 
+/**
+ * One choice. Days are the loud red, because they are the question; equipment
+ * and level are quiet white, because they are settings that mostly stay put.
+ */
+const Chip = ({
+  label,
+  on,
+  onPress,
+  quiet = false,
+  radio = false,
+}: {
+  label: string;
+  on: boolean;
+  onPress: () => void;
+  quiet?: boolean;
+  radio?: boolean;
+}) => {
+  const fill = quiet ? loud.figure : loud.loud;
+  return (
+    <Pressable
+      accessibilityRole={radio ? 'radio' : 'checkbox'}
+      accessibilityState={{ checked: on }}
+      onPress={onPress}
+      style={[styles.chip, { backgroundColor: on ? fill : loud.panel, borderColor: on ? fill : loud.rule }]}
+    >
+      <Text
+        style={{ fontFamily: font.uiStrong, fontSize: 14, color: on ? (quiet ? loud.ground : loud.onLoud) : loud.figure }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+};
+
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4, marginBottom: space.xs },
+  label: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.2, marginTop: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginVertical: space.sm },
   chip: {
     minHeight: TOUCH_TARGET - 8,
@@ -315,5 +422,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     gap: space.sm,
   },
+  rowMain: { flex: 1, paddingVertical: space.xs },
   target: { fontFamily: font.figure, fontSize: 15 },
+  toggle: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
 });

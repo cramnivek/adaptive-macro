@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoutinePrompt, ROUTINE_BUILD_SYSTEM } from '../routineBuild';
+import { buildRoutinePrompt, isBodyweightOnly, missingEquipment, ROUTINE_BUILD_SYSTEM } from '../routineBuild';
 
 describe('buildRoutinePrompt', () => {
   it('names each routine and lays out its slots in order', () => {
@@ -58,27 +58,83 @@ describe('ROUTINE_BUILD_SYSTEM', () => {
 });
 
 describe('equipment', () => {
-  it('assumes a full gym unless told otherwise', () => {
-    expect(buildRoutinePrompt(['push'], [])).toContain('a full gym');
+  it('lists everything as available by default, and nothing as missing', () => {
+    const prompt = buildRoutinePrompt(['push'], []);
+    expect(prompt).toContain('a barbell with plates, a rack and a bench');
+    expect(prompt).toContain('a pull-up bar');
+    expect(prompt).not.toContain('Not available');
   });
 
-  it('rules out everything but dumbbells, by name, for a dumbbell-only routine', () => {
-    const prompt = buildRoutinePrompt(['legs'], [], 'dumbbells');
-    expect(prompt).toContain('no barbell, no cables, no machines');
-    // A live build with only 'or bodyweight' to go on came back with a pull-up.
-    expect(prompt).toContain('no pull-up bar');
-    expect(prompt).not.toContain('a full gym');
+  it('names what is missing as well as what is there', () => {
+    const prompt = buildRoutinePrompt(['pull'], [], { equipment: ['dumbbells'], level: 'intermediate' });
+    expect(prompt).toContain('Equipment: dumbbells and an adjustable bench, and bodyweight.');
+    expect(prompt).toContain('Not available: barbell with plates, a rack and a bench, cable station, weight machines, pull-up bar');
+    expect(prompt).toContain('never use an exercise that needs them');
   });
 
-  it('asks for harder variations rather than load when there is no equipment', () => {
-    const prompt = buildRoutinePrompt(['upper'], [], 'bodyweight');
+  it('says how to fill a slot whose usual tool is missing', () => {
+    const prompt = buildRoutinePrompt(['pull'], [], { equipment: ['dumbbells', 'machines'], level: 'intermediate' });
+    expect(prompt).toContain('a pullover or a row for a vertical pull');
+  });
+
+  it('asks for harder variations rather than load when there is nothing at all', () => {
+    const prompt = buildRoutinePrompt(['upper'], [], { equipment: [], level: 'intermediate' });
     expect(prompt).toContain('Every exercise must be bodyweight');
-    expect(prompt).toContain('pull-up bar');
   });
 
-  it('offers logged exercises only where they suit the equipment', () => {
-    const prompt = buildRoutinePrompt(['push'], ['Bench Press (Barbell)'], 'dumbbells');
+  it('offers logged exercises only where they suit the equipment, after saying what that is', () => {
+    const prompt = buildRoutinePrompt(['push'], ['Bench Press (Barbell)'], { equipment: ['dumbbells'], level: 'intermediate' });
     expect(prompt).toContain('needs only the equipment above');
-    expect(prompt.indexOf('no barbell')).toBeLessThan(prompt.indexOf('- Bench Press (Barbell)'));
+    expect(prompt.indexOf('Not available')).toBeLessThan(prompt.indexOf('- Bench Press (Barbell)'));
+  });
+});
+
+describe('level', () => {
+  it('steers a beginner to movements that are hard to do badly, with lighter volume', () => {
+    const prompt = buildRoutinePrompt(['legs'], [], { equipment: ['barbell', 'dumbbells', 'machines'], level: 'beginner' });
+    expect(prompt).toContain('Level: beginner');
+    expect(prompt).toContain('over technical barbell lifts');
+    expect(prompt).toContain('2 or 3 sets');
+  });
+
+  it('gives an advanced lifter a heavy first compound', () => {
+    const prompt = buildRoutinePrompt(['push'], [], { equipment: ['barbell'], level: 'advanced' });
+    expect(prompt).toContain('4 or 5 sets of "3-6" or "4-6"');
+  });
+
+  it('leaves an intermediate on the default ranges', () => {
+    expect(buildRoutinePrompt(['push'], [])).toContain('Use the set and rep ranges above');
+  });
+});
+
+describe('isBodyweightOnly', () => {
+  it('is true with nothing, or only a bar to hang from', () => {
+    expect(isBodyweightOnly([])).toBe(true);
+    expect(isBodyweightOnly(['pullUpBar'])).toBe(true);
+  });
+
+  it('is false once anything adds load', () => {
+    expect(isBodyweightOnly(['dumbbells'])).toBe(false);
+    expect(isBodyweightOnly(['pullUpBar', 'cables'])).toBe(false);
+  });
+});
+
+describe('missingEquipment', () => {
+  it('catches an exercise that needs something the person does not have', () => {
+    expect(missingEquipment('Pull-Up', ['dumbbells'])).toEqual(['pullUpBar']);
+    expect(missingEquipment('Lat Pulldown (Cable)', ['dumbbells'])).toEqual(['cables']);
+    expect(missingEquipment('Barbell Back Squat', ['dumbbells'])).toEqual(['barbell']);
+    expect(missingEquipment('Leg Press', ['barbell'])).toEqual(['machines']);
+  });
+
+  it('is quiet when the equipment is there', () => {
+    expect(missingEquipment('Pull-Up', ['pullUpBar'])).toEqual([]);
+    expect(missingEquipment('Bench Press (Barbell)', ['barbell'])).toEqual([]);
+  });
+
+  it('does not cry wolf on names that only sound like a machine', () => {
+    expect(missingEquipment('Dumbbell Lying Leg Curl', ['dumbbells'])).toEqual([]);
+    expect(missingEquipment('Goblet Squat', ['dumbbells'])).toEqual([]);
+    expect(missingEquipment('Dumbbell Pullover', ['dumbbells'])).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import { defaultOllamaHost } from '../ai/ollama';
 import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
 import type { BarChoice } from '../plates';
+import { EQUIPMENT_ITEMS, type EquipmentItem, type TrainingLevel } from '../ai/routineBuild';
 
 export type UnitSystem = 'metric' | 'imperial';
 
@@ -68,6 +69,9 @@ export interface AppSettings {
   checkInSeenWeek: ISODate | null;
   /** The bar the plate calculator assumes: 20 kg / 45 lb, or the 15 kg / 35 lb one. */
   barbell: BarChoice;
+  /** What routine building may use, and who it is for. Remembered so the next build starts there. */
+  routineEquipment: EquipmentItem[];
+  trainingLevel: TrainingLevel;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -92,6 +96,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   checkInSeenWeek: null,
   barbell: 'standard',
+  routineEquipment: [...EQUIPMENT_ITEMS],
+  trainingLevel: 'intermediate',
 };
 
 export const SETTINGS_KEY = 'app.settings';

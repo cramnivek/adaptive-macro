@@ -70,32 +70,80 @@ const SLOTS: Record<RoutineFocus, string[]> = {
   ],
 };
 
-export const EQUIPMENT_OPTIONS = ['gym', 'dumbbells', 'bodyweight'] as const;
-export type Equipment = (typeof EQUIPMENT_OPTIONS)[number];
+/** What someone can have to train with. Bodyweight needs nothing, so it is always there. */
+export const EQUIPMENT_ITEMS = ['barbell', 'dumbbells', 'cables', 'machines', 'pullUpBar'] as const;
+export type EquipmentItem = (typeof EQUIPMENT_ITEMS)[number];
 
-export const EQUIPMENT_LABEL: Record<Equipment, string> = {
-  gym: 'Full gym',
+export const EQUIPMENT_LABEL: Record<EquipmentItem, string> = {
+  barbell: 'Barbell',
   dumbbells: 'Dumbbells',
-  bodyweight: 'Bodyweight',
+  cables: 'Cables',
+  machines: 'Machines',
+  pullUpBar: 'Pull-up bar',
+};
+
+/** How each piece is described to the model, with what comes with it. */
+const EQUIPMENT_TEXT: Record<EquipmentItem, string> = {
+  barbell: 'a barbell with plates, a rack and a bench',
+  dumbbells: 'dumbbells and an adjustable bench',
+  cables: 'a cable station',
+  machines: 'weight machines',
+  pullUpBar: 'a pull-up bar',
+};
+
+export const TRAINING_LEVELS = ['beginner', 'intermediate', 'advanced'] as const;
+export type TrainingLevel = (typeof TRAINING_LEVELS)[number];
+
+export const LEVEL_LABEL: Record<TrainingLevel, string> = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
 };
 
 /**
- * What the model is told it has to work with. Spelled out as what is absent as
- * well as what is there, because "dumbbells" alone still gets a barbell squat
- * back as the obvious squat.
+ * What the level changes. Exercise choice as much as volume: a beginner gets
+ * movements that are hard to do badly, because a programme abandoned after a
+ * sore back in week two has no volume at all.
  */
-const EQUIPMENT_TEXT: Record<Equipment, string> = {
-  gym: 'Equipment: a full gym — barbells, dumbbells, cables and machines.',
-  dumbbells:
-    'Equipment: dumbbells and an adjustable bench, nothing else — no barbell, no cables, no machines, ' +
-    'and no pull-up bar. Every exercise must be done with dumbbells or bodyweight on the floor or the ' +
-    'bench; where a slot would need a bar to hang from, use the closest dumbbell movement, such as a ' +
-    'pullover for a vertical pull.',
-  bodyweight:
-    'Equipment: none beyond a pull-up bar and a sturdy bench or chair. Every exercise must be bodyweight. ' +
-    'Make a slot harder with a harder variation — single-leg, slower, deficit — rather than with load, ' +
-    'and let reps run up to 20 where the usual range would be too easy.',
+const LEVEL_TEXT: Record<TrainingLevel, string> = {
+  beginner:
+    'Level: beginner, new to lifting. Prefer stable movements that are hard to do badly — machines, ' +
+    'dumbbells, goblet squats — over technical barbell lifts wherever the equipment allows. 2 or 3 sets ' +
+    'for every exercise, reps "8-12" or "10-15". This overrides the set and rep ranges above.',
+  intermediate: 'Level: intermediate, a year or more of consistent lifting. Use the set and rep ranges above.',
+  advanced:
+    'Level: advanced, several years of serious training. Favour free-weight compounds where the equipment ' +
+    'allows. The first compound of each routine gets 4 or 5 sets of "3-6" or "4-6"; other compounds 3 or 4 ' +
+    'sets of "6-10"; everything else 3 sets. This overrides the set and rep ranges above.',
 };
+
+/**
+ * What the model is told it has to work with, as what is missing as well as
+ * what is there: "dumbbells" alone still gets a barbell squat back as the
+ * obvious squat, and leaving a pull-up bar unmentioned got a pull-up.
+ */
+const equipmentText = (available: EquipmentItem[]): string => {
+  const missing = EQUIPMENT_ITEMS.filter((item) => !available.includes(item));
+  if (available.length === 0) {
+    return (
+      'Equipment: none beyond a sturdy bench or chair. Every exercise must be bodyweight. Make a slot ' +
+      'harder with a harder variation — single-leg, slower, deficit — rather than with load, and let ' +
+      'reps run up to 20 where the usual range would be too easy.'
+    );
+  }
+  const have = available.map((item) => EQUIPMENT_TEXT[item]).join(', ');
+  if (missing.length === 0) return `Equipment: ${have}. Bodyweight exercises are fine too.`;
+  const lacking = missing.map((item) => EQUIPMENT_TEXT[item].replace(/^an? /, '')).join(', ');
+  return (
+    `Equipment: ${have}, and bodyweight. Not available: ${lacking} — never use an exercise that needs ` +
+    `them. Where a slot would usually need one, use the closest movement with what is there, such as ` +
+    `a pullover or a row for a vertical pull with no bar or cable.`
+  );
+};
+
+/** True when nothing in the list adds load, so a routine is bodyweight all through. */
+export const isBodyweightOnly = (available: EquipmentItem[]): boolean =>
+  !available.some((item) => item !== 'pullUpBar');
 
 /** How many of the user's own exercises to offer. Most-used first, so the cut loses the least. */
 const KNOWN_LIMIT = 60;
@@ -103,18 +151,25 @@ const KNOWN_LIMIT = 60;
 export const ROUTINE_BUILD_SYSTEM = `You are a strength coach writing gym routines for one person.
 
 Fill every slot you are given with exactly one exercise, in the order given.
-Prescribe working sets only:
+Prescribe working sets only, unless the person's level says otherwise:
 - compound slots: 3 or 4 sets, reps as a range such as "5-8" or "6-10"
 - other slots: 2 or 3 sets, reps as a range such as "10-15"
 
 Give each exercise its common gym name. Never list the same exercise twice in
 one routine. Set notProgram to false.`;
 
+export interface BuildOptions {
+  equipment: EquipmentItem[];
+  level: TrainingLevel;
+}
+
+export const DEFAULT_BUILD_OPTIONS: BuildOptions = { equipment: [...EQUIPMENT_ITEMS], level: 'intermediate' };
+
 /** The request for one routine per focus, steered towards exercises the person already logs. */
 export const buildRoutinePrompt = (
   focuses: RoutineFocus[],
   known: string[],
-  equipment: Equipment = 'gym',
+  options: BuildOptions = DEFAULT_BUILD_OPTIONS,
 ): string => {
   const days = focuses
     .map((focus) => {
@@ -133,5 +188,26 @@ export const buildRoutinePrompt = (
         offered.map((name) => `- ${name}`).join('\n');
 
   const count = focuses.length === 1 ? 'one routine' : `${focuses.length} routines`;
-  return `Write ${count}.\n${EQUIPMENT_TEXT[equipment]}\n\n${days}${preference}`;
+  return `Write ${count}.\n${equipmentText(options.equipment)}\n${LEVEL_TEXT[options.level]}\n\n${days}${preference}`;
 };
+
+/**
+ * Words in an exercise name that say what it needs. Deliberately narrow: a
+ * "Dumbbell Lying Leg Curl" is not a machine exercise just because most leg
+ * curls are, and a false alarm teaches people to ignore the real ones.
+ */
+const NEEDS: [EquipmentItem, RegExp][] = [
+  ['barbell', /\b(barbell|bb)\b/i],
+  ['dumbbells', /\b(dumbbells?|db)\b/i],
+  ['cables', /\b(cable|pulldown|pushdown)s?\b/i],
+  ['machines', /\b(machine|smith|leg press|pec deck|hack squat)\b/i],
+  ['pullUpBar', /\b(pull-?ups?|chin-?ups?|hanging)\b/i],
+];
+
+/**
+ * What an exercise needs that the person said they do not have, read from its
+ * name. The prompt asks the model to stay inside the equipment, and it mostly
+ * does; this is how the review screen catches the time it does not.
+ */
+export const missingEquipment = (exerciseName: string, available: EquipmentItem[]): EquipmentItem[] =>
+  NEEDS.filter(([item, pattern]) => !available.includes(item) && pattern.test(exerciseName)).map(([item]) => item);
