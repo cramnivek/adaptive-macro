@@ -31,6 +31,10 @@ export const messageFor = (error: ServerError): string => {
       ? 'The sign-in email could not be sent. Try again in a few minutes.'
       : 'Something went wrong on the server. Try again in a few minutes.';
   }
+  // Our own time limit on a request (see timeoutFetch.ts), as postgrest-js reports it.
+  if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+    return 'The server took too long to answer. Try again.';
+  }
   if (
     error.name === 'AuthRetryableFetchError' ||
     error.message?.includes('Failed to fetch') ||
