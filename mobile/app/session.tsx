@@ -948,7 +948,11 @@ export default function SessionScreen() {
                         { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
                       ]}
                     >
-                      {row.setType === 'warmup' ? 'W' : rowIndex + 1}
+                      {/* Working sets are numbered among themselves, so a warm-up first
+                          gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
+                      {row.setType === 'warmup'
+                        ? 'W'
+                        : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
                     </Text>
                   </Tappable>
 

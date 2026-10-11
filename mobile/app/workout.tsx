@@ -155,7 +155,7 @@ export default function WorkoutScreen() {
           {group.sets.map((set, index) => (
             <View key={set.id} style={[styles.row, { borderColor: loud.rule }]}>
               <Text style={[styles.number, set.setType === 'warmup' && { color: loud.warn }]}>
-                {/* Working sets are counted without the warm-ups before them, as in the logger. */}
+                {/* Working sets are counted without the warm-ups before them, as the logger counts them. */}
                 {set.setType === 'warmup'
                   ? 'W'
                   : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
