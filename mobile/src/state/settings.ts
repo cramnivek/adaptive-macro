@@ -74,6 +74,12 @@ export interface AppSettings {
   trainingLevel: TrainingLevel;
   /** Whether the rest timer chimes when it runs out. Off for anyone training in headphones. */
   restSound: boolean;
+  /**
+   * Whether the finish sheet leads with POST. Set by what someone did last
+   * time — posted, or left without posting — so a regular poster gets one tap
+   * and someone who never posts is not nagged.
+   */
+  postWorkouts: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -101,6 +107,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   routineEquipment: [...EQUIPMENT_ITEMS],
   trainingLevel: 'intermediate',
   restSound: true,
+  postWorkouts: false,
 };
 
 export const SETTINGS_KEY = 'app.settings';

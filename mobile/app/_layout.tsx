@@ -12,6 +12,7 @@ import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Toaster } from '../src/components/Toaster';
 import { StorageGate } from '../src/components/StorageGate';
+import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
@@ -52,147 +53,149 @@ export default function RootLayout() {
       <AppProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Toaster />
-        {/* Inside the provider, because it reads the load error from the store. */}
-        <StorageGate>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-              // Set once here rather than on each of the eleven modal screens:
-              // React Navigation draws its own title, so it kept the system font
-              // while the screen beneath it was typeset.
-              headerTitleStyle: { fontFamily: font.uiStrong },
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="search"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Add food',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
+        <SocialProvider>
+          {/* Inside the provider, because it reads the load error from the store. */}
+          <StorageGate>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.background },
+                // Set once here rather than on each of the eleven modal screens:
+                // React Navigation draws its own title, so it kept the system font
+                // while the screen beneath it was typeset.
+                headerTitleStyle: { fontFamily: font.uiStrong },
               }}
-            />
-            <Stack.Screen
-              name="quick-add"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Quick add',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="repeat"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Repeat a day',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="describe"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Describe a meal',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="food-new"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'New food',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="scan"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Scan barcode',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-            <Stack.Screen
-              name="routines"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                // The training side's modals carry its ground, so the bar above them
-                // is not a strip of a different dark. Titles drop: the screen below
-                // already says it in display type.
-                title: '',
-                headerStyle: { backgroundColor: loud.ground },
-                headerTintColor: loud.figure,
-              }}
-            />
-            <Stack.Screen
-              name="session"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                // No title and the logger's own ground, so the modal bar is not
-                // a strip of a different dark above a screen that has already
-                // said "WORKOUT" in 26px. The chevron still dismisses it.
-                title: '',
-                headerStyle: { backgroundColor: loud.ground },
-                headerTintColor: loud.figure,
-              }}
-            />
-            <Stack.Screen
-              name="add-routines"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: '',
-                headerStyle: { backgroundColor: loud.ground },
-                headerTintColor: loud.figure,
-              }}
-            />
-            <Stack.Screen
-              name="progression"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: '',
-                headerStyle: { backgroundColor: loud.ground },
-                headerTintColor: loud.figure,
-              }}
-            />
-            <Stack.Screen
-              name="overview"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: '',
-                headerStyle: { backgroundColor: loud.ground },
-                headerTintColor: loud.figure,
-              }}
-            />
-            <Stack.Screen
-              name="import-workouts"
-              options={{
-                presentation: 'modal',
-                headerShown: true,
-                title: 'Import workouts',
-                headerStyle: { backgroundColor: colors.surface },
-                headerTintColor: colors.text,
-              }}
-            />
-          </Stack>
-        </StorageGate>
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen
+                name="search"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Add food',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="quick-add"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Quick add',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="repeat"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Repeat a day',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="describe"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Describe a meal',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="food-new"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'New food',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="scan"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Scan barcode',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="routines"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  // The training side's modals carry its ground, so the bar above them
+                  // is not a strip of a different dark. Titles drop: the screen below
+                  // already says it in display type.
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
+                name="session"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  // No title and the logger's own ground, so the modal bar is not
+                  // a strip of a different dark above a screen that has already
+                  // said "WORKOUT" in 26px. The chevron still dismisses it.
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
+                name="add-routines"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
+                name="progression"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
+                name="overview"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: '',
+                  headerStyle: { backgroundColor: loud.ground },
+                  headerTintColor: loud.figure,
+                }}
+              />
+              <Stack.Screen
+                name="import-workouts"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Import workouts',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+            </Stack>
+          </StorageGate>
+        </SocialProvider>
       </AppProvider>
     </SafeAreaProvider>
   );
