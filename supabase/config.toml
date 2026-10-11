@@ -1,0 +1,3 @@
+# The Supabase CLI and GitHub integration look for this directory by this file.
+# Everything not set here takes the CLI's defaults.
+project_id = "adaptive-macro"
