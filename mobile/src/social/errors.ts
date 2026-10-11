@@ -24,6 +24,13 @@ export const messageFor = (error: ServerError): string => {
   if (error.code === 'over_email_send_rate_limit' || error.status === 429) {
     return 'Too many codes sent. Wait a few minutes and try again.';
   }
+  // A 5xx came from a server that was reached, so it is never "offline" — supabase-js can
+  // still label it a retryable fetch error, which is why this comes first.
+  if ((error.status ?? 0) >= 500) {
+    return error.message?.includes('sending') && error.message.includes('email')
+      ? 'The sign-in email could not be sent. Try again in a few minutes.'
+      : 'Something went wrong on the server. Try again in a few minutes.';
+  }
   if (
     error.name === 'AuthRetryableFetchError' ||
     error.message?.includes('Failed to fetch') ||

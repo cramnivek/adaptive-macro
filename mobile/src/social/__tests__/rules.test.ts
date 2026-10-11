@@ -70,6 +70,16 @@ describe('messageFor', () => {
     );
   });
 
+  it('says the sign-in email failed, not that the phone is offline', () => {
+    // A server that answered with 500 was reached; blaming the connection sends people to check the wrong thing.
+    expect(
+      messageFor({ name: 'AuthApiError', status: 500, code: 'unexpected_failure', message: 'Error sending magic link email' }),
+    ).toBe('The sign-in email could not be sent. Try again in a few minutes.');
+    expect(messageFor({ name: 'AuthRetryableFetchError', status: 500, message: '{}' })).toBe(
+      'Something went wrong on the server. Try again in a few minutes.',
+    );
+  });
+
   it('explains being offline in Safari and Firefox', () => {
     expect(messageFor({ message: 'Load failed' })).toBe(
       'Could not reach the server. Check the connection and try again.',
