@@ -7,7 +7,14 @@ import {
   MAX_DOCUMENT_BYTES,
   readRoutinesWithGemini,
 } from '../src/ai/geminiRoutine';
-import { FOCUS_LABEL, ROUTINE_FOCUSES, type RoutineFocus } from '../src/ai/routineBuild';
+import {
+  EQUIPMENT_LABEL,
+  EQUIPMENT_OPTIONS,
+  type Equipment,
+  FOCUS_LABEL,
+  ROUTINE_FOCUSES,
+  type RoutineFocus,
+} from '../src/ai/routineBuild';
 import { type ResolvedExercise, type RoutineDraft, resolveAgainstLog } from '../src/ai/routineImport';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
@@ -35,6 +42,10 @@ export default function AddRoutinesScreen() {
 
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
   const [focuses, setFocuses] = useState<RoutineFocus[]>([]);
+  const [equipment, setEquipment] = useState<Equipment>('gym');
+  // What the drafts on screen were built for, so a bodyweight routine saves its
+  // new exercises as bodyweight ones rather than as lifts with no load.
+  const [builtFor, setBuiltFor] = useState<Equipment | null>(null);
   const [found, setFound] = useState<Found[] | null>(null);
   const [source, setSource] = useState('');
   const [working, setWorking] = useState<{ title: string; detail: string } | null>(null);
@@ -63,9 +74,11 @@ export default function AddRoutinesScreen() {
           focuses,
           known.map((k) => k.name),
           settings.foodLookup.geminiApiKey,
+          equipment,
         ),
       );
       setSource('built');
+      setBuiltFor(equipment);
     } catch (error) {
       notify('Could not build the routines', (error as Error).message);
     } finally {
@@ -98,6 +111,7 @@ export default function AddRoutinesScreen() {
       const base64 = await picked.readBase64();
       show(await readRoutinesWithGemini({ mimeType: kind.mimeType, base64 }, settings.foodLookup.geminiApiKey));
       setSource(picked.name);
+      setBuiltFor(null);
     } catch (error) {
       notify('Could not read the programme', (error as Error).message);
     } finally {
@@ -115,7 +129,8 @@ export default function AddRoutinesScreen() {
           routine.name,
           routine.exercises.map((e) => ({
             name: e.name,
-            bodyweightBased: known.find((k) => k.name === e.name)?.bodyweightBased ?? false,
+            bodyweightBased:
+              known.find((k) => k.name === e.name)?.bodyweightBased ?? builtFor === 'bodyweight',
             targetSets: e.sets,
             targetReps: e.reps,
           })),
@@ -162,6 +177,33 @@ export default function AddRoutinesScreen() {
                 );
               })}
             </View>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>With</Text>
+            <View style={styles.chips}>
+              {EQUIPMENT_OPTIONS.map((option) => {
+                const on = equipment === option;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    onPress={() => setEquipment(option)}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: on ? loud.figure : loud.panel, borderColor: on ? loud.figure : loud.rule },
+                    ]}
+                  >
+                    <Text style={{ fontFamily: font.uiStrong, fontSize: 14, color: on ? loud.ground : loud.figure }}>
+                      {EQUIPMENT_LABEL[option]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {equipment === 'bodyweight' && (
+              <Text style={[styles.note, { color: loud.figureFaint }]}>
+                Assumes a pull-up bar and a bench or sturdy chair.
+              </Text>
+            )}
             <Button
               tone="loud"
               label={focuses.length === 0 ? 'Pick at least one' : `Build ${count(focuses.length)}`}

@@ -167,3 +167,17 @@ describe('buildRoutinesWithGemini', () => {
     await expect(buildRoutinesWithGemini(['legs'], [], '')).rejects.toThrow('Building the routine took too long');
   });
 });
+
+describe('buildRoutinesWithGemini with equipment', () => {
+  it('sends the equipment line with the request', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) =>
+      geminiResponse({ notProgram: false, routines: [{ name: 'Legs', exercises: [{ name: 'Goblet Squat', sets: 3, reps: '8-12' }] }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await buildRoutinesWithGemini(['legs'], [], '', 'dumbbells');
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.contents[0].parts[0].text).toContain('dumbbells and an adjustable bench');
+  });
+});

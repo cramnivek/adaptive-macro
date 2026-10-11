@@ -1,5 +1,5 @@
 import { routeFor } from '../api/gemini';
-import { buildRoutinePrompt, ROUTINE_BUILD_SYSTEM, type RoutineFocus } from './routineBuild';
+import { buildRoutinePrompt, type Equipment, ROUTINE_BUILD_SYSTEM, type RoutineFocus } from './routineBuild';
 import {
   ROUTINE_IMPORT_PROMPT,
   ROUTINE_RESPONSE_SCHEMA,
@@ -175,11 +175,12 @@ export const buildRoutinesWithGemini = async (
   focuses: RoutineFocus[],
   known: string[],
   apiKey: string,
+  equipment: Equipment = 'gym',
 ): Promise<RoutineDraft[]> => {
   const parsed = await requestRoutines(
     {
       system: ROUTINE_BUILD_SYSTEM,
-      parts: [{ text: buildRoutinePrompt(focuses, known) }],
+      parts: [{ text: buildRoutinePrompt(focuses, known, equipment) }],
       timeoutMs: BUILD_TIMEOUT_MS,
       unusable: UNBUILDABLE,
       slow: 'Building the routine took too long. Try again.',

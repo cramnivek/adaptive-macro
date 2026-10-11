@@ -56,3 +56,27 @@ describe('ROUTINE_BUILD_SYSTEM', () => {
     expect(ROUTINE_BUILD_SYSTEM).toContain('Never list the same exercise twice');
   });
 });
+
+describe('equipment', () => {
+  it('assumes a full gym unless told otherwise', () => {
+    expect(buildRoutinePrompt(['push'], [])).toContain('a full gym');
+  });
+
+  it('rules out everything but dumbbells, by name, for a dumbbell-only routine', () => {
+    const prompt = buildRoutinePrompt(['legs'], [], 'dumbbells');
+    expect(prompt).toContain('no barbell, no cables, no machines');
+    expect(prompt).not.toContain('a full gym');
+  });
+
+  it('asks for harder variations rather than load when there is no equipment', () => {
+    const prompt = buildRoutinePrompt(['upper'], [], 'bodyweight');
+    expect(prompt).toContain('Every exercise must be bodyweight');
+    expect(prompt).toContain('pull-up bar');
+  });
+
+  it('offers logged exercises only where they suit the equipment', () => {
+    const prompt = buildRoutinePrompt(['push'], ['Bench Press (Barbell)'], 'dumbbells');
+    expect(prompt).toContain('needs only the equipment above');
+    expect(prompt.indexOf('no barbell')).toBeLessThan(prompt.indexOf('- Bench Press (Barbell)'));
+  });
+});

@@ -70,6 +70,31 @@ const SLOTS: Record<RoutineFocus, string[]> = {
   ],
 };
 
+export const EQUIPMENT_OPTIONS = ['gym', 'dumbbells', 'bodyweight'] as const;
+export type Equipment = (typeof EQUIPMENT_OPTIONS)[number];
+
+export const EQUIPMENT_LABEL: Record<Equipment, string> = {
+  gym: 'Full gym',
+  dumbbells: 'Dumbbells',
+  bodyweight: 'Bodyweight',
+};
+
+/**
+ * What the model is told it has to work with. Spelled out as what is absent as
+ * well as what is there, because "dumbbells" alone still gets a barbell squat
+ * back as the obvious squat.
+ */
+const EQUIPMENT_TEXT: Record<Equipment, string> = {
+  gym: 'Equipment: a full gym — barbells, dumbbells, cables and machines.',
+  dumbbells:
+    'Equipment: dumbbells and an adjustable bench, nothing else — no barbell, no cables, no machines. ' +
+    'Every exercise must be done with dumbbells or bodyweight.',
+  bodyweight:
+    'Equipment: none beyond a pull-up bar and a sturdy bench or chair. Every exercise must be bodyweight. ' +
+    'Make a slot harder with a harder variation — single-leg, slower, deficit — rather than with load, ' +
+    'and let reps run up to 20 where the usual range would be too easy.',
+};
+
 /** How many of the user's own exercises to offer. Most-used first, so the cut loses the least. */
 const KNOWN_LIMIT = 60;
 
@@ -84,7 +109,11 @@ Give each exercise its common gym name. Never list the same exercise twice in
 one routine. Set notProgram to false.`;
 
 /** The request for one routine per focus, steered towards exercises the person already logs. */
-export const buildRoutinePrompt = (focuses: RoutineFocus[], known: string[]): string => {
+export const buildRoutinePrompt = (
+  focuses: RoutineFocus[],
+  known: string[],
+  equipment: Equipment = 'gym',
+): string => {
   const days = focuses
     .map((focus) => {
       const slots = SLOTS[focus].map((slot, index) => `  ${index + 1}. ${slot}`).join('\n');
@@ -96,9 +125,11 @@ export const buildRoutinePrompt = (focuses: RoutineFocus[], known: string[]): st
   const preference =
     offered.length === 0
       ? ''
-      : `\n\nThis person already logs these exercises, most used first. When one fits a slot, ` +
-        `use it, with its name written exactly as here, so their history carries on:\n` +
+      : `\n\nThis person already logs these exercises, most used first. When one fits a slot ` +
+        `and needs only the equipment above, use it, with its name written exactly as here, so ` +
+        `their history carries on:\n` +
         offered.map((name) => `- ${name}`).join('\n');
 
-  return `Write ${focuses.length === 1 ? 'one routine' : `${focuses.length} routines`}.\n\n${days}${preference}`;
+  const count = focuses.length === 1 ? 'one routine' : `${focuses.length} routines`;
+  return `Write ${count}.\n${EQUIPMENT_TEXT[equipment]}\n\n${days}${preference}`;
 };
