@@ -19,8 +19,8 @@ export const PostCard = ({ view, onDelete }: { view: PostView; onDelete?: () => 
           NEW BEST · {view.highlight.label} · {view.highlight.figure}
         </Text>
       )}
-      {view.exercises.map((lift) => (
-        <Text key={lift.name} style={[styles.lift, { color: colors.text }]}>
+      {view.exercises.map((lift, index) => (
+        <Text key={`${lift.name}-${index}`} style={[styles.lift, { color: colors.text }]}>
           {lift.sets} {lift.sets === 1 ? 'set' : 'sets'} {lift.name} — {lift.best}
         </Text>
       ))}

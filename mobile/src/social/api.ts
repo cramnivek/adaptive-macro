@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './client';
-import { isAlreadyPosted, messageFor, type ServerError } from './errors';
+import { isAlreadyPosted, messageFor, OFFLINE, type ServerError } from './errors';
 import type { PostRow } from './postPayload';
 import type { ProfileFields } from './profileRules';
 import type { Post, Profile } from './types';
@@ -44,6 +44,13 @@ export const verifyCode = async (email: string, code: string): Promise<void> => 
 
 export const signOut = async (): Promise<void> => {
   const { error } = await client().auth.signOut();
+  // The global sign-out asks the server first, so offline it fails and would leave the person
+  // signed in on a phone that may be shared. Dropping the local session is what matters then.
+  if (error && messageFor(error) === OFFLINE) {
+    const local = await client().auth.signOut({ scope: 'local' });
+    if (local.error) fail(local.error);
+    return;
+  }
   if (error) fail(error);
 };
 

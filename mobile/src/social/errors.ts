@@ -13,13 +13,13 @@ export interface ServerError {
   name?: string;
 }
 
-const OFFLINE = 'Could not reach the server. Check the connection and try again.';
+export const OFFLINE = 'Could not reach the server. Check the connection and try again.';
 
 export const isAlreadyPosted = (error: ServerError): boolean =>
-  error.code === '23505' && (error.message?.includes('session') ?? false);
+  error.code === '23505' && (error.message?.includes('posts_author_id_session_id_key') ?? false);
 
 export const messageFor = (error: ServerError): string => {
-  if (error.code === '23505' && error.message?.includes('username')) return 'That username is taken.';
+  if (error.code === '23505' && error.message?.includes('profiles_username_key')) return 'That username is taken.';
   if (error.code === 'otp_expired') return 'That code is wrong or has expired. Check it, or send a new one.';
   if (error.code === 'over_email_send_rate_limit' || error.status === 429) {
     return 'Too many codes sent. Wait a few minutes and try again.';

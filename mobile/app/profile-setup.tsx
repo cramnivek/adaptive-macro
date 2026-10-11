@@ -70,9 +70,9 @@ function ProfileForm() {
   return (
     <Screen>
       <Card>
-        <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" maxLength={20} placeholder="marc.k" hint="3 to 20 lower-case letters, numbers, _ or ." />
+        <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} maxLength={20} placeholder="marc.k" hint="3 to 20 lower-case letters, numbers, _ or ." />
         <Field label="Name" value={displayName} onChangeText={setDisplayName} maxLength={40} placeholder="Marc" />
-        <Field label="Instagram (optional)" value={instagram} onChangeText={setInstagram} autoCapitalize="none" maxLength={31} placeholder="@yourhandle" />
+        <Field label="Instagram (optional)" value={instagram} onChangeText={setInstagram} autoCapitalize="none" autoCorrect={false} maxLength={31} placeholder="@yourhandle" />
         <Segmented
           label="Who can see your posts"
           options={[

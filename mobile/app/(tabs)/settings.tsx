@@ -665,14 +665,18 @@ export default function SettingsScreen() {
         <Section title="Account">
           <Card
             subtitle={
-              social.session
-                ? social.profile
-                  ? `Signed in as @${social.profile.username}`
-                  : 'Signed in'
-                : 'Sign in to post workouts. Everything else works without an account.'
+              social.session === undefined
+                ? 'Checking your account…'
+                : social.session
+                  ? social.profile
+                    ? `Signed in as @${social.profile.username}`
+                    : 'Signed in'
+                  : 'Sign in to post workouts. Everything else works without an account.'
             }
           >
-            <Button label={social.session ? 'Open account' : 'Sign in'} onPress={() => router.push('/account')} />
+            {social.session !== undefined && (
+              <Button label={social.session ? 'Open account' : 'Sign in'} onPress={() => router.push('/account')} />
+            )}
           </Card>
         </Section>
       )}
