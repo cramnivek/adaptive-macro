@@ -8,26 +8,32 @@
  */
 
 const SAMPLE_RATE = 22050;
-const NOTES_HZ = [880, 1320];
-const NOTE_SECONDS = 0.12;
-const GAP_SECONDS = 0.04;
-const FADE_SECONDS = 0.012;
+const BEEP_HZ = [1046.5, 1046.5, 1046.5, 1046.5, 1318.5];
+const BEEP_SECONDS = [0.09, 0.09, 0.09, 0.09, 0.14];
+const GAP_SECONDS = 0.06;
+const FADE_SECONDS = 0.01;
 
-/** 16-bit mono PCM samples for the two notes and the gap between them. */
+/** 16-bit mono PCM samples for the 5-beep alert sequence. */
 export const chimeSamples = (): Int16Array => {
-  const noteLength = Math.round(NOTE_SECONDS * SAMPLE_RATE);
-  const gapLength = Math.round(GAP_SECONDS * SAMPLE_RATE);
-  const fade = Math.round(FADE_SECONDS * SAMPLE_RATE);
-  const samples = new Int16Array(NOTES_HZ.length * noteLength + gapLength);
+  const beeps = BEEP_HZ.map((hz, i) => ({
+    hz,
+    length: Math.round(BEEP_SECONDS[i] * SAMPLE_RATE),
+    gap: i < BEEP_HZ.length - 1 ? Math.round(GAP_SECONDS * SAMPLE_RATE) : 0,
+  }));
 
-  NOTES_HZ.forEach((hz, note) => {
-    const offset = note * (noteLength + gapLength);
-    for (let i = 0; i < noteLength; i += 1) {
-      const envelope = Math.min(1, i / fade, (noteLength - 1 - i) / fade);
-      const value = Math.sin((2 * Math.PI * hz * i) / SAMPLE_RATE) * envelope * 0.6;
+  const totalSamples = beeps.reduce((sum, b) => sum + b.length + b.gap, 0);
+  const samples = new Int16Array(totalSamples);
+  const fade = Math.round(FADE_SECONDS * SAMPLE_RATE);
+
+  let offset = 0;
+  for (const beep of beeps) {
+    for (let i = 0; i < beep.length; i += 1) {
+      const envelope = Math.min(1, i / fade, (beep.length - 1 - i) / fade);
+      const value = Math.sin((2 * Math.PI * beep.hz * i) / SAMPLE_RATE) * envelope * 0.6;
       samples[offset + i] = Math.round(value * 32767);
     }
-  });
+    offset += beep.length + beep.gap;
+  }
   return samples;
 };
 

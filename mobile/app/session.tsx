@@ -60,7 +60,9 @@ import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routi
 import { nextLoadHint } from '../src/suggestion';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { font, radius, space } from '../src/theme';
+import type { UnitSystem } from '../src/state/settings';
 // Aliased: `session` is already the active-workout state in this component.
 import { session as loud } from '../src/theme/sessionTheme';
 
@@ -242,6 +244,121 @@ export default function SessionScreen() {
       current === null ? null : { endsAt: current.endsAt + delta, total: next },
     );
   };
+
+  /**
+   * Switches between kilograms and pounds directly within the session view,
+   * converting displayed weights in active rows so what the user typed adapts.
+   */
+  const toggleUnits = () => {
+    const nextUnits: UnitSystem = settings.units === 'metric' ? 'imperial' : 'metric';
+    const fromUnits = settings.units;
+
+    setBlocks((current) =>
+      current.map((block) => ({
+        ...block,
+        rows: block.rows.map((row) => {
+          if (!row.weight.trim()) return row;
+          const kg = parseWeight(row.weight, fromUnits);
+          if (kg === null) return row;
+          return {
+            ...row,
+            weight: String(displayWeight(kg, nextUnits).toFixed(1)),
+          };
+        }),
+      })),
+    );
+
+    void updateSettings({ units: nextUnits });
+    notify('Units updated', `Switched to ${nextUnits === 'metric' ? 'kg' : 'lbs'}.`);
+  };
+
+  /**
+   * Toggles the rest completion alert on or off during the session.
+   * When enabled, primes the audio element and plays a confirmation chime.
+   */
+  const toggleAlert = () => {
+    const next = !settings.restSound;
+    if (next) {
+      primeChime();
+      playChime();
+    }
+    void updateSettings({ restSound: next });
+    notify(
+      next ? 'Rest alert on' : 'Rest alert off',
+      next ? 'Chimes when each rest period finishes.' : 'Rest timer will be silent.',
+    );
+  };
+
+  const renderControls = () => (
+    <View style={styles.headerControls}>
+      <Tappable
+        onPress={toggleUnits}
+        scaleTo={0.92}
+        style={styles.unitToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`Switch units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
+      >
+        <View style={styles.unitToggleTrack}>
+          <View
+            style={[
+              styles.unitToggleThumb,
+              settings.units === 'metric' ? styles.unitThumbActive : styles.unitThumbInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.unitToggleText,
+                { color: settings.units === 'metric' ? loud.onLoud : loud.figureFaint },
+              ]}
+            >
+              KG
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.unitToggleThumb,
+              settings.units === 'imperial' ? styles.unitThumbActive : styles.unitThumbInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.unitToggleText,
+                { color: settings.units === 'imperial' ? loud.onLoud : loud.figureFaint },
+              ]}
+            >
+              LBS
+            </Text>
+          </View>
+        </View>
+      </Tappable>
+
+      <Tappable
+        onPress={toggleAlert}
+        scaleTo={0.9}
+        style={[
+          styles.alertBtn,
+          settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive,
+        ]}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: settings.restSound }}
+        accessibilityLabel={settings.restSound ? 'Rest alert on' : 'Rest alert off'}
+      >
+        <Ionicons
+          name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
+          size={15}
+          color={settings.restSound ? loud.onLoud : loud.figureMuted}
+        />
+        <Text
+          style={[
+            styles.alertBtnLabel,
+            { color: settings.restSound ? loud.onLoud : loud.figureMuted },
+          ]}
+        >
+          ALERT
+        </Text>
+      </Tappable>
+    </View>
+  );
 
   const blockFor = useCallback(
     async (
@@ -629,7 +746,10 @@ export default function SessionScreen() {
   if (!session) {
     return (
       <Screen tone="loud">
-        <Text style={styles.screenTitle}>WORKOUT</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.screenTitle}>WORKOUT</Text>
+          {renderControls()}
+        </View>
         <Text style={[styles.note, { marginBottom: space.lg }]}>
           Start an empty workout, or pick one of your routines.
         </Text>
@@ -657,9 +777,12 @@ export default function SessionScreen() {
 
   return (
     <Screen tone="loud">
-      <Text style={styles.screenTitle} numberOfLines={1}>
-        {session.name.toUpperCase()}
-      </Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.screenTitle} numberOfLines={1}>
+          {session.name.toUpperCase()}
+        </Text>
+        {renderControls()}
+      </View>
 
       {/*
         The clock is the hero figure now. It was 20px with the set count as a
@@ -694,12 +817,7 @@ export default function SessionScreen() {
           onAdjust={nudgeRest}
           onSkip={() => setRest(null)}
           soundOn={settings.restSound}
-          onToggleSound={() => {
-            const next = !settings.restSound;
-            // Switching it on is a tap too, so the chime can play this rest.
-            if (next) primeChime();
-            void updateSettings({ restSound: next });
-          }}
+          onToggleSound={toggleAlert}
         />
       )}
 
@@ -1020,12 +1138,78 @@ export default function SessionScreen() {
  * is in `theme/sessionTheme.ts`.
  */
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.sm,
+    gap: space.sm,
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   screenTitle: {
     fontFamily: font.display,
     fontSize: 26,
     letterSpacing: -0.4,
     color: loud.figure,
-    marginBottom: space.sm,
+    flex: 1,
+  },
+  unitToggle: {
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  unitToggleTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    borderRadius: radius.sm,
+    padding: 2,
+  },
+  unitToggleThumb: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitThumbActive: {
+    backgroundColor: loud.loud,
+  },
+  unitThumbInactive: {
+    backgroundColor: 'transparent',
+  },
+  unitToggleText: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  alertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm + 1,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 28,
+  },
+  alertBtnActive: {
+    backgroundColor: loud.loud,
+    borderColor: loud.loud,
+  },
+  alertBtnInactive: {
+    backgroundColor: loud.panel,
+    borderColor: loud.rule,
+  },
+  alertBtnLabel: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 1.2,
   },
   note: {
     fontFamily: font.ui,

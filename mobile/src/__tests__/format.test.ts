@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { axisDecimals, formatDayMonth } from '../format';
+import { axisDecimals, displayWeight, formatDayMonth, parseWeight, weightUnit } from '../format';
 
 describe('formatDayMonth', () => {
   it('gives the day and the month, and nothing else', () => {
@@ -38,5 +38,24 @@ describe('axisDecimals', () => {
   it('does not return something unusable for a flat or invalid span', () => {
     expect(axisDecimals(0)).toBe(1);
     expect(axisDecimals(Number.NaN)).toBe(1);
+  });
+});
+
+describe('weight conversion and unit toggling', () => {
+  it('converts weight between metric and imperial correctly', () => {
+    expect(weightUnit('metric')).toBe('kg');
+    expect(weightUnit('imperial')).toBe('lb');
+
+    // 100 kg in metric
+    expect(displayWeight(100, 'metric')).toBe(100);
+    // 100 kg in imperial (~220.46 lb)
+    expect(Number(displayWeight(100, 'imperial').toFixed(1))).toBe(220.5);
+
+    // Parsing 100 in metric gives 100 kg
+    expect(parseWeight('100', 'metric')).toBe(100);
+    // Parsing 220.5 in imperial gives ~100 kg
+    const parsedKg = parseWeight('220.5', 'imperial');
+    expect(parsedKg).not.toBeNull();
+    expect(Math.round(parsedKg!)).toBe(100);
   });
 });
