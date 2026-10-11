@@ -4,7 +4,7 @@ A local-first nutrition tracker with an **adaptive TDEE engine**: it infers your
 actual energy expenditure from your logged intake and your weight trend, then
 sets calorie and macro targets from that estimate instead of from a BMR formula.
 
-No subscription, no account, no server. Your data stays on your phone.
+No subscription, and no account needed. Your log stays on your phone; an account is optional, and only what you post and your profile are kept on a server.
 
 ---
 

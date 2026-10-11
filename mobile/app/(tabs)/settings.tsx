@@ -639,25 +639,31 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Account">
-        <Card
-          subtitle={
-            social.profile
-              ? `Signed in as @${social.profile.username}`
-              : 'Sign in to post workouts. Everything else works without an account.'
-          }
-        >
-          <Button label={social.profile ? 'Open account' : 'Sign in'} onPress={() => router.push('/account')} />
-        </Card>
-      </Section>
+      {social.configured && (
+        <Section title="Account">
+          <Card
+            subtitle={
+              social.session
+                ? social.profile
+                  ? `Signed in as @${social.profile.username}`
+                  : 'Signed in'
+                : 'Sign in to post workouts. Everything else works without an account.'
+            }
+          >
+            <Button label={social.session ? 'Open account' : 'Sign in'} onPress={() => router.push('/account')} />
+          </Card>
+        </Section>
+      )}
 
       <Section title="Your data">
-        <Card subtitle="Everything lives on this device and nowhere else.">
+        <Card subtitle="Your log lives on this device. An account is optional.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
           <Text style={[styles.note, { color: colors.textFaint }]}>
-            There is no server behind this app, so this file is your only backup and your only way onto
-            another device. It holds your weigh-ins, your diary and your whole lifting history.
+            Your food, weight, workouts and settings are kept only on this device, so this file is your
+            only copy of the log and your only way onto another device. It holds your weigh-ins, your diary
+            and your whole lifting history. If you make an account, only what you post and your profile
+            are kept on a server, and they are removed when you delete the account.
           </Text>
           {Platform.OS === 'web' && (
             <Text style={[styles.note, { color: colors.warning }]}>

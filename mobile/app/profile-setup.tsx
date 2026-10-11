@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, Field, Segmented } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
@@ -11,8 +11,32 @@ import { font, space, useTheme } from '../src/theme';
 
 type Visibility = 'private' | 'public';
 
-/** Choosing a username on first sign-in, and editing the profile after. */
+/**
+ * Choosing a username on first sign-in, and editing the profile after.
+ *
+ * The form seeds its fields once, so it is mounted only when the profile is
+ * known; otherwise saving would overwrite the stored profile with blanks.
+ */
 export default function ProfileSetupScreen() {
+  const { colors } = useTheme();
+  const { profile, profileFailed, refreshProfile } = useSocial();
+
+  if (profile !== undefined) return <ProfileForm />;
+  return (
+    <Screen>
+      {profileFailed ? (
+        <Card>
+          <Text style={[styles.note, { color: colors.textMuted }]}>Could not load your profile.</Text>
+          <Button label="Try again" onPress={() => void refreshProfile().catch(() => undefined)} />
+        </Card>
+      ) : (
+        <ActivityIndicator color={colors.text} />
+      )}
+    </Screen>
+  );
+}
+
+function ProfileForm() {
   const { colors } = useTheme();
   const router = useRouter();
   const { profile, refreshProfile } = useSocial();
@@ -60,6 +84,7 @@ export default function ProfileSetupScreen() {
         />
         <Text style={[styles.note, { color: colors.textFaint }]}>
           Following arrives in the next update. Until then, only you can see your posts either way.
+          Your username, name and Instagram handle can be found by other signed-in users.
         </Text>
         <Button label={busy ? 'Saving…' : 'Save'} onPress={() => void save()} disabled={busy} />
         {problem && <Text style={[styles.problem, { color: colors.danger }]}>{problem}</Text>}

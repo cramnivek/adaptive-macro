@@ -70,6 +70,40 @@ describe('messageFor', () => {
     );
   });
 
+  it('explains being offline in Safari and Firefox', () => {
+    expect(messageFor({ message: 'Load failed' })).toBe(
+      'Could not reach the server. Check the connection and try again.',
+    );
+    expect(messageFor({ message: 'NetworkError when attempting to fetch resource.' })).toBe(
+      'Could not reach the server. Check the connection and try again.',
+    );
+  });
+
+  it('asks for a username when a post has no profile to belong to', () => {
+    expect(
+      messageFor({ code: '23503', message: 'insert or update on table "posts" violates foreign key constraint "posts_author_id_fkey"' }),
+    ).toBe('Choose a username before posting.');
+  });
+
+  it('asks to sign in again when the token has expired', () => {
+    expect(messageFor({ code: 'PGRST301', message: 'JWSError JWSInvalidSignature' })).toBe(
+      'You are signed out. Sign in and try again.',
+    );
+    expect(messageFor({ code: 'PGRST303', message: 'JWT expired' })).toBe(
+      'You are signed out. Sign in and try again.',
+    );
+    expect(messageFor({ message: 'JWT expired' })).toBe('You are signed out. Sign in and try again.');
+  });
+
+  it('does not show database text for any other database or PostgREST code', () => {
+    expect(messageFor({ code: '42501', message: 'new row violates row-level security policy for table "posts"' })).toBe(
+      'Could not save that. Try again.',
+    );
+    expect(messageFor({ code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' })).toBe(
+      'Could not save that. Try again.',
+    );
+  });
+
   it('passes anything else through as the server said it', () => {
     expect(messageFor({ message: 'Something specific' })).toBe('Something specific');
     expect(messageFor({})).toBe('Something went wrong. Try again.');

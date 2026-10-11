@@ -13,7 +13,7 @@ import { font, space, useTheme } from '../src/theme';
 export default function AccountScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { configured, session, profile, refreshProfile } = useSocial();
+  const { configured, session, profile, profileFailed, refreshProfile } = useSocial();
   const [busy, setBusy] = useState(false);
 
   const leave = async (step: () => Promise<void>, failure: string) => {
@@ -56,10 +56,13 @@ export default function AccountScreen() {
         <Button label="Sign in" onPress={() => router.push('/sign-in')} />
       </Card>
     );
+  } else if (profile === undefined && !profileFailed) {
+    body = <ActivityIndicator color={colors.text} />;
   } else if (profile === undefined) {
     body = (
       <Card>
         {note('Could not load your profile.')}
+        {/* A failed retry is recorded in profileFailed, so the error is not needed here. */}
         <Button label="Try again" onPress={() => void refreshProfile().catch(() => undefined)} />
       </Card>
     );

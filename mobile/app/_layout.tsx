@@ -54,7 +54,7 @@ export default function RootLayout() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Toaster />
         <SocialProvider>
-          {/* Inside the provider, because it reads the load error from the store. */}
+          {/* Inside AppProvider, because it reads the load error from the store. */}
           <StorageGate>
             <Stack
               screenOptions={{

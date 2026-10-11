@@ -94,5 +94,6 @@ export const deleteAccount = async (): Promise<void> => {
   const { error } = await client().rpc('delete_account');
   if (error) fail(error);
   // The user no longer exists on the server; only the local copy of the session is left to drop.
-  await client().auth.signOut({ scope: 'local' });
+  // The account is already gone, so a failure here must not be reported as a failed deletion.
+  await client().auth.signOut({ scope: 'local' }).catch(() => undefined);
 };

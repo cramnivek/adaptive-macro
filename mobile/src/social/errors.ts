@@ -27,9 +27,21 @@ export const messageFor = (error: ServerError): string => {
   if (
     error.name === 'AuthRetryableFetchError' ||
     error.message?.includes('Failed to fetch') ||
-    error.message?.includes('Network request failed')
+    error.message?.includes('Network request failed') ||
+    // Safari, which includes the iOS home-screen app, and Firefox word it their own way.
+    error.message?.includes('Load failed') ||
+    error.message?.includes('NetworkError when attempting to fetch resource')
   ) {
     return OFFLINE;
+  }
+  if (error.code === '23503') return 'Choose a username before posting.';
+  if (error.code === 'PGRST301' || error.message?.includes('JWT expired')) {
+    return 'You are signed out. Sign in and try again.';
+  }
+  // Postgres codes are five characters of digits and capitals; PostgREST's start with PGRST.
+  // Their messages are database text, so they are never shown. Auth errors have no such code.
+  if (error.code !== undefined && (/^[0-9A-Z]{5}$/.test(error.code) || error.code.startsWith('PGRST'))) {
+    return 'Could not save that. Try again.';
   }
   return error.message?.trim() || 'Something went wrong. Try again.';
 };
