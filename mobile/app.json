@@ -13,7 +13,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.cramnivek.adaptivemacros",
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan barcodes on food packaging to look up nutrition information."
+        "NSCameraUsageDescription": "Scan barcodes on food packaging, and photograph a meal or a printed programme so the app can estimate it or read it.",
+        "NSPhotoLibraryUsageDescription": "Choose a photo of a meal, or a screenshot of a training programme, for the app to estimate or read."
       }
     },
     "android": {
@@ -24,8 +25,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.CAMERA"],
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -37,7 +42,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Scan barcodes on food packaging to look up nutrition information."
+          "cameraPermission": "Scan barcodes on food packaging, and photograph a meal or a printed programme so the app can estimate it or read it."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo of a meal, or a screenshot of a training programme, for the app to estimate or read.",
+          "cameraPermission": "Scan barcodes on food packaging, and photograph a meal or a printed programme so the app can estimate it or read it.",
+          "microphonePermission": false
         }
       ]
     ],
