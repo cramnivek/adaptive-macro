@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { LineChart } from '../../src/components/LineChart';
+import { LoggingStrip } from '../../src/components/LoggingStrip';
 import { MethodSheet } from '../../src/components/MethodSheet';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
@@ -19,6 +20,7 @@ import {
   formatWeight,
   weightUnit,
 } from '../../src/format';
+import { loggingStrip } from '../../src/loggingStrip';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 
@@ -37,7 +39,7 @@ const WINDOW_DAYS = 90;
  */
 export default function TrendsScreen() {
   const { colors } = useTheme();
-  const { settings, series, latest, trend, program, confidence } = useApp();
+  const { settings, series, latest, trend, program, confidence, weights, dayStatus } = useApp();
   const [intake, setIntake] = useState<{ date: string; kcal: number }[]>([]);
   const [method, setMethod] = useState(false);
   const unit = weightUnit(settings.units);
@@ -80,10 +82,26 @@ export default function TrendsScreen() {
       // Scattered rather than joined: intake is a daily fact with gaps, and a
       // line across a missing day would invent a value for it.
       intake: intake
-        .filter((row) => row.date >= origin)
+        .filter((row) => row.date >= origin && dayStatus.get(row.date) !== false)
+        .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
+      // Days marked as not fully logged stay visible, but faint: the estimate
+      // is not using them, and a bold dot would say it was.
+      leftOut: intake
+        .filter((row) => row.date >= origin && dayStatus.get(row.date) === false)
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
     };
-  }, [window, origin, intake]);
+  }, [window, origin, intake, dayStatus]);
+
+  const strip = useMemo(
+    () =>
+      loggingStrip(
+        today,
+        new Set(intake.map((row) => row.date)),
+        new Set(weights.map((row) => row.date)),
+        dayStatus,
+      ),
+    [today, intake, weights, dayStatus],
+  );
 
   const weight = useMemo(() => {
     if (origin === null || window.length < 2) return null;
@@ -135,6 +153,15 @@ export default function TrendsScreen() {
         />
       </View>
 
+      {/*
+        What the "±" above is made of. Nearly all of an estimate's uncertainty
+        comes from missing input, so this is the honest answer to "why is it
+        not settling" — and the one part of it the person controls.
+      */}
+      <Card title="Last 14 days">
+        <LoggingStrip days={strip} />
+      </Card>
+
       <Card title="Energy">
         <View style={styles.legend}>
           <Key color={colors.positive} label="burning" />
@@ -144,7 +171,14 @@ export default function TrendsScreen() {
         <LineChart
           series={energy ? [{ points: energy.expenditure, color: colors.positive, strokeWidth: 2.5 }] : []}
           band={energy ? { points: energy.band, color: colors.positive } : undefined}
-          scatter={energy ? [{ points: energy.intake, color: colors.carbs, radius: 2.5, opacity: 0.8 }] : undefined}
+          scatter={
+            energy
+              ? [
+                  { points: energy.intake, color: colors.carbs, radius: 2.5, opacity: 0.8 },
+                  { points: energy.leftOut, color: colors.carbs, radius: 2.5, opacity: 0.25 },
+                ]
+              : undefined
+          }
           referenceY={{ value: program.calories.kcal, color: colors.accent }}
           formatX={dayLabel}
           emptyMessage="Log weight and food for a couple of weeks"
