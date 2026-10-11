@@ -85,6 +85,18 @@ interface Block {
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
 
+/**
+ * Keeps password managers off the set fields. A number box in a row looks
+ * enough like a login to them that they pin their own button inside it, on top
+ * of the tick, and a set cannot be recorded until the field loses focus.
+ * `dataSet` becomes the data-* attributes each manager checks; React Native's
+ * types do not know it, hence the spread.
+ */
+const NOT_A_LOGIN = {
+  autoComplete: 'off',
+  dataSet: { lpignore: 'true', '1pIgnore': 'true', bwignore: 'true', formType: 'other' },
+} as const;
+
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
   const seconds = Math.max(0, Math.floor((now - started) / 1000));
@@ -819,6 +831,7 @@ export default function SessionScreen() {
                     value={row.weight}
                     onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
                     onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                    {...NOT_A_LOGIN}
                     keyboardType="decimal-pad"
                     placeholder={block.bodyweightBased ? 'BW' : '—'}
                     placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
@@ -833,6 +846,7 @@ export default function SessionScreen() {
                     value={row.reps}
                     onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
                     onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                    {...NOT_A_LOGIN}
                     keyboardType="number-pad"
                     placeholder="—"
                     placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
