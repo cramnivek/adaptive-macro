@@ -17,10 +17,10 @@ describe('chimeWav', () => {
     expect(view.getUint32(40, true)).toBe(wav.length - 44);
   });
 
-  it('lasts under a third of a second, so it never talks over the next set', () => {
+  it('lasts under one second, repeating 5 beeper pulses so the alert is unmistakable', () => {
     const seconds = chimeSamples().length / 22050;
-    expect(seconds).toBeGreaterThan(0.2);
-    expect(seconds).toBeLessThan(0.33);
+    expect(seconds).toBeGreaterThan(0.6);
+    expect(seconds).toBeLessThan(0.9);
   });
 
   it('starts and ends each note in silence, so it does not click', () => {
