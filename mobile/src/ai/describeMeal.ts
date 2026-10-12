@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { claudeContentFor, systemInstructionFor } from './mealRequest';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import * as z from 'zod/v4';
+import { loadFresh } from '../platform/staleBuild';
 
 /**
  * Natural-language meal logging.
@@ -245,13 +246,15 @@ export const estimateMeal = async (
     // Refused here rather than inside the Ollama path, so the message names the
     // provider instead of surfacing a parse failure three layers down.
     if (photo) throw new PhotoUnsupportedError();
-    const { describeMealWithOllama } = await import('./ollama');
+    const { describeMealWithOllama } = await loadFresh(() => import('./ollama'));
     return describeMealWithOllama(description, config.ollamaHost, config.ollamaModel);
   }
   if (config.provider === 'anthropic') {
     return describeMeal(description, config.anthropicApiKey, DEFAULT_MODEL, photo);
   }
-  const { describeMealWithGemini } = await import('./geminiDescribe');
+  // Through loadFresh: these load on first use, and a page open since before a deploy
+  // would otherwise fail asking for a file the deploy replaced.
+  const { describeMealWithGemini } = await loadFresh(() => import('./geminiDescribe'));
   return describeMealWithGemini(description, config.geminiApiKey, photo);
 };
 
