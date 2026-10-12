@@ -101,6 +101,11 @@ existing PGlite harness before they are pushed to `main`, which applies them liv
   who has blocked them.
 - **reports:** insert as yourself, with no select for users. Only the owner reads
   them, in the dashboard.
+- **Known limit, accepted:** choosing a username that is taken says so, even when
+  the account that holds it has blocked you and is hidden from you. Someone who
+  remembers a blocker's exact username can learn the account still exists. Every
+  username system has to say a name is taken, so this is accepted rather than
+  closed.
 
 ### Harden posts first
 
