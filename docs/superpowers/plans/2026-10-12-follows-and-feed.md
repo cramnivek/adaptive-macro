@@ -37,7 +37,7 @@
 | File | Responsibility |
 | --- | --- |
 | `supabase/migrations/20261012130000_follows_blocks_likes.sql` | `follows`, `blocks`, `likes`, triggers, `can_see`, the new read policies, `follow_counts` |
-| `supabase/migrations/20261012140000_feed.sql` | the `feed_posts` view and the `feed_page(before, size)` RPC |
+| `supabase/migrations/20261012140000_feed.sql` | the `feed_posts` view and the `feed_page(before, before_id, size)` RPC |
 | `supabase/migrations/20261012150000_reports_and_filter.sql` | `reports`, `posts.hidden` and auto-hide, the `blocked_words` filter |
 | `mobile/src/social/__tests__/social-rls.test.ts` | PGlite tests for every rule above |
 | `mobile/src/social/feed.ts` | the app's calls: search, follow, requests, feed, profile, like, report, block |
@@ -490,7 +490,7 @@ git commit -m "feat(social): follows, blocks and likes, and who can see a post" 
 - Consumes: Task 1's tables and `can_see`.
 - Produces:
   - view `public.feed_posts`, with every `posts` column plus `username`, `display_name`, `like_count bigint` and `liked boolean`;
-  - RPC `public.feed_page(before timestamptz default null, size integer default 20) returns setof public.feed_posts`.
+  - RPC `public.feed_page(before timestamptz default null, before_id uuid default null, size integer default 20) returns setof public.feed_posts`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -502,7 +502,7 @@ describe('feed', () => {
     as<{ title: string; username: string; like_count: number; liked: boolean; created_at: string }>(
       db,
       user,
-      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, 20)`,
+      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, $2, 20)`,
       [before],
     );
 
