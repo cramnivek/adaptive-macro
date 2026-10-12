@@ -15,8 +15,13 @@ export default function TabsLayout() {
         // React Navigation styles its own label, so the typeface pass over our
         // style sheets never reached it and the tab bar stayed in the system
         // font on every screen.
-        tabBarLabelStyle: { fontFamily: font.ui },
-        tabBarStyle: {
+        // The label needs a full line's height, but the icon's box is 28 for a 24
+        // icon and the item is a fixed height, so the label was squeezed to the
+        // height of the type and lost what hangs below the line: "Today" read as
+        // "Todau". Fitting the icon's box to the icon makes the room without
+        // making the bar taller.
+        tabBarLabelStyle: { fontFamily: font.ui, lineHeight: 14 },
+        tabBarIconStyle: { height: 24 },        tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth,

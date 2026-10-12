@@ -12,12 +12,20 @@ import type { MuscleRegion } from '../src/components/muscleMap';
 import { Screen } from '../src/components/Screen';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { Tappable } from '../src/components/Tappable';
-import { catalogueRegionsByExerciseName, listAllSets, listLoggedDates } from '../src/db';
+import { WeeklyBars } from '../src/components/WeeklyBars';
+import {
+  catalogueRegionsByExerciseName,
+  finishedSessionTimes,
+  listAllSets,
+  listLoggedDates,
+} from '../src/db';
 import { displayWeight, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 import { volumeComparison } from '../src/volume';
+import { weeklyTotals } from '../src/weeklyTraining';
+import type { SessionTimes } from '../src/weeklyTraining';
 
 /**
  * Rolling windows rather than calendar ones.
@@ -50,22 +58,26 @@ export default function OverviewScreen() {
     Record<string, { primary: MuscleRegion; secondary: MuscleRegion[] }>
   >({});
   const [loggedDates, setLoggedDates] = useState<string[]>([]);
+  const [sessionTimes, setSessionTimes] = useState<SessionTimes[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let current = true;
       void (async () => {
-        const [allSets, byName, dates] = await Promise.all([
+        const [allSets, byName, dates, times] = await Promise.all([
           listAllSets(),
           catalogueRegionsByExerciseName(),
           // Enough to cover the longest window with room to spare.
           listLoggedDates(60),
+          // Twelve weeks is at most 84 days back from the Monday of this one.
+          finishedSessionTimes(addDays(todayISO(), -84)),
         ]);
         if (!current) return;
         setSets(allSets);
         setRegions(byName);
         setLoggedDates(dates);
+        setSessionTimes(times);
         setLoading(false);
       })();
       return () => {
@@ -109,6 +121,11 @@ export default function OverviewScreen() {
     return { primary: ranked[0] ?? null, secondary: ranked.slice(1) };
   }, [summary.exercises, regions]);
 
+  const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, to), [sessionTimes, sets, to]);
+  // Older weeks can have training in them when this window is empty, and that
+  // is when seeing the trend matters most.
+  const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
+
   const daysLogged = loggedDates.filter((date) => date >= from && date <= to).length;
 
   const weightChange = useMemo(() => {
@@ -141,6 +158,8 @@ export default function OverviewScreen() {
               scaleTo={0.97}
               style={styles.switchItem}
               accessibilityLabel={`Show the ${option.label.toLowerCase()}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
               <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
                 <Text
@@ -255,6 +274,14 @@ export default function OverviewScreen() {
           </View>
         </Card>
       </FadeIn>
+
+      {anyWeekTrained && (
+        <FadeIn delay={240}>
+          <Card loud title="Week by week">
+            <WeeklyBars weeks={weeks} units={settings.units} />
+          </Card>
+        </FadeIn>
+      )}
     </Screen>
   );
 }

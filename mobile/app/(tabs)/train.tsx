@@ -1,10 +1,12 @@
 import { bodyweightForDates, progressionFor } from '@adaptive-macros/engine';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { Button, TOUCH_TARGET } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
+import { Tappable } from '../../src/components/Tappable';
 import {
   activeSession,
   listAllSets,
@@ -133,7 +135,7 @@ export default function TrainScreen() {
       )}
 
       {headline.length > 0 && (
-        <Card loud title="Where you are" subtitle={`${totalSets} sets on record`}>
+        <Card loud title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
           {headline.map(({ name, last }) => (
             <Pressable
               key={name}
@@ -167,15 +169,29 @@ export default function TrainScreen() {
       {recent.length > 0 && (
         <Card loud title="Recent sessions">
           {recent.slice(0, 5).map((session) => (
-            <View key={session.id} style={[styles.row, { borderColor: loud.rule }]}>
+            <Tappable
+              key={session.id}
+              onPress={() => router.push(`/workout?id=${session.id}`)}
+              scaleTo={0.99}
+              style={[styles.row, { borderColor: loud.rule }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${session.name}, ${formatDate(session.date)}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
                 <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
                   {formatDate(session.date)} · {session.exercises.join(', ')}
                 </Text>
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={loud.figureFaint} />
+            </Tappable>
           ))}
+          <Button
+            tone="loud"
+            label="All workouts"
+            variant="subtle"
+            onPress={() => router.push('/calendar')}
+          />
         </Card>
       )}
 

@@ -49,7 +49,9 @@ export default function SignInScreen() {
     run(async () => {
       if (sentTo === null) return;
       await verifyCode(sentTo, code);
-      const profile = await refreshProfile();
+      // Signed in from here on. If the profile cannot be loaded, leave anyway: staying would show
+      // a spent code, and the Account screen has its own could-not-load state.
+      const profile = await refreshProfile().catch(() => undefined);
       if (profile === null) router.replace('/profile-setup');
       else router.back();
     });
@@ -65,6 +67,7 @@ export default function SignInScreen() {
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
               placeholder="you@example.com"
             />
             <Button label={busy ? 'Sending…' : 'Send a code'} onPress={() => void send()} disabled={busy || !email.includes('@')} />
@@ -78,11 +81,12 @@ export default function SignInScreen() {
               onChangeText={setCode}
               keyboardType="number-pad"
               autoCapitalize="none"
+              autoCorrect={false}
               maxLength={6}
               placeholder="123456"
             />
             <Button label={busy ? 'Checking…' : 'Sign in'} onPress={() => void verify()} disabled={busy || code.trim().length !== 6} />
-            <Button label="Use a different email" variant="subtle" onPress={() => setSentTo(null)} disabled={busy} />
+            <Button label="Use a different email" variant="subtle" onPress={() => { setSentTo(null); setProblem(null); }} disabled={busy} />
           </>
         )}
         {problem && <Text style={[styles.problem, { color: colors.danger }]}>{problem}</Text>}

@@ -13,13 +13,13 @@ export interface ServerError {
   name?: string;
 }
 
-const OFFLINE = 'Could not reach the server. Check the connection and try again.';
+export const OFFLINE = 'Could not reach the server. Check the connection and try again.';
 
 export const isAlreadyPosted = (error: ServerError): boolean =>
-  error.code === '23505' && (error.message?.includes('session') ?? false);
+  error.code === '23505' && (error.message?.includes('posts_author_id_session_id_key') ?? false);
 
 export const messageFor = (error: ServerError): string => {
-  if (error.code === '23505' && error.message?.includes('username')) return 'That username is taken.';
+  if (error.code === '23505' && error.message?.includes('profiles_username_key')) return 'That username is taken.';
   if (error.code === 'otp_expired') return 'That code is wrong or has expired. Check it, or send a new one.';
   if (error.code === 'over_email_send_rate_limit' || error.status === 429) {
     return 'Too many codes sent. Wait a few minutes and try again.';
@@ -30,6 +30,12 @@ export const messageFor = (error: ServerError): string => {
     return error.message?.includes('sending') && error.message.includes('email')
       ? 'The sign-in email could not be sent. Try again in a few minutes.'
       : 'Something went wrong on the server. Try again in a few minutes.';
+  }
+  // Our own time limit on a request (see timeoutFetch.ts). postgrest-js reports it as
+  // "AbortError: ..."; auth-js wraps it as a retryable fetch error carrying only the raw abort
+  // text ("signal is aborted without reason"), so this must come before the offline branch.
+  if (error.name === 'AbortError' || /abort/i.test(error.message ?? '')) {
+    return 'The server took too long to answer. Try again.';
   }
   if (
     error.name === 'AuthRetryableFetchError' ||
