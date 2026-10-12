@@ -60,7 +60,11 @@ a stale or absent build is invisible until someone opens the site.
 
 ```
 cd ../../mobile && rm -rf dist && npx expo export --platform web
+# Keep the previous build's code files: a page opened before this deploy (an
+# installed iPhone app still in memory) loads some of them later, by name.
+mkdir -p ../keep && cp -r ../services/gemini-proxy/web/_expo/static/js/web/. ../keep/ 2>/dev/null
 rm -rf ../services/gemini-proxy/web && cp -r dist ../services/gemini-proxy/web
+cp -n ../keep/* ../services/gemini-proxy/web/_expo/static/js/web/ 2>/dev/null; rm -rf ../keep
 
 cd ../services/gemini-proxy
 gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
