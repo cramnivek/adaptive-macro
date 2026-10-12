@@ -158,6 +158,8 @@ export default function OverviewScreen() {
               scaleTo={0.97}
               style={styles.switchItem}
               accessibilityLabel={`Show the ${option.label.toLowerCase()}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
               <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
                 <Text

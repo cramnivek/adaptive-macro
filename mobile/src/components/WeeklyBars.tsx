@@ -75,6 +75,8 @@ export const WeeklyBars = ({ weeks, units }: WeeklyBarsProps) => {
               scaleTo={0.97}
               style={styles.switchItem}
               accessibilityLabel={`Show ${option.noun.toLowerCase()} per week`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: option.key === metric }}
             >
               <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
                 <Text
