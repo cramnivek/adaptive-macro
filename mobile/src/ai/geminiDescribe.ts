@@ -1,4 +1,4 @@
-import { ALLOWANCE_USED_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
+import { ALLOWANCE_USED_MESSAGE, SIGN_IN_AGAIN_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
 import { type DescribeResult, type MealEstimate, MealEstimateSchema, type MealPhoto } from './describeMeal';
 import { geminiPartsFor, systemInstructionFor } from './mealRequest';
 
@@ -88,7 +88,7 @@ export const describeMealWithGemini = async (
 
   let payload: any;
   try {
-    const { response, route } = await fetchGemini(MODEL, apiKey, {
+    const { response, route, rejectedSession } = await fetchGemini(MODEL, apiKey, {
       signal: controller.signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemInstructionFor(photo) }] },
@@ -100,6 +100,7 @@ export const describeMealWithGemini = async (
       }),
     });
 
+    if (rejectedSession) throw new DescribeResponseError(SIGN_IN_AGAIN_MESSAGE);
     if (isPersonalLimit(response, route)) throw new DescribeResponseError(ALLOWANCE_USED_MESSAGE);
     if (!response.ok) {
       throw new DescribeResponseError(`The estimate service returned ${response.status}.`);

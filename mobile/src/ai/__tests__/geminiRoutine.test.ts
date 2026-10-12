@@ -88,6 +88,13 @@ describe('readRoutinesWithGemini', () => {
     );
   });
 
+  it('asks the person to sign in again when the proxy rejects their session', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
+
+    await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow('Sign in again to use AI features.');
+  });
+
   it('sends the signed-in person\'s token and retries once after an expiry', async () => {
     session.token.mockResolvedValue('jwt-old');
     session.refresh.mockResolvedValue('jwt-new');

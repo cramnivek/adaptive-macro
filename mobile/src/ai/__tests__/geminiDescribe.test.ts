@@ -115,6 +115,15 @@ describe('describeMealWithGemini', () => {
     );
   });
 
+  it('asks the person to sign in again when the proxy rejects their session', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
+
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow(
+      'Sign in again to use AI features.',
+    );
+  });
+
   it('keeps the generic message for any other failure status', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429 })));
 

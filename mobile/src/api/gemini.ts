@@ -103,6 +103,8 @@ export const routeFor = (
  */
 export const ALLOWANCE_USED_MESSAGE = "You've used today's AI allowance. It resets tomorrow.";
 
+export const SIGN_IN_AGAIN_MESSAGE = 'Sign in again to use AI features.';
+
 export const isPersonalLimit = (response: Response, route: GeminiRoute): boolean =>
   route.viaProxy && response.status === 429 && response.headers.get('x-limit') === 'user-daily';
 
@@ -121,7 +123,7 @@ export const fetchGemini = async (
   model: string,
   apiKey: string,
   init: { body: string; signal: AbortSignal },
-): Promise<{ response: Response; route: GeminiRoute }> => {
+): Promise<{ response: Response; route: GeminiRoute; rejectedSession: boolean }> => {
   const send = async (token: string | null) => {
     const route = routeFor(model, apiKey, token);
     const response = await fetch(route.url, {
@@ -130,7 +132,15 @@ export const fetchGemini = async (
       headers: route.headers,
       body: init.body,
     });
-    return { response, route };
+    // A 401 that is not an expiry, on a request that carried a session, means
+    // the proxy looked at that session and refused it. Signing in again is the
+    // fix, which "add your own key" would not point to.
+    const rejectedSession =
+      route.viaProxy &&
+      token !== null &&
+      response.status === 401 &&
+      response.headers.get('x-auth') !== 'expired';
+    return { response, route, rejectedSession };
   };
 
   // A user's own key goes straight to Google, where a token is never sent, so
@@ -318,10 +328,12 @@ const postJson = async (
   if (signal?.aborted) controller.abort();
 
   try {
-    const { response, route } = await fetchGemini(model, apiKey, {
+    const { response, route, rejectedSession } = await fetchGemini(model, apiKey, {
       signal: controller.signal,
       body: JSON.stringify(body),
     });
+
+    if (rejectedSession) throw new GeminiAccessError(SIGN_IN_AGAIN_MESSAGE);
 
     // Same status, different cause. On the direct path the user's own key was
     // rejected and they can fix it; on the proxy path the key is the author's

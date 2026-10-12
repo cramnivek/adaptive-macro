@@ -698,6 +698,35 @@ describe('the sign-in token on a Gemini request', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('asks the person to sign in again when the proxy rejects the session it was sent', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('Sign in again to use AI features.');
+  });
+
+  it('keeps the build message for a 401 when no session was sent', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('This build cannot reach the lookup service');
+  });
+
+  it('keeps the build message for a 401 after an expiry that could not be refreshed', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(expired());
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('This build cannot reach the lookup service');
+  });
+
+  it('keeps the build message for a 401 on the user-key route', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], 'AIzaUserKey')).rejects.toThrow(
+      'This build cannot reach the lookup service',
+    );
+  });
+
   it('says the personal allowance is used up when the proxy names it', async () => {
     fetchMock.mockResolvedValue(
       new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } }),
