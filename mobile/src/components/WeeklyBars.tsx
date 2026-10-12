@@ -148,12 +148,10 @@ const styles = StyleSheet.create({
   slot: { flex: 1, justifyContent: 'flex-end' },
   bar: { width: '100%', borderTopLeftRadius: 2, borderTopRightRadius: 2 },
   barCurrent: { backgroundColor: loud.loud },
-  barPast: {
-    backgroundColor: loud.panel,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: 0,
-    borderColor: loud.rule,
-  },
+  // The panel colour is a hair off the ground, so past weeks — usually the whole
+  // chart — all but disappeared; the faint figure colour reads as a bar and still
+  // leaves the current week the loudest thing on it.
+  barPast: { backgroundColor: loud.figureFaint },
 
   axis: { flexDirection: 'row', marginTop: space.xs },
   axisLabel: { flex: 1, fontFamily: font.ui, fontSize: 11, color: loud.figureFaint },
