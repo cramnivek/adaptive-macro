@@ -140,6 +140,25 @@ create function public.unfollow_on_block() returns trigger
 create trigger blocks_unfollow after insert on public.blocks
   for each row execute function public.unfollow_on_block();
 
+-- Blocking an account that does not exist is dropped without an error. Without
+-- this the foreign key would refuse it, while blocking an account that exists
+-- but is hidden from you (it blocked you) succeeds, and "exists but I cannot
+-- see it" would mean blocked. Only the caller's own row, as in follow_status:
+-- a forged row falls through to row-level security.
+create function public.block_target_exists() returns trigger
+  language plpgsql security definer set search_path = ''
+  as $$
+  begin
+    if new.blocker_id = auth.uid()
+       and not exists (select 1 from public.profiles where id = new.blocked_id) then
+      return null;
+    end if;
+    return new;
+  end
+  $$;
+create trigger blocks_target_exists before insert on public.blocks
+  for each row execute function public.block_target_exists();
+
 -- Follower and following counts for any profile. Rows of follows are private to
 -- the two people in them, so the counts come from here rather than a count(*).
 -- No row for a profile the caller cannot see (missing, or blocked either way),
@@ -203,6 +222,11 @@ create policy "posts are readable by those allowed to see them" on public.posts
 -- Profiles stay findable by anyone signed in, except across a block, so a
 -- blocked person cannot find the account that blocked them (visible_profile is
 -- defined above, beside can_see).
+-- One signal remains and is accepted on purpose: a username's unique constraint
+-- still says a name is taken when the account holding it is hidden from you
+-- (profiles_username_key). Every username system must say that a name is taken,
+-- and closing this would mean never saying whether a name is available, which
+-- sign-up cannot do without.
 drop policy "profiles are readable when signed in" on public.profiles;
 create policy "profiles are readable unless blocked either way" on public.profiles
   for select to authenticated

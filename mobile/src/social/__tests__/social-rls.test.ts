@@ -176,6 +176,15 @@ describe('blocks', () => {
     expect((await db.query(`select * from follows`)).rows).toEqual([]);
   });
 
+  it('of a missing account look like blocking a hidden one: no error either way', async () => {
+    const nobody = '00000000-0000-4000-8000-0000000000ff';
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    // carol's profile is now hidden from bob, so this is a block of a hidden account
+    await as(db, USER_B, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_B, USER_C]);
+    await as(db, USER_B, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_B, nobody]);
+    expect(await as(db, USER_B, `select blocked_id from blocks`)).toEqual([{ blocked_id: USER_C }]);
+  });
+
   it('are seen only by the person who made them', async () => {
     await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
     expect(await as(db, USER_B, `select * from blocks`)).toEqual([]);
