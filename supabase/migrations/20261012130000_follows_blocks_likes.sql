@@ -3,6 +3,9 @@
 --
 -- Who may read a post is decided in one place, can_see(), and every policy
 -- that needs the answer asks it, so the rule cannot drift between tables.
+--
+-- The binding rule for blocks: nobody can learn they have been blocked from
+-- anything the API returns. Each place a block could show is closed below.
 
 create table public.follows (
   follower_id uuid not null references public.profiles (id) on delete cascade,
@@ -21,6 +24,8 @@ create table public.blocks (
   primary key (blocker_id, blocked_id),
   check (blocker_id <> blocked_id)
 );
+-- The account-deletion cascade looks rows up by the second person, here and in likes.
+create index blocks_blocked on public.blocks (blocked_id);
 
 create table public.likes (
   post_id uuid not null references public.posts (id) on delete cascade,
@@ -28,11 +33,20 @@ create table public.likes (
   created_at timestamptz not null default now(),
   primary key (post_id, user_id)
 );
+create index likes_user on public.likes (user_id);
+
+-- The helpers live in a schema of their own. PostgREST exposes every function
+-- in public as /rpc/..., and can_see(x) or visible_profile(x) called by hand
+-- answers false exactly when x has blocked the caller: a block oracle. Policies
+-- still reach them as the caller, so the roles get USAGE here; PostgREST does
+-- not expose this schema, so there is no route to them from the API.
+create schema private;
+grant usage on schema private to authenticated;
 
 -- Security definer because a block is visible only to the person who made it,
--- yet both people's reads must respect it. Not callable by users directly: it
--- would tell anyone whether a given person has blocked them.
-create function public.blocked_between(a uuid, b uuid) returns boolean
+-- yet both people's reads must respect it. Granted to nobody: the definer
+-- functions below call it as their owner.
+create function private.blocked_between(a uuid, b uuid) returns boolean
   language sql stable security definer set search_path = ''
   as $$
     select exists (
@@ -40,16 +54,16 @@ create function public.blocked_between(a uuid, b uuid) returns boolean
        where (blocker_id = a and blocked_id = b) or (blocker_id = b and blocked_id = a)
     )
   $$;
-revoke execute on function public.blocked_between(uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.blocked_between(uuid, uuid) from public, anon, authenticated;
 
 -- The one rule: the author; otherwise, with no block either way, anyone when
 -- the author is public, or an accepted follower when private.
-create function public.can_see(author uuid) returns boolean
+create function private.can_see(author uuid) returns boolean
   language sql stable security definer set search_path = ''
   as $$
     select author = auth.uid()
         or (
-          not public.blocked_between(author, auth.uid())
+          not private.blocked_between(author, auth.uid())
           and (
             exists (select 1 from public.profiles p where p.id = author and not p.is_private)
             or exists (
@@ -59,27 +73,33 @@ create function public.can_see(author uuid) returns boolean
           )
         )
   $$;
-revoke execute on function public.can_see(uuid) from public, anon;
-grant execute on function public.can_see(uuid) to authenticated;
+revoke execute on function private.can_see(uuid) from public, anon;
+grant execute on function private.can_see(uuid) to authenticated;
 
 -- A policy checks EXECUTE on the functions it names against the caller, and
 -- blocked_between is not granted to users, so the profile and like policies ask
--- through this narrower wrapper: it answers only "may I see this person", which
--- their absence would say anyway.
-create function public.visible_profile(profile uuid) returns boolean
+-- through this narrower wrapper: it answers only "may I see this person".
+create function private.visible_profile(profile uuid) returns boolean
   language sql stable security definer set search_path = ''
-  as $$ select not public.blocked_between(profile, auth.uid()) $$;
-revoke execute on function public.visible_profile(uuid) from public, anon;
-grant execute on function public.visible_profile(uuid) to authenticated;
+  as $$ select not private.blocked_between(profile, auth.uid()) $$;
+revoke execute on function private.visible_profile(uuid) from public, anon;
+grant execute on function private.visible_profile(uuid) to authenticated;
 
 -- A follow's status is the followee's to decide, so the client never sets it:
--- pending for a private account, accepted for a public one. A follow across a
--- block is dropped without an error, so nobody can test whether they are blocked.
+-- pending for a private account, accepted for a public one.
+-- Your own follow of someone who blocked you, or of an account that does not
+-- exist, is dropped without an error, and the two look the same, so nobody can
+-- test whether they are blocked. Only the caller's own row is treated so: this
+-- trigger runs before row-level security, and a forged row (someone else as
+-- the follower) must fall through to be refused as any forgery is, or the
+-- silence would reveal whether the forged pair has a block.
 create function public.follow_status() returns trigger
   language plpgsql security definer set search_path = ''
   as $$
   begin
-    if public.blocked_between(new.follower_id, new.followee_id) then
+    if new.follower_id = auth.uid()
+       and (private.blocked_between(new.follower_id, new.followee_id)
+            or not exists (select 1 from public.profiles where id = new.followee_id)) then
       return null;
     end if;
     new.status := case
@@ -122,12 +142,16 @@ create trigger blocks_unfollow after insert on public.blocks
 
 -- Follower and following counts for any profile. Rows of follows are private to
 -- the two people in them, so the counts come from here rather than a count(*).
+-- No row for a profile the caller cannot see (missing, or blocked either way),
+-- so the counts do not show that a blocker's account exists.
 create function public.follow_counts(profile uuid) returns table (followers bigint, following bigint)
   language sql stable security definer set search_path = ''
   as $$
     select
       (select count(*) from public.follows where followee_id = profile and status = 'accepted'),
       (select count(*) from public.follows where follower_id = profile and status = 'accepted')
+    where exists (select 1 from public.profiles where id = profile)
+      and private.visible_profile(profile)
   $$;
 revoke execute on function public.follow_counts(uuid) from public, anon;
 grant execute on function public.follow_counts(uuid) to authenticated;
@@ -164,7 +188,7 @@ create policy "a block is lifted by the blocker" on public.blocks
 -- the block, so a like by anyone blocked either way is hidden separately.
 create policy "likes are visible on posts you can see" on public.likes
   for select to authenticated
-  using (exists (select 1 from public.posts p where p.id = post_id) and public.visible_profile(user_id));
+  using (exists (select 1 from public.posts p where p.id = post_id) and private.visible_profile(user_id));
 create policy "a like is your own, on a post you can see" on public.likes
   for insert to authenticated
   with check (user_id = (select auth.uid()) and exists (select 1 from public.posts p where p.id = post_id));
@@ -174,7 +198,7 @@ create policy "a like is removed by whoever made it" on public.likes
 -- Posts: step 1's author-only read becomes can_see().
 drop policy "posts are readable by their author" on public.posts;
 create policy "posts are readable by those allowed to see them" on public.posts
-  for select to authenticated using (public.can_see(author_id));
+  for select to authenticated using (private.can_see(author_id));
 
 -- Profiles stay findable by anyone signed in, except across a block, so a
 -- blocked person cannot find the account that blocked them (visible_profile is
@@ -182,4 +206,4 @@ create policy "posts are readable by those allowed to see them" on public.posts
 drop policy "profiles are readable when signed in" on public.profiles;
 create policy "profiles are readable unless blocked either way" on public.profiles
   for select to authenticated
-  using (public.visible_profile(id));
+  using (private.visible_profile(id));
