@@ -643,8 +643,8 @@ git commit -m "feat(social): a feed of the people you follow, newest first" -m "
     - `pendingRequests(): Promise<PublicProfile[]>`
     - `acceptRequest(from: string): Promise<void>`
     - `declineRequest(from: string): Promise<void>`
-    - `feedPage(before: string | null): Promise<FeedPost[]>`
-    - `postsBy(author: string, before: string | null): Promise<FeedPost[]>`
+    - `feedPage(before: FeedCursor | null): Promise<FeedPost[]>`
+    - `postsBy(author: string, before: FeedCursor | null): Promise<FeedPost[]>`, with `type FeedCursor = { at: string; id: string }` (the last post's `created_at` and `id`: Task 2 pages by both so posts at the same moment are never skipped)
     - `like(postId: string): Promise<void>`
     - `unlike(postId: string): Promise<void>`
     - `block(them: string): Promise<void>`
@@ -887,15 +887,28 @@ export const declineRequest = async (from: string): Promise<void> => {
   if (error) fail(error);
 };
 
-export const feedPage = async (before: string | null): Promise<FeedPost[]> => {
-  const { data, error } = await client().rpc('feed_page', { before, size: PAGE });
+export type FeedCursor = { at: string; id: string };
+
+/** The cursor that asks for the page after this one. */
+export const cursorAfter = (posts: FeedPost[]): FeedCursor | null =>
+  posts.length === 0 ? null : { at: posts[posts.length - 1].created_at, id: posts[posts.length - 1].id };
+
+export const feedPage = async (before: FeedCursor | null): Promise<FeedPost[]> => {
+  const { data, error } = await client().rpc('feed_page', { before: before?.at ?? null, before_id: before?.id ?? null, size: PAGE });
   if (error) fail(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
 };
 
-export const postsBy = async (author: string, before: string | null): Promise<FeedPost[]> => {
-  let query = client().from('feed_posts').select('*').eq('author_id', author).order('created_at', { ascending: false }).limit(PAGE);
-  if (before !== null) query = query.lt('created_at', before);
+export const postsBy = async (author: string, before: FeedCursor | null): Promise<FeedPost[]> => {
+  let query = client()
+    .from('feed_posts')
+    .select('*')
+    .eq('author_id', author)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(PAGE);
+  // (created_at, id) < (at, id), spelled for PostgREST: earlier, or the same moment with a smaller id.
+  if (before !== null) query = query.or(`created_at.lt.${before.at},and(created_at.eq.${before.at},id.lt.${before.id})`);
   const { data, error } = await query;
   if (error) fail(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
@@ -1264,7 +1277,7 @@ import { PostCard } from '../../src/components/PostCard';
 import { Screen } from '../../src/components/Screen';
 import { Tappable } from '../../src/components/Tappable';
 import { notify } from '../../src/dialog';
-import { feedPage, like, pendingRequests, unlike } from '../../src/social/feed';
+import { cursorAfter, feedPage, like, pendingRequests, unlike } from '../../src/social/feed';
 import { postView } from '../../src/social/postPayload';
 import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
@@ -1310,7 +1323,7 @@ export default function SocialScreen() {
     if (!posts || posts.length === 0 || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await feedPage(posts[posts.length - 1].created_at);
+      const page = await feedPage(cursorAfter(posts));
       setPosts([...posts, ...page]);
       setMore(page.length === 20);
     } catch (error) {
