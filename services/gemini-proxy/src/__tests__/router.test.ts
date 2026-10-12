@@ -478,6 +478,33 @@ describe('per-user limits', () => {
     expect(await res.json()).toEqual({ error: 'Invalid session' });
   });
 
+  // A bad bearer costs an ECDSA verify. If the 401 came before any limiter,
+  // a caller could force one per request without ever being counted.
+  it('rate limits a caller who keeps sending forged tokens', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const good = await tokenFor('alice');
+    const [header, , signature] = good.split('.');
+    const forged = Buffer.from(JSON.stringify(supabaseClaims(NOW, { sub: 'bob' }))).toString('base64url');
+    const bad = `${header}.${forged}.${signature}`;
+
+    for (let i = 0; i < 20; i += 1) expect((await router(call(bad, '203.0.113.5'))).status).toBe(401);
+
+    const refused = await router(call(bad, '203.0.113.5'));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('x-limit')).toBeNull();
+    // Someone else at another address is not punished for it.
+    expect((await router(call(bad, '203.0.113.6'))).status).toBe(401);
+  });
+
+  it('rate limits a caller who keeps sending expired tokens', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const stale = await tokenFor('alice', { exp: Math.floor(NOW / 1000) - 3600 });
+
+    for (let i = 0; i < 20; i += 1) expect((await router(call(stale, '203.0.113.5'))).status).toBe(401);
+
+    expect((await router(call(stale, '203.0.113.5'))).status).toBe(429);
+  });
+
   it('lets a signed-in caller through to the signed-out pool when Supabase keys are unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('bad gateway', { status: 502 })));
     const router = createRouter({ env: userEnv, webRoot });

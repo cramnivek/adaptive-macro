@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTokenVerifier } from '../userToken.js';
 import {
   KID,
@@ -56,6 +56,20 @@ describe('createTokenVerifier', () => {
     const { verifier, fetchImpl } = setup();
     await verifier.check(bearer(await keys.sign(supabaseClaims(NOW))));
 
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
+  });
+
+  // The URL is typed into a deploy command; a trailing slash is an easy slip
+  // and would otherwise make the issuer never match, 401ing every signed-in user.
+  it('ignores trailing slashes on the project URL', async () => {
+    const fetchImpl = vi.fn(async () => jwksResponse(keys.jwks));
+    const verifier = createTokenVerifier({
+      supabaseUrl: `${SUPABASE_URL}//`,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => NOW,
+    });
+
+    expect(await verifier.check(bearer(await keys.sign(supabaseClaims(NOW))))).toEqual({ userId: 'user-1' });
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
   });
 
@@ -272,6 +286,87 @@ describe('createTokenVerifier', () => {
         problem: 'invalid',
         keysUnavailable: true,
       });
+    });
+
+    // A Supabase that accepts the connection and then says nothing would
+    // otherwise hold every bearer request for the length of undici's default
+    // timeout, and the "outage uses the signed-out pool" rule would only hold
+    // for outages that fail fast.
+    describe('when the key endpoint stalls', () => {
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      /** A fetch that never answers, and rejects only if it is aborted. */
+      const stalled = () =>
+        vi.fn(
+          (_url: unknown, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+            }),
+        );
+
+      it('gives up after 3 seconds and reports the keys unavailable', async () => {
+        const fetchImpl = stalled();
+        const verifier = createTokenVerifier({
+          supabaseUrl: SUPABASE_URL,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          now: () => NOW,
+        });
+        const token = await keys.sign(supabaseClaims(NOW));
+
+        const pending = verifier.check(bearer(token));
+        await vi.advanceTimersByTimeAsync(2_900);
+        let settled = false;
+        void pending.then(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(200);
+        expect(await pending).toEqual({ problem: 'invalid', keysUnavailable: true });
+      });
+
+      it('lets every waiting request go once the one shared fetch times out', async () => {
+        const fetchImpl = stalled();
+        const verifier = createTokenVerifier({
+          supabaseUrl: SUPABASE_URL,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          now: () => NOW,
+        });
+        const token = await keys.sign(supabaseClaims(NOW));
+
+        const all = Promise.all([1, 2, 3].map(() => verifier.check(bearer(token))));
+        await vi.advanceTimersByTimeAsync(3_100);
+
+        expect(await all).toEqual(Array(3).fill({ problem: 'invalid', keysUnavailable: true }));
+        expect(fetchImpl).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('survives a fetch that throws synchronously, and tries again later', async () => {
+      let broken = true;
+      const fetchImpl = vi.fn((): Promise<Response> => {
+        if (broken) throw new Error('sync boom');
+        return Promise.resolve(jwksResponse(keys.jwks));
+      });
+      let at = NOW;
+      const verifier = createTokenVerifier({
+        supabaseUrl: SUPABASE_URL,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        now: () => at,
+      });
+      const token = await keys.sign(supabaseClaims(NOW));
+
+      expect(await verifier.check(bearer(token))).toEqual({ problem: 'invalid', keysUnavailable: true });
+
+      broken = false;
+      at += 61_000;
+      expect(await verifier.check(bearer(token))).toEqual({ userId: 'user-1' });
     });
 
     it('tries again after an outage once the retry interval has passed', async () => {

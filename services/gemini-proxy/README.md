@@ -174,9 +174,11 @@ per person:
 - No token (or `SUPABASE_URL` unset) — 20 per 10 minutes per address, and a
   **signed-out pool of 100 per 24 hours** shared by everyone.
 - An expired token answers `401` with `x-auth: expired`; the app refreshes and
-  retries once. Any other bad token answers `401` and is not retried. If
-  Supabase's keys cannot be fetched and none are cached, the caller is treated
-  as signed out rather than refused.
+  retries once. Any other bad token answers `401` and is not retried. Either
+  kind counts against the caller's per-address burst limit before the `401` is
+  sent, so a loop of bad tokens ends in `429` like any other flood. If
+  Supabase's keys cannot be fetched (the fetch gives up after 3 seconds) and
+  none are cached, the caller is treated as signed out rather than refused.
 - The **daily ceiling**, 1,500 Gemini calls across every caller signed in or
   not, stays as the bill guard. It does not depend on knowing who is calling.
 

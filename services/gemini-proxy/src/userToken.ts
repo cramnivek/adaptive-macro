@@ -25,6 +25,9 @@ const EXPIRY_LEEWAY_MS = 30_000;
  */
 const REFETCH_INTERVAL_MS = 60_000;
 
+/** How long the key endpoint gets to answer before it counts as down. */
+const JWKS_TIMEOUT_MS = 3_000;
+
 const invalid = { problem: 'invalid' } as const;
 
 type KeySet = Map<string, CryptoKey>;
@@ -45,7 +48,9 @@ export const createTokenVerifier = (opts: {
   fetchImpl?: typeof fetch;
   now?: () => number;
 }) => {
-  const issuer = `${opts.supabaseUrl}/auth/v1`;
+  // The URL is typed into a deploy command, and a trailing slash would make
+  // the issuer never match, refusing every signed-in person.
+  const issuer = `${opts.supabaseUrl.replace(/\/+$/, '')}/auth/v1`;
   const jwksUrl = `${issuer}/.well-known/jwks.json`;
   const now = opts.now ?? Date.now;
   // Resolved at call time so a test (or a runtime) that swaps the global fetch
@@ -86,14 +91,25 @@ export const createTokenVerifier = (opts: {
     if (inFlight) return inFlight;
     lastAttemptAt = now();
     inFlight = (async () => {
+      // A fetch that connects and then stalls would hold every waiting request
+      // for undici's default timeout, so an outage would only fall back to the
+      // signed-out pool when it failed fast. Aborting counts as a failed fetch.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), JWKS_TIMEOUT_MS);
       try {
-        const response = await fetchJwks(jwksUrl);
+        // Deferred a tick so that a fetch which throws synchronously is caught
+        // here like any other failure. Called directly, it would run `finally`
+        // before `inFlight` is assigned below and leave it set for good.
+        const response = await Promise.resolve().then(() =>
+          fetchJwks(jwksUrl, { signal: controller.signal }),
+        );
         if (!response.ok) return;
         const fresh = await importKeys(await response.json());
         if (fresh.size > 0) keys = fresh;
       } catch {
         // Keep whatever is cached. The caller finds out through the lookup.
       } finally {
+        clearTimeout(timer);
         inFlight = null;
       }
     })();

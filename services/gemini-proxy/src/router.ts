@@ -117,6 +117,18 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       // they always have, so a refused caller costs no upstream work.
       const who = verifier ? await verifier.check(request.headers.get('authorization')) : null;
 
+      const badToken =
+        who !== null &&
+        'problem' in who &&
+        (who.problem === 'expired' || (who.problem === 'invalid' && !who.keysUnavailable));
+      // A bad bearer costs a signature check. Counting it against the same
+      // per-address limit as any other call means a loop of them is refused
+      // like anyone else's rather than getting free verifies.
+      if (badToken) {
+        const burst = signedOutBurstLimiter.check(callerKey(request));
+        if (!burst.allowed) return tooMany(burst.retryAfterSeconds);
+      }
+
       if (who && 'problem' in who && who.problem === 'expired') {
         return Response.json(
           { error: 'Session expired' },
