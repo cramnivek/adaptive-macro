@@ -237,12 +237,13 @@ describe('the helper functions', () => {
 });
 
 describe('feed', () => {
-  const feed = (user: string, before: string | null = null) =>
-    as<{ title: string; username: string; like_count: number; liked: boolean; created_at: string }>(
+  type FeedRow = { id: string; title: string; username: string; like_count: number; liked: boolean; created_at: string };
+  const feed = (user: string, after: FeedRow | null = null, size = 20) =>
+    as<FeedRow>(
       db,
       user,
-      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, 20)`,
-      [before],
+      `select id, title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, $2, $3)`,
+      [after?.created_at ?? null, after?.id ?? null, size],
     );
 
   it('shows your own posts and those of people you follow, newest first', async () => {
@@ -281,8 +282,32 @@ describe('feed', () => {
     await post(db, USER_B, 'two');
     const first = await feed(USER_B);
     expect(first).toHaveLength(2);
-    const older = await feed(USER_B, first[0].created_at);
+    const older = await feed(USER_B, first[0]);
     expect(older).toHaveLength(1);
+  });
+
+  it('pages posts made at the same moment without skipping or repeating any', async () => {
+    await as(
+      db,
+      USER_B,
+      `insert into posts (author_id, session_id, title, performed_on, duration_min, sets, volume_kg, exercises)
+       select $1, 's' || n, 'Push', '2026-10-12', 45, 5, 2400, '[]'::jsonb from generate_series(1, 5) n`,
+      [USER_B],
+    );
+    const seen: FeedRow[] = [];
+    let page = await feed(USER_B, null, 2);
+    while (page.length > 0) {
+      seen.push(...page);
+      page = await feed(USER_B, page[page.length - 1], 2);
+    }
+    expect(new Set(seen.map((r) => r.created_at)).size).toBe(1);
+    expect(seen.map((r) => r.id)).toEqual((await feed(USER_B)).map((r) => r.id));
+    expect(new Set(seen.map((r) => r.id)).size).toBe(5);
+  });
+
+  it('treats a missing size as the default', async () => {
+    await post(db, USER_B);
+    expect(await as(db, USER_B, `select 1 from feed_page(null, null, null)`)).toHaveLength(1);
   });
 
   it('respects a block', async () => {
@@ -310,8 +335,18 @@ describe('feed', () => {
     expect(await as(db, USER_C, `select title from feed_posts`)).toHaveLength(1);
   });
 
+  it('can only be read by a signed-in user, not written', async () => {
+    const [grants] = await as<{ read: boolean; write: boolean }>(
+      db,
+      USER_B,
+      `select has_table_privilege('feed_posts', 'select') as read,
+              has_table_privilege('feed_posts', 'insert, update, delete, truncate, references, trigger') as write`,
+    );
+    expect(grants).toEqual({ read: true, write: false });
+  });
+
   it('is not open to someone signed out', async () => {
-    await expect(as(db, null, `select * from feed_page(null, 20)`)).rejects.toThrow(/permission denied/);
+    await expect(as(db, null, `select * from feed_page(null, null, 20)`)).rejects.toThrow(/permission denied/);
     await expect(as(db, null, `select * from feed_posts`)).rejects.toThrow(/permission denied/);
   });
 });

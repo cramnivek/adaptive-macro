@@ -5,6 +5,12 @@
 -- person, so the like_count below counts only the likes the caller can see (a
 -- like by someone who blocked you is not in it) and a post by someone who
 -- blocked you is not a row at all.
+--
+-- The view is selectable directly and shows every post the caller may see,
+-- public strangers' included; leaving strangers out is feed_page's rule, not
+-- the view's. The view also freezes its column list (select p.*), and feed_page
+-- returns its row type, so a later change to the view must drop and recreate
+-- both, with their grants.
 
 create view public.feed_posts with (security_invoker = true) as
   select p.*,
@@ -17,7 +23,9 @@ create view public.feed_posts with (security_invoker = true) as
 
 -- Your posts and those of the people you follow (accepted), newest first. Public
 -- strangers are left out: a feed is the people you chose, not everyone.
-create function public.feed_page(before timestamptz default null, size integer default 20)
+-- Paged by (created_at, id): posts made at the same moment share a created_at,
+-- so the id breaks the tie and the next page starts exactly after the last row.
+create function public.feed_page(before timestamptz default null, before_id uuid default null, size integer default 20)
   returns setof public.feed_posts
   language sql stable security invoker set search_path = ''
   as $$
@@ -27,10 +35,11 @@ create function public.feed_page(before timestamptz default null, size integer d
                         where f.follower_id = (select auth.uid())
                           and f.followee_id = fp.author_id
                           and f.status = 'accepted'))
-       and (before is null or fp.created_at < before)
-     order by fp.created_at desc
-     limit least(greatest(size, 1), 50)
+       and (before is null or (fp.created_at, fp.id) < (before, before_id))
+     order by fp.created_at desc, fp.id desc
+     limit least(greatest(coalesce(size, 20), 1), 50)
   $$;
-revoke execute on function public.feed_page(timestamptz, integer) from public, anon;
-grant execute on function public.feed_page(timestamptz, integer) to authenticated;
+revoke execute on function public.feed_page(timestamptz, uuid, integer) from public, anon;
+grant execute on function public.feed_page(timestamptz, uuid, integer) to authenticated;
 revoke all on public.feed_posts from anon;
+revoke insert, update, delete, truncate, references, trigger on public.feed_posts from authenticated;
