@@ -27,6 +27,12 @@ export interface ProxyEnv {
   proxyToken: string;
   /** USDA FoodData Central. Falls back to DEMO_KEY's tiny quota when unset. */
   usdaApiKey: string;
+  /**
+   * The Supabase project URL whose sign-in tokens the router verifies. Empty
+   * switches per-user limits off: every Gemini call then uses the signed-out
+   * pool, which is how a deploy without this setting keeps working.
+   */
+  supabaseUrl: string;
 }
 
 export const handleGeminiProxy = async (

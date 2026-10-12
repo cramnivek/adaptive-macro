@@ -3,42 +3,81 @@ import { handleOffProxy } from './offProxy.js';
 import { handleUsdaProxy } from './usdaProxy.js';
 import { callerKey, createRateLimiter } from './rateLimit.js';
 import { serveStatic } from './staticFiles.js';
+import { createTokenVerifier } from './userToken.js';
 
 /*
   Gemini is the expensive one and the slow one: a grounded lookup takes most of
   a minute, so 20 in ten minutes is already far beyond any human pace and well
   under what an abuser with the extracted token would want. The data lookups
   are cheap and get typed at, so they are far looser.
+
+  The same 20 in ten minutes applies to a signed-in person, keyed on who they
+  are instead of where they appear to come from, and to a signed-out caller,
+  keyed on that address.
 */
 const GEMINI_LIMIT = { windowMs: 10 * 60_000, max: 20 };
 const LOOKUP_LIMIT = { windowMs: 10 * 60_000, max: 150 };
 
 /*
+  How the Gemini budget is divided, now that a caller can say who they are.
+
+  The shared token ships inside every copy of the app, so it identifies nobody:
+  anyone who reads the bundle holds it. A Supabase sign-in token does identify
+  a person, and the proxy checks it (userToken.ts), so a signed-in person gets
+  their own daily allowance, and one person spending theirs no longer takes
+  anyone else's with them. Real use is nowhere near it — a heavy day is perhaps
+  fifteen calls — so sixty is generous for people and small for a script.
+*/
+const USER_DAILY_LIMIT = { windowMs: 24 * 60 * 60_000, max: 60 };
+
+/*
+  Callers with no valid sign-in share one pool. It exists so that testers who
+  have not made an account yet keep working while the app moves over, and it is
+  the pool anyone holding only the extracted shared token lands in, so it is
+  sized to be exhaustible without hurting anyone who is signed in. It is also
+  where signed-in people fall back to when Supabase's keys cannot be fetched,
+  so an outage on their side degrades to this pool instead of to errors.
+*/
+const SIGNED_OUT_DAILY_LIMIT = { windowMs: 24 * 60 * 60_000, max: 100 };
+const SIGNED_OUT_KEY = 'signed-out';
+
+/*
   The ceiling that does not depend on knowing who is calling.
 
-  Per-caller limiting cannot be made spoof-proof here. On Cloud Run the front
-  end appends only its own hop, so the client's own entry in `x-forwarded-for`
-  stays caller-controlled — measured against the deployed service: twenty-one
-  calls with no header hit the limit exactly, while twenty-one carrying a
-  different invented address each sailed through on twenty-one fresh buckets.
+  Per-caller limiting for signed-out callers cannot be made spoof-proof here.
+  On Cloud Run the front end appends only its own hop, so the client's own
+  entry in `x-forwarded-for` stays caller-controlled — measured against the
+  deployed service: twenty-one calls with no header hit the limit exactly,
+  while twenty-one carrying a different invented address each sailed through on
+  twenty-one fresh buckets. The signed-out pool above is what bounds those
+  callers; per-user limits bound the signed-in ones.
 
   What is actually being protected is the bill, and the bill does not care who
-  spent it. So Gemini also has a flat daily ceiling across every caller. A real
-  user is nowhere near 300 grounded calls in a day — each takes most of a
-  minute — and an abuser with the extracted token is capped at a bounded,
-  affordable number instead of an open tab.
-
-  The cost of this is honest and deliberate: someone flooding the service can
-  exhaust the day's allowance and lock the real user out of lookups until it
-  rolls. Protecting the wallet is worth more than protecting availability here,
-  and per-user credentials are what remove the trade-off.
+  spent it. So Gemini keeps one flat daily ceiling across every caller, signed
+  in or not. It is a guard rather than the everyday limit now: it sits well
+  above the signed-out pool plus a realistic number of people, so ordinary use
+  never meets it. Anyone able to mint many accounts could still reach it, and
+  then every caller is refused until it rolls. Protecting the wallet is worth
+  more than protecting availability in that case, and sign-up rate limits are
+  the lever for it.
 */
-const GEMINI_DAILY_CEILING = { windowMs: 24 * 60 * 60_000, max: 300 };
+const GEMINI_DAILY_CEILING = { windowMs: 24 * 60 * 60_000, max: 1_500 };
 
-const tooMany = (retryAfterSeconds: number) =>
+/**
+ * `limit` names which limit was hit when the app needs to tell them apart:
+ * a person's own daily allowance running out reads differently from the
+ * service being busy.
+ */
+const tooMany = (retryAfterSeconds: number, limit?: 'user-daily') =>
   Response.json(
     { error: 'Too many requests' },
-    { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSeconds),
+        ...(limit ? { 'x-limit': limit } : {}),
+      },
+    },
   );
 
 /**
@@ -52,7 +91,15 @@ const tooMany = (retryAfterSeconds: number) =>
  */
 export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
   // One limiter per route family, held across requests by the closure.
-  const geminiLimiter = createRateLimiter(GEMINI_LIMIT);
+  const signedOutBurstLimiter = createRateLimiter(GEMINI_LIMIT);
+  const userBurstLimiter = createRateLimiter(GEMINI_LIMIT);
+  const userDailyLimiter = createRateLimiter(USER_DAILY_LIMIT);
+  const signedOutDailyLimiter = createRateLimiter(SIGNED_OUT_DAILY_LIMIT);
+  // Production wiring: no SUPABASE_URL means no verifier, so every Gemini call
+  // takes the signed-out path and the Authorization header is never read.
+  const verifier = opts.env.supabaseUrl
+    ? createTokenVerifier({ supabaseUrl: opts.env.supabaseUrl })
+    : null;
   const geminiCeiling = createRateLimiter(GEMINI_DAILY_CEILING);
   const lookupLimiter = createRateLimiter(LOOKUP_LIMIT);
 
@@ -65,8 +112,35 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       if (request.method !== 'POST') {
         return new Response('Method not allowed', { status: 405 });
       }
-      const verdict = geminiLimiter.check(callerKey(request));
-      if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
+      // The shared token is still checked by handleGeminiProxy, as before; the
+      // sign-in token only decides which limits apply. Limits run first, as
+      // they always have, so a refused caller costs no upstream work.
+      const who = verifier ? await verifier.check(request.headers.get('authorization')) : null;
+
+      if (who && 'problem' in who && who.problem === 'expired') {
+        return Response.json(
+          { error: 'Session expired' },
+          { status: 401, headers: { 'x-auth': 'expired' } },
+        );
+      }
+      // A failed key fetch is Supabase's outage rather than a bad token, so it
+      // must not lock signed-in people out; they use the signed-out pool.
+      if (who && 'problem' in who && who.problem === 'invalid' && !who.keysUnavailable) {
+        return Response.json({ error: 'Invalid session' }, { status: 401 });
+      }
+
+      if (who && 'userId' in who) {
+        const key = `user:${who.userId}`;
+        const burst = userBurstLimiter.check(key);
+        if (!burst.allowed) return tooMany(burst.retryAfterSeconds);
+        const daily = userDailyLimiter.check(key);
+        if (!daily.allowed) return tooMany(daily.retryAfterSeconds, 'user-daily');
+      } else {
+        const burst = signedOutBurstLimiter.check(callerKey(request));
+        if (!burst.allowed) return tooMany(burst.retryAfterSeconds);
+        const pool = signedOutDailyLimiter.check(SIGNED_OUT_KEY);
+        if (!pool.allowed) return tooMany(pool.retryAfterSeconds);
+      }
       const ceiling = geminiCeiling.check('all');
       if (!ceiling.allowed) return tooMany(ceiling.retryAfterSeconds);
       return handleGeminiProxy(request, opts.env);
