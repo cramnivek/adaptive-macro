@@ -16,16 +16,16 @@ const PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
 const POST_COLUMNS =
   'id, author_id, session_id, title, performed_on, duration_min, sets, volume_kg, exercises, highlight, caption, created_at';
 
-const client = (): SupabaseClient => {
+export const client = (): SupabaseClient => {
   if (supabase === null) throw new Error('Sign-in is not set up in this build.');
   return supabase;
 };
 
-function fail(error: ServerError): never {
+export function fail(error: ServerError): never {
   throw new Error(messageFor(error));
 }
 
-const userId = async (): Promise<string> => {
+export const userId = async (): Promise<string> => {
   const { data } = await client().auth.getSession();
   const id = data.session?.user.id;
   if (!id) throw new Error('You are signed out. Sign in and try again.');
