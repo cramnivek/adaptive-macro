@@ -50,16 +50,15 @@ async, or takes the token as an argument from its callers.
 ### The proxy verifies it
 
 The proxy verifies the JWT against the project's published keys
-(`https://eigtmrtavtpzzjzfcskc.supabase.co/auth/v1/.well-known/jwks.json`) with
-`jose`'s `createRemoteJWKSet`. It caches the keys and checks the signature,
+(`https://eigtmrtavtpzzjzfcskc.supabase.co/auth/v1/.well-known/jwks.json`) using
+Node's built-in WebCrypto (`crypto.subtle`, ECDSA P-256). That keeps the proxy
+free of runtime dependencies, as it is today. It caches the keys and checks the signature,
 `exp`, `iss` (the project's auth URL) and `aud` (`authenticated`). The user id is
 the token's `sub`.
 
-- **To check first:** the project must use asymmetric JWT signing keys for the
-  JWKS route to work. New projects do by default, but confirm under Project
-  Settings → JWT Keys. A project still on the legacy shared secret would need
-  `SUPABASE_JWT_SECRET` set on the proxy instead, and verification with HS256.
-  The design works either way; only the key source differs.
+- **Checked 2026-10-12:** the project publishes asymmetric signing keys. The
+  JWKS endpoint returns one ES256 (P-256) key, so verification needs no secret on
+  the proxy: just the public JWKS URL, with `algorithms: ['ES256']`.
 
 ### Limits per person
 
@@ -128,7 +127,8 @@ proxy distinguishes the cases with a header (`x-limit: user-daily`), and
 
 ## Costs and risks
 
-- **One new dependency on the proxy (`jose`).** No new services, no new secrets
-  if the project uses asymmetric keys.
+- **No new dependency:** verification uses Node's WebCrypto. No new services and
+  no new secrets. One new setting on the proxy, `SUPABASE_URL`. Without it,
+  per-user limits are off and everyone uses the signed-out pool.
 - **A wrong `iss`/`aud` check would lock everyone out of per-user limits.** The
   fallback keeps them on the signed-out pool, and the tests pin both values.
