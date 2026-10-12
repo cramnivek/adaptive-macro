@@ -55,6 +55,8 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     return () => {
       live = false;
     };
+  // `postFirst` is read once per finished workout: posting flips the setting while the sheet is
+  // still open, and that must not snap the caption shut.
   }, [summary]);
 
   const share = async () => {
@@ -85,11 +87,23 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     }
   };
 
+  // A post already on its way lands whether or not the sheet stays, so leaving now would record
+  // "did not post" for it and could switch the setting off.
+  const leave = () => {
+    if (!posting) onDone(posted);
+  };
+
   const postLeads = account !== 'unavailable' && writing;
   const height = writing ? 240 : 360;
 
   const postButton = account === 'unavailable' ? null : (
-    <Tappable onPress={() => { if (!posting && !posted) void post(); }} scaleTo={0.97} style={styles.action}>
+    <Tappable
+      onPress={() => { if (!posting && !posted) void post(); }}
+      scaleTo={0.97}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: posting || posted }}
+      style={[styles.action, (posting || posted) && styles.spent]}
+    >
       <SlashPanel color={postLeads ? loud.loud : loud.panel} style={styles.button}>
         <Text style={[styles.buttonLabel, { color: postLeads ? loud.onLoud : loud.figure }]}>
           {posted ? 'POSTED' : posting ? 'POSTING…' : 'POST'}
@@ -99,7 +113,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   );
 
   return (
-    <Modal visible={summary !== null && !hidden} animationType="slide" transparent onRequestClose={() => onDone(posted)}>
+    <Modal visible={summary !== null && !hidden} animationType="slide" transparent onRequestClose={leave}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
           <Text style={styles.title}>WORKOUT DONE</Text>
@@ -137,7 +151,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           </Tappable>
           {!postLeads && postButton}
           {note && <Text style={styles.note}>{note}</Text>}
-          <Tappable onPress={() => onDone(posted)} scaleTo={0.97} style={styles.action}>
+          <Tappable onPress={leave} scaleTo={0.97} style={styles.action}>
             <SlashPanel color={loud.panel} style={styles.button}>
               <Text style={[styles.buttonLabel, { color: loud.figure }]}>DONE</Text>
             </SlashPanel>
@@ -165,6 +179,7 @@ const styles = StyleSheet.create({
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
   caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
+  spent: { opacity: 0.6 },
   button: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   buttonLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6 },
   note: { fontFamily: font.ui, fontSize: 12, color: loud.figureMuted, textAlign: 'center', marginTop: space.xs },

@@ -1,10 +1,13 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRouter } from '../router';
+import { SUPABASE_URL, createTestKeys, supabaseClaims, type TestKeys } from './tokenFixtures';
 
 let webRoot: string;
+// No supabaseUrl: per-user limits are off, so these tests see the signed-out
+// pool exactly as a deploy without SUPABASE_URL would.
 const env = { geminiApiKey: 'server-key', proxyToken: 'shared-token' };
 
 beforeAll(() => {
@@ -281,21 +284,25 @@ describe('the daily ceiling', () => {
       body: '{"contents":[]}',
     });
 
-  it('caps Gemini across everyone, however many callers it is spread over', async () => {
+  // Without sign-in every caller shares one pool, so the pool is what stops
+  // them, long before the global ceiling is in sight.
+  it('caps signed-out Gemini calls at 100 a day across every caller', async () => {
     const router = createRouter({ env, webRoot });
 
     // Every one of these is a different caller as far as the per-caller limit
-    // is concerned, so only a ceiling that ignores identity can stop them.
-    for (let i = 0; i < 300; i += 1) {
+    // is concerned, so only a pool that ignores identity can stop them.
+    for (let i = 0; i < 100; i += 1) {
       expect((await router(stranger(i))).status).toBe(401);
     }
 
-    expect((await router(stranger(1000))).status).toBe(429);
+    const refused = await router(stranger(1000));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('x-limit')).toBeNull();
   });
 
   it('leaves the food lookups alone, which are not what costs money', async () => {
     const router = createRouter({ env, webRoot });
-    for (let i = 0; i < 300; i += 1) await router(stranger(i));
+    for (let i = 0; i < 100; i += 1) await router(stranger(i));
 
     const usda = await router(
       new Request('https://x.test/api/usda/search?q=chicken', {
@@ -303,5 +310,256 @@ describe('the daily ceiling', () => {
       }),
     );
     expect(usda.status).not.toBe(429);
+  });
+});
+
+describe('per-user limits', () => {
+  const NOW = 1_800_000_000_000;
+  const userEnv = { ...env, supabaseUrl: SUPABASE_URL };
+  let keys: TestKeys;
+  let jwksFetches = 0;
+
+  beforeAll(async () => {
+    keys = await createTestKeys();
+  });
+
+  beforeEach(() => {
+    // Only the clock is faked: the limiters read Date.now, and sixty calls a
+    // day cannot be spaced past a ten-minute burst window in real time.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    jwksFetches = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('jwks.json')) {
+          jwksFetches += 1;
+          return new Response(JSON.stringify(keys.jwks), { status: 200 });
+        }
+        return new Response('{"candidates":[]}', { status: 200 });
+      }),
+    );
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  /** A token good for two days, so a test can run a day's calls on its clock. */
+  const tokenFor = (sub: string, claims: Record<string, unknown> = {}) =>
+    keys.sign(supabaseClaims(NOW, { sub, exp: Math.floor(NOW / 1000) + 172_800, ...claims }));
+
+  /** The wrong shared token on purpose: the call stops at 401 and never reaches Google. */
+  const call = (token: string | null, ip = '198.51.100.1') =>
+    new Request('https://x.test/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-proxy-token': 'wrong-on-purpose',
+        'x-forwarded-for': `${ip}, 10.0.0.1`,
+        ...(token === null ? {} : { authorization: `Bearer ${token}` }),
+      },
+      body: '{"contents":[]}',
+    });
+
+  /** Spaces calls 31 seconds apart: under the burst limit, far inside a day. */
+  const later = (ms = 31_000) => vi.setSystemTime(Date.now() + ms);
+
+  it('gives a signed-in person 60 calls a day, then says their own allowance is spent', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const token = await tokenFor('alice');
+
+    for (let i = 0; i < 60; i += 1) {
+      later();
+      expect((await router(call(token))).status).toBe(401);
+    }
+
+    later();
+    const refused = await router(call(token));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('x-limit')).toBe('user-daily');
+    expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThan(0);
+  });
+
+  it('does not let two people share a count', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+    const bob = await tokenFor('bob');
+
+    for (let i = 0; i < 60; i += 1) {
+      later();
+      await router(call(alice));
+    }
+    later();
+    expect((await router(call(alice))).status).toBe(429);
+
+    expect((await router(call(bob))).status).toBe(401);
+  });
+
+  // The burst limit is keyed on the person now, not the address: two people
+  // behind one router are not one caller, and one person can't change address.
+  it('keys the burst limit on the person rather than the address', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+    const bob = await tokenFor('bob');
+
+    for (let i = 0; i < 20; i += 1) expect((await router(call(alice, '203.0.113.9'))).status).toBe(401);
+
+    const burst = await router(call(alice, '203.0.113.77'));
+    expect(burst.status).toBe(429);
+    expect(burst.headers.get('x-limit')).toBeNull();
+    expect((await router(call(bob, '203.0.113.9'))).status).toBe(401);
+  });
+
+  it('treats a call with no token as signed out, and does not fetch keys for it', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+
+    expect((await router(call(null))).status).toBe(401);
+    expect(jwksFetches).toBe(0);
+  });
+
+  it('keeps the signed-out pool separate from signed-in people', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+
+    for (let i = 0; i < 100; i += 1) {
+      later();
+      await router(call(null, `203.0.113.${i}`));
+    }
+    later();
+    expect((await router(call(null, '203.0.113.200'))).status).toBe(429);
+
+    expect((await router(call(alice))).status).toBe(401);
+  });
+
+  it('binds the global ceiling across signed-in and signed-out callers together', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const people = await Promise.all(Array.from({ length: 25 }, (_, i) => tokenFor(`user-${i}`)));
+
+    // 100 signed out, which empties that pool, then 1,400 spread over 24
+    // people who each stay under their own 60. Thirty seconds apart keeps each
+    // person under the burst limit and the whole run inside one day.
+    for (let i = 0; i < 100; i += 1) {
+      later(30_000);
+      expect((await router(call(null, `203.0.113.${i}`))).status).toBe(401);
+    }
+    for (let i = 0; i < 1_400; i += 1) {
+      later(30_000);
+      expect((await router(call(people[i % 24] as string))).status).toBe(401);
+    }
+
+    // 1,500 spent. Nobody here is over a personal limit, so only the ceiling
+    // can refuse the 25th person's first call.
+    later(30_000);
+    const refused = await router(call(people[24] as string));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('x-limit')).toBeNull();
+  });
+
+  it('answers an expired session with x-auth: expired, before anything is counted', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const stale = await tokenFor('alice', { exp: Math.floor(NOW / 1000) - 3600 });
+
+    const res = await router(call(stale));
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get('x-auth')).toBe('expired');
+    expect(await res.json()).toEqual({ error: 'Session expired' });
+  });
+
+  it('answers a forged token with 401 and no hint to refresh', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const good = await tokenFor('alice');
+    const [header, , signature] = good.split('.');
+    const forged = Buffer.from(JSON.stringify(supabaseClaims(NOW, { sub: 'bob' }))).toString('base64url');
+
+    const res = await router(call(`${header}.${forged}.${signature}`));
+
+    expect(res.status).toBe(401);
+    expect(res.headers.get('x-auth')).toBeNull();
+    expect(await res.json()).toEqual({ error: 'Invalid session' });
+  });
+
+  // A bad bearer costs an ECDSA verify. If the 401 came before any limiter,
+  // a caller could force one per request without ever being counted.
+  it('rate limits a caller who keeps sending forged tokens', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const good = await tokenFor('alice');
+    const [header, , signature] = good.split('.');
+    const forged = Buffer.from(JSON.stringify(supabaseClaims(NOW, { sub: 'bob' }))).toString('base64url');
+    const bad = `${header}.${forged}.${signature}`;
+
+    for (let i = 0; i < 20; i += 1) expect((await router(call(bad, '203.0.113.5'))).status).toBe(401);
+
+    const refused = await router(call(bad, '203.0.113.5'));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('x-limit')).toBeNull();
+    // Someone else at another address is not punished for it.
+    expect((await router(call(bad, '203.0.113.6'))).status).toBe(401);
+  });
+
+  it('rate limits a caller who keeps sending expired tokens', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const stale = await tokenFor('alice', { exp: Math.floor(NOW / 1000) - 3600 });
+
+    for (let i = 0; i < 20; i += 1) expect((await router(call(stale, '203.0.113.5'))).status).toBe(401);
+
+    expect((await router(call(stale, '203.0.113.5'))).status).toBe(429);
+  });
+
+  it('lets a signed-in caller through to the signed-out pool when Supabase keys are unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('bad gateway', { status: 502 })));
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+
+    // The proxy's own 401 ("Unauthorized"), not "Invalid session".
+    const res = await router(call(alice));
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('ignores the token entirely when SUPABASE_URL is not set', async () => {
+    const router = createRouter({ env, webRoot });
+    const alice = await tokenFor('alice');
+    const garbage = 'not-a-jwt';
+
+    // Past 60 would be refused had the token been honoured.
+    for (let i = 0; i < 70; i += 1) {
+      later();
+      expect((await router(call(i % 2 === 0 ? alice : garbage))).status).toBe(401);
+    }
+    expect(jwksFetches).toBe(0);
+  });
+
+  it('still lets a verified person with the shared token through to Google', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+
+    const res = await router(
+      new Request('https://x.test/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-proxy-token': 'shared-token',
+          'x-gemini-model': 'gemini-3.5-flash',
+          authorization: `Bearer ${alice}`,
+        },
+        body: '{"contents":[]}',
+      }),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it('leaves the food lookups to their own per-caller limit, with or without a token', async () => {
+    const router = createRouter({ env: userEnv, webRoot });
+    const alice = await tokenFor('alice');
+
+    const usda = await router(
+      new Request('https://x.test/api/usda/search?q=chicken', {
+        headers: { 'x-forwarded-for': '198.51.100.1, 10.0.0.1', authorization: `Bearer ${alice}` },
+      }),
+    );
+
+    expect(usda.status).toBe(401);
+    expect(jwksFetches).toBe(0);
   });
 });

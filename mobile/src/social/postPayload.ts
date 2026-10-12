@@ -18,6 +18,7 @@ import type { UnitSystem } from '../state/settings';
 export const MAX_CAPTION = 500;
 const MAX_TITLE = 80;
 const MAX_EXERCISES = 30;
+const MAX_NAME = 80;
 
 export interface PostExercise {
   name: string;
@@ -50,6 +51,14 @@ export interface FinishedWorkout {
   milestone: Milestone | null;
 }
 
+/**
+ * A lift's name as the database will accept it: at most eighty characters and
+ * never empty. Names come from custom exercises and imports, so neither is
+ * ruled out. Counted in code points, as Postgres counts, so an emoji is not
+ * cut in half; half of one cannot be stored.
+ */
+const storedName = (name: string): string => Array.from(name).slice(0, MAX_NAME).join('') || 'Exercise';
+
 export const postPayload = (workout: FinishedWorkout, caption: string | null): PostRow => {
   const said = caption?.trim() ? caption.trim() : null;
   if (said !== null && said.length > MAX_CAPTION) {
@@ -66,7 +75,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
     const mine = working.filter((set) => set.exerciseName === name);
     const loaded = mine.filter((set) => set.weightKg !== null && set.weightKg > 0);
     if (loaded.length === 0) {
-      return { name, sets: mine.length, best_kg: null, best_reps: Math.max(...mine.map((set) => set.reps)) };
+      return { name: storedName(name), sets: mine.length, best_kg: null, best_reps: Math.max(...mine.map((set) => set.reps)) };
     }
     // Heaviest, and of those the most reps: the set someone would quote.
     const top = loaded.reduce((a, b) =>
@@ -75,7 +84,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
         ? b
         : a,
     );
-    return { name, sets: mine.length, best_kg: top.weightKg as number, best_reps: top.reps };
+    return { name: storedName(name), sets: mine.length, best_kg: top.weightKg as number, best_reps: top.reps };
   });
 
   const volumeKg = working.reduce((sum, set) => sum + (set.weightKg ?? 0) * set.reps, 0);
@@ -89,21 +98,52 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
     sets: working.length,
     volume_kg: volumeKg > 0 ? volumeKg : null,
     exercises: exercises.slice(0, MAX_EXERCISES),
-    highlight: workout.milestone,
+    highlight:
+      workout.milestone?.exercise === undefined
+        ? workout.milestone
+        : { ...workout.milestone, exercise: storedName(workout.milestone.exercise) },
     caption: said,
   };
 };
 
 export type PostView = ShareSummary & { caption: string | null };
 
-const formatDuration = (minutes: number): string => {
+export const formatDuration = (minutes: number): string => {
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 };
 
-const trim = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+export const trim = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * Whatever the server sent, as lifts the reader can draw. A row written by an
+ * old app, by hand, or before the database checked its shape may hold
+ * anything, and a post that cannot be drawn must cost the reader one line, not
+ * the screen.
+ */
+const readableLifts = (exercises: unknown): PostExercise[] =>
+  (Array.isArray(exercises) ? exercises : [])
+    .filter((lift): lift is Record<string, unknown> => typeof lift === 'object' && lift !== null && typeof lift.name === 'string')
+    .map((lift) => ({
+      name: lift.name as string,
+      sets: isNumber(lift.sets) ? lift.sets : 0,
+      best_kg: isNumber(lift.best_kg) ? lift.best_kg : null,
+      best_reps: isNumber(lift.best_reps) ? lift.best_reps : 0,
+    }));
+
+/** The highlight if `describeMilestone` can say something true about it; otherwise none. */
+const readableHighlight = (highlight: unknown): Milestone | null => {
+  if (typeof highlight !== 'object' || highlight === null) return null;
+  const { kind, value, exercise } = highlight as Record<string, unknown>;
+  if (kind !== 'load' && kind !== 'volume' && kind !== 'sessions') return null;
+  if (!isNumber(value)) return null;
+  if (exercise !== undefined && typeof exercise !== 'string') return null;
+  return { kind, value, ...(exercise === undefined ? {} : { exercise }) };
+};
 
 export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): PostView => {
   const unit = units === 'metric' ? 'kg' : 'lb';
@@ -111,7 +151,9 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
     lift.best_kg === null
       ? `${lift.best_reps} reps`
       : `${trim(Math.round(displayWeight(lift.best_kg, units) * 10) / 10)} ${unit} × ${lift.best_reps}`;
-  const copy = row.highlight ? describeMilestone(row.highlight, units) : null;
+  const lifts = readableLifts(row.exercises);
+  const milestone = readableHighlight(row.highlight);
+  const copy = milestone ? describeMilestone(milestone, units) : null;
 
   return {
     title: row.title,
@@ -122,8 +164,8 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
       row.volume_kg === null
         ? null
         : `${Math.round(displayWeight(row.volume_kg, units)).toLocaleString('en-US')} ${unit}`,
-    exercises: row.exercises.slice(0, maxExercises).map((lift) => ({ name: lift.name, sets: lift.sets, best: best(lift) })),
-    more: Math.max(0, row.exercises.length - maxExercises),
+    exercises: lifts.slice(0, maxExercises).map((lift) => ({ name: lift.name, sets: lift.sets, best: best(lift) })),
+    more: Math.max(0, lifts.length - maxExercises),
     highlight: copy ? { label: copy.label, figure: copy.figure } : null,
     caption: row.caption,
   };

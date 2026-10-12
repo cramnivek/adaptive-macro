@@ -1,5 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildRoutinesWithGemini, documentKindOf, readRoutinesWithGemini } from '../geminiRoutine';
+
+// The real helpers read the Supabase session, which needs react-native.
+const session = vi.hoisted(() => ({
+  token: vi.fn(async (): Promise<string | null> => null),
+  refresh: vi.fn(async (): Promise<string | null> => null),
+}));
+vi.mock('../../social/api', () => ({
+  currentAccessToken: session.token,
+  refreshAccessToken: session.refresh,
+}));
+
+beforeEach(() => {
+  session.token.mockReset().mockResolvedValue(null);
+  session.refresh.mockReset().mockResolvedValue(null);
+});
 
 const pdf = { mimeType: 'application/pdf', base64: 'JVBERi0xLjQK' };
 
@@ -63,6 +78,38 @@ describe('readRoutinesWithGemini', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('slow down', { status: 429 })));
 
     await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow('Too many requests');
+  });
+
+  it('says the personal AI allowance is used up when the proxy names it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } })));
+
+    await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow(
+      "You've used today's AI allowance. It resets tomorrow.",
+    );
+  });
+
+  it('asks the person to sign in again when the proxy rejects their session', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 401 })));
+
+    await expect(readRoutinesWithGemini(pdf, '')).rejects.toThrow('Sign in again to use AI features.');
+  });
+
+  it('sends the signed-in person\'s token and retries once after an expiry', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue('jwt-new');
+    const fetchMock = vi
+      .fn(async (..._args: Parameters<typeof fetch>) => geminiResponse(programme))
+      .mockResolvedValueOnce(new Response('{}', { status: 401, headers: { 'x-auth': 'expired' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await readRoutinesWithGemini(pdf, '');
+
+    const authorizationOf = (call: number) =>
+      ((fetchMock.mock.calls[call][1] as RequestInit).headers as Record<string, string>).Authorization;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(authorizationOf(0)).toBe('Bearer jwt-old');
+    expect(authorizationOf(1)).toBe('Bearer jwt-new');
   });
 
   it('reports a timeout as a sentence rather than an AbortError', async () => {

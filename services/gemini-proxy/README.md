@@ -31,6 +31,10 @@ directly on every platform.
   is attached to the key, and a key in the bundle is readable by anyone who
   opens the site. A user who enters their own key in Settings bypasses this
   route entirely and spends their own quota.
+- `SUPABASE_URL` — the Supabase project URL (`https://<ref>.supabase.co`). The
+  proxy verifies the app's sign-in token against that project's published keys
+  and limits Gemini per signed-in person. Optional: unset, per-user limits are
+  off and every Gemini call uses the signed-out pool. No secret is involved.
 - `PROXY_TOKEN` — the shared secret the proxy checks against the
   `x-proxy-token` header. The app sends this as `EXPO_PUBLIC_PROXY_TOKEN`
   (the `EXPO_PUBLIC_` prefix means it's inlined into the app bundle and
@@ -56,7 +60,11 @@ a stale or absent build is invisible until someone opens the site.
 
 ```
 cd ../../mobile && rm -rf dist && npx expo export --platform web
+# Keep the previous build's code files: a page opened before this deploy (an
+# installed iPhone app still in memory) loads some of them later, by name.
+mkdir -p ../keep && cp -r ../services/gemini-proxy/web/_expo/static/js/web/. ../keep/ 2>/dev/null
 rm -rf ../services/gemini-proxy/web && cp -r dist ../services/gemini-proxy/web
+cp -n ../keep/* ../services/gemini-proxy/web/_expo/static/js/web/ 2>/dev/null; rm -rf ../keep
 
 cd ../services/gemini-proxy
 gcloud run deploy gemini-proxy --source . --region asia-southeast1 \
@@ -160,16 +168,28 @@ Cloud Run's front end appends only its own hop, so the client's own entry stays
 caller-controlled whichever end you read from. Per-caller limiting here stops
 accidental overuse and nothing else. Treat it as such.
 
-What does hold is the **daily ceiling**: 300 Gemini calls across every caller,
-every 24 hours. It does not depend on knowing who is calling, which is the only
-reason it works. A real user is nowhere near that — each grounded call takes
-most of a minute — and an abuser with the extracted token is capped at a
-bounded bill instead of an open tab.
+What does hold is knowing who is *signed in*. With `SUPABASE_URL` set, a
+request carrying `Authorization: Bearer <Supabase access token>` is verified
+(`userToken.ts`, ES256 against the project's JWKS, no dependency) and counted
+per person:
 
-The cost is deliberate: a flood can exhaust the day's allowance and lock the
-real user out of lookups until it rolls. Protecting the wallet is worth more
-than protecting availability here. Per-user credentials are what remove the
-trade-off, and until they exist this is a spend cap, not access control.
+- Signed in — 20 per 10 minutes and **60 per 24 hours**, keyed on the user id.
+  The daily one answers `429` with `x-limit: user-daily`.
+- No token (or `SUPABASE_URL` unset) — 20 per 10 minutes per address, and a
+  **signed-out pool of 100 per 24 hours** shared by everyone.
+- An expired token answers `401` with `x-auth: expired`; the app refreshes and
+  retries once. Any other bad token answers `401` and is not retried. Either
+  kind counts against the caller's per-address burst limit before the `401` is
+  sent, so a loop of bad tokens ends in `429` like any other flood. If
+  Supabase's keys cannot be fetched (the fetch gives up after 3 seconds) and
+  none are cached, the caller is treated as signed out rather than refused.
+- The **daily ceiling**, 1,500 Gemini calls across every caller signed in or
+  not, stays as the bill guard. It does not depend on knowing who is calling.
+
+The shared token still gates every Gemini call; the sign-in token only decides
+which limits apply. Someone who can create many accounts could still reach the
+ceiling, and then every caller is refused until it rolls. Protecting the wallet
+is worth more than protecting availability here.
 
 - `/api/gemini` — 20 per 10 minutes. A grounded lookup takes most of a minute,
   so this is already far beyond any human pace.

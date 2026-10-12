@@ -374,7 +374,7 @@ export default function DescribeScreen() {
           <Text style={[styles.body, { color: colors.textMuted, textAlign: 'center', marginTop: space.md }]}>
             {usingLocal
               ? `Running ${settings.ollamaModel} on this machine — a large local model usually takes 10 to 45 seconds.`
-              : 'Asking Claude…'}
+              : `Asking ${settings.aiProvider === 'gemini' ? 'Gemini' : 'Claude'}…`}
           </Text>
         </Card>
       )}
@@ -396,7 +396,7 @@ export default function DescribeScreen() {
       {estimate && !estimate.notFood && (
         <>
           {estimate.notes.trim().length > 0 && (
-            <Card title="What Claude had to assume">
+            <Card title="What the estimate assumed">
               <Text style={[styles.body, { color: colors.textMuted }]}>{estimate.notes}</Text>
             </Card>
           )}
@@ -494,7 +494,9 @@ export default function DescribeScreen() {
             ) : (
               ranOn && (
                 <Text style={[styles.cost, { color: colors.textFaint }]}>
-                  Estimated by {ranOn}, on this machine. No cost.
+                  {/* Only a local model runs here and costs nothing; Gemini goes through the
+                      server, so it says only which model answered. */}
+                  {usingLocal ? `Estimated by ${ranOn}, on this machine. No cost.` : `Estimated by ${ranOn}.`}
                 </Text>
               )
             )}

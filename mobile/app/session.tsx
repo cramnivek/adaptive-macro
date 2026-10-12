@@ -347,7 +347,7 @@ export default function SessionScreen() {
       <Tappable
         onPress={toggleUnits}
         scaleTo={0.92}
-        style={styles.unitToggle}
+        style={[styles.unitToggle, styles.headerHit]}
         accessibilityRole="button"
         accessibilityLabel={`Switch units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
       >
@@ -388,27 +388,26 @@ export default function SessionScreen() {
       <Tappable
         onPress={toggleAlert}
         scaleTo={0.9}
-        style={[
-          styles.alertBtn,
-          settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive,
-        ]}
+        style={styles.headerHit}
         accessibilityRole="switch"
         accessibilityState={{ checked: settings.restSound }}
         accessibilityLabel={settings.restSound ? 'Rest alert on' : 'Rest alert off'}
       >
-        <Ionicons
-          name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
-          size={15}
-          color={settings.restSound ? loud.onLoud : loud.figureMuted}
-        />
-        <Text
-          style={[
-            styles.alertBtnLabel,
-            { color: settings.restSound ? loud.onLoud : loud.figureMuted },
-          ]}
-        >
-          ALERT
-        </Text>
+        <View style={[styles.alertBtn, settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive]}>
+          <Ionicons
+            name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
+            size={15}
+            color={settings.restSound ? loud.onLoud : loud.figureMuted}
+          />
+          <Text
+            style={[
+              styles.alertBtnLabel,
+              { color: settings.restSound ? loud.onLoud : loud.figureMuted },
+            ]}
+          >
+            ALERT
+          </Text>
+        </View>
       </Tappable>
     </View>
   );
@@ -561,7 +560,18 @@ export default function SessionScreen() {
     [blockFor, withTargetRows, settings.units],
   );
 
+  /**
+   * Which `start`/`routine` the blocks were last loaded for. The loaders depend on
+   * the units, so switching kg/lb mid-workout re-runs this effect — and reloading
+   * from the database would drop every set not yet ticked. Loading is for arriving,
+   * not for a change of units; `toggleUnits` converts the rows on screen itself.
+   */
+  const loadedFor = useRef<string | null>(null);
+
   useEffect(() => {
+    const key = `${params.start ?? ''}|${params.routine ?? ''}`;
+    if (loadedFor.current === key) return;
+    loadedFor.current = key;
     void (async () => {
       const [existing, loadedRoutines, names] = await Promise.all([
         activeSession(),
@@ -1259,7 +1269,11 @@ export default function SessionScreen() {
                         { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
                       ]}
                     >
-                      {row.setType === 'warmup' ? 'W' : rowIndex + 1}
+                      {/* Working sets are numbered among themselves, so a warm-up first
+                          gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
+                      {row.setType === 'warmup'
+                        ? 'W'
+                        : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
                     </Text>
                   </Tappable>
 
@@ -1565,6 +1579,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: space.sm,
     gap: space.sm,
+  },
+  /**
+   * The header's controls are drawn about 28 high to sit beside the title, but a
+   * finger needs the app's 44. Padding makes the touch area and the negative margin
+   * gives the height back, so the header does not grow. Padding, not hitSlop: the
+   * web build, which is what iPhones run, ignores hitSlop.
+   */
+  headerHit: {
+    paddingVertical: 8,
+    marginVertical: -8,
   },
   headerControls: {
     flexDirection: 'row',

@@ -85,6 +85,8 @@ interface FieldProps {
   multiline?: boolean;
   /** Emails, usernames and codes must not be capitalised by the keyboard. */
   autoCapitalize?: 'none' | 'sentences';
+  /** On by default; off for emails, handles and codes, which a keyboard would "fix" into something else. */
+  autoCorrect?: boolean;
   maxLength?: number;
 }
 
@@ -99,6 +101,7 @@ export const Field = ({
   onBlurCommit,
   multiline = false,
   autoCapitalize = 'sentences',
+  autoCorrect = true,
   maxLength,
 }: FieldProps) => {
   const { colors } = useTheme();
@@ -114,6 +117,7 @@ export const Field = ({
           onBlur={onBlurCommit}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
           maxLength={maxLength}
           placeholder={placeholder}
           placeholderTextColor={colors.textFaint}

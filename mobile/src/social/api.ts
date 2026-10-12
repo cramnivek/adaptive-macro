@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './client';
-import { isAlreadyPosted, messageFor, type ServerError } from './errors';
+import { isAlreadyPosted, messageFor, OFFLINE, type ServerError } from './errors';
 import type { PostRow } from './postPayload';
 import type { ProfileFields } from './profileRules';
 import type { Post, Profile } from './types';
@@ -32,6 +32,36 @@ const userId = async (): Promise<string> => {
   return id;
 };
 
+/**
+ * The signed-in person's access token, which the AI proxy uses to count their
+ * calls separately from everyone else's.
+ *
+ * Null when signed out or when this build has no sign-in, and never a throw: an
+ * AI request without a token is still a valid request, answered from the shared
+ * signed-out allowance, so failing to read one must not fail the request.
+ */
+export const currentAccessToken = async (): Promise<string | null> => {
+  try {
+    const { data } = await client().auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A fresh access token, for when the proxy says the one it was sent has
+ * expired. Same contract as `currentAccessToken`: null on any failure.
+ */
+export const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const { data } = await client().auth.refreshSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const sendCode = async (email: string): Promise<void> => {
   const { error } = await client().auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } });
   if (error) fail(error);
@@ -44,6 +74,13 @@ export const verifyCode = async (email: string, code: string): Promise<void> => 
 
 export const signOut = async (): Promise<void> => {
   const { error } = await client().auth.signOut();
+  // The global sign-out asks the server first, so offline it fails and would leave the person
+  // signed in on a phone that may be shared. Dropping the local session is what matters then.
+  if (error && messageFor(error) === OFFLINE) {
+    const local = await client().auth.signOut({ scope: 'local' });
+    if (local.error) fail(local.error);
+    return;
+  }
   if (error) fail(error);
 };
 

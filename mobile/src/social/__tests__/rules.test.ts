@@ -127,4 +127,10 @@ describe('isAlreadyPosted', () => {
     ).toBe(true);
     expect(isAlreadyPosted({ code: '23505', message: 'duplicate key value violates unique constraint "profiles_username_key"' })).toBe(false);
   });
+
+  it('does not take any unique violation that merely mentions "session" for a repeat post', () => {
+    expect(
+      isAlreadyPosted({ code: '23505', message: 'duplicate key value violates unique constraint "sessions_device_session_key"' }),
+    ).toBe(false);
+  });
 });

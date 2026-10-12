@@ -1,4 +1,5 @@
 import { type Food, type FoodPortion, per100gFromPortion } from '@adaptive-macros/engine';
+import { currentAccessToken, refreshAccessToken } from '../social/api';
 import {
   ENRICHMENT_SCHEMA,
   enrichmentPromptFor,
@@ -63,8 +64,16 @@ export interface GeminiRoute {
  * A key in Settings always wins. That keeps bring-your-own-key users off the
  * shared quota, and makes a proxy outage degrade to "enter a key" rather than
  * to a broken feature.
+ *
+ * `accessToken` is the signed-in person's Supabase token, which lets the proxy
+ * count their calls apart from everyone else's. It goes only to the proxy:
+ * Google has no use for it and should never be handed it.
  */
-export const routeFor = (model: string, apiKey: string): GeminiRoute => {
+export const routeFor = (
+  model: string,
+  apiKey: string,
+  accessToken?: string | null,
+): GeminiRoute => {
   const key = apiKey.trim();
 
   if (key) {
@@ -81,9 +90,70 @@ export const routeFor = (model: string, apiKey: string): GeminiRoute => {
       'Content-Type': 'application/json',
       'x-proxy-token': PROXY_TOKEN,
       'x-gemini-model': model,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     viaProxy: true,
   };
+};
+
+/**
+ * The sentence shown when the proxy says this person's own daily allowance is
+ * spent. It is the proxy's `x-limit: user-daily` header that marks it, so
+ * Google's own 429 on the same status keeps its different meaning.
+ */
+export const ALLOWANCE_USED_MESSAGE = "You've used today's AI allowance. It resets tomorrow.";
+
+export const SIGN_IN_AGAIN_MESSAGE = 'Sign in again to use AI features.';
+
+export const isPersonalLimit = (response: Response, route: GeminiRoute): boolean =>
+  route.viaProxy && response.status === 429 && response.headers.get('x-limit') === 'user-daily';
+
+/**
+ * Sends one Gemini request, attaching the signed-in person's token when it
+ * goes to the proxy.
+ *
+ * The token lasts an hour, and a phone that has been asleep can wake holding
+ * an expired one. The proxy says so with `x-auth: expired`, and the answer is
+ * to refresh the session and send the same request once more. Once: a refresh
+ * that still produces a rejected token is a real problem, and looping on it
+ * would only hammer the auth server. All three Gemini callers send through
+ * here so that handling is written in one place.
+ */
+export const fetchGemini = async (
+  model: string,
+  apiKey: string,
+  init: { body: string; signal: AbortSignal },
+): Promise<{ response: Response; route: GeminiRoute; rejectedSession: boolean }> => {
+  const send = async (token: string | null) => {
+    const route = routeFor(model, apiKey, token);
+    const response = await fetch(route.url, {
+      method: 'POST',
+      signal: init.signal,
+      headers: route.headers,
+      body: init.body,
+    });
+    // A 401 that is not an expiry, on a request that carried a session, means
+    // the proxy looked at that session and refused it. Signing in again is the
+    // fix, which "add your own key" would not point to.
+    const rejectedSession =
+      route.viaProxy &&
+      token !== null &&
+      response.status === 401 &&
+      response.headers.get('x-auth') !== 'expired';
+    return { response, route, rejectedSession };
+  };
+
+  // A user's own key goes straight to Google, where a token is never sent, so
+  // there is no reason to read the session for it.
+  const first = await send(apiKey.trim() ? null : await currentAccessToken());
+  const expired =
+    first.route.viaProxy &&
+    first.response.status === 401 &&
+    first.response.headers.get('x-auth') === 'expired';
+  if (!expired) return first;
+
+  const refreshed = await refreshAccessToken();
+  return refreshed ? send(refreshed) : first;
 };
 
 /**
@@ -256,15 +326,14 @@ const postJson = async (
   const abandon = () => controller.abort();
   signal?.addEventListener('abort', abandon);
   if (signal?.aborted) controller.abort();
-  const route = routeFor(model, apiKey);
 
   try {
-    const response = await fetch(route.url, {
-      method: 'POST',
+    const { response, route, rejectedSession } = await fetchGemini(model, apiKey, {
       signal: controller.signal,
-      headers: route.headers,
       body: JSON.stringify(body),
     });
+
+    if (rejectedSession) throw new GeminiAccessError(SIGN_IN_AGAIN_MESSAGE);
 
     // Same status, different cause. On the direct path the user's own key was
     // rejected and they can fix it; on the proxy path the key is the author's
@@ -281,6 +350,9 @@ const postJson = async (
       throw new GeminiAccessError(
         'This build cannot reach the lookup service. Add your own Gemini API key in Settings.',
       );
+    }
+    if (isPersonalLimit(response, route)) {
+      throw new GeminiAccessError(ALLOWANCE_USED_MESSAGE);
     }
     // Grounding is metered separately and needs billing enabled on the project;
     // without it every grounded call returns 429 while plain ones still succeed.

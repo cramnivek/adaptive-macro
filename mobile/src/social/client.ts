@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
+import { withTimeout } from './timeoutFetch';
 
 /**
  * The connection to Supabase, or null in a build without its address and key.
@@ -9,6 +10,9 @@ import { AppState, Platform } from 'react-native';
  * in the database is what keeps one person's posts from another, not the key.
  * Null rather than a throw, so a build without social keeps every other feature.
  */
+
+/** Long enough for a slow phone network, short enough that a hung post lets the sheet close. */
+const REQUEST_TIMEOUT_MS = 20_000;
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -23,6 +27,7 @@ export const supabase: SupabaseClient | null =
           persistSession: true,
           detectSessionInUrl: Platform.OS === 'web',
         },
+        global: { fetch: withTimeout((input, init) => fetch(input, init), REQUEST_TIMEOUT_MS) },
       })
     : null;
 

@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { myProfile } from './api';
 import { supabase } from './client';
 import type { Profile } from './types';
@@ -28,13 +28,21 @@ export const SocialProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [profileFailed, setProfileFailed] = useState(false);
 
+  // Who is signed in right now, readable from a fetch that started when it was somebody else.
+  const currentUserId = useRef<string | null>(null);
+
   const refreshProfile = useCallback(async () => {
+    const requestedFor = currentUserId.current;
     setProfileFailed(false);
     try {
       const next = await myProfile();
+      // Sign-out and a different sign-in can happen while this was in flight; the answer is
+      // for the earlier person and must not be shown as the new one's.
+      if (currentUserId.current !== requestedFor) return next;
       setProfile(next);
       return next;
     } catch (error) {
+      if (currentUserId.current !== requestedFor) throw error;
       setProfileFailed(true);
       throw error;
     }
@@ -50,6 +58,11 @@ export const SocialProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const userId = session?.user.id ?? null;
+  // Declared before the effect below so the ref already names the new user when that effect
+  // starts their profile load.
+  useEffect(() => {
+    currentUserId.current = userId;
+  }, [userId]);
   // Keyed on the user, not the session object, which a token refresh replaces.
   const known = session !== undefined;
   useEffect(() => {

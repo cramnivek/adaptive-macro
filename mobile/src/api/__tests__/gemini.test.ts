@@ -3,6 +3,21 @@ import { GeminiAccessError, GroundedLookupError, UngroundedResponseError, enrich
 import { MOVEMENT_PATTERNS } from '../../ai/exercises';
 import { MUSCLE_REGIONS } from '../../components/muscleMap';
 
+// The real helpers read the Supabase session, which needs react-native.
+const session = vi.hoisted(() => ({
+  token: vi.fn(async (): Promise<string | null> => null),
+  refresh: vi.fn(async (): Promise<string | null> => null),
+}));
+vi.mock('../../social/api', () => ({
+  currentAccessToken: session.token,
+  refreshAccessToken: session.refresh,
+}));
+
+beforeEach(() => {
+  session.token.mockReset().mockResolvedValue(null);
+  session.refresh.mockReset().mockResolvedValue(null);
+});
+
 const validRaw = {
   name: 'Chickenjoy',
   brand: 'Jollibee',
@@ -561,6 +576,190 @@ describe('enrichExercises', () => {
     await expect(enrichExercises(['Squat'], 'test-key')).rejects.not.toBeInstanceOf(
       GeminiAccessError,
     );
+  });
+});
+
+describe('routeFor with a sign-in token', () => {
+  it('adds the bearer header on the proxy route when a token is given', () => {
+    const route = routeFor('gemini-3.5-flash', '', 'jwt-1');
+
+    expect(route.viaProxy).toBe(true);
+    expect(route.headers.Authorization).toBe('Bearer jwt-1');
+    expect(route.headers['x-proxy-token']).toBeDefined();
+  });
+
+  it('adds nothing without a token', () => {
+    expect(routeFor('gemini-3.5-flash', '').headers.Authorization).toBeUndefined();
+    expect(routeFor('gemini-3.5-flash', '', null).headers.Authorization).toBeUndefined();
+    expect(routeFor('gemini-3.5-flash', '', '').headers.Authorization).toBeUndefined();
+  });
+
+  // The direct route goes to Google, which has no use for a Supabase token and
+  // should never see one.
+  it('never sends it to Google on the user-key route', () => {
+    const route = routeFor('gemini-3.5-flash', 'AIzaUserKey', 'jwt-1');
+
+    expect(route.viaProxy).toBe(false);
+    expect(JSON.stringify(route)).not.toContain('jwt-1');
+  });
+});
+
+describe('the sign-in token on a Gemini request', () => {
+  const ok = () =>
+    new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"exercises":[]}' }] } }] }), {
+      status: 200,
+    });
+  const expired = () => new Response('{}', { status: 401, headers: { 'x-auth': 'expired' } });
+  const allowance = "You've used today's AI allowance. It resets tomorrow.";
+
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const authorizationOf = (call: number) =>
+    ((fetchMock.mock.calls[call]?.[1] as { headers: Record<string, string> }).headers).Authorization;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is sent on a proxy request when someone is signed in', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    fetchMock.mockResolvedValueOnce(ok());
+
+    await enrichExercises(['Squat'], '').catch(() => undefined);
+
+    expect(authorizationOf(0)).toBe('Bearer jwt-1');
+  });
+
+  it('is left off when signed out', async () => {
+    fetchMock.mockResolvedValueOnce(ok());
+
+    await enrichExercises(['Squat'], '').catch(() => undefined);
+
+    expect(authorizationOf(0)).toBeUndefined();
+  });
+
+  it('is not even read for a request that goes direct to Google', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    fetchMock.mockResolvedValueOnce(ok());
+
+    await enrichExercises(['Squat'], 'AIzaUserKey').catch(() => undefined);
+
+    expect(session.token).not.toHaveBeenCalled();
+    expect(authorizationOf(0)).toBeUndefined();
+  });
+
+  it('refreshes the session once on an expired answer and retries with the new token', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue('jwt-new');
+    fetchMock.mockResolvedValueOnce(expired()).mockResolvedValueOnce(ok());
+
+    const error = await enrichExercises(['Squat'], '').catch((e) => e);
+
+    expect(error).not.toBeInstanceOf(GeminiAccessError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(session.refresh).toHaveBeenCalledTimes(1);
+    expect(authorizationOf(0)).toBe('Bearer jwt-old');
+    expect(authorizationOf(1)).toBe('Bearer jwt-new');
+  });
+
+  it('never retries a second time, however the retry is answered', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue('jwt-new');
+    fetchMock.mockResolvedValue(expired());
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toBeInstanceOf(GeminiAccessError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(session.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry when the session cannot be refreshed', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(expired());
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toBeInstanceOf(GeminiAccessError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refresh for a 401 that is not an expiry', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue('jwt-new');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toBeInstanceOf(GeminiAccessError);
+
+    expect(session.refresh).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the person to sign in again when the proxy rejects the session it was sent', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('Sign in again to use AI features.');
+  });
+
+  it('keeps the build message for a 401 when no session was sent', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('This build cannot reach the lookup service');
+  });
+
+  it('keeps the build message for a 401 after an expiry that could not be refreshed', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(expired());
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow('This build cannot reach the lookup service');
+  });
+
+  it('keeps the build message for a 401 on the user-key route', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
+
+    await expect(enrichExercises(['Squat'], 'AIzaUserKey')).rejects.toThrow(
+      'This build cannot reach the lookup service',
+    );
+  });
+
+  it('says the personal allowance is used up when the proxy names it', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } }),
+    );
+
+    await expect(enrichExercises(['Squat'], '')).rejects.toThrow(allowance);
+  });
+
+  it('keeps the shared-allowance message for a 429 that names no personal limit', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 429 }));
+
+    const error = await enrichExercises(['Squat'], '').catch((e) => e);
+
+    expect(error).toBeInstanceOf(GeminiAccessError);
+    expect(error.message).toContain('shared lookup allowance is used up');
+  });
+
+  it("keeps Google's own 429 message on the user-key route, header or not", async () => {
+    fetchMock.mockResolvedValue(
+      new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } }),
+    );
+
+    const error = await enrichExercises(['Squat'], 'AIzaUserKey').catch((e) => e);
+
+    expect(error.message).toContain('Gemini quota reached');
+  });
+
+  it('applies to a grounded lookup too', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } }),
+    );
+
+    await expect(lookupFood('chickenjoy', 'ph', '')).rejects.toThrow(allowance);
   });
 });
 
