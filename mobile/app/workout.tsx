@@ -3,9 +3,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
+import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { Screen } from '../src/components/Screen';
-import { discardSession, pastSession, sessionSets } from '../src/db';
+import { Tappable } from '../src/components/Tappable';
+import { deleteSet, discardSession, pastSession, sessionSets, updateSetValues } from '../src/db';
 import type { LoggedSet } from '../src/db';
 import { confirm } from '../src/dialog';
 import { formatDateLong } from '../src/format';
@@ -25,13 +27,26 @@ interface Loaded {
   sets: LoggedSet[];
 }
 
-/** Whether a reload found the workout it already had: same session, same sets in the same order. */
+/**
+ * Whether a reload found the workout it already had: same session, same sets in the same order,
+ * with the same figures. The figures are compared because a set can be corrected in place, keeping
+ * its id, and a reload that called that unchanged would leave the old numbers on screen.
+ */
 const sameWorkout = (a: Loaded, b: Loaded): boolean =>
   a.past?.id === b.past?.id &&
   a.past?.name === b.past?.name &&
   a.past?.finishedAt === b.past?.finishedAt &&
   a.sets.length === b.sets.length &&
-  a.sets.every((set, index) => set.id === b.sets[index]?.id);
+  a.sets.every((set, index) => {
+    const other = b.sets[index];
+    return (
+      set.id === other?.id &&
+      set.weightKg === other.weightKg &&
+      set.reps === other.reps &&
+      set.setType === other.setType &&
+      set.rpe === other.rpe
+    );
+  });
 
 /**
  * A finished workout, looked at again.
@@ -52,26 +67,32 @@ export default function WorkoutScreen() {
   const [sharing, setSharing] = useState(false);
   /** Sign-in is open over the sheet. */
   const [signingIn, setSigningIn] = useState(false);
+  /** The set being corrected, or null when its sheet is closed. */
+  const [editing, setEditing] = useState<LoggedSet | null>(null);
   // Back from sign-in (or profile setup), the sheet comes back with its caption.
   useFocusEffect(useCallback(() => setSigningIn(false), []));
+
+  const load = useCallback(async (): Promise<Loaded> => {
+    const past = id ? await pastSession(id) : null;
+    const sets = past ? await sessionSets(past.id) : [];
+    return { past, sets };
+  }, [id]);
+
+  // The same workout comes back as the same objects. Returning from sign-in reloads on
+  // focus, and a fresh summary would make the finish sheet clear the caption typed so far.
+  const keep = (next: Loaded) =>
+    setLoaded((before) => (before !== null && sameWorkout(before, next) ? before : next));
 
   useFocusEffect(
     useCallback(() => {
       let current = true;
-      void (async () => {
-        const past = id ? await pastSession(id) : null;
-        const sets = past ? await sessionSets(past.id) : [];
-        if (!current) return;
-        // The same workout comes back as the same objects. Returning from sign-in reloads on
-        // focus, and a fresh summary would make the finish sheet clear the caption typed so far.
-        setLoaded((before) =>
-          before !== null && sameWorkout(before, { past, sets }) ? before : { past, sets },
-        );
-      })();
+      void load().then((next) => {
+        if (current) keep(next);
+      });
       return () => {
         current = false;
       };
-    }, [id]),
+    }, [load]),
   );
 
   const past = loaded?.past ?? null;
@@ -153,7 +174,18 @@ export default function WorkoutScreen() {
       {groups.map((group) => (
         <Card loud key={group.name} title={group.name}>
           {group.sets.map((set, index) => (
-            <View key={set.id} style={[styles.row, { borderColor: loud.rule }]}>
+            <Tappable
+              key={set.id}
+              onPress={() => setEditing(set)}
+              scaleTo={0.99}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit set ${
+                set.setType === 'warmup'
+                  ? 'warm-up'
+                  : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length
+              }, ${setLine(set, settings.units)}`}
+              style={[styles.row, { borderColor: loud.rule }]}
+            >
               <Text style={[styles.number, set.setType === 'warmup' && { color: loud.warn }]}>
                 {/* Working sets are counted without the warm-ups before them, as the logger counts them. */}
                 {set.setType === 'warmup'
@@ -161,13 +193,36 @@ export default function WorkoutScreen() {
                   : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
               </Text>
               <Text style={styles.line}>{setLine(set, settings.units)}</Text>
-            </View>
+            </Tappable>
           ))}
         </Card>
       ))}
 
+      {/* A post is a snapshot on the server; correcting a set here does not reach it. */}
+      <Text style={styles.hint}>
+        Tap a set to correct it. A post of this workout keeps the figures it was posted with.
+      </Text>
+
       <Button tone="loud" label="Share or post" onPress={() => setSharing(true)} />
       <Button tone="loud" variant="danger" label="Delete workout" onPress={() => void remove()} />
+
+      <EditSetSheet
+        set={editing}
+        units={settings.units}
+        onCancel={() => setEditing(null)}
+        onSave={async (weightKg, reps) => {
+          if (editing === null) return;
+          await updateSetValues(editing.id, weightKg, reps);
+          keep(await load());
+          setEditing(null);
+        }}
+        onDelete={async () => {
+          if (editing === null) return;
+          await deleteSet(editing.id);
+          keep(await load());
+          setEditing(null);
+        }}
+      />
 
       <FinishSheet
         summary={sharing ? summary : null}
@@ -207,6 +262,8 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 13, lineHeight: 18, color: loud.figureFaint },
+
+  hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.figureFaint },
 
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   stat: {
