@@ -26,14 +26,14 @@ export const readSetEdit = (
     return { problem: `Reps must be a whole number from 1 to ${MAX_REPS}.` };
   }
 
-  if (weightText.trim() === '') {
+  // A typed zero means the same as an empty box, as it does in the logger, where parseWeight
+  // refuses 0 and the set is stored with no weight rather than a weight of 0.
+  const typed = Number.parseFloat(weightText.replace(',', '.'));
+  if (weightText.trim() === '' || typed === 0) {
     return bodyweightBased ? { weightKg: null, reps } : { problem: 'Enter a weight.' };
   }
 
-  // parseWeight refuses 0 so that a weigh-in cannot be stored as 0, but a set may carry no
-  // load, so a typed zero is read here rather than rejected.
-  const typed = Number.parseFloat(weightText.replace(',', '.'));
-  const weightKg = typed === 0 ? 0 : parseWeight(weightText, units);
+  const weightKg = parseWeight(weightText, units);
   if (weightKg === null) {
     return {
       problem: bodyweightBased

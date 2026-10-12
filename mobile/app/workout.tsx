@@ -209,6 +209,7 @@ export default function WorkoutScreen() {
       <EditSetSheet
         set={editing}
         units={settings.units}
+        isLastSet={sets.length === 1}
         onCancel={() => setEditing(null)}
         onSave={async (weightKg, reps) => {
           if (editing === null) return;
@@ -218,6 +219,14 @@ export default function WorkoutScreen() {
         }}
         onDelete={async () => {
           if (editing === null) return;
+          // A finished workout with no sets would still list and still offer to be shared, so
+          // taking out its only set takes the workout with it.
+          if (sets.length === 1) {
+            await discardSession(past.id);
+            setEditing(null);
+            router.back();
+            return;
+          }
           await deleteSet(editing.id);
           keep(await load());
           setEditing(null);

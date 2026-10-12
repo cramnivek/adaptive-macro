@@ -41,8 +41,14 @@ describe('readSetEdit', () => {
     expect(readSetEdit('-5', '8', 'metric', false)).toEqual({ problem: 'That weight looks wrong.' });
   });
 
-  it('allows a weight of zero, which reads as no added load', () => {
-    expect(readSetEdit('0', '8', 'metric', true)).toEqual({ weightKg: 0, reps: 8 });
+  it('reads a typed zero as no added load on a bodyweight exercise', () => {
+    // The logger treats a typed 0 as no weight, so a correction must not store 0 where it would not.
+    expect(readSetEdit('0', '8', 'metric', true)).toEqual({ weightKg: null, reps: 8 });
+  });
+
+  it('asks for a weight when a loaded lift is given zero, as it does for empty', () => {
+    expect(readSetEdit('0', '8', 'metric', false)).toEqual({ problem: 'Enter a weight.' });
+    expect(readSetEdit('0.0', '8', 'imperial', false)).toEqual({ problem: 'Enter a weight.' });
   });
 
   it('refuses 1500 kg, and a weight that is over 1000 kg only once converted', () => {

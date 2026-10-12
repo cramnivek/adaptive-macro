@@ -23,6 +23,8 @@ interface EditSetSheetProps {
   /** The set being corrected, or null when the sheet is closed. */
   set: LoggedSet | null;
   units: UnitSystem;
+  /** The workout's only set: deleting it deletes the workout, and the confirm says so. */
+  isLastSet: boolean;
   onCancel: () => void;
   onSave: (weightKg: number | null, reps: number) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -44,7 +46,7 @@ const NOT_A_LOGIN = {
  * and the set's kind were not typed. The figures are read by `readSetEdit`, so a 800 for 80 is
  * refused here rather than stored.
  */
-export const EditSetSheet = ({ set, units, onCancel, onSave, onDelete }: EditSetSheetProps) => {
+export const EditSetSheet = ({ set, units, isLastSet, onCancel, onSave, onDelete }: EditSetSheetProps) => {
   const insets = useSafeAreaInsets();
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
@@ -84,12 +86,21 @@ export const EditSetSheet = ({ set, units, onCancel, onSave, onDelete }: EditSet
 
   const remove = async () => {
     if (busy) return;
-    const ok = await confirm({
-      title: 'Delete this set?',
-      message: 'It is removed from this workout and from your history.',
-      confirmLabel: 'Delete',
-      destructive: true,
-    });
+    const ok = await confirm(
+      isLastSet
+        ? {
+            title: 'Delete this set?',
+            message: "This is the workout's only set, so the workout is deleted too.",
+            confirmLabel: 'Delete workout',
+            destructive: true,
+          }
+        : {
+            title: 'Delete this set?',
+            message: 'It is removed from this workout and from your history.',
+            confirmLabel: 'Delete',
+            destructive: true,
+          },
+    );
     if (ok) void run(onDelete);
   };
 
