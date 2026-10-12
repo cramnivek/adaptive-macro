@@ -1,4 +1,4 @@
-import { routeFor } from '../api/gemini';
+import { ALLOWANCE_USED_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
 import {
   applyPrescription,
   type BuildOptions,
@@ -100,16 +100,13 @@ interface RoutineRequest {
 }
 
 const requestRoutines = async (request: RoutineRequest, apiKey: string): Promise<RoutineImport> => {
-  const route = routeFor(MODEL, apiKey);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), request.timeoutMs);
 
   let payload: any;
   try {
-    const response = await fetch(route.url, {
-      method: 'POST',
+    const { response, route } = await fetchGemini(MODEL, apiKey, {
       signal: controller.signal,
-      headers: route.headers,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: request.system }] },
         contents: [{ parts: request.parts }],
@@ -120,6 +117,7 @@ const requestRoutines = async (request: RoutineRequest, apiKey: string): Promise
       }),
     });
 
+    if (isPersonalLimit(response, route)) throw new RoutineResponseError(ALLOWANCE_USED_MESSAGE);
     if (response.status === 429) {
       throw new RoutineResponseError('Too many requests just now. Wait a few minutes and try again.');
     }

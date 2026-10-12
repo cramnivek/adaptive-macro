@@ -32,6 +32,36 @@ const userId = async (): Promise<string> => {
   return id;
 };
 
+/**
+ * The signed-in person's access token, which the AI proxy uses to count their
+ * calls separately from everyone else's.
+ *
+ * Null when signed out or when this build has no sign-in, and never a throw: an
+ * AI request without a token is still a valid request, answered from the shared
+ * signed-out allowance, so failing to read one must not fail the request.
+ */
+export const currentAccessToken = async (): Promise<string | null> => {
+  try {
+    const { data } = await client().auth.getSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A fresh access token, for when the proxy says the one it was sent has
+ * expired. Same contract as `currentAccessToken`: null on any failure.
+ */
+export const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const { data } = await client().auth.refreshSession();
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const sendCode = async (email: string): Promise<void> => {
   const { error } = await client().auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true } });
   if (error) fail(error);

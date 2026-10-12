@@ -1,5 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeMealWithGemini } from '../geminiDescribe';
+
+// The real helpers read the Supabase session, which needs react-native.
+const session = vi.hoisted(() => ({
+  token: vi.fn(async (): Promise<string | null> => null),
+  refresh: vi.fn(async (): Promise<string | null> => null),
+}));
+vi.mock('../../social/api', () => ({
+  currentAccessToken: session.token,
+  refreshAccessToken: session.refresh,
+}));
+
+beforeEach(() => {
+  session.token.mockReset().mockResolvedValue(null);
+  session.refresh.mockReset().mockResolvedValue(null);
+});
 
 const estimate = {
   items: [
@@ -60,6 +75,50 @@ describe('describeMealWithGemini', () => {
     await describeMealWithGemini('two scrambled eggs', '');
 
     expect(fetchMock.mock.calls[0][0]).toContain('/api/gemini');
+  });
+
+  it('sends the signed-in person\'s token to the proxy, and not to Google', async () => {
+    session.token.mockResolvedValue('jwt-1');
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => geminiResponse(estimate));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await describeMealWithGemini('two scrambled eggs', '');
+    await describeMealWithGemini('two scrambled eggs', 'AIzaUserKey');
+
+    const headersOf = (call: number) => (fetchMock.mock.calls[call][1] as RequestInit).headers as Record<string, string>;
+    expect(headersOf(0).Authorization).toBe('Bearer jwt-1');
+    expect(headersOf(1).Authorization).toBeUndefined();
+  });
+
+  it('refreshes once and retries when the proxy says the session expired', async () => {
+    session.token.mockResolvedValue('jwt-old');
+    session.refresh.mockResolvedValue('jwt-new');
+    const fetchMock = vi
+      .fn(async (..._args: Parameters<typeof fetch>) => geminiResponse(estimate))
+      .mockResolvedValueOnce(new Response('{}', { status: 401, headers: { 'x-auth': 'expired' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await describeMealWithGemini('two scrambled eggs', '');
+
+    expect(result.estimate.items[0].name).toBe('Scrambled eggs');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(((fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>).Authorization).toBe(
+      'Bearer jwt-new',
+    );
+  });
+
+  it('says the personal AI allowance is used up when the proxy names it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429, headers: { 'x-limit': 'user-daily' } })));
+
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow(
+      "You've used today's AI allowance. It resets tomorrow.",
+    );
+  });
+
+  it('keeps the generic message for any other failure status', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429 })));
+
+    await expect(describeMealWithGemini('two scrambled eggs', '')).rejects.toThrow('returned 429');
   });
 
   it('uses the key directly when one is given', async () => {
