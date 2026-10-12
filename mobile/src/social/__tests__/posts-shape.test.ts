@@ -120,20 +120,22 @@ describe('a post’s exercises', () => {
     expect([many, notArray, nothing]).toEqual([false, false, false]);
   });
 
-  // 30 lifts with 80-character names cannot reach 8 KB in plain letters, but a
-  // name is counted in characters and stored in bytes: an emoji takes four.
-  it('refuse a value over 8 KB even when every part of it is the right shape', async () => {
-    const heavy = Array.from({ length: 30 }, () => lift({ name: '🏋'.repeat(80) }));
-    const [{ valid }] = await as(db, USER_A, `select public.valid_post_exercises($1::jsonb) as valid`, [
-      JSON.stringify(heavy),
-    ]);
-    expect(valid).toBe(true);
-    await expect(addPost(db, { exercises: heavy })).rejects.toThrow(/posts_exercises_size/);
+  // A name is counted in characters and stored in bytes: an emoji takes four.
+  // Thirty lifts of eighty emoji is the largest post the shape rules allow, and
+  // the app can write it, so the size limit must let it through.
+  it('accept the largest post the shape allows, thirty names of eighty emoji', async () => {
+    await addPost(db, { exercises: Array.from({ length: 30 }, () => lift({ name: '🏋'.repeat(80) })) });
+  });
+
+  it('refuse a value over 16 KB, which no shape-valid post can reach', async () => {
+    await expect(addPost(db, { exercises: [lift({ junk: 'x'.repeat(20_000) })] })).rejects.toThrow(
+      /posts_exercises_size/,
+    );
   });
 
   it('refuse a huge blob hidden under an extra key', async () => {
     await expect(addPost(db, { exercises: [lift({ junk: 'x'.repeat(5_000_000) })] })).rejects.toThrow(
-      /posts_exercises_(size|valid)/,
+      /posts_exercises_size/,
     );
   });
 });
@@ -176,6 +178,21 @@ describe('a post’s highlight', () => {
   it('refuses something that is not an object', async () => {
     await expect(addPost(db, { highlight: 'load' })).rejects.toThrow(/posts_highlight_valid/);
     await expect(addPost(db, { highlight: [] })).rejects.toThrow(/posts_highlight_valid/);
+  });
+
+  // A JSON number has no length limit, so a hand-written value of tens of
+  // thousands of digits is a number and passes every shape rule.
+  it('refuses a value written with thousands of digits', async () => {
+    const huge = `{"kind":"sessions","value":${'7'.repeat(50_000)}}`;
+    await expect(
+      as(
+        db,
+        USER_A,
+        `insert into posts (author_id, session_id, title, performed_on, duration_min, sets, exercises, highlight)
+         values ($1, 'huge', 'Push', '2026-10-11', 60, 3, '[]'::jsonb, $2::jsonb)`,
+        [USER_A, huge],
+      ),
+    ).rejects.toThrow(/posts_highlight_size/);
   });
 });
 

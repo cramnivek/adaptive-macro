@@ -94,13 +94,19 @@ end;
 $$;
 
 -- Named, so a later change can tell which rule a refused post broke.
--- The size limit is checked on the stored form, in bytes, because the shape
--- limits count characters and a name of eighty emoji is over three hundred
--- bytes. Thirty ordinary lifts come to about 3.5 KB, and thirty of the longest
--- names allowed come to 5 KB in Latin letters and 7.5 KB in Cyrillic, so 8 KB
--- leaves room for every real post and stops the rest.
+-- The size limits are on the stored binary jsonb form, in bytes (what
+-- `pg_column_size` reports), not on the text. The shape limits count
+-- characters, and a name of eighty emoji is over three hundred bytes. Thirty
+-- ordinary lifts come to about 3.5 KB. Thirty of the longest names allowed come
+-- to 5 KB in Latin letters, 7.5 KB in Cyrillic, 10 KB in Chinese or Japanese and
+-- 12.4 KB in emoji, which is the largest post the shape rules permit. 16 KB
+-- therefore leaves room for any post the app can write, while still stopping a
+-- hand-written value of megabytes. The highlight needs far less: a kind, a
+-- number and one name come to about 150 bytes, and 1 KB stops a number written
+-- with tens of thousands of digits, which is still a valid JSON number.
 alter table public.posts
   add constraint posts_exercises_valid check (public.valid_post_exercises(exercises)),
   add constraint posts_highlight_valid check (public.valid_post_highlight(highlight)),
   add constraint posts_session_id_length check (char_length(session_id) <= 64),
-  add constraint posts_exercises_size check (pg_column_size(exercises) <= 8192);
+  add constraint posts_exercises_size check (pg_column_size(exercises) <= 16384),
+  add constraint posts_highlight_size check (highlight is null or pg_column_size(highlight) <= 1024);
