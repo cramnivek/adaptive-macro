@@ -235,3 +235,83 @@ describe('the helper functions', () => {
     expect(await as(db, USER_B, `select * from follow_counts($1)`, ['00000000-0000-4000-8000-0000000000ff'])).toEqual([]);
   });
 });
+
+describe('feed', () => {
+  const feed = (user: string, before: string | null = null) =>
+    as<{ title: string; username: string; like_count: number; liked: boolean; created_at: string }>(
+      db,
+      user,
+      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, 20)`,
+      [before],
+    );
+
+  it('shows your own posts and those of people you follow, newest first', async () => {
+    await post(db, USER_B, 'mine');
+    await post(db, USER_C, 'theirs');
+    await follow(db, USER_B, USER_C);
+    const rows = await feed(USER_B);
+    expect(rows.map((r) => r.username)).toEqual(['carol', 'bob']);
+  });
+
+  it('leaves out public strangers', async () => {
+    await post(db, USER_C);
+    expect(await feed(USER_B)).toEqual([]);
+  });
+
+  it('leaves out a private account until the follow is accepted', async () => {
+    await post(db, USER_A);
+    await follow(db, USER_B, USER_A);
+    expect(await feed(USER_B)).toEqual([]);
+    await as(db, USER_A, `update follows set status = 'accepted' where follower_id = $1`, [USER_B]);
+    expect(await feed(USER_B)).toHaveLength(1);
+  });
+
+  it('counts likes, and says whether you liked it', async () => {
+    const id = await post(db, USER_C);
+    await follow(db, USER_B, USER_C);
+    await as(db, USER_B, `insert into likes (post_id, user_id) values ($1, $2)`, [id, USER_B]);
+    await as(db, USER_A, `insert into likes (post_id, user_id) values ($1, $2)`, [id, USER_A]);
+    const [row] = await feed(USER_B);
+    expect(row).toMatchObject({ like_count: 2, liked: true });
+  });
+
+  it('pages by time', async () => {
+    await post(db, USER_B, 'one');
+    await db.query(`update posts set created_at = now() - interval '1 hour' where session_id = 'one'`);
+    await post(db, USER_B, 'two');
+    const first = await feed(USER_B);
+    expect(first).toHaveLength(2);
+    const older = await feed(USER_B, first[0].created_at);
+    expect(older).toHaveLength(1);
+  });
+
+  it('respects a block', async () => {
+    await post(db, USER_C);
+    await follow(db, USER_B, USER_C);
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    expect(await feed(USER_B)).toEqual([]);
+  });
+
+  it('does not count a like from someone who blocked you, so the count shows no block', async () => {
+    const id = await post(db, USER_C);
+    await follow(db, USER_B, USER_C);
+    await as(db, USER_A, `insert into likes (post_id, user_id) values ($1, $2)`, [id, USER_A]);
+    await as(db, USER_A, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_A, USER_B]);
+    const [row] = await feed(USER_B);
+    expect(row.like_count).toBe(0);
+    // the count is exactly what the likes the reader can see add up to, never more
+    expect(await as(db, USER_B, `select 1 from likes`)).toHaveLength(0);
+  });
+
+  it('the view itself shows no more than posts does, across a block', async () => {
+    await post(db, USER_C);
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    expect(await as(db, USER_B, `select * from feed_posts`)).toEqual([]);
+    expect(await as(db, USER_C, `select title from feed_posts`)).toHaveLength(1);
+  });
+
+  it('is not open to someone signed out', async () => {
+    await expect(as(db, null, `select * from feed_page(null, 20)`)).rejects.toThrow(/permission denied/);
+    await expect(as(db, null, `select * from feed_posts`)).rejects.toThrow(/permission denied/);
+  });
+});
