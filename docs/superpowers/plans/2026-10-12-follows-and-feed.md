@@ -449,7 +449,7 @@ create policy "posts are readable by those allowed to see them" on public.posts
 -- answers only "may I see this profile", which its absence would say anyway.
 create function public.visible_profile(profile uuid) returns boolean
   language sql stable security definer set search_path = ''
-  as $ select not public.blocked_between(profile, auth.uid()) $;
+  as $$ select not public.blocked_between(profile, auth.uid()) $$;
 revoke execute on function public.visible_profile(uuid) from public, anon;
 grant execute on function public.visible_profile(uuid) to authenticated;
 
@@ -1100,7 +1100,7 @@ create trigger reports_hide after insert on public.reports
 drop policy "posts are readable by those allowed to see them" on public.posts;
 create policy "posts are readable by those allowed to see them" on public.posts
   for select to authenticated
-  using (public.can_see(author_id) and (not hidden or author_id = (select auth.uid())));
+  using (private.can_see(author_id) and (not hidden or author_id = (select auth.uid())));
 
 -- The word filter. The list lives in a table so it grows without an app release;
 -- the owner edits it in the dashboard. Matching is case-insensitive and by
