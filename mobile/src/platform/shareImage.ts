@@ -191,7 +191,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   ctx.fillText('WORKOUT DONE', PAD, 300);
   track(ctx, 0);
 
-  // The title, as big as it will go, and never cut short.
+  // The title, as big as it will go.
   const lines = headline(summary.title);
   const lineWidth = (line: { text: string }[], px: number): number => {
     ctx.font = `700 ${px}px ${font.display}`;
@@ -206,8 +206,12 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     for (const part of line) {
       ctx.font = `700 ${title}px ${font.display}`;
       ctx.fillStyle = part.red ? loud.loud : loud.figure;
-      ctx.fillText(part.text, at, y);
-      at += ctx.measureText(part.text).width;
+      // One long word cannot be made to fit by shrinking alone. A title is a
+      // name rather than a figure, so at the smallest size it is cut rather
+      // than left to run off the edge of the card.
+      const text = fit(ctx, part.text, W - PAD - at);
+      ctx.fillText(text, at, y);
+      at += ctx.measureText(text).width;
     }
     if (i < lines.length - 1) y += title * 0.94;
   });
