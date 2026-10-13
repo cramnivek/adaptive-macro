@@ -99,7 +99,7 @@ export default function TodayScreen() {
       title="Today"
       subtitle={formatDateLong(selectedDate)}
       action={
-        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={{ padding: 10 }}>
+        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
           <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
         </Tappable>
       }
@@ -352,6 +352,7 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
+  gear: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
   dateNav: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   navButton: {
     minHeight: TOUCH_TARGET,

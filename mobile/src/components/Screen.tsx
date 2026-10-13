@@ -46,10 +46,17 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
         ) : undefined
       }
     >
-      {title && (
+      {/* An action alone still draws the header: a modal whose stack header already
+          shows its title would otherwise have to pass one here only to get the
+          slot, and the heading would appear twice. */}
+      {(title || action) && (
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+            {title ? (
+              <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+            ) : (
+              <View />
+            )}
             {action}
           </View>
           {subtitle && (
