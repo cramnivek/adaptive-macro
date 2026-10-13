@@ -32,18 +32,26 @@ export default function ReportScreen() {
   const postId = typeof params.postId === 'string' && params.postId !== '' ? params.postId : undefined;
   const profileId = typeof params.profileId === 'string' ? params.profileId : '';
   const username = typeof params.username === 'string' ? params.username : '';
-  const [reason, setReason] = useState<ReportReason>('spam');
+  // Nothing is chosen to begin with: a reason that is already selected is one that
+  // gets sent by a mis-tap, and what a report says it is decides who reads it.
+  const [reason, setReason] = useState<ReportReason | null>(null);
   const [note, setNote] = useState('');
   // Held across both buttons, so neither can be tapped again while the other is in flight.
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const send = async () => {
+    if (reason === null) return;
     setBusy(true);
     try {
       // A workout is reported as the workout; the person is only the subject when no workout is.
       await report(postId ? { postId, reason, note } : { profileId, reason, note });
       notify('Thanks — we’ll look at it');
-      router.back();
+      // The screen stays open rather than closing itself. Someone reporting abuse
+      // usually wants it to stop now as well, and Block is on this screen: sending
+      // them back would be taking that away at the moment they are most likely to
+      // want it.
+      setSent(true);
     } catch (error) {
       notify('Could not send that', (error as Error).message);
     } finally {
@@ -115,7 +123,11 @@ export default function ReportScreen() {
           multiline
           maxLength={300}
         />
-        <Button label="Send report" disabled={busy} onPress={() => void send()} />
+        <Button
+          label={sent ? 'Reported' : 'Send report'}
+          disabled={busy || sent || reason === null}
+          onPress={() => void send()}
+        />
       </Card>
       <Card>
         {say('Reporting tells us. Blocking stops it for you now.')}
