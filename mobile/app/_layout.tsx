@@ -293,6 +293,16 @@ export default function RootLayout() {
                   headerTintColor: colors.text,
                 }}
               />
+              <Stack.Screen
+                name="blocked"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Blocked people',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
             </Stack>
           </StorageGate>
         </SocialProvider>
