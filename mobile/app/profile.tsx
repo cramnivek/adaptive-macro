@@ -167,7 +167,7 @@ export default function ProfileScreen() {
           </Tappable>
         )}
         <Text style={[styles.counts, { color: colors.textMuted }]}>
-          {counts.followers} followers · {counts.following} following
+          {counts.followers} {counts.followers === 1 ? 'follower' : 'followers'} · {counts.following} following
         </Text>
         {own ? (
           <Button label="Edit profile" variant="subtle" onPress={() => router.push('/profile-setup')} />
