@@ -14,6 +14,7 @@ import { TOUCH_TARGET } from '../src/components/Controls';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
+import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
 import { type ShareSummary, shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
 import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
@@ -216,6 +217,9 @@ export default function SessionScreen() {
   const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareSummary } | null>(null);
   /** Sign-in is open over the finish sheet. */
   const [signingIn, setSigningIn] = useState(false);
+  /** The save-as-routine sheet is open over the finish sheet, and whether it has been saved. */
+  const [savingRoutine, setSavingRoutine] = useState(false);
+  const [routineSaved, setRoutineSaved] = useState(false);
   const social = useSocial();
   // Back from sign-in (or profile setup), the sheet comes back with its caption.
   useFocusEffect(useCallback(() => setSigningIn(false), []));
@@ -1670,7 +1674,7 @@ export default function SessionScreen() {
 
       <FinishSheet
         summary={milestone === null ? (finished?.summary ?? null) : null}
-        hidden={signingIn}
+        hidden={signingIn || savingRoutine}
         account={
           !social.configured
             ? 'unavailable'
@@ -1690,10 +1694,25 @@ export default function SessionScreen() {
           setSigningIn(true);
           router.push(social.session ? '/profile-setup' : '/sign-in');
         }}
+        onSaveAsRoutine={() => setSavingRoutine(true)}
+        routineSaved={routineSaved}
         onDone={(posted) => {
           if (social.configured && !posted && settings.postWorkouts) void updateSettings({ postWorkouts: false });
           setFinished(null);
           router.back();
+        }}
+      />
+
+      {/* The finish sheet is hidden, not closed, behind this one: it keeps its caption, and two modals never stack. */}
+      <SaveRoutineSheet
+        visible={savingRoutine}
+        initialName={finished?.workout.title === 'Workout' ? '' : (finished?.workout.title ?? '')}
+        sets={finished?.workout.sets ?? []}
+        existingNames={routines.map((r) => r.name)}
+        onCancel={() => setSavingRoutine(false)}
+        onSaved={() => {
+          setSavingRoutine(false);
+          setRoutineSaved(true);
         }}
       />
 
