@@ -145,10 +145,13 @@ const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   ctx.fillStyle = top;
   ctx.fillRect(0, 0, W, H * 0.68);
 
+  // Light, this one: the type already carries its own shadow, and a left side
+  // dark enough to guarantee legibility on its own would put whoever is standing
+  // on that side of the frame in shade.
   const left = ctx.createLinearGradient(0, 0, W, 0);
-  left.addColorStop(0, 'rgba(8,8,10,0.62)');
-  left.addColorStop(0.5, 'rgba(8,8,10,0.34)');
-  left.addColorStop(0.85, 'rgba(8,8,10,0)');
+  left.addColorStop(0, 'rgba(8,8,10,0.42)');
+  left.addColorStop(0.45, 'rgba(8,8,10,0.22)');
+  left.addColorStop(0.8, 'rgba(8,8,10,0)');
   ctx.fillStyle = left;
   ctx.fillRect(0, 0, W, H);
 
