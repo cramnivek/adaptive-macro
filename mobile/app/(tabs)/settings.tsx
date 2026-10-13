@@ -27,6 +27,7 @@ import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useSocial } from '../../src/social/session';
 import { playChime, primeChime } from '../../src/platform/chime';
+import type { AppSettings, WeightUnitSetting, SpeedUnitSetting } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
 import { font, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -504,14 +505,43 @@ export default function SettingsScreen() {
 
       <Section title="Units & Training">
         <Card title="Units">
-          <Segmented
-            value={settings.units}
-            onChange={(units) => void updateSettings({ units })}
+          <Segmented<WeightUnitSetting>
+            label="Weight unit"
+            value={settings.weightUnitSetting ?? 'switchable'}
+            onChange={(val) => {
+              const patch: Partial<AppSettings> = { weightUnitSetting: val };
+              if (val === 'kg') patch.units = 'metric';
+              if (val === 'lbs') patch.units = 'imperial';
+              void updateSettings(patch);
+            }}
             options={[
-              { value: 'metric' as const, label: 'kg / cm' },
-              { value: 'imperial' as const, label: 'lb / in' },
+              { value: 'switchable', label: 'Switchable' },
+              { value: 'kg', label: 'kg' },
+              { value: 'lbs', label: 'lbs' },
             ]}
           />
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+            When set to Switchable, a KG / LBS toggle is available in your active workout sessions. Selecting kg or lbs locks the unit and hides the switcher.
+          </Text>
+
+          <Segmented<SpeedUnitSetting>
+            label="Speed unit (treadmill)"
+            value={settings.speedUnitSetting ?? 'switchable'}
+            onChange={(val) => {
+              const patch: Partial<AppSettings> = { speedUnitSetting: val };
+              if (val === 'kph') patch.activeSpeedUnit = 'kph';
+              if (val === 'mph') patch.activeSpeedUnit = 'mph';
+              void updateSettings(patch);
+            }}
+            options={[
+              { value: 'switchable', label: 'Switchable' },
+              { value: 'kph', label: 'kph' },
+              { value: 'mph', label: 'mph' },
+            ]}
+          />
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            When set to Switchable, a KPH / MPH toggle is available in your active workout sessions. Selecting kph or mph locks the unit and hides the switcher. Outside distance is measured in km.
+          </Text>
         </Card>
 
         <Card title="Rest timer alert">

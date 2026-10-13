@@ -58,3 +58,38 @@ describe('deleting a routine', () => {
     });
   });
 });
+
+describe('cardio routines and sets', () => {
+  it('stores cardio routine targets and sets correctly in the database', () => {
+    db.prepare("INSERT INTO exercises (id, name, bodyweight_based, is_cardio, cardio_mode, created_at) VALUES ('e2', 'Treadmill', 0, 1, 'treadmill', '2026-01-01')").run();
+    db.prepare(
+      `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps, is_cardio, cardio_mode, target_time, target_speed)
+       VALUES ('r1', 'e2', 1, 1, NULL, 1, 'treadmill', '30m', 8.5)`,
+    ).run();
+
+    const routineEx = db.prepare("SELECT is_cardio, cardio_mode, target_time, target_speed FROM routine_exercises WHERE routine_id = 'r1' AND exercise_id = 'e2'").get() as {
+      is_cardio: number;
+      cardio_mode: string;
+      target_time: string;
+      target_speed: number;
+    };
+    expect(routineEx.is_cardio).toBe(1);
+    expect(routineEx.cardio_mode).toBe('treadmill');
+    expect(routineEx.target_time).toBe('30m');
+    expect(routineEx.target_speed).toBe(8.5);
+
+    db.prepare(
+      `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, is_cardio, cardio_mode, speed_kph, duration_seconds, created_at)
+       VALUES ('set-1', 's1', 'e2', 'Treadmill', 0, NULL, 0, 'normal', 1, 'treadmill', 8.5, 1800, '2026-10-01T18:00:00')`,
+    ).run();
+
+    const logged = db.prepare("SELECT speed_kph, duration_seconds, cardio_mode FROM sets WHERE id = 'set-1'").get() as {
+      speed_kph: number;
+      duration_seconds: number;
+      cardio_mode: string;
+    };
+    expect(logged.speed_kph).toBe(8.5);
+    expect(logged.duration_seconds).toBe(1800);
+    expect(logged.cardio_mode).toBe('treadmill');
+  });
+});

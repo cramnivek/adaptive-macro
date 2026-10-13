@@ -119,7 +119,19 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           <Text style={styles.title}>WORKOUT DONE</Text>
           {summary && (
             <Text style={styles.subtitle}>
-              {summary.duration} · {summary.sets} {summary.sets === 1 ? 'set' : 'sets'}{summary.volume ? ` · ${summary.volume}` : ''}
+              {[
+                summary.duration,
+                summary.sets > 0 ? `${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}` : null,
+                summary.volume,
+                summary.cardioDistanceKm && summary.cardioDistanceKm > 0
+                  ? `${summary.cardioDistanceKm.toFixed(1)} km`
+                  : null,
+                summary.steps && summary.steps > 0
+                  ? `~${summary.steps.toLocaleString()} steps`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           )}
 

@@ -94,4 +94,26 @@ describe('postView', () => {
     expect(view.caption).toBe('felt strong');
     expect(view.duration).toBe('1 h 12 min');
   });
+
+  it('stores cardio as 0 sets and 0 reps without inflating post sets', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Treadmill',
+      bodyweightBased: false,
+      setIndex: 1,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'treadmill',
+    };
+    const row = postPayload(workout({ sets: [cardioSet] }), null);
+    expect(row.sets).toBe(0);
+    expect(row.exercises[0]).toEqual({ name: 'Treadmill', sets: 0, best_kg: null, best_reps: 0 });
+
+    const view = postView(row, 'metric');
+    expect(view.sets).toBe(0);
+    expect(view.exercises[0].best).toBe('Cardio');
+  });
 });
