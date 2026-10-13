@@ -1,6 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { as, freshDatabase, USER_A, USER_B, USER_C } from './postgres';
+import { as, freshDatabase, USER_A, USER_B, USER_C, USER_D } from './postgres';
 
 const profile = (db: PGlite, user: string, username: string, isPrivate = true) =>
   as(db, user, `insert into profiles (id, username, display_name, is_private) values ($1, $2, $2, $3)`, [
@@ -381,5 +381,108 @@ describe('the names the app spells out', () => {
     expect(columns.map((row) => row.column_name)).toEqual(
       expect.arrayContaining(['id', 'author_id', 'created_at', 'username', 'display_name', 'like_count', 'liked']),
     );
+  });
+});
+
+describe('reports', () => {
+  const reportPost = (user: string, id: string) =>
+    as(db, user, `insert into reports (reporter_id, post_id, reason) values ($1, $2, 'spam')`, [user, id]);
+  const reportThrice = async (id: string) => {
+    await profile(db, USER_D, 'dave');
+    for (const reporter of [USER_B, USER_A, USER_D]) await reportPost(reporter, id);
+  };
+
+  it('can be written about what you can see, and never read back', async () => {
+    const id = await post(db, USER_C);
+    await reportPost(USER_B, id);
+    expect(await as(db, USER_B, `select * from reports`)).toEqual([]);
+    expect(await as(db, USER_C, `select * from reports`)).toEqual([]);
+  });
+
+  it('cannot be made in someone else’s name', async () => {
+    const id = await post(db, USER_C);
+    await expect(
+      as(db, USER_B, `insert into reports (reporter_id, post_id, reason) values ($1, $2, 'spam')`, [USER_A, id]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('cannot be about a post or a profile you cannot see', async () => {
+    const id = await post(db, USER_A); // private, and bob does not follow alice
+    await expect(reportPost(USER_B, id)).rejects.toThrow(/row-level security/);
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    await expect(
+      as(db, USER_B, `insert into reports (reporter_id, profile_id, reason) values ($1, $2, 'abuse')`, [USER_B, USER_C]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('hide a post from everyone but its author at three different reporters', async () => {
+    const id = await post(db, USER_C);
+    await profile(db, USER_D, 'dave');
+    await reportPost(USER_B, id);
+    await reportPost(USER_B, id); // the same person twice counts once
+    await reportPost(USER_A, id);
+    expect(await titles(db, USER_B)).toHaveLength(1);
+    await reportPost(USER_D, id);
+    expect(await titles(db, USER_B)).toEqual([]);
+    expect(await titles(db, USER_C)).toHaveLength(1);
+  });
+
+  it('take a hidden post out of the feed too, for everyone but its author', async () => {
+    const id = await post(db, USER_C);
+    await follow(db, USER_B, USER_C);
+    await reportThrice(id);
+    expect(await as(db, USER_B, `select * from feed_posts`)).toEqual([]);
+    expect(await as(db, USER_B, `select * from feed_page(null, null, 20)`)).toEqual([]);
+    expect(await as(db, USER_C, `select * from feed_page(null, null, 20)`)).toHaveLength(1);
+  });
+
+  it('cannot be undone by the author, who may not touch the hidden flag', async () => {
+    const id = await post(db, USER_C);
+    await reportThrice(id);
+    await expect(as(db, USER_C, `update posts set hidden = false where id = $1`, [id])).rejects.toThrow(/permission denied/);
+    await as(db, USER_C, `update posts set caption = 'edited' where id = $1`, [id]);
+    expect(await titles(db, USER_B)).toEqual([]);
+  });
+});
+
+describe('word filter', () => {
+  beforeEach(async () => {
+    await db.query(`insert into blocked_words (word) values ('badword')`);
+  });
+
+  it('refuses a caption, a username or a name containing a listed word', async () => {
+    await expect(
+      as(db, USER_B, `insert into posts (author_id, session_id, title, performed_on, duration_min, sets, exercises, caption)
+                      values ($1, 'x', 'Push', '2026-10-12', 10, 1, '[]'::jsonb, 'what a BadWord day')`, [USER_B]),
+    ).rejects.toThrow(/blocked_word/);
+    await expect(as(db, USER_B, `update profiles set display_name = 'badword' where id = $1`, [USER_B])).rejects.toThrow(/blocked_word/);
+  });
+
+  it('raises exactly the error the app maps: P0001, message blocked_word', async () => {
+    await expect(as(db, USER_B, `update profiles set display_name = 'badword' where id = $1`, [USER_B])).rejects.toMatchObject({
+      code: 'P0001',
+      message: 'blocked_word',
+    });
+  });
+
+  it('lets ordinary text through', async () => {
+    await as(db, USER_B, `update profiles set display_name = 'Bob the builder' where id = $1`, [USER_B]);
+  });
+
+  it('is not readable or writable by users', async () => {
+    await expect(as(db, USER_B, `insert into blocked_words (word) values ('xyz')`)).rejects.toThrow(/row-level security|permission denied/);
+    expect(await as(db, USER_B, `select * from blocked_words`)).toEqual([]);
+  });
+});
+
+describe('my_blocked_profiles', () => {
+  it('lists the people you blocked, and only yours', async () => {
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    expect((await as<{ username: string }>(db, USER_C, `select username from my_blocked_profiles()`)).map((r) => r.username)).toEqual(['bob']);
+    expect(await as(db, USER_B, `select username from my_blocked_profiles()`)).toEqual([]);
+  });
+
+  it('is not open to someone signed out', async () => {
+    await expect(as(db, null, `select * from my_blocked_profiles()`)).rejects.toThrow(/permission denied/);
   });
 });
