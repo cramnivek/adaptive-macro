@@ -122,10 +122,14 @@ const heroOf = (summary: ShareCard): { figure: string; label: string; red: boole
 
 /**
  * The picture behind the type, filling the card without being stretched, and
- * then darkened at the top and foot. The scrim is what makes the card work
- * over any photo at all: a bright gym ceiling would otherwise swallow the
- * white type, and a card that is only legible over some pictures is not one
- * anybody can be handed.
+ * then darkened. The scrim is what makes the card work over any photo at all:
+ * a white gym wall in daylight would otherwise swallow the type, and a card
+ * that is only legible over some pictures is not one anybody can be handed.
+ *
+ * Three passes, because one strong enough everywhere would hide the photo. Down
+ * from the top and up from the foot, where the type is; and in from the left,
+ * where every line of it starts, which leaves the right of the frame — whoever
+ * is in the picture — the lightest part of the card.
  */
 const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   const scale = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
@@ -133,12 +137,20 @@ const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   const h = photo.naturalHeight * scale;
   ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
 
-  const top = ctx.createLinearGradient(0, 0, 0, H * 0.55);
-  top.addColorStop(0, 'rgba(8,8,10,0.94)');
-  top.addColorStop(0.55, 'rgba(8,8,10,0.62)');
-  top.addColorStop(1, 'rgba(8,8,10,0.08)');
+  const top = ctx.createLinearGradient(0, 0, 0, H * 0.68);
+  top.addColorStop(0, 'rgba(8,8,10,0.92)');
+  top.addColorStop(0.45, 'rgba(8,8,10,0.66)');
+  top.addColorStop(0.85, 'rgba(8,8,10,0.34)');
+  top.addColorStop(1, 'rgba(8,8,10,0)');
   ctx.fillStyle = top;
-  ctx.fillRect(0, 0, W, H * 0.55);
+  ctx.fillRect(0, 0, W, H * 0.68);
+
+  const left = ctx.createLinearGradient(0, 0, W, 0);
+  left.addColorStop(0, 'rgba(8,8,10,0.62)');
+  left.addColorStop(0.5, 'rgba(8,8,10,0.34)');
+  left.addColorStop(0.85, 'rgba(8,8,10,0)');
+  ctx.fillStyle = left;
+  ctx.fillRect(0, 0, W, H);
 
   const foot = ctx.createLinearGradient(0, H * 0.5, 0, H);
   foot.addColorStop(0, 'rgba(8,8,10,0)');
@@ -162,7 +174,19 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   sky.addColorStop(1, '#070708');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
-  if (photo) backdrop(ctx, photo);
+  if (photo) {
+    backdrop(ctx, photo);
+    // Over a photo everything drawn from here on carries a soft shadow. A scrim
+    // alone cannot be both dark enough for a white wall and light enough to
+    // leave the picture visible; the shadow travels with the type instead, so a
+    // letter is legible against whatever happens to be directly behind it.
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 26;
+    ctx.shadowOffsetY = 3;
+  }
+  // The quietest grey on the card is a dark one: it reads on the black ground
+  // and disappears over a bright photo, so over a photo it lifts a step.
+  const faint = photo ? loud.figureMuted : loud.figureFaint;
 
   ctx.save();
   ctx.fillStyle = loud.loud;
@@ -263,7 +287,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     ctx.fillText(value, x, y);
     ctx.font = `600 28px ${font.uiStrong}`;
     track(ctx, 8);
-    ctx.fillStyle = loud.figureFaint;
+    ctx.fillStyle = faint;
     ctx.fillText(label, x, y + 46);
     track(ctx, 0);
     const cell = cellWidth(label, value, statPx);
@@ -296,7 +320,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   y = top + 74;
   ctx.font = `600 28px ${font.uiStrong}`;
   track(ctx, 10);
-  ctx.fillStyle = loud.figureFaint;
+  ctx.fillStyle = faint;
   ctx.fillText('TOP LIFTS', left, y);
   track(ctx, 0);
 
@@ -311,7 +335,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     ctx.font = `600 42px ${font.uiStrong}`;
     ctx.fillText(fit(ctx, exercise.name.toUpperCase(), panelInner - best - 40), left, y);
     ctx.font = `400 28px ${font.ui}`;
-    ctx.fillStyle = loud.figureFaint;
+    ctx.fillStyle = faint;
     ctx.fillText(`${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`, left, y + 36);
     y += 34;
   }
@@ -320,7 +344,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     y += 50;
     ctx.font = `600 28px ${font.uiStrong}`;
     track(ctx, 8);
-    ctx.fillStyle = loud.figureFaint;
+    ctx.fillStyle = faint;
     ctx.fillText(`+ ${summary.more} MORE ${summary.more === 1 ? 'LIFT' : 'LIFTS'}`, left, y);
     track(ctx, 0);
   }
@@ -328,7 +352,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   y += 50;
   ctx.font = `600 28px ${font.uiStrong}`;
   track(ctx, 10);
-  ctx.fillStyle = loud.figureFaint;
+  ctx.fillStyle = faint;
   ctx.fillText('THE CLIMB', left, y);
   ctx.textAlign = 'right';
   ctx.fillText('EVERY SET, IN ORDER', right, y);
@@ -345,7 +369,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     const barW = Math.max(3, Math.min(26, step * 0.7));
     summary.climb.forEach((bar, i) => {
       const h = 14 + bar.height * 86;
-      ctx.fillStyle = bar.top ? loud.loud : loud.figureFaint;
+      ctx.fillStyle = bar.top ? loud.loud : faint;
       ctx.fillRect(left + i * step, floor - h, barW, h);
     });
   }
@@ -354,7 +378,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   ctx.textAlign = 'right';
   ctx.font = `600 28px ${font.uiStrong}`;
   track(ctx, 10);
-  ctx.fillStyle = loud.figureFaint;
+  ctx.fillStyle = faint;
   ctx.fillText('KEEP ASCENDING.', W - PAD, H - 68);
   track(ctx, 0);
   ctx.textAlign = 'left';
