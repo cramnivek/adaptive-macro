@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateCardioSteps,
+  calculateTreadmillMetrics,
   detectCardio,
   detectCardioMode,
   displayDistance,
   displaySpeed,
+  distanceUnit,
   durationToInputMinutes,
+  estimateSteps,
   formatCardioEffort,
   formatDurationDisplay,
+  formatLiveCardioEstimate,
+  formatStepEstimate,
   parseDistance,
   parseDurationSeconds,
   parseIncline,
   parseSpeed,
+  speedUnit,
 } from '../cardio';
 
 describe('detectCardio', () => {
@@ -69,45 +76,66 @@ describe('detectCardioMode', () => {
     expect(detectCardioMode('Trail Running')).toBe('outside');
     expect(detectCardioMode('Road Cycling')).toBe('outside');
     expect(detectCardioMode('Park Jog')).toBe('outside');
+    expect(detectCardioMode('Biking')).toBe('outside');
+    expect(detectCardioMode('Cycling')).toBe('outside');
+    expect(detectCardioMode('Hiking')).toBe('outside');
   });
 
   it('detects treadmill and indoor machine activities', () => {
     expect(detectCardioMode('Treadmill Walk')).toBe('treadmill');
     expect(detectCardioMode('Indoor Cycling')).toBe('treadmill');
     expect(detectCardioMode('Stationary Bike')).toBe('treadmill');
+    expect(detectCardioMode('Spinning')).toBe('treadmill');
+    expect(detectCardioMode('Elliptical')).toBe('treadmill');
+    expect(detectCardioMode('Rowing Machine')).toBe('treadmill');
+    expect(detectCardioMode('Stair Climber')).toBe('treadmill');
   });
 
-  it('defaults to treadmill for general gym activities', () => {
+  it('respects historyMode if provided', () => {
+    expect(detectCardioMode('Walking', 'outside')).toBe('outside');
+    expect(detectCardioMode('Biking', 'treadmill')).toBe('treadmill');
+  });
+
+  it('defaults to treadmill/machine for walking and running', () => {
     expect(detectCardioMode('Walking')).toBe('treadmill');
     expect(detectCardioMode('Running')).toBe('treadmill');
   });
 });
 
 describe('speed conversion', () => {
-  it('converts km/h to mph in imperial mode', () => {
+  it('converts km/h to mph in imperial mode or mph SpeedUnit', () => {
     expect(displaySpeed(10, 'metric')).toBe(10);
+    expect(displaySpeed(10, 'kph')).toBe(10);
     expect(displaySpeed(10, 'imperial')).toBeCloseTo(6.21371, 3);
+    expect(displaySpeed(10, 'mph')).toBeCloseTo(6.21371, 3);
+    expect(speedUnit('kph')).toBe('kph');
+    expect(speedUnit('mph')).toBe('mph');
   });
 
   it('parses user input speed to canonical km/h', () => {
     expect(parseSpeed('10', 'metric')).toBe(10);
+    expect(parseSpeed('10', 'kph')).toBe(10);
     expect(parseSpeed('6.21', 'imperial')).toBeCloseTo(10, 0);
+    expect(parseSpeed('6.21', 'mph')).toBeCloseTo(10, 0);
     expect(parseSpeed('invalid', 'metric')).toBeNull();
     expect(parseSpeed('-5', 'metric')).toBeNull();
   });
 });
 
 describe('distance conversion', () => {
-  it('converts km to miles in imperial mode', () => {
+  it('keeps outside distance strictly in km', () => {
+    expect(displayDistance(5)).toBe(5);
     expect(displayDistance(5, 'metric')).toBe(5);
-    expect(displayDistance(5, 'imperial')).toBeCloseTo(3.10685, 3);
+    expect(displayDistance(5, 'imperial')).toBe(5);
+    expect(displayDistance(5, 'mph')).toBe(5);
+    expect(distanceUnit()).toBe('km');
   });
 
-  it('parses user input distance to canonical km', () => {
-    expect(parseDistance('5', 'metric')).toBe(5);
-    expect(parseDistance('3.1', 'imperial')).toBeCloseTo(4.989, 1);
-    expect(parseDistance('abc', 'metric')).toBeNull();
-    expect(parseDistance('0', 'metric')).toBeNull();
+  it('parses user input distance directly as km', () => {
+    expect(parseDistance('5')).toBe(5);
+    expect(parseDistance('3.1')).toBe(3.1);
+    expect(parseDistance('abc')).toBeNull();
+    expect(parseDistance('0')).toBeNull();
   });
 });
 
@@ -160,7 +188,8 @@ describe('formatCardioEffort', () => {
       },
       'metric',
     );
-    expect(formatted).toBe('6.0 km/h · 2.0% · 30m');
+    expect(formatted).toContain('6.0 kph · 2.0% · 30m');
+    expect(formatted).toContain('steps');
   });
 
   it('formats outside effort', () => {
@@ -172,6 +201,124 @@ describe('formatCardioEffort', () => {
       },
       'metric',
     );
-    expect(formatted).toBe('5.0 km · 30m');
+    expect(formatted).toContain('5.0 km');
+    expect(formatted).toContain('steps');
+    expect(formatted).toContain('30m');
+  });
+});
+
+describe('estimateSteps', () => {
+  it('estimates steps based on distance and speed', () => {
+    // 5 km walk at 5 km/h -> ~1250 steps/km -> 6250 steps
+    const walking = estimateSteps(5, 5);
+    expect(walking).toBe(6250);
+
+    // 5 km run at 10 km/h -> ~980 steps/km -> 4900 steps
+    const running = estimateSteps(5, 10);
+    expect(running).toBe(4900);
+
+    // Baseline when speed is omitted: 1300 steps/km -> 6500 steps
+    const baseline = estimateSteps(5);
+    expect(baseline).toBe(6500);
+  });
+
+  it('adjusts for steep treadmill incline', () => {
+    const flat = estimateSteps(3, 5, 0);
+    const steep = estimateSteps(3, 5, 12);
+    expect(steep).toBeGreaterThan(flat!);
+  });
+
+  it('returns null for empty or non-positive distance', () => {
+    expect(estimateSteps(null)).toBeNull();
+    expect(estimateSteps(0)).toBeNull();
+    expect(estimateSteps(-2)).toBeNull();
+  });
+});
+
+describe('calculateTreadmillMetrics', () => {
+  it('calculates distance, estimated steps, and elevation gain', () => {
+    // 30 min at 6.0 km/h with 5% incline
+    const metrics = calculateTreadmillMetrics(6.0, 5.0, 1800);
+    expect(metrics.distanceKm).toBe(3.0);
+    expect(metrics.estimatedSteps).toBeGreaterThan(3500);
+    expect(metrics.elevationGainMeters).toBe(150); // 3000m * 0.05
+  });
+
+  it('handles flat treadmill', () => {
+    const metrics = calculateTreadmillMetrics(5.0, 0, 1800);
+    expect(metrics.distanceKm).toBe(2.5);
+    expect(metrics.elevationGainMeters).toBeNull();
+  });
+});
+
+describe('formatLiveCardioEstimate', () => {
+  it('formats live preview for treadmill', () => {
+    const preview = formatLiveCardioEstimate(
+      {
+        mode: 'treadmill',
+        speedKph: 6.0,
+        inclinePct: 4.0,
+        durationSeconds: 1800,
+      },
+      'metric',
+    );
+    expect(preview).toContain('3.00 km');
+    expect(preview).toContain('steps');
+    expect(preview).toContain('+120m elev');
+  });
+
+  it('formats live preview for outside distance with pace', () => {
+    const preview = formatLiveCardioEstimate(
+      {
+        mode: 'outside',
+        distanceKm: 5.0,
+        durationSeconds: 1500, // 25 mins -> 5:00/km
+      },
+      'metric',
+    );
+    expect(preview).toContain('steps');
+    expect(preview).toContain('5:00 /km');
+  });
+});
+
+describe('formatStepEstimate', () => {
+  it('formats step count nicely', () => {
+    expect(formatStepEstimate(3200)).toBe('~3,200 steps');
+    expect(formatStepEstimate(null)).toBe('');
+    expect(formatStepEstimate(0)).toBe('');
+  });
+});
+
+describe('calculateCardioSteps', () => {
+  it('calculates steps for outside cardio by distance', () => {
+    const steps = calculateCardioSteps({
+      mode: 'outside',
+      distanceKm: 2.0,
+      durationSeconds: 1200,
+    });
+    expect(steps).toBeGreaterThan(2000);
+  });
+
+  it('calculates steps for treadmill cardio by speed and time', () => {
+    const steps = calculateCardioSteps({
+      mode: 'treadmill',
+      speedKph: 6.0,
+      durationSeconds: 1800,
+      inclinePct: 0,
+    });
+    expect(steps).toBeGreaterThan(3000);
+  });
+
+  it('calculates fallback steps for duration-only entries', () => {
+    const steps = calculateCardioSteps({
+      mode: 'outside',
+      durationSeconds: 1800, // 30 mins * 105 steps/min = 3150
+    });
+    expect(steps).toBe(3150);
+  });
+
+  it('returns 0 for empty entries', () => {
+    expect(calculateCardioSteps({ mode: 'outside' })).toBe(0);
+    expect(calculateCardioSteps({ mode: 'treadmill' })).toBe(0);
   });
 });

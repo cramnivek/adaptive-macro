@@ -87,14 +87,18 @@ export const ExercisePicker = ({
   // Auto-detect cardio based on search input
   const handleSearchChange = (text: string) => {
     setSearch(text);
-    const isDetected = detectCardio(text);
-    if (isDetected) {
+    const trimmed = text.trim();
+    const isDetected = detectCardio(trimmed);
+    const historyItem = known.find((k) => k.name.toLowerCase() === trimmed.toLowerCase());
+
+    if (isDetected || historyItem?.isCardio) {
       setIsCardio(true);
       setAutoDetected(true);
-      setCardioMode(detectCardioMode(text));
-    } else if (autoDetected && !text.trim()) {
+      setCardioMode(detectCardioMode(trimmed, historyItem?.cardioMode));
+    } else if (autoDetected && !trimmed) {
       setAutoDetected(false);
       setIsCardio(initialMode === 'cardio');
+      setCardioMode('treadmill');
     }
   };
 
@@ -198,16 +202,13 @@ export const ExercisePicker = ({
       {/* Treadmill vs Outside selection for cardio */}
       {isCardio && (
         <View style={styles.cardioSelection}>
-          <Text style={styles.cardioLabel}>
-            {autoDetected ? 'AUTO-DETECTED CARDIO · SELECT MODE:' : 'CARDIO MODE:'}
-          </Text>
           <View style={styles.modeRow}>
             <Pressable
               onPress={() => setCardioMode('treadmill')}
               style={[styles.modeChip, cardioMode === 'treadmill' && styles.modeChipActive]}
             >
               <Text style={[styles.modeChipText, cardioMode === 'treadmill' && styles.modeChipTextActive]}>
-                🏃 Treadmill / Machine
+                🏃 Machine
               </Text>
             </Pressable>
             <Pressable
@@ -246,7 +247,7 @@ export const ExercisePicker = ({
             <Tappable
               onPress={() =>
                 onPick(item.recordedName ?? item.canonicalName, item.bodyweightBased, {
-                  isCardio,
+                  isCardio: isCardio || detectCardio(item.canonicalName),
                   mode: cardioMode,
                 })
               }
@@ -295,7 +296,7 @@ export const ExercisePicker = ({
                 <Text style={styles.name}>{item.name}</Text>
                 {itemIsCardio && (
                   <Text style={styles.meta}>
-                    Cardio · {itemMode === 'outside' ? 'Outside' : 'Treadmill'}
+                    Cardio · {itemMode === 'outside' ? 'Outside' : 'Machine'}
                   </Text>
                 )}
               </View>
@@ -310,8 +311,9 @@ export const ExercisePicker = ({
         <Tappable
           onPress={() => {
             const exact = matches.find((m) => m.canonicalName.toLowerCase() === term);
-            onPick(exact?.recordedName ?? search.trim(), exact?.bodyweightBased, {
-              isCardio,
+            const pickedName = exact?.recordedName ?? search.trim();
+            onPick(pickedName, exact?.bodyweightBased, {
+              isCardio: isCardio || detectCardio(pickedName),
               mode: cardioMode,
             });
           }}
@@ -320,7 +322,7 @@ export const ExercisePicker = ({
           <SlashPanel color={loud.loud} style={styles.slab}>
             <Text style={[styles.slabLabel, { color: loud.onLoud }]} numberOfLines={1}>
               ADD {search.trim().toUpperCase()}
-              {isCardio ? ` (${cardioMode.toUpperCase()})` : ''}
+              {isCardio ? ` (${cardioMode === 'outside' ? 'OUTSIDE' : 'MACHINE'})` : ''}
             </Text>
           </SlashPanel>
         </Tappable>
@@ -391,13 +393,6 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-  },
-  cardioLabel: {
-    fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: loud.loud,
-    marginBottom: space.xs,
   },
   modeRow: {
     flexDirection: 'row',

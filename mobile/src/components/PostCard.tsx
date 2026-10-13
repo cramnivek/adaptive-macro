@@ -6,7 +6,13 @@ import { Button } from './Controls';
 /** One workout post: the figures, the day's best, the first lifts, and what was said about it. */
 export const PostCard = ({ view, onDelete }: { view: PostView; onDelete?: () => void }) => {
   const { colors } = useTheme();
-  const facts = [view.date, view.duration, `${view.sets} ${view.sets === 1 ? 'set' : 'sets'}`, view.volume]
+  const facts = [
+    view.date,
+    view.duration,
+    view.sets > 0 ? `${view.sets} ${view.sets === 1 ? 'set' : 'sets'}` : null,
+    view.steps && view.steps > 0 ? `~${view.steps.toLocaleString()} steps` : null,
+    view.volume,
+  ]
     .filter(Boolean)
     .join(' · ');
   return (
@@ -21,7 +27,7 @@ export const PostCard = ({ view, onDelete }: { view: PostView; onDelete?: () => 
       )}
       {view.exercises.map((lift, index) => (
         <Text key={`${lift.name}-${index}`} style={[styles.lift, { color: colors.text }]}>
-          {lift.sets} {lift.sets === 1 ? 'set' : 'sets'} {lift.name} — {lift.best}
+          {lift.sets > 0 ? `${lift.sets} ${lift.sets === 1 ? 'set' : 'sets'} ` : ''}{lift.name} — {lift.best}
         </Text>
       ))}
       {view.more > 0 && (

@@ -1,7 +1,7 @@
 import { bodyweightForDates, milestonesOn, todayISO } from '@adaptive-macros/engine';
 import type { Milestone, SetType } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -62,16 +62,22 @@ import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import {
   type CardioMode,
+  type SpeedUnit,
+  calculateCardioSteps,
+  calculateTreadmillMetrics,
+  detectCardio,
+  detectCardioMode,
   displayDistance,
   displaySpeed,
-  distanceUnit,
   durationToInputMinutes,
+  estimateSteps,
   formatCardioEffort,
+  formatLiveCardioEstimate,
+  formatStepEstimate,
   parseDistance,
   parseDurationSeconds,
   parseIncline,
   parseSpeed,
-  speedUnit,
 } from '../src/cardio';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { font, radius, space } from '../src/theme';
@@ -275,11 +281,43 @@ export default function SessionScreen() {
     );
   };
 
+    /** Active speed unit: locked setting, or active speed unit if switchable (default kph). */
+  const speedUnit: SpeedUnit =
+    settings.speedUnitSetting === 'kph' || settings.speedUnitSetting === 'mph'
+      ? settings.speedUnitSetting
+      : (settings.activeSpeedUnit ?? 'kph');
+
+  const totalSteps = useMemo(() => {
+    let completedSteps = 0;
+    let draftSteps = 0;
+
+    for (const block of blocks) {
+      if (!block.isCardio) continue;
+      const mode = block.cardioMode ?? 'treadmill';
+      for (const row of block.rows) {
+        const steps = calculateCardioSteps({
+          mode,
+          speedKph: row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null,
+          inclinePct: row.incline?.trim() ? parseIncline(row.incline) : null,
+          durationSeconds: row.time?.trim() ? parseDurationSeconds(row.time) : null,
+          distanceKm: row.distance?.trim() ? parseDistance(row.distance) : null,
+        });
+        if (row.done) {
+          completedSteps += steps;
+        } else {
+          draftSteps += steps;
+        }
+      }
+    }
+
+    return completedSteps > 0 ? completedSteps : draftSteps;
+  }, [blocks, speedUnit]);
+
   /**
    * Switches between kilograms and pounds directly within the session view,
    * converting displayed weights in active rows so what the user typed adapts.
    */
-  const toggleUnits = () => {
+  const toggleWeightUnits = () => {
     const nextUnits: UnitSystem = settings.units === 'metric' ? 'imperial' : 'metric';
     const fromUnits = settings.units;
 
@@ -287,29 +325,7 @@ export default function SessionScreen() {
       current.map((block) => ({
         ...block,
         rows: block.rows.map((row) => {
-          if (row.isCardio) {
-            let nextSpeed = row.speed ?? '';
-            let nextDistance = row.distance ?? '';
-            if (row.speed?.trim()) {
-              const kph = parseSpeed(row.speed, fromUnits);
-              if (kph != null) {
-                const spd = displaySpeed(kph, nextUnits);
-                nextSpeed = spd != null ? spd.toFixed(1) : row.speed;
-              }
-            }
-            if (row.distance?.trim()) {
-              const km = parseDistance(row.distance, fromUnits);
-              if (km != null) {
-                const dst = displayDistance(km, nextUnits);
-                nextDistance = dst != null ? dst.toFixed(1) : row.distance;
-              }
-            }
-            return {
-              ...row,
-              speed: nextSpeed,
-              distance: nextDistance,
-            };
-          }
+          if (row.isCardio || block.isCardio) return row;
           if (!row.weight.trim()) return row;
           const kg = parseWeight(row.weight, fromUnits);
           if (kg === null) return row;
@@ -322,7 +338,40 @@ export default function SessionScreen() {
     );
 
     void updateSettings({ units: nextUnits });
-    notify('Units updated', `Switched to ${nextUnits === 'metric' ? 'kg · km' : 'lbs · miles'}.`);
+    notify('Weight unit updated', `Switched to ${nextUnits === 'metric' ? 'kg' : 'lbs'}.`);
+  };
+
+  /**
+   * Switches treadmill speed display between kph and mph directly within the session view,
+   * converting displayed speeds in active cardio rows. Outside distance remains strictly km.
+   */
+  const toggleSpeedUnits = () => {
+    const fromUnit: SpeedUnit = speedUnit;
+    const nextUnit: SpeedUnit = fromUnit === 'kph' ? 'mph' : 'kph';
+
+    setBlocks((current) =>
+      current.map((block) => ({
+        ...block,
+        rows: block.rows.map((row) => {
+          if (!row.isCardio && !block.isCardio) return row;
+          let nextSpeed = row.speed ?? '';
+          if (row.speed?.trim()) {
+            const kph = parseSpeed(row.speed, fromUnit);
+            if (kph != null) {
+              const spd = displaySpeed(kph, nextUnit);
+              nextSpeed = spd != null ? spd.toFixed(1) : row.speed;
+            }
+          }
+          return {
+            ...row,
+            speed: nextSpeed,
+          };
+        }),
+      })),
+    );
+
+    void updateSettings({ activeSpeedUnit: nextUnit });
+    notify('Speed unit updated', `Switched to ${nextUnit.toUpperCase()}.`);
   };
 
   /**
@@ -342,48 +391,96 @@ export default function SessionScreen() {
     );
   };
 
+  const showWeightSwitcher = settings.weightUnitSetting !== 'kg' && settings.weightUnitSetting !== 'lbs';
+  const showSpeedSwitcher = settings.speedUnitSetting !== 'kph' && settings.speedUnitSetting !== 'mph';
+
   const renderControls = () => (
     <View style={styles.headerControls}>
-      <Tappable
-        onPress={toggleUnits}
-        scaleTo={0.92}
-        style={[styles.unitToggle, styles.headerHit]}
-        accessibilityRole="button"
-        accessibilityLabel={`Switch units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
-      >
-        <View style={styles.unitToggleTrack}>
-          <View
-            style={[
-              styles.unitToggleThumb,
-              settings.units === 'metric' ? styles.unitThumbActive : styles.unitThumbInactive,
-            ]}
-          >
-            <Text
+      {showWeightSwitcher && (
+        <Tappable
+          onPress={toggleWeightUnits}
+          scaleTo={0.92}
+          style={[styles.unitToggle, styles.headerHit]}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch weight units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
+        >
+          <View style={styles.unitToggleTrack}>
+            <View
               style={[
-                styles.unitToggleText,
-                { color: settings.units === 'metric' ? loud.onLoud : loud.figureFaint },
+                styles.unitToggleThumb,
+                settings.units === 'metric' ? styles.unitThumbActive : styles.unitThumbInactive,
               ]}
             >
-              KG
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.unitToggleThumb,
-              settings.units === 'imperial' ? styles.unitThumbActive : styles.unitThumbInactive,
-            ]}
-          >
-            <Text
+              <Text
+                style={[
+                  styles.unitToggleText,
+                  { color: settings.units === 'metric' ? loud.onLoud : loud.figureFaint },
+                ]}
+              >
+                KG
+              </Text>
+            </View>
+            <View
               style={[
-                styles.unitToggleText,
-                { color: settings.units === 'imperial' ? loud.onLoud : loud.figureFaint },
+                styles.unitToggleThumb,
+                settings.units === 'imperial' ? styles.unitThumbActive : styles.unitThumbInactive,
               ]}
             >
-              LBS
-            </Text>
+              <Text
+                style={[
+                  styles.unitToggleText,
+                  { color: settings.units === 'imperial' ? loud.onLoud : loud.figureFaint },
+                ]}
+              >
+                LBS
+              </Text>
+            </View>
           </View>
-        </View>
-      </Tappable>
+        </Tappable>
+      )}
+
+      {showSpeedSwitcher && (
+        <Tappable
+          onPress={toggleSpeedUnits}
+          scaleTo={0.92}
+          style={[styles.unitToggle, styles.headerHit]}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch speed units, currently ${speedUnit}`}
+        >
+          <View style={styles.unitToggleTrack}>
+            <View
+              style={[
+                styles.unitToggleThumb,
+                speedUnit === 'kph' ? styles.unitThumbActive : styles.unitThumbInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.unitToggleText,
+                  { color: speedUnit === 'kph' ? loud.onLoud : loud.figureFaint },
+                ]}
+              >
+                KPH
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.unitToggleThumb,
+                speedUnit === 'mph' ? styles.unitThumbActive : styles.unitThumbInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.unitToggleText,
+                  { color: speedUnit === 'mph' ? loud.onLoud : loud.figureFaint },
+                ]}
+              >
+                MPH
+              </Text>
+            </View>
+          </View>
+        </Tappable>
+      )}
 
       <Tappable
         onPress={toggleAlert}
@@ -472,7 +569,7 @@ export default function SessionScreen() {
                   ? durationToInputMinutes(previous.durationSeconds)
                   : target?.targetTime
                     ? target.targetTime.replace(/[^\d.]/g, '')
-                    : '30',
+                    : '',
               distance:
                 previous?.distanceKm != null
                   ? String(displayDistance(previous.distanceKm, settings.units)?.toFixed(1))
@@ -517,8 +614,8 @@ export default function SessionScreen() {
         names.map(async (name) => {
           const mine = open.sets.filter((s) => s.exerciseName === name);
           const planned = plan.find((e) => e.name === name);
-          const isCardio = mine[0]?.isCardio ?? planned?.isCardio ?? false;
-          const cardioMode = (mine[0]?.cardioMode ?? planned?.cardioMode ?? 'treadmill') as CardioMode;
+          const isCardio = mine[0]?.isCardio ?? planned?.isCardio ?? detectCardio(name);
+          const cardioMode = (mine[0]?.cardioMode ?? planned?.cardioMode ?? detectCardioMode(name)) as CardioMode;
           const block = await blockFor(
             name,
             mine[0]?.bodyweightBased ?? planned?.bodyweightBased ?? false,
@@ -534,11 +631,11 @@ export default function SessionScreen() {
               isCardio: s.isCardio,
               cardioMode: (s.cardioMode as CardioMode) ?? cardioMode,
               speed:
-                s.speedKph != null ? String(displaySpeed(s.speedKph, settings.units)?.toFixed(1)) : '',
+                s.speedKph != null ? String(displaySpeed(s.speedKph, speedUnit)?.toFixed(1)) : '',
               incline: s.inclinePct != null ? String(s.inclinePct) : '',
               time: s.durationSeconds != null ? durationToInputMinutes(s.durationSeconds) : '',
               distance:
-                s.distanceKm != null ? String(displayDistance(s.distanceKm, settings.units)?.toFixed(1)) : '',
+                s.distanceKm != null ? String(displayDistance(s.distanceKm)?.toFixed(1)) : '',
             })),
             planned
               ? {
@@ -557,7 +654,7 @@ export default function SessionScreen() {
         }),
       );
     },
-    [blockFor, withTargetRows, settings.units],
+    [blockFor, withTargetRows, settings.units, speedUnit],
   );
 
   /**
@@ -745,9 +842,9 @@ export default function SessionScreen() {
     if (block.isCardio || row.isCardio) {
       const isOutside = block.cardioMode === 'outside';
       const parsedTime = row.time?.trim() ? parseDurationSeconds(row.time) : null;
-      const parsedSpeed = row.speed?.trim() ? parseSpeed(row.speed, settings.units) : null;
+      const parsedSpeed = row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null;
       const parsedIncline = row.incline?.trim() ? parseIncline(row.incline) : null;
-      const parsedDistance = row.distance?.trim() ? parseDistance(row.distance, settings.units) : null;
+      const parsedDistance = row.distance?.trim() ? parseDistance(row.distance) : null;
 
       if (isOutside) {
         if (!parsedDistance && !parsedTime) {
@@ -756,7 +853,7 @@ export default function SessionScreen() {
         }
       } else {
         if (!parsedSpeed && !parsedTime) {
-          notify('Enter speed or time', 'Fill in your treadmill speed or time before ticking.');
+          notify('Enter speed or time', 'Fill in your speed or time before ticking.');
           return;
         }
       }
@@ -782,17 +879,26 @@ export default function SessionScreen() {
       const written = refreshed?.sets.filter((s) => s.exerciseName === block.name) ?? [];
       editRow(blockIndex, rowIndex, { done: true, id: written[written.length - 1]?.id ?? null });
 
+      const estimatedSteps = isOutside
+        ? estimateSteps(
+            parsedDistance,
+            parsedTime && parsedDistance ? parsedDistance / (parsedTime / 3600) : null,
+          )
+        : calculateTreadmillMetrics(parsedSpeed, parsedIncline, parsedTime).estimatedSteps;
+
       thud('heavy');
       setLanded({
         rowKey: row.key,
         content: {
-          figure: isOutside
-            ? row.distance?.trim()
-              ? `${row.distance.trim()} ${distanceUnit(settings.units).toUpperCase()}`
-              : `${row.time?.trim() ?? ''} MIN`
-            : row.speed?.trim()
-              ? `${row.speed.trim()} ${speedUnit(settings.units).toUpperCase()}`
-              : `${row.time?.trim() ?? ''} MIN`,
+          figure: estimatedSteps
+            ? formatStepEstimate(estimatedSteps).toUpperCase()
+            : isOutside
+              ? row.distance?.trim()
+                ? `${row.distance.trim()} KM`
+                : `${row.time?.trim() ?? ''} MIN`
+              : row.speed?.trim()
+                ? `${row.speed.trim()} ${speedUnit.toUpperCase()}`
+                : `${row.time?.trim() ?? ''} MIN`,
           verdict: 'CARDIO DONE',
         },
       });
@@ -850,9 +956,9 @@ export default function SessionScreen() {
 
     if (row.isCardio || blocks[blockIndex].isCardio) {
       const parsedTime = row.time?.trim() ? parseDurationSeconds(row.time) : null;
-      const parsedSpeed = row.speed?.trim() ? parseSpeed(row.speed, settings.units) : null;
+      const parsedSpeed = row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null;
       const parsedIncline = row.incline?.trim() ? parseIncline(row.incline) : null;
-      const parsedDistance = row.distance?.trim() ? parseDistance(row.distance, settings.units) : null;
+      const parsedDistance = row.distance?.trim() ? parseDistance(row.distance) : null;
       await updateSetValues(row.id, null, 0, {
         speedKph: parsedSpeed,
         inclinePct: parsedIncline,
@@ -894,8 +1000,14 @@ export default function SessionScreen() {
     // The stored flag first, the catalogue's second. `exercises.bodyweight_based`
     // may hold a correction the user made through Settings, and the model's
     // guess must not quietly overwrite it — a row on record beats a guess.
-    const isCardio = cardio?.isCardio ?? known.find((k) => k.name === trimmed)?.isCardio ?? false;
-    const cardioMode = (cardio?.mode ?? known.find((k) => k.name === trimmed)?.cardioMode ?? 'treadmill') as CardioMode;
+    const isDetectedCardio = detectCardio(trimmed);
+    const isCardio =
+      cardio?.isCardio ||
+      (known.find((k) => k.name === trimmed)?.isCardio ?? false) ||
+      isDetectedCardio;
+    const cardioMode = (cardio?.mode ??
+      known.find((k) => k.name === trimmed)?.cardioMode ??
+      detectCardioMode(trimmed)) as CardioMode;
     const bodyweightBased =
       known.find((k) => k.name === trimmed)?.bodyweightBased ?? catalogueBodyweight ?? false;
     const block = await blockFor(trimmed, bodyweightBased, [], null, isCardio, cardioMode);
@@ -1004,7 +1116,13 @@ export default function SessionScreen() {
       // Nothing to say, and nothing worth blocking the exit for.
     }
 
-    notify('Workout saved', `${logged} ${logged === 1 ? 'set' : 'sets'} logged.`);
+    const strengthLogged = blocks.filter((b) => !b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
+    const cardioLogged = blocks.filter((b) => b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
+    const message =
+      strengthLogged > 0
+        ? `${strengthLogged} ${strengthLogged === 1 ? 'set' : 'sets'} logged${cardioLogged > 0 ? ` + ${cardioLogged} cardio` : ''}.`
+        : `${cardioLogged} cardio logged.`;
+    notify('Workout saved', message);
     router.back();
   };
 
@@ -1046,7 +1164,8 @@ export default function SessionScreen() {
     );
   }
 
-  const loggedCount = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
+  const strengthCount = blocks.filter((b) => !b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
+  const cardioCount = blocks.filter((b) => b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
   return (
     <Screen tone="loud">
@@ -1065,9 +1184,31 @@ export default function SessionScreen() {
       <View style={styles.hero}>
         <View style={styles.heroFigures}>
           <Text style={styles.clock}>{elapsed(session.startedAt, now)}</Text>
-          <View style={styles.heroCount}>
-            <CountUp value={loggedCount} style={styles.countFigure} />
-            <Text style={styles.countLabel}>{loggedCount === 1 ? 'SET' : 'SETS'}</Text>
+          <View style={styles.heroCounts}>
+            {strengthCount > 0 ? (
+              <View style={styles.heroCount}>
+                <CountUp value={strengthCount} style={styles.countFigure} />
+                <Text style={styles.countLabel}>{strengthCount === 1 ? 'SET' : 'SETS'}</Text>
+              </View>
+            ) : totalSteps === 0 && cardioCount === 0 ? (
+              <View style={styles.heroCount}>
+                <CountUp value={0} style={styles.countFigure} />
+                <Text style={styles.countLabel}>SETS</Text>
+              </View>
+            ) : null}
+            {totalSteps > 0 && (
+              <>
+                {strengthCount > 0 && <Text style={styles.heroCountDivider}>·</Text>}
+                <View style={styles.heroCount}>
+                  <CountUp
+                    value={totalSteps}
+                    format={(n) => `~${Math.round(n).toLocaleString('en-US')}`}
+                    style={styles.countFigure}
+                  />
+                  <Text style={styles.countLabel}>STEPS</Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
         <Tappable onPress={() => void finish()} scaleTo={0.93}>
@@ -1149,7 +1290,7 @@ export default function SessionScreen() {
                       block.cardioMode === 'treadmill' && styles.cardioModeChipTextActive,
                     ]}
                   >
-                    🏃 TREADMILL / MACHINE
+                    🏃 MACHINE
                   </Text>
                 </Tappable>
                 <Tappable
@@ -1183,10 +1324,10 @@ export default function SessionScreen() {
               <Text style={styles.target}>
                 {block.target.targetTime ? `Target: ${block.target.targetTime}` : ''}
                 {block.target.targetDistance != null
-                  ? ` · ${displayDistance(block.target.targetDistance, settings.units)?.toFixed(1)} ${distanceUnit(settings.units)}`
+                  ? ` · ${displayDistance(block.target.targetDistance)?.toFixed(1)} km`
                   : ''}
                 {block.target.targetSpeed != null
-                  ? ` · ${displaySpeed(block.target.targetSpeed, settings.units)?.toFixed(1)} ${speedUnit(settings.units)}`
+                  ? ` · ${displaySpeed(block.target.targetSpeed, speedUnit)?.toFixed(1)} ${speedUnit}`
                   : ''}
                 {block.target.targetIncline != null ? ` · ${block.target.targetIncline}%` : ''}
               </Text>
@@ -1212,9 +1353,9 @@ export default function SessionScreen() {
             )}
             {block.isCardio && block.cardioMode === 'treadmill' && (
               <View style={styles.columns}>
-                <Text style={[styles.col, styles.colSet]}>INT</Text>
+                <Text style={[styles.col, styles.colSet]}>#</Text>
                 <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
-                <Text style={[styles.col, styles.colCardioSpd]}>{speedUnit(settings.units).toUpperCase()}</Text>
+                <Text style={[styles.col, styles.colCardioSpd]}>{speedUnit.toUpperCase()}</Text>
                 <Text style={[styles.col, styles.colCardioInc]}>INCL%</Text>
                 <Text style={[styles.col, styles.colCardioTime]}>MIN</Text>
                 <View style={styles.colTick} />
@@ -1222,9 +1363,9 @@ export default function SessionScreen() {
             )}
             {block.isCardio && block.cardioMode === 'outside' && (
               <View style={styles.columns}>
-                <Text style={[styles.col, styles.colSet]}>EFF</Text>
+                <Text style={[styles.col, styles.colSet]}>#</Text>
                 <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
-                <Text style={[styles.col, styles.colCardioDist]}>{distanceUnit(settings.units).toUpperCase()}</Text>
+                <Text style={[styles.col, styles.colCardioDist]}>KM</Text>
                 <Text style={[styles.col, styles.colCardioTimeWide]}>MIN</Text>
                 <View style={styles.colTick} />
               </View>
@@ -1234,7 +1375,7 @@ export default function SessionScreen() {
               const previous = block.previous[rowIndex];
               const previousLabel = previous
                 ? block.isCardio
-                  ? formatCardioEffort(previous, settings.units)
+                  ? formatCardioEffort(previous, speedUnit)
                   : `${
                       previous.weightKg === null
                         ? 'BW'
@@ -1243,220 +1384,234 @@ export default function SessionScreen() {
                 : '—';
               const on = row.done ? loud.onLoud : loud.figure;
 
+              const liveEstimate = block.isCardio
+                ? formatLiveCardioEstimate(
+                    {
+                      mode: block.cardioMode ?? 'treadmill',
+                      speedKph: row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null,
+                      inclinePct: row.incline?.trim() ? parseIncline(row.incline) : null,
+                      durationSeconds: row.time?.trim() ? parseDurationSeconds(row.time) : null,
+                      distanceKm: row.distance?.trim() ? parseDistance(row.distance) : null,
+                    },
+                    speedUnit,
+                  )
+                : null;
+
               return (
-                <View
-                  key={row.key}
-                  style={[
-                    styles.row,
-                    row.done
-                      ? { backgroundColor: loud.loud, borderColor: loud.loud }
-                      : { backgroundColor: 'transparent', borderColor: loud.rule },
-                  ]}
-                >
-                  <Tappable
-                    onPress={() =>
-                      !block.isCardio &&
-                      editRow(blockIndex, rowIndex, {
-                        setType: row.setType === 'normal' ? 'warmup' : 'normal',
-                      })
-                    }
-                    scaleTo={block.isCardio ? 1 : 0.8}
-                    style={styles.colSet}
+                <View key={row.key}>
+                  <View
+                    style={[
+                      styles.row,
+                      row.done
+                        ? { backgroundColor: loud.loud, borderColor: loud.loud }
+                        : { backgroundColor: 'transparent', borderColor: loud.rule },
+                    ]}
                   >
+                    <Tappable
+                      onPress={() =>
+                        !block.isCardio &&
+                        editRow(blockIndex, rowIndex, {
+                          setType: row.setType === 'normal' ? 'warmup' : 'normal',
+                        })
+                      }
+                      scaleTo={block.isCardio ? 1 : 0.8}
+                      style={styles.colSet}
+                    >
+                      <Text
+                        style={[
+                          styles.setFigure,
+                          { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
+                        ]}
+                      >
+                        {/* Working sets are numbered among themselves, so a warm-up first
+                            gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
+                        {row.setType === 'warmup'
+                          ? 'W'
+                          : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
+                      </Text>
+                    </Tappable>
+
                     <Text
                       style={[
-                        styles.setFigure,
-                        { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
+                        styles.previous,
+                        styles.colPrev,
+                        { color: row.done ? loud.onLoud : loud.figureFaint },
                       ]}
+                      numberOfLines={1}
                     >
-                      {/* Working sets are numbered among themselves, so a warm-up first
-                          gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
-                      {row.setType === 'warmup'
-                        ? 'W'
-                        : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
+                      {previousLabel}
                     </Text>
-                  </Tappable>
 
-                  <Text
-                    style={[
-                      styles.previous,
-                      styles.colPrev,
-                      { color: row.done ? loud.onLoud : loud.figureFaint },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {previousLabel}
-                  </Text>
-
-                  {block.isCardio ? (
-                    block.cardioMode === 'outside' ? (
-                      <>
-                        <TextInput
-                          value={row.distance ?? ''}
-                          onChangeText={(distance) => editRow(blockIndex, rowIndex, { distance })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="decimal-pad"
-                          placeholder="—"
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colCardioDist,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                        <TextInput
-                          value={row.time ?? ''}
-                          onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="decimal-pad"
-                          placeholder="30"
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colCardioTimeWide,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                      </>
+                    {block.isCardio ? (
+                      block.cardioMode === 'outside' ? (
+                        <>
+                          <TextInput
+                            value={row.distance ?? ''}
+                            onChangeText={(distance) => editRow(blockIndex, rowIndex, { distance })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="decimal-pad"
+                            placeholder="—"
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colCardioDist,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                          <TextInput
+                            value={row.time ?? ''}
+                            onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="decimal-pad"
+                            placeholder="30"
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colCardioTimeWide,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <TextInput
+                            value={row.speed ?? ''}
+                            onChangeText={(speed) => editRow(blockIndex, rowIndex, { speed })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="decimal-pad"
+                            placeholder="—"
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colCardioSpd,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                          <TextInput
+                            value={row.incline ?? ''}
+                            onChangeText={(incline) => editRow(blockIndex, rowIndex, { incline })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="decimal-pad"
+                            placeholder="0"
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colCardioInc,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                          <TextInput
+                            value={row.time ?? ''}
+                            onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="decimal-pad"
+                            placeholder="30"
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colCardioTime,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                        </>
+                      )
                     ) : (
                       <>
                         <TextInput
-                          value={row.speed ?? ''}
-                          onChangeText={(speed) => editRow(blockIndex, rowIndex, { speed })}
+                          value={row.weight}
+                          onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
                           onBlur={() => void commitEdit(blockIndex, rowIndex)}
                           {...NOT_A_LOGIN}
                           keyboardType="decimal-pad"
+                          placeholder={block.bodyweightBased ? 'BW' : '—'}
+                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                          style={[
+                            styles.input,
+                            styles.colNum,
+                            row.done ? styles.inputOnLoud : styles.inputOnGround,
+                            { color: on },
+                          ]}
+                        />
+                        <TextInput
+                          value={row.reps}
+                          onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
+                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                          {...NOT_A_LOGIN}
+                          keyboardType="number-pad"
                           placeholder="—"
                           placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
                           style={[
                             styles.input,
-                            styles.colCardioSpd,
+                            styles.colNum,
                             row.done ? styles.inputOnLoud : styles.inputOnGround,
                             { color: on },
                           ]}
                         />
-                        <TextInput
-                          value={row.incline ?? ''}
-                          onChangeText={(incline) => editRow(blockIndex, rowIndex, { incline })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="decimal-pad"
-                          placeholder="0"
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colCardioInc,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                        <TextInput
-                          value={row.time ?? ''}
-                          onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="decimal-pad"
-                          placeholder="30"
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colCardioTime,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                      </>
-                    )
-                  ) : (
-                    <>
-                      <TextInput
-                        value={row.weight}
-                        onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
-                        onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                        {...NOT_A_LOGIN}
-                        keyboardType="decimal-pad"
-                        placeholder={block.bodyweightBased ? 'BW' : '—'}
-                        placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                        style={[
-                          styles.input,
-                          styles.colNum,
-                          row.done ? styles.inputOnLoud : styles.inputOnGround,
-                          { color: on },
-                        ]}
-                      />
-                      <TextInput
-                        value={row.reps}
-                        onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
-                        onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                        {...NOT_A_LOGIN}
-                        keyboardType="number-pad"
-                        placeholder="—"
-                        placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                        style={[
-                          styles.input,
-                          styles.colNum,
-                          row.done ? styles.inputOnLoud : styles.inputOnGround,
-                          { color: on },
-                        ]}
-                      />
-                      {row.done ? (
-                        <Tappable
-                          onPress={() => setRating({ blockIndex, rowIndex })}
-                          scaleTo={0.82}
-                          style={styles.colRpe}
-                          accessibilityLabel={
-                            row.rpe === null
-                              ? 'Rate how hard this set felt'
-                              : `Rated ${formatRpe(row.rpe)}. Change it.`
-                          }
-                        >
-                          <View
-                            style={[
-                              styles.rpeChip,
-                              row.rpe === null ? styles.rpeChipEmpty : styles.rpeChipSet,
-                            ]}
+                        {row.done ? (
+                          <Tappable
+                            onPress={() => setRating({ blockIndex, rowIndex })}
+                            scaleTo={0.82}
+                            style={styles.colRpe}
+                            accessibilityLabel={
+                              row.rpe === null
+                                ? 'Rate how hard this set felt'
+                                : `Rated ${formatRpe(row.rpe)}. Change it.`
+                            }
                           >
-                            <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
-                              {row.rpe === null ? '+' : formatRpe(row.rpe)}
-                            </Text>
-                          </View>
-                        </Tappable>
-                      ) : (
-                        <View style={styles.colRpe} />
-                      )}
-                    </>
-                  )}
+                            <View
+                              style={[
+                                styles.rpeChip,
+                                row.rpe === null ? styles.rpeChipEmpty : styles.rpeChipSet,
+                              ]}
+                            >
+                              <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
+                                {row.rpe === null ? '+' : formatRpe(row.rpe)}
+                              </Text>
+                            </View>
+                          </Tappable>
+                        ) : (
+                          <View style={styles.colRpe} />
+                        )}
+                      </>
+                    )}
 
-                  <Tappable
-                    onPress={() => void toggleRow(blockIndex, rowIndex)}
-                    scaleTo={0.78}
-                    style={styles.colTick}
-                    accessibilityLabel={row.done ? 'Undo this set' : 'Record this set'}
-                  >
-                    <Text style={[styles.tick, { color: row.done ? loud.onLoud : loud.figureFaint }]}>
-                      ✓
-                    </Text>
-                  </Tappable>
+                    <Tappable
+                      onPress={() => void toggleRow(blockIndex, rowIndex)}
+                      scaleTo={0.78}
+                      style={styles.colTick}
+                      accessibilityLabel={row.done ? 'Undo this set' : 'Record this set'}
+                    >
+                      <Text style={[styles.tick, { color: row.done ? loud.onLoud : loud.figureFaint }]}>
+                        ✓
+                      </Text>
+                    </Tappable>
 
-                  {landed?.rowKey === row.key && (
-                    <ImpactFrame content={landed.content} onDone={clearLanded} />
-                  )}
+                    {landed?.rowKey === row.key && (
+                      <ImpactFrame content={landed.content} onDone={clearLanded} />
+                    )}
+                  </View>
+
+                  {block.isCardio && liveEstimate ? (
+                    <View style={styles.cardioLiveBadge}>
+                      <Text style={styles.cardioLiveText}>{liveEstimate}</Text>
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
 
             <Tappable onPress={() => addRow(blockIndex)} style={styles.addSet} scaleTo={0.98}>
-              <Text style={styles.addSetLabel}>
-                {block.isCardio
-                  ? block.cardioMode === 'outside'
-                    ? '+ ADD EFFORT'
-                    : '+ ADD INTERVAL'
-                  : '+ ADD SET'}
-              </Text>
+              <Text style={styles.addSetLabel}>{block.isCardio ? '+ ADD INTERVAL' : '+ ADD SET'}</Text>
             </Tappable>
           </View>
         </FadeIn>
@@ -1682,7 +1837,13 @@ const styles = StyleSheet.create({
     color: loud.figure,
     fontVariant: ['tabular-nums'],
   },
+  heroCounts: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
   heroCount: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  heroCountDivider: {
+    fontFamily: font.display,
+    fontSize: 14,
+    color: loud.figureFaint,
+  },
   countFigure: {
     fontFamily: font.figure,
     fontSize: 14,
@@ -1760,6 +1921,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: space.sm,
     marginBottom: space.sm,
+  },
+  cardioLiveBadge: {
+    alignSelf: 'flex-end',
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: -2,
+    marginBottom: 6,
+    marginRight: 42,
+  },
+  cardioLiveText: {
+    fontFamily: font.figure,
+    fontSize: 10,
+    color: loud.figureMuted,
+    fontVariant: ['tabular-nums'],
   },
 
   row: {

@@ -73,4 +73,61 @@ describe('shareSummary', () => {
     const summary = shareSummary({ ...base, sets, milestone: { kind: 'load', value: 100, exercise: 'Bench Press (Barbell)' } });
     expect(summary.highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '100 kg' });
   });
+
+  it('does not count cardio as sets and estimates steps', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Walking',
+      bodyweightBased: false,
+      setIndex: 1,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'treadmill',
+      speedKph: 5.0,
+      inclinePct: 2.0,
+      durationSeconds: 1800,
+      distanceKm: 2.5,
+    };
+    const summary = shareSummary({ ...base, sets: [cardioSet] });
+    expect(summary.sets).toBe(0);
+    expect(summary.steps).toBeGreaterThan(0);
+    expect(summary.exercises[0]).toMatchObject({
+      name: 'Walking',
+      sets: 0,
+      isCardio: true,
+      best: expect.stringContaining('5.0 kph'),
+      detail: expect.stringContaining('Machine'),
+    });
+  });
+
+  it('keeps strength sets count separate from cardio in a mixed workout', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Morning Walk',
+      bodyweightBased: false,
+      setIndex: 4,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'outside',
+      durationSeconds: 1800,
+      distanceKm: 2.5,
+    };
+    const mixed = [...sets, cardioSet];
+    const summary = shareSummary({ ...base, sets: mixed });
+    // Still 5 strength sets, not 6
+    expect(summary.sets).toBe(5);
+    expect(summary.steps).toBeGreaterThan(0);
+    expect(summary.exercises.find((e) => e.name === 'Morning Walk')).toMatchObject({
+      sets: 0,
+      isCardio: true,
+      best: expect.stringContaining('2.5 km'),
+      detail: expect.stringContaining('Outside'),
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import type { Nutrients } from '@adaptive-macros/engine';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { font, radius, space, useTheme } from '../theme';
 import { useAnimatedTo } from '../theme/motion';
@@ -55,7 +55,8 @@ interface CalorieRingProps {
   size?: number;
 }
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedCircle =
+  Platform.OS === 'web' ? (Circle as any) : Animated.createAnimatedComponent(Circle);
 
 export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRingProps) => {
   const { colors } = useTheme();
@@ -78,24 +79,39 @@ export const CalorieRing = ({ consumedKcal, targetKcal, size = 148 }: CalorieRin
           strokeWidth={stroke}
           fill="none"
         />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={over ? colors.danger : colors.accent}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          // The arc sweeps to the new figure. Paired with the CountUp below,
-          // which travels over the same duration so the two agree.
-          strokeDashoffset={progress.interpolate({
-            inputRange: [0, 1],
-            outputRange: [circumference, 0],
-          })}
-          // Rotate so the arc starts at 12 o'clock rather than 3 o'clock.
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        {Platform.OS === 'web' ? (
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={over ? colors.danger : colors.accent}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - ratio)}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        ) : (
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={over ? colors.danger : colors.accent}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            // The arc sweeps to the new figure. Paired with the CountUp below,
+            // which travels over the same duration so the two agree.
+            strokeDashoffset={progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [circumference, 0],
+            })}
+            // Rotate so the arc starts at 12 o'clock rather than 3 o'clock.
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
       </Svg>
       <View style={[StyleSheet.absoluteFill, styles.ringCentre]}>
         <CountUp

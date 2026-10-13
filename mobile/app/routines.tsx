@@ -210,7 +210,7 @@ export default function RoutinesScreen() {
                 </View>
                 <Text style={[styles.note, { color: loud.figureFaint }]}>
                   {item.isCardio
-                    ? `${item.cardioMode === 'outside' ? 'Outside' : 'Treadmill'} · ${item.targetTime ?? '30m'}`
+                    ? `${item.cardioMode === 'outside' ? 'Outside' : 'Machine'} · ${item.targetTime ?? '30m'}`
                     : `${item.targetSets} sets${item.targetReps ? ` of ${item.targetReps}` : ''}${
                         item.bodyweightBased ? ' · bodyweight' : ''
                       }`}
@@ -331,7 +331,7 @@ export default function RoutinesScreen() {
             {routine.exercises
               .map((e) =>
                 e.isCardio
-                  ? `${e.name} (${e.cardioMode === 'outside' ? 'Outside' : 'Treadmill'}${
+                  ? `${e.name} (${e.cardioMode === 'outside' ? 'Outside' : 'Machine'}${
                       e.targetTime ? `, ${e.targetTime}` : ''
                     })`
                   : `${e.name} × ${e.targetSets}${e.targetReps ? ` (${e.targetReps})` : ''}`,

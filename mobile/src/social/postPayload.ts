@@ -1,4 +1,5 @@
 import type { Milestone } from '@adaptive-macros/engine';
+import { detectCardio } from '../cardio';
 import type { LoggedSet } from '../db';
 import { displayWeight, formatDateLong } from '../format';
 import { describeMilestone } from '../milestones';
@@ -67,12 +68,18 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
 
   // Warm-ups are left out of all of it, as they are everywhere else — a post
   // that counts the empty bar is flattering, not honest.
+  const isCardioSet = (set: LoggedSet): boolean => set.isCardio === true || detectCardio(set.exerciseName);
   const working = workout.sets.filter((set) => set.setType !== 'warmup');
+  const strengthSets = working.filter((set) => !isCardioSet(set));
   const order: string[] = [];
   for (const set of working) if (!order.includes(set.exerciseName)) order.push(set.exerciseName);
 
   const exercises = order.map((name): PostExercise => {
     const mine = working.filter((set) => set.exerciseName === name);
+    const isCardio = mine.some((set) => isCardioSet(set));
+    if (isCardio) {
+      return { name: storedName(name), sets: 0, best_kg: null, best_reps: 0 };
+    }
     const loaded = mine.filter((set) => set.weightKg !== null && set.weightKg > 0);
     if (loaded.length === 0) {
       return { name: storedName(name), sets: mine.length, best_kg: null, best_reps: Math.max(...mine.map((set) => set.reps)) };
@@ -87,7 +94,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
     return { name: storedName(name), sets: mine.length, best_kg: top.weightKg as number, best_reps: top.reps };
   });
 
-  const volumeKg = working.reduce((sum, set) => sum + (set.weightKg ?? 0) * set.reps, 0);
+  const volumeKg = strengthSets.reduce((sum, set) => sum + (set.weightKg ?? 0) * set.reps, 0);
   const minutes = Math.round((workout.finishedAt.getTime() - new Date(workout.startedAt).getTime()) / 60000);
 
   return {
@@ -95,7 +102,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
     title: workout.title.trim().slice(0, MAX_TITLE) || 'Workout',
     performed_on: workout.date,
     duration_min: Math.max(1, minutes),
-    sets: working.length,
+    sets: strengthSets.length,
     volume_kg: volumeKg > 0 ? volumeKg : null,
     exercises: exercises.slice(0, MAX_EXERCISES),
     highlight:
@@ -147,10 +154,14 @@ const readableHighlight = (highlight: unknown): Milestone | null => {
 
 export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): PostView => {
   const unit = units === 'metric' ? 'kg' : 'lb';
-  const best = (lift: PostExercise): string =>
-    lift.best_kg === null
+  const best = (lift: PostExercise): string => {
+    if (detectCardio(lift.name)) {
+      return 'Cardio';
+    }
+    return lift.best_kg === null
       ? `${lift.best_reps} reps`
       : `${trim(Math.round(displayWeight(lift.best_kg, units) * 10) / 10)} ${unit} × ${lift.best_reps}`;
+  };
   const lifts = readableLifts(row.exercises);
   const milestone = readableHighlight(row.highlight);
   const copy = milestone ? describeMilestone(milestone, units) : null;
@@ -164,7 +175,15 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
       row.volume_kg === null
         ? null
         : `${Math.round(displayWeight(row.volume_kg, units)).toLocaleString('en-US')} ${unit}`,
-    exercises: lifts.slice(0, maxExercises).map((lift) => ({ name: lift.name, sets: lift.sets, best: best(lift) })),
+    exercises: lifts.slice(0, maxExercises).map((lift) => {
+      const isCardio = detectCardio(lift.name);
+      return {
+        name: lift.name,
+        sets: lift.sets,
+        best: best(lift),
+        ...(isCardio ? { isCardio: true, detail: 'Completed' } : {}),
+      };
+    }),
     more: Math.max(0, lifts.length - maxExercises),
     highlight: copy ? { label: copy.label, figure: copy.figure } : null,
     caption: row.caption,
