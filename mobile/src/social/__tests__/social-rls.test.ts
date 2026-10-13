@@ -458,6 +458,24 @@ describe('word filter', () => {
     await expect(as(db, USER_B, `update profiles set display_name = 'badword' where id = $1`, [USER_B])).rejects.toThrow(/blocked_word/);
   });
 
+  it('refuses a listed word in a caption changed later', async () => {
+    const id = await post(db, USER_B);
+    await expect(as(db, USER_B, `update posts set caption = 'so badword' where id = $1`, [id])).rejects.toThrow(/blocked_word/);
+  });
+
+  it('refuses a listed word in a username, when the profile is made and when it is changed', async () => {
+    await expect(
+      as(db, USER_D, `insert into profiles (id, username, display_name) values ($1, 'x_badword_x', 'Dave')`, [USER_D]),
+    ).rejects.toThrow(/blocked_word/);
+    await expect(as(db, USER_B, `update profiles set username = 'badword99' where id = $1`, [USER_B])).rejects.toThrow(/blocked_word/);
+  });
+
+  it('refuses a listed word in a display name when the profile is made', async () => {
+    await expect(
+      as(db, USER_D, `insert into profiles (id, username, display_name) values ($1, 'dave', 'Bad Word? BADWORD')`, [USER_D]),
+    ).rejects.toThrow(/blocked_word/);
+  });
+
   it('raises exactly the error the app maps: P0001, message blocked_word', async () => {
     await expect(as(db, USER_B, `update profiles set display_name = 'badword' where id = $1`, [USER_B])).rejects.toMatchObject({
       code: 'P0001',
@@ -476,10 +494,26 @@ describe('word filter', () => {
 });
 
 describe('my_blocked_profiles', () => {
+  type Listed = { id: string; username: string; display_name: string };
+  const listed = (user: string) => as<Listed>(db, user, `select id, username, display_name from my_blocked_profiles()`);
+
   it('lists the people you blocked, and only yours', async () => {
     await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
-    expect((await as<{ username: string }>(db, USER_C, `select username from my_blocked_profiles()`)).map((r) => r.username)).toEqual(['bob']);
-    expect(await as(db, USER_B, `select username from my_blocked_profiles()`)).toEqual([]);
+    expect((await listed(USER_C)).map((r) => r.username)).toEqual(['bob']);
+    expect(await listed(USER_B)).toEqual([]);
+  });
+
+  it('names someone who blocked you first as they were when you blocked, and never reads their live profile', async () => {
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    await as(db, USER_B, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_B, USER_C]);
+    expect(await listed(USER_B)).toEqual([{ id: USER_C, username: 'carol', display_name: 'carol' }]);
+    await as(db, USER_C, `update profiles set username = 'carol2', display_name = 'Carol Two' where id = $1`, [USER_C]);
+    expect(await listed(USER_B)).toEqual([{ id: USER_C, username: 'carol', display_name: 'carol' }]);
+  });
+
+  it('keeps what the database saw, not what the blocker sent', async () => {
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id, username) values ($1, $2, 'forged')`, [USER_C, USER_B]);
+    expect((await listed(USER_C)).map((r) => r.username)).toEqual(['bob']);
   });
 
   it('is not open to someone signed out', async () => {
