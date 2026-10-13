@@ -206,7 +206,8 @@ const styles = StyleSheet.create({
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
   photoRow: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginBottom: space.xs },
-  photoAction: { paddingVertical: space.sm, paddingHorizontal: space.sm },
+  // Small type, but a full touch target: hitSlop is ignored on the web.
+  photoAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md },
   photoLabel: { fontFamily: font.uiStrong, fontSize: 12, letterSpacing: 1.2, color: loud.figureMuted },
   caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
