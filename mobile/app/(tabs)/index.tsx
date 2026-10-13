@@ -95,7 +95,15 @@ export default function TodayScreen() {
   const leftOut = dayStatus.get(selectedDate) === false;
 
   return (
-    <Screen title="Today" subtitle={formatDateLong(selectedDate)}>
+    <Screen
+      title="Today"
+      subtitle={formatDateLong(selectedDate)}
+      action={
+        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={{ padding: 10 }}>
+          <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
+        </Tappable>
+      }
+    >
       <HomeScreenNotice />
       <View style={styles.dateNav}>
         <Pressable

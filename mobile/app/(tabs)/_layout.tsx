@@ -57,11 +57,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="social"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" color={color} size={size} />,
+          title: 'Social',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" color={color} size={size} />,
         }}
+      />
+      <Tabs.Screen
+        name="settings"
+        // Out of the bar, which holds five at phone width, but still a route: the
+        // gear on Today and on Social opens it.
+        options={{ title: 'Settings', href: null }}
       />
     </Tabs>
   );

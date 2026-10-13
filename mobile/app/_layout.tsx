@@ -253,6 +253,46 @@ export default function RootLayout() {
                   headerTintColor: colors.text,
                 }}
               />
+              <Stack.Screen
+                name="people"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Find people',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="profile"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Profile',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="requests"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Follow requests',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="report"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Report',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
             </Stack>
           </StorageGate>
         </SocialProvider>
