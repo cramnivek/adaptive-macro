@@ -350,3 +350,36 @@ describe('feed', () => {
     await expect(as(db, null, `select * from feed_posts`)).rejects.toThrow(/permission denied/);
   });
 });
+
+describe('the names the app spells out', () => {
+  let db: PGlite;
+  beforeEach(async () => {
+    db = await freshDatabase();
+  });
+
+  // `feed.ts` tells a second follow, like or block from a real failure by the
+  // constraint name in the error, and reads the view's columns by name. Rename
+  // one in a migration and the app stops swallowing a harmless duplicate, or
+  // reads undefined, with nothing to say why. These are that contract.
+  it('keeps the constraint names feed.ts matches on', async () => {
+    const names = await as<{ conname: string }>(
+      db,
+      USER_A,
+      `select conname from pg_constraint where connamespace = 'public'::regnamespace`,
+    );
+    expect(names.map((row) => row.conname)).toEqual(
+      expect.arrayContaining(['follows_pkey', 'follows_follower_id_fkey', 'likes_pkey', 'blocks_pkey']),
+    );
+  });
+
+  it('keeps the feed columns the app reads', async () => {
+    const columns = await as<{ column_name: string }>(
+      db,
+      USER_A,
+      `select column_name from information_schema.columns where table_name = 'feed_posts'`,
+    );
+    expect(columns.map((row) => row.column_name)).toEqual(
+      expect.arrayContaining(['id', 'author_id', 'created_at', 'username', 'display_name', 'like_count', 'liked']),
+    );
+  });
+});
