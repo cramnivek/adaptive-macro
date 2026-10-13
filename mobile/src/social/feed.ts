@@ -156,8 +156,10 @@ export const unblock = async (them: string): Promise<void> => {
 
 export const blockedProfiles = async (): Promise<PublicProfile[]> => {
   // Profiles across a block are hidden from both people, so the blocked person's
-  // name comes from a function that answers for the caller's own blocks only.
-  // `my_blocked_profiles` arrives in Task 4; until then this fails.
+  // name comes from a function that answers for the caller's own blocks only. What
+  // it returns is what you could see when you blocked them, kept at that moment:
+  // reading their profile now would let anyone read one across a block by blocking
+  // back. Their Instagram handle is never kept, so it comes back null.
   const { data, error } = await client().rpc('my_blocked_profiles');
   if (error) fail(error);
   return (data ?? []) as PublicProfile[];
