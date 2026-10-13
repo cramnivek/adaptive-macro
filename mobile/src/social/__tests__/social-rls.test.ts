@@ -511,6 +511,14 @@ describe('my_blocked_profiles', () => {
     expect(await listed(USER_B)).toEqual([{ id: USER_C, username: 'carol', display_name: 'carol' }]);
   });
 
+  it('never returns an Instagram handle, even one the blocked person had when blocked', async () => {
+    await as(db, USER_B, `update profiles set instagram = 'bob_lifts' where id = $1`, [USER_B]);
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    expect(await as(db, USER_C, `select username, display_name, instagram from my_blocked_profiles()`)).toEqual([
+      { username: 'bob', display_name: 'bob', instagram: null },
+    ]);
+  });
+
   it('keeps what the database saw, not what the blocker sent', async () => {
     await as(db, USER_C, `insert into blocks (blocker_id, blocked_id, username) values ($1, $2, 'forged')`, [USER_C, USER_B]);
     expect((await listed(USER_C)).map((r) => r.username)).toEqual(['bob']);

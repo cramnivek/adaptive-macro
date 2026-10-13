@@ -97,17 +97,22 @@ create trigger profiles_word_filter before insert or update of username, display
 -- The people you have blocked. The list has to name them, but their live profile
 -- is hidden from you by the profiles policy (a block hides both ways), and
 -- reading it from here anyway would let anyone read a profile across a block:
--- block the account back and the list returns its current name, handle and
+-- block the account back and the list returns its current name and
 -- privacy, following it through every rename. Leaving the row out instead would
 -- tell you that you had been blocked. So a block keeps what you could see at the
 -- moment you made it, and the list reads that and never joins profiles.
 alter table public.blocks
   add column username text,
   add column display_name text,
-  add column instagram text,
   add column is_private boolean;
 
 -- The row is always overwritten, so what a user sends for these columns is ignored.
+-- The Instagram handle is deliberately not kept: the list shows a name and a
+-- username, and a handle added after the block must never reach the blocked person.
+-- One signal remains and is accepted on purpose: the snapshot is what you could see
+-- when you blocked them, and blocking again (after unblocking) refreshes it, so
+-- someone can learn the name you use at that moment. The alternative is a row with
+-- no name, or one that disappears, and either would tell you that you had been blocked.
 -- Triggers fire in name order, so this runs before blocks_target_exists; a block of
 -- an account that does not exist gets nulls here and is then dropped by that
 -- trigger, so it never lands. Either order would be correct.
@@ -115,8 +120,8 @@ create function public.snapshot_blocked_profile() returns trigger
   language plpgsql security definer set search_path = ''
   as $$
   begin
-    select p.username, p.display_name, p.instagram, p.is_private
-      into new.username, new.display_name, new.instagram, new.is_private
+    select p.username, p.display_name, p.is_private
+      into new.username, new.display_name, new.is_private
       from public.profiles p where p.id = new.blocked_id;
     return new;
   end
@@ -125,11 +130,12 @@ create trigger blocks_snapshot_profile before insert on public.blocks
   for each row execute function public.snapshot_blocked_profile();
 
 -- Security invoker: the blocks policy already limits the rows to your own blocks.
+-- instagram stays in the declared type because the app reads it; it is always null.
 create function public.my_blocked_profiles()
   returns table (id uuid, username text, display_name text, instagram text, is_private boolean)
   language sql stable security invoker set search_path = ''
   as $$
-    select b.blocked_id, b.username, b.display_name, b.instagram, b.is_private
+    select b.blocked_id, b.username, b.display_name, null::text as instagram, b.is_private
       from public.blocks b
      where b.blocker_id = (select auth.uid())
      order by b.username
