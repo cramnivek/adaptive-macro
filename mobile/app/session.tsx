@@ -14,7 +14,7 @@ import { TOUCH_TARGET } from '../src/components/Controls';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
-import { type ShareSummary, shareSummary } from '../src/shareCard';
+import { type ShareCard, shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
 import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
@@ -177,7 +177,7 @@ export default function SessionScreen() {
   /** Shown once the workout is saved, when the day was worth marking. */
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   /** The finished workout and its card, for the sheet that offers to share and post it. */
-  const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareSummary } | null>(null);
+  const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareCard } | null>(null);
   /** Sign-in is open over the finish sheet. */
   const [signingIn, setSigningIn] = useState(false);
   const social = useSocial();
