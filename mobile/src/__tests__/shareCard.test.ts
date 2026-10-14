@@ -62,7 +62,9 @@ describe('shareSummary', () => {
     expect(shareSummary({ ...base, sets: [set('Push-Up', null, 20)] }).volume).toBeNull();
   });
 
-  it('fits six lifts and counts the rest', () => {
+  // The summary carries six, which is what the text version lists; the picture
+  // names the first three of them and counts the rest itself.
+  it('carries six lifts and counts the rest', () => {
     const many = Array.from({ length: 8 }, (_, i) => set(`Lift ${i}`, 50, 10));
     const summary = shareSummary({ ...base, sets: many });
     expect(summary.exercises).toHaveLength(6);
@@ -129,5 +131,63 @@ describe('shareSummary', () => {
       best: expect.stringContaining('2.5 km'),
       detail: expect.stringContaining('Outside'),
     });
+  });
+});
+
+describe('the climb', () => {
+  it('stands every working set against the biggest, in the order they were done', () => {
+    const summary = shareSummary({
+      ...base,
+      sets: [set('Squat', 50, 10, 'warmup'), set('Squat', 100, 5), set('Squat', 50, 5)],
+    });
+    // The warm-up is no part of the day's shape, and the lighter set is half the taller one.
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('marks the lift that moved the most, so the day’s real work is the red block', () => {
+    const summary = shareSummary({
+      ...base,
+      sets: [set('Squat', 100, 5), set('Squat', 100, 5), set('Curl', 20, 10)],
+    });
+    expect(summary.climb.map((bar) => bar.top)).toEqual([true, true, false]);
+  });
+
+  it('draws a day with no weight on anything by its reps rather than flat', () => {
+    const summary = shareSummary({ ...base, sets: [set('Pull Up', null, 10), set('Pull Up', null, 5)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('has nothing to draw for a day with no working sets', () => {
+    expect(shareSummary({ ...base, sets: [set('Squat', 60, 10, 'warmup')] }).climb).toEqual([]);
+  });
+});
+
+describe('the climb on a day that was not lifting', () => {
+  const cardio = (exerciseName: string, durationSeconds: number): LoggedSet => ({
+    id: `c${durationSeconds}`,
+    exerciseName,
+    bodyweightBased: false,
+    setIndex: 1,
+    weightKg: null,
+    reps: 0,
+    setType: 'normal',
+    rpe: null,
+    isCardio: true,
+    cardioMode: 'treadmill',
+    speedKph: 8,
+    inclinePct: 0,
+    durationSeconds,
+    distanceKm: null,
+  });
+
+  it('stands cardio by its minutes, since it has neither weight nor reps', () => {
+    const summary = shareSummary({ ...base, title: 'Treadmill', sets: [cardio('Treadmill', 1200), cardio('Treadmill', 600)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('stands cardio at nothing on a day that also lifted, because the climb is about load', () => {
+    const summary = shareSummary({ ...base, sets: [set('Squat', 100, 5), cardio('Treadmill', 1200)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0]);
+    expect(summary.climb.map((bar) => bar.top)).toEqual([true, false]);
   });
 });

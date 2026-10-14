@@ -47,6 +47,52 @@ export interface ShareSummary {
   cardioDistanceKm?: number | null;
 }
 
+/**
+ * One working set as a bar: how tall it stands against the day's biggest, and
+ * whether it belongs to the exercise that did the most.
+ */
+export interface ClimbBar {
+  height: number;
+  top: boolean;
+}
+
+/**
+ * The card is the summary plus the shape of the day — every set, in order.
+ * That is the one thing the card draws which a post row does not carry: it is
+ * worked out here and drawn, never stored, because a reader elsewhere would
+ * need the sets themselves to draw it and a post is a summary.
+ */
+export type ShareCard = ShareSummary & { climb: ClimbBar[] };
+
+/**
+ * What a set is worth, for the picture: the weight it moved, or its reps when
+ * nothing that day carried weight, or its seconds when it has no reps either.
+ * Three scales, but only ever one of them in a day, so the bars stay comparable
+ * — and on a day that mixed lifting with cardio, the cardio sets stand at
+ * nothing, which is the truth about load.
+ */
+const climb = (sets: LoggedSet[]): ClimbBar[] => {
+  const working = sets.filter((set) => set.setType !== 'warmup');
+  const weighted = working.some((set) => (set.weightKg ?? 0) > 0);
+  const repped = working.some((set) => set.reps > 0);
+  const size = (set: LoggedSet): number => {
+    if (weighted) return (set.weightKg ?? 0) * set.reps;
+    if (repped) return set.reps;
+    return set.durationSeconds ?? 0;
+  };
+
+  const moved = new Map<string, number>();
+  for (const set of working) moved.set(set.exerciseName, (moved.get(set.exerciseName) ?? 0) + size(set));
+  let biggest: string | null = null;
+  for (const [name, total] of moved) if (biggest === null || total > (moved.get(biggest) as number)) biggest = name;
+
+  const peak = Math.max(0, ...working.map(size));
+  return working.map((set) => ({
+    height: peak > 0 ? size(set) / peak : 0,
+    top: set.exerciseName === biggest,
+  }));
+};
+
 /** Lifts beyond this are summed into "+ 2 more": a story card is not a log. */
 export const MAX_SHARE_EXERCISES = 6;
 
@@ -58,7 +104,7 @@ export const shareSummary = (input: {
   sets: LoggedSet[];
   units: UnitSystem;
   milestone: Milestone | null;
-}): ShareSummary => {
+}): ShareCard => {
   const working = input.sets.filter((s) => s.setType !== 'warmup');
   const isCardioSet = (s: LoggedSet): boolean => s.isCardio === true || detectCardio(s.exerciseName);
 
@@ -193,5 +239,6 @@ export const shareSummary = (input: {
     highlight: milestoneCopy ? { label: milestoneCopy.label, figure: milestoneCopy.figure } : null,
     steps: totalSteps > 0 ? totalSteps : null,
     cardioDistanceKm: totalDistanceKm > 0 ? totalDistanceKm : null,
+    climb: climb(input.sets),
   };
 };
