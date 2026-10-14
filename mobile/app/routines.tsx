@@ -25,7 +25,18 @@ import { formatDate } from '../src/format';
 import { font, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
-type Draft = { name: string; bodyweightBased: boolean; targetSets: number; targetReps?: string | null };
+type Draft = {
+  name: string;
+  bodyweightBased: boolean;
+  targetSets: number;
+  targetReps?: string | null;
+  isCardio?: boolean;
+  cardioMode?: 'treadmill' | 'outside' | null;
+  targetTime?: string | null;
+  targetDistance?: number | null;
+  targetSpeed?: number | null;
+  targetIncline?: number | null;
+};
 
 /**
  * Routines: named, ordered exercise lists with a target set count each.
@@ -38,7 +49,12 @@ export default function RoutinesScreen() {
   const router = useRouter();
 
   const [routines, setRoutines] = useState<Routine[] | null>(null);
-  const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
+  const [known, setKnown] = useState<{
+    name: string;
+    bodyweightBased: boolean;
+    isCardio: boolean;
+    cardioMode?: 'treadmill' | 'outside' | null;
+  }[]>([]);
   const [past, setPast] = useState<{ id: string; name: string; date: string; exercises: string[] }[]>([]);
 
   const [editing, setEditing] = useState<string | null>(null);
@@ -48,6 +64,7 @@ export default function RoutinesScreen() {
   // up a name neither knows. A plain text box here saved whatever was typed,
   // misspellings included, as a new exercise with no how-to.
   const [picking, setPicking] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'exercise' | 'cardio'>('exercise');
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   const { settings } = useApp();
   const [busy, setBusy] = useState(false);
@@ -81,24 +98,40 @@ export default function RoutinesScreen() {
         bodyweightBased: e.bodyweightBased,
         targetSets: e.targetSets,
         targetReps: e.targetReps,
+        isCardio: e.isCardio,
+        cardioMode: e.cardioMode,
+        targetTime: e.targetTime,
+        targetDistance: e.targetDistance,
+        targetSpeed: e.targetSpeed,
+        targetIncline: e.targetIncline,
       })),
     );
   };
 
-  const addToDraft = (name: string, catalogueBodyweight?: boolean) => {
+  const addToDraft = (
+    name: string,
+    catalogueBodyweight?: boolean,
+    cardio?: { isCardio: boolean; mode: 'treadmill' | 'outside' },
+  ) => {
     const trimmed = name.trim();
     setPicking(false);
     if (!trimmed) return;
     if (draft.some((d) => d.name === trimmed)) {
       return notify('Already in this routine', `${trimmed} is already listed.`);
     }
+    const isCardio = cardio?.isCardio ?? known.find((k) => k.name === trimmed)?.isCardio ?? false;
+    const cardioMode = cardio?.mode ?? known.find((k) => k.name === trimmed)?.cardioMode ?? 'treadmill';
+
     setDraft((current) => [
       ...current,
       {
         name: trimmed,
         // A flag on record beats the catalogue's guess, as in a session.
         bodyweightBased: known.find((k) => k.name === trimmed)?.bodyweightBased ?? catalogueBodyweight ?? false,
-        targetSets: 3,
+        targetSets: isCardio ? 1 : 3,
+        isCardio,
+        cardioMode,
+        targetTime: isCardio ? '30m' : null,
       },
     ]);
   };
@@ -113,7 +146,7 @@ export default function RoutinesScreen() {
 
   const save = async () => {
     if (!draftName.trim()) return notify('Name it', 'Give the routine a name first.');
-    if (draft.length === 0) return notify('No exercises', 'Add at least one exercise.');
+    if (draft.length === 0) return notify('No exercises', 'Add at least one exercise or cardio activity.');
 
     setBusy(true);
     try {
@@ -160,17 +193,27 @@ export default function RoutinesScreen() {
           <Field label="Routine name" value={draftName} onChangeText={setDraftName} placeholder="Push A" />
         </Card>
 
-        <Card loud title="Exercises">
+        <Card loud title="Exercises & Cardio">
           <Text style={[styles.note, { color: loud.figureFaint }]}>
             The order here is the order you do them in.
           </Text>
           {draft.map((item, index) => (
             <View key={item.name} style={[styles.row, { borderColor: loud.rule }]}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{item.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{item.name}</Text>
+                  {item.isCardio && (
+                    <Text style={{ fontFamily: font.display, fontSize: 10, color: loud.loud }}>
+                      CARDIO
+                    </Text>
+                  )}
+                </View>
                 <Text style={[styles.note, { color: loud.figureFaint }]}>
-                  {item.targetSets} sets{item.targetReps ? ` of ${item.targetReps}` : ''}
-                  {item.bodyweightBased ? ' · bodyweight' : ''}
+                  {item.isCardio
+                    ? `${item.cardioMode === 'outside' ? 'Outside' : 'Machine'} · ${item.targetTime ?? '30m'}`
+                    : `${item.targetSets} sets${item.targetReps ? ` of ${item.targetReps}` : ''}${
+                        item.bodyweightBased ? ' · bodyweight' : ''
+                      }`}
                 </Text>
               </View>
               <Pressable onPress={() => move(index, -1)} style={styles.iconBtn}>
@@ -179,18 +222,40 @@ export default function RoutinesScreen() {
               <Pressable onPress={() => move(index, 1)} style={styles.iconBtn}>
                 <Text style={{ color: loud.figureMuted }}>↓</Text>
               </Pressable>
-              <Pressable
-                onPress={() =>
-                  setDraft((c) =>
-                    c.map((d, i) =>
-                      i === index ? { ...d, targetSets: (d.targetSets % 6) + 1 } : d,
-                    ),
-                  )
-                }
-                style={styles.iconBtn}
-              >
-                <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>sets</Text>
-              </Pressable>
+              {item.isCardio ? (
+                <Pressable
+                  onPress={() =>
+                    setDraft((c) =>
+                      c.map((d, i) =>
+                        i === index
+                          ? {
+                              ...d,
+                              cardioMode: d.cardioMode === 'outside' ? 'treadmill' : 'outside',
+                            }
+                          : d,
+                      ),
+                    )
+                  }
+                  style={styles.iconBtn}
+                >
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.loud, fontSize: 11 }}>
+                    {item.cardioMode === 'outside' ? '🌲' : '🏃'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() =>
+                    setDraft((c) =>
+                      c.map((d, i) =>
+                        i === index ? { ...d, targetSets: (d.targetSets % 6) + 1 } : d,
+                      ),
+                    )
+                  }
+                  style={styles.iconBtn}
+                >
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>sets</Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => setDraft((c) => c.filter((_, i) => i !== index))}
                 style={styles.iconBtn}
@@ -205,17 +270,41 @@ export default function RoutinesScreen() {
               known={known}
               patterns={patterns}
               geminiApiKey={settings.foodLookup.geminiApiKey}
+              initialMode={pickerMode}
               onPick={addToDraft}
               onCancel={() => setPicking(false)}
             />
           ) : (
-            <Tappable onPress={() => setPicking(true)} scaleTo={0.97} style={styles.addExercise}>
-              <SlashPanel color={loud.panel} style={styles.addSlab}>
-                <Text style={{ fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.figure }}>
-                  + ADD EXERCISE
-                </Text>
-              </SlashPanel>
-            </Tappable>
+            <View style={styles.addButtonsRow}>
+              <Tappable
+                onPress={() => {
+                  setPickerMode('exercise');
+                  setPicking(true);
+                }}
+                scaleTo={0.97}
+                style={{ flex: 1 }}
+              >
+                <SlashPanel color={loud.panel} style={styles.addSlab}>
+                  <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.figure }}>
+                    + EXERCISE
+                  </Text>
+                </SlashPanel>
+              </Tappable>
+              <Tappable
+                onPress={() => {
+                  setPickerMode('cardio');
+                  setPicking(true);
+                }}
+                scaleTo={0.97}
+                style={{ flex: 1 }}
+              >
+                <SlashPanel color={loud.loud} style={styles.addSlab}>
+                  <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.onLoud }}>
+                    + CARDIO
+                  </Text>
+                </SlashPanel>
+              </Tappable>
+            </View>
           )}
         </Card>
 
@@ -240,9 +329,14 @@ export default function RoutinesScreen() {
         <Card key={routine.id} title={routine.name}>
           <Text style={[styles.note, { color: loud.figureFaint }]}>
             {routine.exercises
-              .map((e) => `${e.name} × ${e.targetSets}${e.targetReps ? ` (${e.targetReps})` : ''}`)
-              .join(' · ') ||
-              'No exercises'}
+              .map((e) =>
+                e.isCardio
+                  ? `${e.name} (${e.cardioMode === 'outside' ? 'Outside' : 'Machine'}${
+                      e.targetTime ? `, ${e.targetTime}` : ''
+                    })`
+                  : `${e.name} × ${e.targetSets}${e.targetReps ? ` (${e.targetReps})` : ''}`,
+              )
+              .join(' · ') || 'No exercises'}
           </Text>
           <View style={styles.actions}>
             <Pressable onPress={() => void moveRoutine(routine.id, -1).then(refresh)} style={styles.iconBtn}>
@@ -285,11 +379,17 @@ export default function RoutinesScreen() {
               onPress={() =>
                 startNew(
                   session.name,
-                  session.exercises.map((name) => ({
-                    name,
-                    bodyweightBased: known.find((k) => k.name === name)?.bodyweightBased ?? false,
-                    targetSets: 3,
-                  })),
+                  session.exercises.map((name) => {
+                    const k = known.find((item) => item.name === name);
+                    return {
+                      name,
+                      bodyweightBased: k?.bodyweightBased ?? false,
+                      targetSets: k?.isCardio ? 1 : 3,
+                      isCardio: k?.isCardio ?? false,
+                      cardioMode: k?.cardioMode ?? 'treadmill',
+                      targetTime: k?.isCardio ? '30m' : null,
+                    };
+                  }),
                 )
               }
               style={[styles.row, { borderColor: loud.rule }]}
@@ -324,6 +424,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  addButtonsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
   addExercise: { marginTop: space.sm },
   addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
 });

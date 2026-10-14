@@ -1,3 +1,4 @@
+import { detectCardio, formatCardioEffort } from './cardio';
 import type { LoggedSet } from './db';
 import { displayWeight } from './format';
 import { formatRpe } from './rpe';
@@ -20,8 +21,12 @@ export const groupByExercise = (sets: LoggedSet[]): { name: string; sets: Logged
 /**
  * One set as a line: "80 kg × 8", "220.5 lb × 5", "12 reps" for a set with no added load,
  * with " @ 8" appended when an RPE was recorded. Weights rounded to 0.1 in the reader's units.
+ * Cardio sets format distance, speed, incline, duration, and steps estimates.
  */
 export const setLine = (set: LoggedSet, units: UnitSystem): string => {
+  if (set.isCardio || detectCardio(set.exerciseName)) {
+    return formatCardioEffort(set, units);
+  }
   const loaded = set.weightKg !== null && set.weightKg > 0;
   const body = loaded
     ? `${trim(Math.round(displayWeight(set.weightKg as number, units) * 10) / 10)} ${units === 'metric' ? 'kg' : 'lb'} × ${set.reps}`

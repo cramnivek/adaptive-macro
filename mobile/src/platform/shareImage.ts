@@ -61,13 +61,21 @@ export const drawShareCard = (summary: ShareSummary): HTMLCanvasElement => {
   ctx.font = `400 40px ${font.ui}`;
   ctx.fillText(summary.date, PAD, 500);
 
-  // Three figures across: how long, how many, how much.
-  const stats: [string, string][] = [
-    ['TIME', summary.duration],
-    ['SETS', String(summary.sets)],
-    ...(summary.volume ? ([['LIFTED', summary.volume]] as [string, string][]) : []),
-  ];
-  const column = (W - PAD * 2) / 3;
+  // Three figures across: how long, how many, how much, or cardio metrics.
+  const stats: [string, string][] = [['TIME', summary.duration]];
+  if (summary.sets > 0) {
+    stats.push(['SETS', String(summary.sets)]);
+  } else if (summary.steps && summary.steps > 0) {
+    stats.push(['STEPS', `~${summary.steps.toLocaleString()}`]);
+  }
+  if (summary.volume) {
+    stats.push(['LIFTED', summary.volume]);
+  } else if (summary.cardioDistanceKm && summary.cardioDistanceKm > 0) {
+    stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
+  } else if (summary.sets > 0 && summary.steps && summary.steps > 0 && stats.length < 3) {
+    stats.push(['STEPS', `~${summary.steps.toLocaleString()}`]);
+  }
+  const column = (W - PAD * 2) / Math.max(3, stats.length);
   stats.forEach(([label, value], i) => {
     const x = PAD + column * i;
     ctx.fillStyle = loud.figureFaint;
@@ -92,7 +100,7 @@ export const drawShareCard = (summary: ShareSummary): HTMLCanvasElement => {
     y += 260;
   }
 
-  // The lifts, each with its best set.
+  // The lifts, each with its best set or cardio effort.
   ctx.fillStyle = loud.rule;
   ctx.fillRect(PAD, y, W - PAD * 2, 3);
   y += 30;
@@ -107,7 +115,11 @@ export const drawShareCard = (summary: ShareSummary): HTMLCanvasElement => {
     ctx.fillText(best, W - PAD - ctx.measureText(best).width, y);
     ctx.fillStyle = loud.figureFaint;
     ctx.font = `400 30px ${font.ui}`;
-    ctx.fillText(`${exercise.sets} ${exercise.sets === 1 ? 'set' : 'sets'}`, PAD, y + 40);
+    if (!exercise.isCardio) {
+      ctx.fillText(`${exercise.sets} ${exercise.sets === 1 ? 'set' : 'sets'}`, PAD, y + 40);
+    } else if (exercise.detail) {
+      ctx.fillText(exercise.detail, PAD, y + 40);
+    }
     y += 40;
   }
   if (summary.more > 0) {
@@ -146,12 +158,23 @@ export const shareCardFile = async (summary: ShareSummary): Promise<{ file: File
   return { file, url: URL.createObjectURL(blob) };
 };
 
-const asText = (summary: ShareSummary): string =>
-  [
+const asText = (summary: ShareSummary): string => {
+  const meta: string[] = [summary.duration];
+  if (summary.sets > 0) meta.push(`${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}`);
+  if (summary.volume) meta.push(summary.volume);
+  if (summary.cardioDistanceKm && summary.cardioDistanceKm > 0) meta.push(`${summary.cardioDistanceKm.toFixed(1)} km`);
+  if (summary.steps && summary.steps > 0) meta.push(`~${summary.steps.toLocaleString()} steps`);
+
+  return [
     `${summary.title} — ${summary.date}`,
-    `${summary.duration} · ${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}${summary.volume ? ` · ${summary.volume}` : ''}`,
-    ...summary.exercises.map((e) => `${e.name}: ${e.best}`),
+    meta.join(' · '),
+    ...summary.exercises.map((e) =>
+      e.isCardio
+        ? `${e.name}: ${e.best}${e.detail ? ` (${e.detail})` : ''}`
+        : `${e.name}: ${e.best}`
+    ),
   ].join('\n');
+};
 
 /**
  * Hands the card to the system share sheet; on a browser without file

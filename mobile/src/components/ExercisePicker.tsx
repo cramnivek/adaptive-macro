@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { EnrichmentParseError } from '../ai/exercises';
 import type { MovementPattern } from '../ai/exercises';
 import { GroundedLookupError, enrichExercises } from '../api/gemini';
+import {
+  type CardioMode,
+  detectCardio,
+  detectCardioMode,
+} from '../cardio';
 import { linkExerciseToCatalogue, searchCatalogue, upsertCatalogueEntry } from '../db';
 import type { CatalogueEntry } from '../db';
 import { font, radius, space } from '../theme';
@@ -15,9 +20,27 @@ import { Tappable } from './Tappable';
 
 const couldNotLookUp = 'Could not look that up. You can still add it.';
 
+const CARDIO_SUGGESTIONS = [
+  'Walking',
+  'Jogging',
+  'Running',
+  'Biking',
+  'Cycling',
+  'Treadmill Walk',
+  'Elliptical',
+  'Rowing',
+  'Stair Climber',
+  'Hiking',
+];
+
 interface ExercisePickerProps {
   /** Exercises already on record, for the history list and the bodyweight flag. */
-  known: { name: string; bodyweightBased: boolean }[];
+  known: {
+    name: string;
+    bodyweightBased: boolean;
+    isCardio?: boolean;
+    cardioMode?: 'treadmill' | 'outside' | null;
+  }[];
   /** Movement glyph per name, shared with the block headers. */
   patterns: Record<string, MovementPattern>;
   geminiApiKey: string;
@@ -27,22 +50,20 @@ interface ExercisePickerProps {
    * first logged, and logging under a second spelling forks that history in
    * two and blanks both halves.
    */
-  onPick: (name: string, catalogueBodyweight?: boolean) => void;
+  onPick: (
+    name: string,
+    catalogueBodyweight?: boolean,
+    cardio?: { isCardio: boolean; mode: CardioMode },
+  ) => void;
   onCancel: () => void;
+  initialMode?: 'exercise' | 'cardio';
 }
 
 /**
- * Finding or naming the next exercise.
+ * Finding or naming the next exercise or cardiovascular activity.
  *
- * Lifted out of the session screen, which had grown past 1,100 lines with
- * this living inside it: its own search, its own catalogue lookups, a Gemini
- * enrichment with a debounce and two refs guarding it, and a render a hundred
- * lines long. None of that touches the sets being logged, and the screen is
- * the file edited on nearly every change.
- *
- * Mounted only while picking, so its state starts fresh every time it opens
- * and needs no resetting when it closes — what used to be a `setSearch('')`
- * after every add is simply the component going away.
+ * Supports auto-detecting cardio inputs (walking, jogging, running, biking, etc.)
+ * with explicit selection for treadmill vs outside.
  */
 export const ExercisePicker = ({
   known,
@@ -50,18 +71,36 @@ export const ExercisePicker = ({
   geminiApiKey,
   onPick,
   onCancel,
+  initialMode = 'exercise',
 }: ExercisePickerProps) => {
   const [search, setSearch] = useState('');
   const [matches, setMatches] = useState<CatalogueEntry[]>([]);
   const [enriching, setEnriching] = useState(false);
-  // What to say when the lookup came back with nothing. A name the model
-  // declines is left unlinked and *reported*, not guessed at; the picker used
-  // to swallow it and leave the progress line as the only thing that happened.
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
-  // Same guard as the food search: one automatic call per distinct term, so a
-  // failed enrichment cannot refire and retyping costs nothing.
+  const [isCardio, setIsCardio] = useState(initialMode === 'cardio');
+  const [cardioMode, setCardioMode] = useState<CardioMode>('treadmill');
+  const [autoDetected, setAutoDetected] = useState(false);
+
   const autoEnriched = useRef<Set<string>>(new Set());
   const latestTerm = useRef('');
+
+  // Auto-detect cardio based on search input
+  const handleSearchChange = (text: string) => {
+    setSearch(text);
+    const trimmed = text.trim();
+    const isDetected = detectCardio(trimmed);
+    const historyItem = known.find((k) => k.name.toLowerCase() === trimmed.toLowerCase());
+
+    if (isDetected || historyItem?.isCardio) {
+      setIsCardio(true);
+      setAutoDetected(true);
+      setCardioMode(detectCardioMode(trimmed, historyItem?.cardioMode));
+    } else if (autoDetected && !trimmed) {
+      setAutoDetected(false);
+      setIsCardio(initialMode === 'cardio');
+      setCardioMode('treadmill');
+    }
+  };
 
   useEffect(() => {
     const term = search.trim();
@@ -82,15 +121,11 @@ export const ExercisePicker = ({
     };
   }, [search]);
 
-  // A name the catalogue does not know is the dead end worth removing. Wait for
-  // typing to settle, then classify it and write its how-to, once.
+  // Only enrich strength training exercises with Gemini if not in cardio mode
   useEffect(() => {
     const term = search.trim();
-    if (enriching || term.length < 2) return;
+    if (isCardio || enriching || term.length < 2) return;
     if (matches.length > 0 || autoEnriched.current.has(term)) return;
-    // An exercise already on record is not a dead end, whatever the catalogue
-    // knows about it: the picker lists it below and tapping it works. Spending a
-    // call to be told what `exercises` already holds is the waste worth avoiding.
     if (known.some((k) => k.name.toLowerCase().includes(term.toLowerCase()))) return;
 
     const timer = setTimeout(() => {
@@ -105,16 +140,11 @@ export const ExercisePicker = ({
           }
           const id = await upsertCatalogueEntry(entries[0]);
           await linkExerciseToCatalogue(entries[0].requestedName, id);
-          // By the name the model returned, which may not contain what was typed.
           const found = await searchCatalogue(entries[0].canonicalName);
-          // The user may have kept typing while this was in flight.
           if (latestTerm.current === term) setMatches(found);
         })
         .catch((error) => {
-          // Typing the name still works; the failure only means it arrives
-          // without a pattern or a how-to, which is better than blocking the set.
           if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
-          // Only the two lookup failures are expected; anything else is a bug.
           if (error instanceof GroundedLookupError || error instanceof EnrichmentParseError) return;
           console.warn('exercise enrichment failed', error);
         })
@@ -122,12 +152,8 @@ export const ExercisePicker = ({
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [search, enriching, matches.length, known, geminiApiKey]);
+  }, [search, enriching, matches.length, known, geminiApiKey, isCardio]);
 
-  // Catalogue matches first, then the exercises already on record that no match
-  // covers. Rendering matches alone gave a device with a year of history and no
-  // seeding run an empty box, and made typing a name it already knew fire a
-  // Gemini call for it. A row with no icon and no muscle still logs sets.
   const term = search.trim().toLowerCase();
   const knownMatches = known.filter(
     (k) =>
@@ -141,23 +167,99 @@ export const ExercisePicker = ({
 
   return (
     <View style={styles.picker}>
+      {/* Category selector */}
+      <View style={styles.tabRow}>
+        <Pressable
+          onPress={() => {
+            setIsCardio(false);
+            setAutoDetected(false);
+          }}
+          style={[styles.tab, !isCardio && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, !isCardio ? styles.tabTextActive : styles.tabTextInactive]}>
+            EXERCISE / LIFT
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setIsCardio(true)}
+          style={[styles.tab, isCardio && styles.tabActive]}
+        >
+          <Text style={[styles.tabText, isCardio ? styles.tabTextActive : styles.tabTextInactive]}>
+            CARDIO
+          </Text>
+        </Pressable>
+      </View>
+
       <TextInput
         value={search}
-        onChangeText={setSearch}
-        placeholder="Search or type a new exercise"
+        onChangeText={handleSearchChange}
+        placeholder={isCardio ? 'Search or type cardio (e.g. Walking, Running)' : 'Search or type a new exercise'}
         placeholderTextColor={loud.figureFaint}
         autoFocus
         style={styles.input}
       />
+
+      {/* Treadmill vs Outside selection for cardio */}
+      {isCardio && (
+        <View style={styles.cardioSelection}>
+          <View style={styles.modeRow}>
+            <Pressable
+              onPress={() => setCardioMode('treadmill')}
+              style={[styles.modeChip, cardioMode === 'treadmill' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, cardioMode === 'treadmill' && styles.modeChipTextActive]}>
+                🏃 Machine
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setCardioMode('outside')}
+              style={[styles.modeChip, cardioMode === 'outside' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, cardioMode === 'outside' && styles.modeChipTextActive]}>
+                🌲 Outside / Distance
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Quick suggestions when in cardio mode with empty or short search */}
+      {isCardio && search.trim().length === 0 && (
+        <View style={styles.suggestionsContainer}>
+          <Text style={styles.group}>POPULAR CARDIO ACTIVITIES</Text>
+          <View style={styles.suggestionChips}>
+            {CARDIO_SUGGESTIONS.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => handleSearchChange(item)}
+                style={styles.suggestionChip}
+              >
+                <Text style={styles.suggestionText}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
       <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
         {matches.map((item, index) => (
           <FadeIn key={item.id} delay={Math.min(index, 6) * 25}>
             <Tappable
-              onPress={() => onPick(item.recordedName ?? item.canonicalName, item.bodyweightBased)}
+              onPress={() =>
+                onPick(item.recordedName ?? item.canonicalName, item.bodyweightBased, {
+                  isCardio: isCardio || detectCardio(item.canonicalName),
+                  mode: cardioMode,
+                })
+              }
               scaleTo={0.985}
               style={styles.row}
             >
-              <ExerciseIcon pattern={item.movementPattern} size={20} color={loud.loud} />
+              <ExerciseIcon
+                pattern={item.movementPattern}
+                isCardio={isCardio}
+                size={20}
+                color={loud.loud}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.canonicalName}</Text>
                 <Text style={styles.meta}>
@@ -169,19 +271,38 @@ export const ExercisePicker = ({
           </FadeIn>
         ))}
         {knownMatches.length > 0 && <Text style={styles.group}>FROM YOUR HISTORY</Text>}
-        {knownMatches.map((item) => (
-          <Tappable
-            key={`known:${item.name}`}
-            onPress={() => onPick(item.name)}
-            scaleTo={0.985}
-            style={styles.row}
-          >
-            <ExerciseIcon pattern={patterns[item.name]} size={20} color={loud.loud} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
-            </View>
-          </Tappable>
-        ))}
+        {knownMatches.map((item) => {
+          const itemIsCardio = item.isCardio ?? isCardio;
+          const itemMode = item.cardioMode ?? cardioMode;
+          return (
+            <Tappable
+              key={`known:${item.name}`}
+              onPress={() =>
+                onPick(item.name, item.bodyweightBased, {
+                  isCardio: itemIsCardio,
+                  mode: itemMode,
+                })
+              }
+              scaleTo={0.985}
+              style={styles.row}
+            >
+              <ExerciseIcon
+                pattern={patterns[item.name]}
+                isCardio={itemIsCardio}
+                size={20}
+                color={loud.loud}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{item.name}</Text>
+                {itemIsCardio && (
+                  <Text style={styles.meta}>
+                    Cardio · {itemMode === 'outside' ? 'Outside' : 'Machine'}
+                  </Text>
+                )}
+              </View>
+            </Tappable>
+          );
+        })}
         {enriching && <Text style={styles.note}>Looking that exercise up…</Text>}
         {enrichNote !== null && !enriching && <Text style={styles.note}>{enrichNote}</Text>}
       </ScrollView>
@@ -189,16 +310,19 @@ export const ExercisePicker = ({
       {search.trim() !== '' && (
         <Tappable
           onPress={() => {
-            // Typing a catalogue name out in full is the same tap by another
-            // route, so it has to resolve to the same recorded name.
             const exact = matches.find((m) => m.canonicalName.toLowerCase() === term);
-            onPick(exact?.recordedName ?? search, exact?.bodyweightBased);
+            const pickedName = exact?.recordedName ?? search.trim();
+            onPick(pickedName, exact?.bodyweightBased, {
+              isCardio: isCardio || detectCardio(pickedName),
+              mode: cardioMode,
+            });
           }}
           scaleTo={0.97}
         >
           <SlashPanel color={loud.loud} style={styles.slab}>
             <Text style={[styles.slabLabel, { color: loud.onLoud }]} numberOfLines={1}>
               ADD {search.trim().toUpperCase()}
+              {isCardio ? ` (${cardioMode === 'outside' ? 'OUTSIDE' : 'MACHINE'})` : ''}
             </Text>
           </SlashPanel>
         </Tappable>
@@ -220,6 +344,36 @@ const styles = StyleSheet.create({
     padding: space.sm,
     marginBottom: space.md,
   },
+  tabRow: {
+    flexDirection: 'row',
+    gap: space.xs,
+    marginBottom: space.sm,
+  },
+  tab: {
+    flex: 1,
+    minHeight: TOUCH_TARGET - 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  tabActive: {
+    backgroundColor: loud.loud,
+    borderColor: loud.loud,
+  },
+  tabText: {
+    fontFamily: font.display,
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  tabTextActive: {
+    color: loud.onLoud,
+  },
+  tabTextInactive: {
+    color: loud.figureFaint,
+  },
   input: {
     minHeight: TOUCH_TARGET - 10,
     borderRadius: radius.sm,
@@ -232,12 +386,69 @@ const styles = StyleSheet.create({
     backgroundColor: loud.panel,
     borderColor: loud.rule,
   },
+  cardioSelection: {
+    backgroundColor: loud.panel,
+    borderRadius: radius.sm,
+    padding: space.sm,
+    marginBottom: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: space.xs,
+  },
+  modeChip: {
+    flex: 1,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+    backgroundColor: loud.ground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    paddingHorizontal: space.xs,
+  },
+  modeChipActive: {
+    backgroundColor: loud.loud,
+    borderColor: loud.loud,
+  },
+  modeChipText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    color: loud.figureMuted,
+  },
+  modeChipTextActive: {
+    color: loud.onLoud,
+  },
+  suggestionsContainer: {
+    marginBottom: space.sm,
+  },
+  suggestionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  suggestionChip: {
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  suggestionText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: loud.figure,
+  },
   group: {
     fontFamily: font.display,
     fontSize: 9,
     letterSpacing: 1.4,
     color: loud.figureFaint,
-    paddingTop: space.md,
+    paddingTop: space.sm,
     paddingBottom: 4,
   },
   note: { fontFamily: font.ui, fontSize: 12, padding: space.md, color: loud.figureFaint },

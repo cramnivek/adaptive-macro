@@ -21,6 +21,10 @@ interface FinishSheetProps {
   onPost: (caption: string) => Promise<void>;
   onNeedAccount: () => void;
   onDone: (posted: boolean) => void;
+  /** Opens the save-as-routine sheet. Omit to hide the button. */
+  onSaveAsRoutine?: () => void;
+  /** The routine was saved from this workout. */
+  routineSaved?: boolean;
 }
 
 /**
@@ -31,7 +35,7 @@ interface FinishSheetProps {
  * you see is what gets sent, and it is ready before the tap, which is the only
  * moment a browser will open the share sheet.
  */
-export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNeedAccount, onDone }: FinishSheetProps) => {
+export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNeedAccount, onDone, onSaveAsRoutine, routineSaved = false }: FinishSheetProps) => {
   const insets = useSafeAreaInsets();
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
   const [drawing, setDrawing] = useState(false);
@@ -119,7 +123,19 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           <Text style={styles.title}>WORKOUT DONE</Text>
           {summary && (
             <Text style={styles.subtitle}>
-              {summary.duration} · {summary.sets} {summary.sets === 1 ? 'set' : 'sets'}{summary.volume ? ` · ${summary.volume}` : ''}
+              {[
+                summary.duration,
+                summary.sets > 0 ? `${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}` : null,
+                summary.volume,
+                summary.cardioDistanceKm && summary.cardioDistanceKm > 0
+                  ? `${summary.cardioDistanceKm.toFixed(1)} km`
+                  : null,
+                summary.steps && summary.steps > 0
+                  ? `~${summary.steps.toLocaleString()} steps`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           )}
 
@@ -151,6 +167,21 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           </Tappable>
           {!postLeads && postButton}
           {note && <Text style={styles.note}>{note}</Text>}
+          {onSaveAsRoutine && (
+            <Tappable
+              onPress={() => { if (!routineSaved) onSaveAsRoutine(); }}
+              scaleTo={0.97}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: routineSaved }}
+              style={[styles.action, routineSaved && styles.spent]}
+            >
+              <SlashPanel color={loud.panel} style={styles.button}>
+                <Text style={[styles.buttonLabel, { color: loud.figure }]}>
+                  {routineSaved ? 'ROUTINE SAVED' : 'SAVE AS ROUTINE'}
+                </Text>
+              </SlashPanel>
+            </Tappable>
+          )}
           <Tappable onPress={leave} scaleTo={0.97} style={styles.action}>
             <SlashPanel color={loud.panel} style={styles.button}>
               <Text style={[styles.buttonLabel, { color: loud.figure }]}>DONE</Text>

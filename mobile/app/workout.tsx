@@ -7,10 +7,12 @@ import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
-import { deleteSet, discardSession, pastSession, sessionSets, updateSetValues } from '../src/db';
+import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
+import { deleteSet, discardSession, listRoutines, pastSession, sessionSets, updateSetValues } from '../src/db';
 import type { LoggedSet } from '../src/db';
 import { confirm } from '../src/dialog';
 import { formatDateLong } from '../src/format';
+import { detectCardio } from '../src/cardio';
 import { groupByExercise, setLine } from '../src/pastWorkout';
 import { shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
@@ -71,6 +73,15 @@ export default function WorkoutScreen() {
   const [editing, setEditing] = useState<LoggedSet | null>(null);
   // Back from sign-in (or profile setup), the sheet comes back with its caption.
   useFocusEffect(useCallback(() => setSigningIn(false), []));
+  /** The save-as-routine sheet is open, and whether this workout has been saved as one. */
+  const [savingRoutine, setSavingRoutine] = useState(false);
+  const [routineSaved, setRoutineSaved] = useState(false);
+  const [routineNames, setRoutineNames] = useState<string[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      void listRoutines().then((all) => setRoutineNames(all.map((r) => r.name)));
+    }, []),
+  );
 
   const load = useCallback(async (): Promise<Loaded> => {
     const past = id ? await pastSession(id) : null;
@@ -166,37 +177,56 @@ export default function WorkoutScreen() {
       <Card loud title={summary.title} subtitle={formatDateLong(past.date)}>
         <View style={styles.stats}>
           <Stat label="TIME" value={summary.duration} />
-          <Stat label="WORKING SETS" value={String(summary.sets)} />
-          {summary.volume !== null && <Stat label="VOLUME" value={summary.volume} />}
+          {summary.sets > 0 ? (
+            <Stat label="WORKING SETS" value={String(summary.sets)} />
+          ) : summary.steps && summary.steps > 0 ? (
+            <Stat label="STEPS" value={`~${summary.steps.toLocaleString()}`} />
+          ) : null}
+          {summary.volume !== null ? (
+            <Stat label="VOLUME" value={summary.volume} />
+          ) : summary.cardioDistanceKm && summary.cardioDistanceKm > 0 ? (
+            <Stat label="DISTANCE" value={`${summary.cardioDistanceKm.toFixed(1)} km`} />
+          ) : summary.sets > 0 && summary.steps && summary.steps > 0 ? (
+            <Stat label="STEPS" value={`~${summary.steps.toLocaleString()}`} />
+          ) : null}
         </View>
       </Card>
 
-      {groups.map((group) => (
-        <Card loud key={group.name} title={group.name}>
-          {group.sets.map((set, index) => (
-            <Tappable
-              key={set.id}
-              onPress={() => setEditing(set)}
-              scaleTo={0.99}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit set ${
-                set.setType === 'warmup'
-                  ? 'warm-up'
-                  : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length
-              }, ${setLine(set, settings.units)}`}
-              style={[styles.row, { borderColor: loud.rule }]}
-            >
-              <Text style={[styles.number, set.setType === 'warmup' && { color: loud.warn }]}>
-                {/* Working sets are counted without the warm-ups before them, as the logger counts them. */}
-                {set.setType === 'warmup'
-                  ? 'W'
-                  : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
-              </Text>
-              <Text style={styles.line}>{setLine(set, settings.units)}</Text>
-            </Tappable>
-          ))}
-        </Card>
-      ))}
+      {groups.map((group) => {
+        const isCardio = group.sets.some((s) => s.isCardio) || detectCardio(group.name);
+        return (
+          <Card loud key={group.name} title={group.name}>
+            {group.sets.map((set, index) => (
+              <Tappable
+                key={set.id}
+                onPress={() => setEditing(set)}
+                scaleTo={0.99}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isCardio
+                    ? `${group.name}, ${setLine(set, settings.units)}`
+                    : `Edit set ${
+                        set.setType === 'warmup'
+                          ? 'warm-up'
+                          : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length
+                      }, ${setLine(set, settings.units)}`
+                }
+                style={[styles.row, { borderColor: loud.rule }]}
+              >
+                <Text style={[styles.number, set.setType === 'warmup' && { color: loud.warn }]}>
+                  {/* Working sets are counted without the warm-ups before them, as the logger counts them. */}
+                  {isCardio
+                    ? '—'
+                    : set.setType === 'warmup'
+                    ? 'W'
+                    : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
+                </Text>
+                <Text style={styles.line}>{setLine(set, settings.units)}</Text>
+              </Tappable>
+            ))}
+          </Card>
+        );
+      })}
 
       {/* A post is a snapshot on the server; correcting a set here does not reach it. */}
       <Text style={styles.hint}>
@@ -204,6 +234,13 @@ export default function WorkoutScreen() {
       </Text>
 
       <Button tone="loud" label="Share or post" onPress={() => setSharing(true)} />
+      <Button
+        tone="loud"
+        variant="subtle"
+        label={routineSaved ? 'Routine saved' : 'Save as routine'}
+        disabled={routineSaved}
+        onPress={() => setSavingRoutine(true)}
+      />
       <Button tone="loud" variant="danger" label="Delete workout" onPress={() => void remove()} />
 
       <EditSetSheet
@@ -257,6 +294,18 @@ export default function WorkoutScreen() {
           router.push(social.session ? '/profile-setup' : '/sign-in');
         }}
         onDone={() => setSharing(false)}
+      />
+
+      <SaveRoutineSheet
+        visible={savingRoutine}
+        initialName={past.name === 'Workout' ? '' : past.name}
+        sets={sets}
+        existingNames={routineNames}
+        onCancel={() => setSavingRoutine(false)}
+        onSaved={() => {
+          setSavingRoutine(false);
+          setRoutineSaved(true);
+        }}
       />
     </Screen>
   );
