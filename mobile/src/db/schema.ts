@@ -173,4 +173,28 @@ export const MIGRATIONS: string[] = [
     marked_at TEXT NOT NULL
   );
   `,
+  // v8 — cardiovascular activities in routines and sessions
+  //
+  // Adds support for tracking cardio alongside lifting exercises.
+  // Cardio mode: 'treadmill' or 'outside'.
+  // Treadmill variables: speed_kph, incline_pct, duration_seconds.
+  // Outside variables: distance_km, duration_seconds.
+  `
+  ALTER TABLE exercises ADD COLUMN is_cardio INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE exercises ADD COLUMN cardio_mode TEXT;
+
+  ALTER TABLE routine_exercises ADD COLUMN is_cardio INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE routine_exercises ADD COLUMN cardio_mode TEXT;
+  ALTER TABLE routine_exercises ADD COLUMN target_time TEXT;
+  ALTER TABLE routine_exercises ADD COLUMN target_distance REAL;
+  ALTER TABLE routine_exercises ADD COLUMN target_speed REAL;
+  ALTER TABLE routine_exercises ADD COLUMN target_incline REAL;
+
+  ALTER TABLE sets ADD COLUMN is_cardio INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE sets ADD COLUMN cardio_mode TEXT;
+  ALTER TABLE sets ADD COLUMN speed_kph REAL;
+  ALTER TABLE sets ADD COLUMN incline_pct REAL;
+  ALTER TABLE sets ADD COLUMN duration_seconds INTEGER;
+  ALTER TABLE sets ADD COLUMN distance_km REAL;
+  `,
 ];

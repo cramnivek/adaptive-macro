@@ -75,4 +75,26 @@ describe('setLine', () => {
     expect(setLine(set('Squat', 80, 8, 8.5), 'metric')).toBe('80 kg × 8 @ 8.5');
     expect(setLine(set('Pull Up', null, 10, 9), 'metric')).toBe('10 reps @ 9');
   });
+
+  it('formats cardio sets with effort and steps instead of reps', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Walking',
+      bodyweightBased: false,
+      setIndex: 1,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'treadmill',
+      speedKph: 5.0,
+      inclinePct: 2.0,
+      durationSeconds: 1800,
+    };
+    expect(setLine(cardioSet, 'metric')).toContain('5.0 kph');
+    expect(setLine(cardioSet, 'metric')).toContain('2.0%');
+    expect(setLine(cardioSet, 'metric')).toContain('30m');
+    expect(setLine(cardioSet, 'metric')).not.toContain('0 reps');
+  });
 });

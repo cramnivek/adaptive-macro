@@ -14,7 +14,8 @@
     "start": "npm run start --workspace @adaptive-macros/mobile",
     "ios": "npm run ios --workspace @adaptive-macros/mobile",
     "android": "npm run android --workspace @adaptive-macros/mobile",
-    "web": "npm run web --workspace @adaptive-macros/mobile"
+    "web": "npm run web --workspace @adaptive-macros/mobile",
+    "dev": "npm run web --workspace @adaptive-macros/mobile"
   },
   "license": "MIT",
   "overrides": {

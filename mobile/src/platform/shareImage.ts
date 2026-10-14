@@ -104,7 +104,13 @@ const headline = (title: string): { text: string; red: boolean }[][] => {
   ];
 };
 
-/** The one figure the card leads with, and what it was. */
+/**
+ * The one figure the card leads with, and what it was: a new best if the day
+ * made one, then the weight moved, then — on a day that was cardio rather than
+ * lifting — the distance, then the steps, and sets if the day was none of those.
+ * Whatever leads is left out of the row below, so the card never says a number
+ * twice.
+ */
 const heroOf = (summary: ShareCard): { figure: string; label: string; red: boolean } => {
   if (summary.highlight) {
     return { figure: summary.highlight.figure, label: `NEW BEST · ${summary.highlight.label}`, red: true };
@@ -116,6 +122,12 @@ const heroOf = (summary: ShareCard): { figure: string; label: string; red: boole
       label: `${summary.volume.slice(cut + 1).toUpperCase()} MOVED`,
       red: false,
     };
+  }
+  if (summary.cardioDistanceKm) {
+    return { figure: summary.cardioDistanceKm.toFixed(1), label: 'KM COVERED', red: false };
+  }
+  if (summary.steps) {
+    return { figure: `~${summary.steps.toLocaleString('en-US')}`, label: 'STEPS', red: false };
   }
   return { figure: String(summary.sets), label: 'SETS DONE', red: false };
 };
@@ -258,14 +270,22 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   ctx.fillText(fit(ctx, hero.label, INNER), PAD, y);
   track(ctx, 0);
 
-  // The rest of the day across one row, each figure as wide as it needs to be.
+  // The rest of the day across one row, each figure as wide as it needs to be,
+  // and never a figure the hero has already said.
+  const lifting = summary.sets > 0;
   const lifts = summary.exercises.length + summary.more;
   const stats: [string, string][] = [['TIME', summary.duration]];
-  // Sets lead the card on a day with no weight on anything; saying the number
-  // twice would waste the row.
-  if (hero.label !== 'SETS DONE') stats.push(['SETS', String(summary.sets)]);
+  if (lifting && hero.label !== 'SETS DONE') stats.push(['SETS', String(summary.sets)]);
   if (hero.red && summary.volume) stats.push(['LIFTED', summary.volume]);
-  stats.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
+  if (summary.cardioDistanceKm && hero.label !== 'KM COVERED') {
+    stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
+  }
+  if (summary.steps && hero.label !== 'STEPS') {
+    stats.push(['STEPS', `~${summary.steps.toLocaleString('en-US')}`]);
+  }
+  // Counting the treadmill as a lift would be a lie, and the panel below names
+  // what was done anyway, so the count is only there on a day that lifted.
+  if (lifting) stats.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
 
   const gap = 52;
   const cellWidth = (label: string, value: string, px: number): number => {
@@ -302,10 +322,14 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     x += cell + gap;
   });
 
-  // The lifts, and the shape of the session, in one panel at the foot.
-  const rows = summary.exercises;
+  // The lifts, and the shape of the session, in one panel at the foot. The
+  // summary carries six for the text version; three of them are named here and
+  // the rest are counted, because a story card is not a log.
+  const NAMED = 3;
+  const rows = summary.exercises.slice(0, NAMED);
+  const unnamed = summary.more + Math.max(0, summary.exercises.length - NAMED);
   const bottom = H - 150;
-  const panelH = 40 + 34 + rows.length * 110 + (summary.more > 0 ? 50 : 0) + 50 + 118 + 40;
+  const panelH = 40 + 34 + rows.length * 110 + (unnamed > 0 ? 50 : 0) + 50 + 118 + 40;
   const top = bottom - panelH;
   // Over a photo the panel keeps a little of it, so the card reads as one
   // picture rather than a black box dropped on someone's shoulder.
@@ -324,7 +348,8 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   ctx.font = `600 28px ${font.uiStrong}`;
   track(ctx, 10);
   ctx.fillStyle = faint;
-  ctx.fillText('TOP LIFTS', left, y);
+  // A day of nothing but cardio has no lifts to head a list with.
+  ctx.fillText(lifting ? 'TOP LIFTS' : 'WHAT YOU DID', left, y);
   track(ctx, 0);
 
   for (const exercise of rows) {
@@ -339,16 +364,21 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     ctx.fillText(fit(ctx, exercise.name.toUpperCase(), panelInner - best - 40), left, y);
     ctx.font = `400 28px ${font.ui}`;
     ctx.fillStyle = faint;
-    ctx.fillText(`${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`, left, y + 36);
+    // Cardio is not counted in sets, so it says what it was instead: outside, or
+    // on a machine.
+    const under = exercise.isCardio
+      ? (exercise.detail ?? '').toUpperCase()
+      : `${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`;
+    if (under !== '') ctx.fillText(under, left, y + 36);
     y += 34;
   }
 
-  if (summary.more > 0) {
+  if (unnamed > 0) {
     y += 50;
     ctx.font = `600 28px ${font.uiStrong}`;
     track(ctx, 8);
     ctx.fillStyle = faint;
-    ctx.fillText(`+ ${summary.more} MORE ${summary.more === 1 ? 'LIFT' : 'LIFTS'}`, left, y);
+    ctx.fillText(lifting ? `+ ${unnamed} MORE ${unnamed === 1 ? 'LIFT' : 'LIFTS'}` : `+ ${unnamed} MORE`, left, y);
     track(ctx, 0);
   }
 
@@ -460,12 +490,21 @@ export const shareCardFile = async (
   return { file, url: URL.createObjectURL(blob) };
 };
 
-const asText = (summary: ShareCard): string =>
-  [
+const asText = (summary: ShareCard): string => {
+  const meta: string[] = [summary.duration];
+  if (summary.sets > 0) meta.push(`${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}`);
+  if (summary.volume) meta.push(summary.volume);
+  if (summary.cardioDistanceKm && summary.cardioDistanceKm > 0) meta.push(`${summary.cardioDistanceKm.toFixed(1)} km`);
+  if (summary.steps && summary.steps > 0) meta.push(`~${summary.steps.toLocaleString()} steps`);
+
+  return [
     `${summary.title} — ${summary.date}`,
-    `${summary.duration} · ${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'}${summary.volume ? ` · ${summary.volume}` : ''}`,
-    ...summary.exercises.map((e) => `${e.name}: ${e.best}`),
+    meta.join(' · '),
+    ...summary.exercises.map((e) =>
+      e.isCardio ? `${e.name}: ${e.best}${e.detail ? ` (${e.detail})` : ''}` : `${e.name}: ${e.best}`,
+    ),
   ].join('\n');
+};
 
 /**
  * Hands the card to the system share sheet; on a browser without file

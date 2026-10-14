@@ -7,6 +7,9 @@ import type { BarChoice } from '../plates';
 import { EQUIPMENT_ITEMS, type EquipmentItem, type TrainingLevel } from '../ai/routineBuild';
 
 export type UnitSystem = 'metric' | 'imperial';
+export type WeightUnitSetting = 'switchable' | 'kg' | 'lbs';
+export type SpeedUnitSetting = 'switchable' | 'kph' | 'mph';
+export type SpeedUnit = 'kph' | 'mph';
 
 export interface AppSettings {
   profile: UserProfile;
@@ -15,6 +18,12 @@ export interface AppSettings {
   /** Optional target weight in kg, used only for the goal projection. */
   goalWeightKg: number | null;
   units: UnitSystem;
+  /** Controls weight unit display and session switcher visibility ('switchable' | 'kg' | 'lbs'). */
+  weightUnitSetting: WeightUnitSetting;
+  /** Controls speed unit display and session switcher visibility ('switchable' | 'kph' | 'mph'). */
+  speedUnitSetting: SpeedUnitSetting;
+  /** The current active speed unit when switchable ('kph' | 'mph'). Defaults to 'kph'. */
+  activeSpeedUnit: SpeedUnit;
   /** Macro policy, surfaced in settings because these are genuine preferences. */
   proteinGPerKg: number;
   minFatGPerKg: number;
@@ -88,6 +97,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   goal: { direction: 'lose', rateKgPerWeek: 0.5 },
   goalWeightKg: null,
   units: 'metric',
+  weightUnitSetting: 'switchable',
+  speedUnitSetting: 'switchable',
+  activeSpeedUnit: 'kph',
   proteinGPerKg: DEFAULT_TARGET_OPTIONS.proteinGPerKg,
   minFatGPerKg: DEFAULT_TARGET_OPTIONS.minFatGPerKg,
   kcalPerKgTissue: DEFAULT_MODEL_OPTIONS.kcalPerKgTissue,

@@ -62,16 +62,75 @@ describe('shareSummary', () => {
     expect(shareSummary({ ...base, sets: [set('Push-Up', null, 20)] }).volume).toBeNull();
   });
 
-  it('names three lifts and counts the rest', () => {
+  // The summary carries six, which is what the text version lists; the picture
+  // names the first three of them and counts the rest itself.
+  it('carries six lifts and counts the rest', () => {
     const many = Array.from({ length: 8 }, (_, i) => set(`Lift ${i}`, 50, 10));
     const summary = shareSummary({ ...base, sets: many });
-    expect(summary.exercises).toHaveLength(3);
-    expect(summary.more).toBe(5);
+    expect(summary.exercises).toHaveLength(6);
+    expect(summary.more).toBe(2);
   });
 
   it('carries the day’s milestone, in the words the app already uses for it', () => {
     const summary = shareSummary({ ...base, sets, milestone: { kind: 'load', value: 100, exercise: 'Bench Press (Barbell)' } });
     expect(summary.highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '100 kg' });
+  });
+
+  it('does not count cardio as sets and estimates steps', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Walking',
+      bodyweightBased: false,
+      setIndex: 1,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'treadmill',
+      speedKph: 5.0,
+      inclinePct: 2.0,
+      durationSeconds: 1800,
+      distanceKm: 2.5,
+    };
+    const summary = shareSummary({ ...base, sets: [cardioSet] });
+    expect(summary.sets).toBe(0);
+    expect(summary.steps).toBeGreaterThan(0);
+    expect(summary.exercises[0]).toMatchObject({
+      name: 'Walking',
+      sets: 0,
+      isCardio: true,
+      best: expect.stringContaining('5.0 kph'),
+      detail: expect.stringContaining('Machine'),
+    });
+  });
+
+  it('keeps strength sets count separate from cardio in a mixed workout', () => {
+    const cardioSet: LoggedSet = {
+      id: 'c1',
+      exerciseName: 'Morning Walk',
+      bodyweightBased: false,
+      setIndex: 4,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'outside',
+      durationSeconds: 1800,
+      distanceKm: 2.5,
+    };
+    const mixed = [...sets, cardioSet];
+    const summary = shareSummary({ ...base, sets: mixed });
+    // Still 5 strength sets, not 6
+    expect(summary.sets).toBe(5);
+    expect(summary.steps).toBeGreaterThan(0);
+    expect(summary.exercises.find((e) => e.name === 'Morning Walk')).toMatchObject({
+      sets: 0,
+      isCardio: true,
+      best: expect.stringContaining('2.5 km'),
+      detail: expect.stringContaining('Outside'),
+    });
   });
 });
 
@@ -100,5 +159,35 @@ describe('the climb', () => {
 
   it('has nothing to draw for a day with no working sets', () => {
     expect(shareSummary({ ...base, sets: [set('Squat', 60, 10, 'warmup')] }).climb).toEqual([]);
+  });
+});
+
+describe('the climb on a day that was not lifting', () => {
+  const cardio = (exerciseName: string, durationSeconds: number): LoggedSet => ({
+    id: `c${durationSeconds}`,
+    exerciseName,
+    bodyweightBased: false,
+    setIndex: 1,
+    weightKg: null,
+    reps: 0,
+    setType: 'normal',
+    rpe: null,
+    isCardio: true,
+    cardioMode: 'treadmill',
+    speedKph: 8,
+    inclinePct: 0,
+    durationSeconds,
+    distanceKm: null,
+  });
+
+  it('stands cardio by its minutes, since it has neither weight nor reps', () => {
+    const summary = shareSummary({ ...base, title: 'Treadmill', sets: [cardio('Treadmill', 1200), cardio('Treadmill', 600)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('stands cardio at nothing on a day that also lifted, because the climb is about load', () => {
+    const summary = shareSummary({ ...base, sets: [set('Squat', 100, 5), cardio('Treadmill', 1200)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0]);
+    expect(summary.climb.map((bar) => bar.top)).toEqual([true, false]);
   });
 });
