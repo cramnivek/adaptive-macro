@@ -1,5 +1,5 @@
 import { Platform, Share } from 'react-native';
-import type { ShareCard } from '../shareCard';
+import { type ShareCard, titleLines } from '../shareCard';
 import { font } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 
@@ -88,21 +88,6 @@ const wordmark = (ctx: CanvasRenderingContext2D, x: number, y: number, px: numbe
   track(ctx, 0);
 };
 
-/**
- * The title, in one or two lines, the last of them red.
- *
- * "Push Day" becomes PUSH / DAY., which is the shape the card is built
- * around. A one-word title keeps its line and takes the red full stop on the
- * end, because a line holding nothing but a full stop reads as a mistake.
- */
-const headline = (title: string): { text: string; red: boolean }[][] => {
-  const words = title.trim().toUpperCase().split(/\s+/).filter(Boolean);
-  if (words.length <= 1) return [[{ text: words[0] ?? 'WORKOUT', red: false }, { text: '.', red: true }]];
-  return [
-    [{ text: words.slice(0, -1).join(' '), red: false }],
-    [{ text: `${words[words.length - 1]}.`, red: true }],
-  ];
-};
 
 /**
  * The one figure the card leads with, and what it was: a new best if the day
@@ -133,46 +118,58 @@ const heroOf = (summary: ShareCard): { figure: string; label: string; red: boole
 };
 
 /**
- * The picture behind the type, filling the card without being stretched, and
- * then darkened. The scrim is what makes the card work over any photo at all:
- * a white gym wall in daylight would otherwise swallow the type, and a card
- * that is only legible over some pictures is not one anybody can be handed.
+ * The picture behind the type, filling the card without being stretched.
  *
- * Three passes, because one strong enough everywhere would hide the photo. Down
- * from the top and up from the foot, where the type is; and in from the left,
- * where every line of it starts, which leaves the right of the frame — whoever
- * is in the picture — the lightest part of the card.
+ * Graded rather than curtained. Laying bands of black over a photo makes a card
+ * you can read and also a card where you can see exactly where each band
+ * begins; the picture ends up behind the type rather than with it. So the photo
+ * is first taken down as a photographer would — some colour out, a little more
+ * contrast, darker overall — which costs it nothing it needed and puts it in
+ * the same near-black the rest of the card is built on.
+ *
+ * Then one even wash, so every part of the frame shares a ground; then a
+ * vignette, which is how a picture and the type over it have been made to look
+ * like one thing since posters were printed; and only then the lightest
+ * possible fall-off at the head and the foot, where the type actually sits.
+ * Legibility over a bright photo is carried by the shadow on the type itself,
+ * which travels with the letter instead of flattening the picture.
+ *
+ * `filter` is ignored by Safari before 16.4, the same floor the letter-spacing
+ * already asks for. There the photo simply keeps its own colour and the washes
+ * below still carry it.
  */
 const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   const scale = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
   const w = photo.naturalWidth * scale;
   const h = photo.naturalHeight * scale;
+  ctx.save();
+  ctx.filter = 'grayscale(0.45) contrast(1.12) brightness(0.74)';
   ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
+  ctx.restore();
 
-  const top = ctx.createLinearGradient(0, 0, 0, H * 0.68);
-  top.addColorStop(0, 'rgba(8,8,10,0.92)');
-  top.addColorStop(0.45, 'rgba(8,8,10,0.66)');
-  top.addColorStop(0.85, 'rgba(8,8,10,0.34)');
-  top.addColorStop(1, 'rgba(8,8,10,0)');
-  ctx.fillStyle = top;
-  ctx.fillRect(0, 0, W, H * 0.68);
-
-  // Light, this one: the type already carries its own shadow, and a left side
-  // dark enough to guarantee legibility on its own would put whoever is standing
-  // on that side of the frame in shade.
-  const left = ctx.createLinearGradient(0, 0, W, 0);
-  left.addColorStop(0, 'rgba(8,8,10,0.42)');
-  left.addColorStop(0.45, 'rgba(8,8,10,0.22)');
-  left.addColorStop(0.8, 'rgba(8,8,10,0)');
-  ctx.fillStyle = left;
+  ctx.fillStyle = 'rgba(10,10,12,0.2)';
   ctx.fillRect(0, 0, W, H);
 
-  const foot = ctx.createLinearGradient(0, H * 0.5, 0, H);
+  const vignette = ctx.createRadialGradient(W * 0.52, H * 0.46, H * 0.16, W * 0.52, H * 0.46, H * 0.78);
+  vignette.addColorStop(0, 'rgba(8,8,10,0)');
+  vignette.addColorStop(0.55, 'rgba(8,8,10,0.22)');
+  vignette.addColorStop(1, 'rgba(8,8,10,0.78)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+
+  const top = ctx.createLinearGradient(0, 0, 0, H * 0.52);
+  top.addColorStop(0, 'rgba(8,8,10,0.74)');
+  top.addColorStop(0.5, 'rgba(8,8,10,0.34)');
+  top.addColorStop(1, 'rgba(8,8,10,0)');
+  ctx.fillStyle = top;
+  ctx.fillRect(0, 0, W, H * 0.52);
+
+  const foot = ctx.createLinearGradient(0, H * 0.52, 0, H);
   foot.addColorStop(0, 'rgba(8,8,10,0)');
-  foot.addColorStop(0.45, 'rgba(8,8,10,0.72)');
-  foot.addColorStop(1, 'rgba(8,8,10,0.96)');
+  foot.addColorStop(0.5, 'rgba(8,8,10,0.6)');
+  foot.addColorStop(1, 'rgba(8,8,10,0.94)');
   ctx.fillStyle = foot;
-  ctx.fillRect(0, H * 0.5, W, H * 0.5);
+  ctx.fillRect(0, H * 0.52, W, H * 0.48);
 };
 
 export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null = null): HTMLCanvasElement => {
@@ -203,16 +200,22 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   // and disappears over a bright photo, so over a photo it lifts a step.
   const faint = photo ? loud.figureMuted : loud.figureFaint;
 
-  ctx.save();
-  ctx.fillStyle = loud.loud;
-  // Faint enough to be a cast of light rather than a red block over whoever is
-  // in the picture; the stroke along its edge is what you actually read.
-  ctx.globalAlpha = 0.05;
-  slab(ctx, 620, 0, 700, 1180, 260);
-  ctx.globalAlpha = 0.7;
-  // A slab is as wide as `w` less its lean, so a ten-pixel stroke on this lean asks for 270.
-  slab(ctx, 620, 0, 270, 1180, 260);
-  ctx.restore();
+  // The lean is there to give an empty black card some structure. A photo has
+  // its own, and a hard red line ruled across a picture of someone is the
+  // opposite of what a photo is for — so over a picture the card goes without
+  // it, and the slashes on the wordmark carry the mark instead.
+  if (!photo) {
+    ctx.save();
+    ctx.fillStyle = loud.loud;
+    // Faint enough to be a cast of light rather than a red block; the stroke
+    // along its edge is what you actually read.
+    ctx.globalAlpha = 0.05;
+    slab(ctx, 620, 0, 700, 1180, 260);
+    ctx.globalAlpha = 0.7;
+    // A slab is as wide as `w` less its lean, so a ten-pixel stroke on this lean asks for 270.
+    slab(ctx, 620, 0, 270, 1180, 260);
+    ctx.restore();
+  }
 
   wordmark(ctx, PAD, 136, 46);
 
@@ -231,7 +234,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   track(ctx, 0);
 
   // The title, as big as it will go.
-  const lines = headline(summary.title);
+  const lines = titleLines(summary.title);
   const lineWidth = (line: { text: string }[], px: number): number => {
     ctx.font = `700 ${px}px ${font.display}`;
     return line.reduce((sum, part) => sum + ctx.measureText(part.text).width, 0);
@@ -349,7 +352,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   track(ctx, 10);
   ctx.fillStyle = faint;
   // A day of nothing but cardio has no lifts to head a list with.
-  ctx.fillText(lifting ? 'TOP LIFTS' : 'WHAT YOU DID', left, y);
+  ctx.fillText(lifting ? (rows.length === 1 ? 'TOP LIFT' : 'TOP LIFTS') : 'WHAT YOU DID', left, y);
   track(ctx, 0);
 
   for (const exercise of rows) {

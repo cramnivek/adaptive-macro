@@ -242,3 +242,47 @@ export const shareSummary = (input: {
     climb: climb(input.sets),
   };
 };
+
+/** A piece of the title, and whether it is the red part. */
+export interface TitlePart {
+  text: string;
+  red: boolean;
+}
+
+/**
+ * The title as the card sets it: one or two lines, the last of them red.
+ *
+ * The break goes wherever it leaves the two lines most alike in length, not
+ * before the last word. "Pull #1 Phase 1" broken before its last word gives a
+ * second line reading "1.", which looks like a mistake rather than a title;
+ * broken down the middle it gives PULL #1 / PHASE 1., which is what it is.
+ * Counting characters is enough — the face is even enough that measuring the
+ * real widths moves the break only when the two candidates were alike anyway.
+ *
+ * A one-word title keeps its line and takes the red full stop on the end,
+ * because a line holding nothing but a full stop reads as a mistake too.
+ */
+export const titleLines = (title: string): TitlePart[][] => {
+  const words = title.trim().toUpperCase().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) {
+    return [[{ text: words[0] ?? 'WORKOUT', red: false }, { text: '.', red: true }]];
+  }
+
+  let at = words.length - 1;
+  let closest = Number.POSITIVE_INFINITY;
+  for (let k = 1; k < words.length; k += 1) {
+    const first = words.slice(0, k).join(' ').length;
+    // The full stop belongs to the second line and counts towards its width.
+    const second = words.slice(k).join(' ').length + 1;
+    const apart = Math.abs(first - second);
+    if (apart < closest) {
+      closest = apart;
+      at = k;
+    }
+  }
+
+  return [
+    [{ text: words.slice(0, at).join(' '), red: false }],
+    [{ text: `${words.slice(at).join(' ')}.`, red: true }],
+  ];
+};
