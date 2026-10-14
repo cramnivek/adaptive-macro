@@ -73,8 +73,18 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   const choosePhoto = async () => {
     if (summary === null) return;
-    const image = await pickCardPhoto();
-    if (image) setPicked({ workout: summary, image });
+    const picked = await pickCardPhoto();
+    if (picked.ok) {
+      setNote(null);
+      setPicked({ workout: summary, image: picked.image });
+      return;
+    }
+    // Changing your mind is silent. A picture the browser cannot open is not:
+    // many phone photographs are HEIC, which plenty of browsers refuse, and
+    // without this the tap simply appears to do nothing at all.
+    if (picked.why === 'unreadable') {
+      setNote('That picture could not be opened. A screenshot of it will work.');
+    }
   };
 
   const share = async () => {

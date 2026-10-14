@@ -463,39 +463,53 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
  *
  * A file input is the one picker every browser has, and on a phone it offers
  * the camera roll and the camera itself. Web only, like the card.
+ *
+ * It says which way it ended, because the three endings need three different
+ * things from the screen above: a picture, silence, or a sentence. A phone
+ * photograph is often HEIC, which plenty of browsers cannot decode — and a
+ * picture that cannot be opened must not look the same as one that was never
+ * chosen, which is precisely how this read as simply broken.
  */
-export const pickCardPhoto = (): Promise<HTMLImageElement | null> => {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return Promise.resolve(null);
+export type PickedPhoto =
+  | { ok: true; image: HTMLImageElement }
+  | { ok: false; why: 'cancelled' | 'unreadable' };
+
+export const pickCardPhoto = (): Promise<PickedPhoto> => {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return Promise.resolve({ ok: false, why: 'cancelled' });
+  }
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.style.display = 'none';
+    // Out of sight, but laid out. A file input that is `display: none` cannot be
+    // opened at all on several phone browsers — the tap does nothing and nothing
+    // says why — so it is parked off-screen instead, which every one of them
+    // allows.
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
     document.body.appendChild(input);
-    const done = (image: HTMLImageElement | null) => {
+    const done = (how: PickedPhoto) => {
       input.remove();
-      resolve(image);
+      resolve(how);
     };
     // Closing the picker without choosing fires `cancel` and never `change`;
     // without this the promise would simply never settle.
-    input.addEventListener('cancel', () => done(null));
+    input.addEventListener('cancel', () => done({ ok: false, why: 'cancelled' }));
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (!file) {
-        done(null);
+        done({ ok: false, why: 'cancelled' });
         return;
       }
       const image = new Image();
-      const url = URL.createObjectURL(file);
-      image.onload = () => {
-        URL.revokeObjectURL(url);
-        done(image);
-      };
-      image.onerror = () => {
-        URL.revokeObjectURL(url);
-        done(null);
-      };
-      image.src = url;
+      // The card is drawn from this image more than once — once for the
+      // preview, again for the file, and again whenever the layout changes —
+      // and the browser is within its rights to need the source again each
+      // time. Letting go of the address as soon as it had loaded was asking
+      // for a picture that works once and then does not.
+      image.src = URL.createObjectURL(file);
+      image.onload = () => done({ ok: true, image });
+      image.onerror = () => done({ ok: false, why: 'unreadable' });
     });
     input.click();
   });
