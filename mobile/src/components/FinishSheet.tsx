@@ -64,7 +64,23 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     let live = true;
     setDrawing(true);
     void shareCardFile(summary, photo)
-      .then((drawn) => live && setCard(drawn))
+      .then((drawn) => {
+        if (!live) return;
+        if (drawn !== null) {
+          setCard(drawn);
+        } else if (photo !== null) {
+          // Only a browser that cannot make the file at all gets here, and the
+          // old card is still on screen, so without a word it reads as the
+          // picture simply having been ignored.
+          setNote('The card could not be made with that picture.');
+        }
+      })
+      // Drawing threw rather than failed. It used to be swallowed, which left
+      // the card that was already there and nothing to say why — the picture
+      // looked as though it had been dropped on the floor. The browser's own
+      // words are worth more than mine here, because this is the one failure
+      // nobody can reproduce on anybody else's phone.
+      .catch((error) => live && setNote(`The card could not be drawn: ${(error as Error).message}`))
       .finally(() => live && setDrawing(false));
     return () => {
       live = false;
