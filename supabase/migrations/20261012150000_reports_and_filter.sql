@@ -148,3 +148,10 @@ create function public.my_blocked_profiles()
   $$;
 revoke execute on function public.my_blocked_profiles() from public, anon;
 grant execute on function public.my_blocked_profiles() to authenticated;
+
+-- As in the follows migration: a trigger function is run by its table, so the
+-- execute grant Supabase adds by default is only something for the advisor to
+-- complain about.
+revoke execute on function public.hide_on_reports() from public, anon, authenticated;
+revoke execute on function public.reject_blocked_words() from public, anon, authenticated;
+revoke execute on function public.snapshot_blocked_profile() from public, anon, authenticated;

@@ -231,3 +231,13 @@ drop policy "profiles are readable when signed in" on public.profiles;
 create policy "profiles are readable unless blocked either way" on public.profiles
   for select to authenticated
   using (private.visible_profile(id));
+
+-- A trigger function is run by the table it is attached to, not called by name, so
+-- nobody needs the right to execute it. Supabase grants that right to every new
+-- function by default, and its own advisor then reports each of these as a
+-- security definer function anyone can reach over /rpc. Taking the grant away
+-- removes the question rather than answering it every time.
+revoke execute on function public.follow_status() from public, anon, authenticated;
+revoke execute on function public.accept_pending_on_public() from public, anon, authenticated;
+revoke execute on function public.unfollow_on_block() from public, anon, authenticated;
+revoke execute on function public.block_target_exists() from public, anon, authenticated;
