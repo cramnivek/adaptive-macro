@@ -219,3 +219,16 @@ describe('titleLines', () => {
     expect(said('   ')).toEqual(['WORKOUT.']);
   });
 });
+
+describe('a new best on a lift with its equipment in the name', () => {
+  it('keeps the lift and drops the brackets, which is the part that would be cut', () => {
+    const summary = shareSummary({
+      ...base,
+      units: 'imperial',
+      sets: [set('Arnold Press (Dumbbell)', 43, 8)],
+      milestone: { kind: 'load', value: 43, exercise: 'Arnold Press (Dumbbell)' },
+    });
+    // The summary keeps the whole name; the card is what shortens it.
+    expect(summary.highlight).toEqual({ label: 'ARNOLD PRESS (DUMBBELL)', figure: '95 lb' });
+  });
+});
