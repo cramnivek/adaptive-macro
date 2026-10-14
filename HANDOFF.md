@@ -1,5 +1,9 @@
 # Handoff
 
+> **Out of date.** A snapshot from 2026-10-01, kept for what it records about
+> decisions taken then. For how the repository works now, read [AGENTS.md](AGENTS.md).
+
+
 Last updated 2026-10-01. Branch `feat/web-deployment`, **81 commits ahead of `main`**, working tree clean. Not yet pushed; the deployed site is older still.
 
 397 tests pass (`npm test`) — engine 104, mobile 227, gemini-proxy 66. `npm run typecheck` is clean, web and android both export.
