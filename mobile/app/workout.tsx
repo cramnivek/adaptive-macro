@@ -7,7 +7,8 @@ import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
-import { deleteSet, discardSession, pastSession, sessionSets, updateSetValues } from '../src/db';
+import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
+import { deleteSet, discardSession, listRoutines, pastSession, sessionSets, updateSetValues } from '../src/db';
 import type { LoggedSet } from '../src/db';
 import { confirm } from '../src/dialog';
 import { formatDateLong } from '../src/format';
@@ -72,6 +73,15 @@ export default function WorkoutScreen() {
   const [editing, setEditing] = useState<LoggedSet | null>(null);
   // Back from sign-in (or profile setup), the sheet comes back with its caption.
   useFocusEffect(useCallback(() => setSigningIn(false), []));
+  /** The save-as-routine sheet is open, and whether this workout has been saved as one. */
+  const [savingRoutine, setSavingRoutine] = useState(false);
+  const [routineSaved, setRoutineSaved] = useState(false);
+  const [routineNames, setRoutineNames] = useState<string[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      void listRoutines().then((all) => setRoutineNames(all.map((r) => r.name)));
+    }, []),
+  );
 
   const load = useCallback(async (): Promise<Loaded> => {
     const past = id ? await pastSession(id) : null;
@@ -224,6 +234,13 @@ export default function WorkoutScreen() {
       </Text>
 
       <Button tone="loud" label="Share or post" onPress={() => setSharing(true)} />
+      <Button
+        tone="loud"
+        variant="subtle"
+        label={routineSaved ? 'Routine saved' : 'Save as routine'}
+        disabled={routineSaved}
+        onPress={() => setSavingRoutine(true)}
+      />
       <Button tone="loud" variant="danger" label="Delete workout" onPress={() => void remove()} />
 
       <EditSetSheet
@@ -277,6 +294,18 @@ export default function WorkoutScreen() {
           router.push(social.session ? '/profile-setup' : '/sign-in');
         }}
         onDone={() => setSharing(false)}
+      />
+
+      <SaveRoutineSheet
+        visible={savingRoutine}
+        initialName={past.name === 'Workout' ? '' : past.name}
+        sets={sets}
+        existingNames={routineNames}
+        onCancel={() => setSavingRoutine(false)}
+        onSaved={() => {
+          setSavingRoutine(false);
+          setRoutineSaved(true);
+        }}
       />
     </Screen>
   );
