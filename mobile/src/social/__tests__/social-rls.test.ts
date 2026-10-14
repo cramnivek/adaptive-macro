@@ -528,3 +528,42 @@ describe('my_blocked_profiles', () => {
     await expect(as(db, null, `select * from my_blocked_profiles()`)).rejects.toThrow(/permission denied/);
   });
 });
+
+describe('a short word in the filter', () => {
+  let db: PGlite;
+  beforeEach(async () => {
+    db = await freshDatabase();
+    await profile(db, USER_B, 'bob');
+    // Three letters, and a piece of a dozen innocent words.
+    await db.query(`insert into blocked_words (word) values ('ass'), ('onlyfans'), ('t.me/')`);
+  });
+
+  const caption = (said: string) =>
+    as(db, USER_B, `insert into posts (author_id, session_id, title, performed_on, duration_min, sets, exercises, caption)
+                    values ($1, $2, 'Push', '2026-10-14', 10, 1, '[]'::jsonb, $3)`, [USER_B, said.slice(0, 12), said]);
+
+  it('leaves the innocent words it is a piece of alone', async () => {
+    for (const said of ['A classic session', 'Just passing through', 'Grass outside', 'Assisted pull ups']) {
+      await expect(caption(said)).resolves.toBeDefined();
+    }
+  });
+
+  it('still catches it standing on its own, whatever is beside it', async () => {
+    for (const said of ['ass', 'what an ass', 'ASS!', 'ass, honestly', '(ass)']) {
+      await expect(caption(said)).rejects.toThrow(/blocked_word/);
+    }
+  });
+
+  it('matches a long word anywhere inside, which is what those entries are for', async () => {
+    await expect(caption('see myonlyfanspage')).rejects.toThrow(/blocked_word/);
+  });
+
+  it('matches an entry that is not just letters anywhere inside too', async () => {
+    await expect(caption('join at t.me/whatever')).rejects.toThrow(/blocked_word/);
+  });
+
+  it('catches a short word someone has spelled with a digit in it', async () => {
+    await db.query(`insert into blocked_words (word) values ('4ss')`);
+    await expect(caption('what a 4ss')).rejects.toThrow(/blocked_word/);
+  });
+});
