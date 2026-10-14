@@ -138,36 +138,72 @@ const heroOf = (summary: ShareCard): { figure: string; label: string; red: boole
  * already asks for. There the photo simply keeps its own colour and the washes
  * below still carry it.
  */
+/**
+ * How light the picture is, nought to one, by looking at it small.
+ *
+ * Twenty-four by forty-two is enough to tell a night out from a white wall and
+ * costs nothing. A canvas the browser will not let us read — which a photo from
+ * another site would make — gives nothing back, and the card then treats it as
+ * an ordinary one.
+ */
+const brightnessOf = (photo: HTMLImageElement): number | null => {
+  try {
+    const small = document.createElement('canvas');
+    small.width = 24;
+    small.height = 42;
+    const look = small.getContext('2d');
+    if (look === null) return null;
+    look.drawImage(photo, 0, 0, small.width, small.height);
+    const { data } = look.getImageData(0, 0, small.width, small.height);
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+    }
+    return sum / (data.length / 4);
+  } catch {
+    return null;
+  }
+};
+
 const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
+  // How hard to work on the picture, from nothing for a photo taken at night to
+  // everything for a white wall in daylight. A fixed grade cannot do both: the
+  // one that saves the wall crushes the night out into black, which is exactly
+  // what it did. An unreadable canvas is treated as an ordinary photo.
+  const light = brightnessOf(photo) ?? 0.45;
+  const heavy = Math.min(1, Math.max(0, (light - 0.2) / 0.45));
+
   const scale = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
   const w = photo.naturalWidth * scale;
   const h = photo.naturalHeight * scale;
   ctx.save();
-  ctx.filter = 'grayscale(0.45) contrast(1.12) brightness(0.74)';
+  ctx.filter = `grayscale(${(0.2 + 0.25 * heavy).toFixed(2)}) contrast(${(1.04 + 0.1 * heavy).toFixed(2)}) brightness(${(1 - 0.32 * heavy).toFixed(2)})`;
   ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
   ctx.restore();
 
-  ctx.fillStyle = 'rgba(10,10,12,0.2)';
+  ctx.fillStyle = `rgba(10,10,12,${(0.04 + 0.2 * heavy).toFixed(2)})`;
   ctx.fillRect(0, 0, W, H);
 
   const vignette = ctx.createRadialGradient(W * 0.52, H * 0.46, H * 0.16, W * 0.52, H * 0.46, H * 0.78);
   vignette.addColorStop(0, 'rgba(8,8,10,0)');
-  vignette.addColorStop(0.55, 'rgba(8,8,10,0.22)');
-  vignette.addColorStop(1, 'rgba(8,8,10,0.78)');
+  vignette.addColorStop(0.55, `rgba(8,8,10,${(0.1 + 0.16 * heavy).toFixed(2)})`);
+  vignette.addColorStop(1, `rgba(8,8,10,${(0.4 + 0.35 * heavy).toFixed(2)})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 
   const top = ctx.createLinearGradient(0, 0, 0, H * 0.52);
-  top.addColorStop(0, 'rgba(8,8,10,0.74)');
-  top.addColorStop(0.5, 'rgba(8,8,10,0.34)');
+  top.addColorStop(0, `rgba(8,8,10,${(0.34 + 0.4 * heavy).toFixed(2)})`);
+  top.addColorStop(0.5, `rgba(8,8,10,${(0.14 + 0.2 * heavy).toFixed(2)})`);
   top.addColorStop(1, 'rgba(8,8,10,0)');
   ctx.fillStyle = top;
   ctx.fillRect(0, 0, W, H * 0.52);
 
+  // The foot carries the panel, so it stays the firmest of the three whatever
+  // the exposure — but it starts from nothing, so there is no edge to see.
   const foot = ctx.createLinearGradient(0, H * 0.52, 0, H);
   foot.addColorStop(0, 'rgba(8,8,10,0)');
-  foot.addColorStop(0.5, 'rgba(8,8,10,0.6)');
-  foot.addColorStop(1, 'rgba(8,8,10,0.94)');
+  foot.addColorStop(0.5, `rgba(8,8,10,${(0.42 + 0.2 * heavy).toFixed(2)})`);
+  foot.addColorStop(1, `rgba(8,8,10,${(0.82 + 0.12 * heavy).toFixed(2)})`);
   ctx.fillStyle = foot;
   ctx.fillRect(0, H * 0.52, W, H * 0.48);
 };
