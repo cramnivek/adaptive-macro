@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LoggedSet } from '../db';
-import { shareSummary } from '../shareCard';
+import { shareSummary, titleLines } from '../shareCard';
 
 let id = 0;
 const set = (exerciseName: string, weightKg: number | null, reps: number, setType: LoggedSet['setType'] = 'normal'): LoggedSet => {
@@ -189,5 +189,33 @@ describe('the climb on a day that was not lifting', () => {
     const summary = shareSummary({ ...base, sets: [set('Squat', 100, 5), cardio('Treadmill', 1200)] });
     expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0]);
     expect(summary.climb.map((bar) => bar.top)).toEqual([true, false]);
+  });
+});
+
+describe('titleLines', () => {
+  const said = (title: string) => titleLines(title).map((line) => line.map((part) => part.text).join(''));
+
+  it('breaks where the two lines come out most alike, not before the last word', () => {
+    // The real case this was written for: breaking before the last word left a
+    // second line reading "1.", which looks like a mistake rather than a title.
+    expect(said('Pull #1 Phase 1')).toEqual(['PULL #1', 'PHASE 1.']);
+    expect(said('Upper Body Strength')).toEqual(['UPPER BODY', 'STRENGTH.']);
+  });
+
+  it('still gives the two-word title its one word a line', () => {
+    expect(said('Push Day')).toEqual(['PUSH', 'DAY.']);
+  });
+
+  it('keeps a one-word title on its line and puts the full stop on the end', () => {
+    expect(said('Pull')).toEqual(['PULL.']);
+    expect(titleLines('Pull')[0].map((part) => part.red)).toEqual([false, true]);
+  });
+
+  it('makes the second line the red one', () => {
+    expect(titleLines('Push Day').map((line) => line.every((part) => part.red))).toEqual([false, true]);
+  });
+
+  it('has something to say about a workout with no name at all', () => {
+    expect(said('   ')).toEqual(['WORKOUT.']);
   });
 });
