@@ -199,30 +199,59 @@ export const MealCameraSheet = ({
                     scrollbar, just missing. Which is exactly the half holding
                     "Use this".
                   */
-                  <ScrollView style={styles.items} contentContainerStyle={styles.itemsContent}>
-                    {items.map((item) => (
-                      <View key={`${item.name}:${item.grams}`} style={styles.row}>
-                        <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        <Text style={[styles.figure, { color: colors.textMuted }]}>
-                          {Math.round(item.grams)} g · {Math.round(item.kcal)} kcal
-                        </Text>
-                        <View
-                          style={[styles.badge, { borderColor: confidenceColor(item.confidence) }]}
-                        >
-                          <Text
-                            style={[styles.badgeText, { color: confidenceColor(item.confidence) }]}
-                          >
-                            {item.confidence}
+                  <>
+                    {/*
+                      The meal, before its parts. This is the figure that is
+                      about to be logged and the one worth checking against the
+                      photo, and the macros were already estimated — they were
+                      simply never shown, which left the decision to be made on
+                      calories alone.
+                    */}
+                    <View style={styles.total}>
+                      <Text style={[styles.totalKcal, { color: colors.text }]}>
+                        {Math.round(items.reduce((sum, item) => sum + item.kcal, 0))} kcal
+                      </Text>
+                      <Text style={[styles.totalMacros, { color: colors.textMuted }]}>
+                        {Math.round(items.reduce((sum, item) => sum + item.proteinG, 0))} P ·{' '}
+                        {Math.round(items.reduce((sum, item) => sum + item.carbsG, 0))} C ·{' '}
+                        {Math.round(items.reduce((sum, item) => sum + item.fatG, 0))} F
+                      </Text>
+                    </View>
+                    <ScrollView style={styles.items} contentContainerStyle={styles.itemsContent}>
+                      {items.map((item) => (
+                        <View key={`${item.name}:${item.grams}`} style={styles.item}>
+                          <View style={styles.row}>
+                            <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
+                              {item.name}
+                            </Text>
+                            <Text style={[styles.figure, { color: colors.textMuted }]}>
+                              {Math.round(item.grams)} g · {Math.round(item.kcal)} kcal
+                            </Text>
+                            <View
+                              style={[styles.badge, { borderColor: confidenceColor(item.confidence) }]}
+                            >
+                              <Text
+                                style={[styles.badgeText, { color: confidenceColor(item.confidence) }]}
+                              >
+                                {item.confidence}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={[styles.itemMacros, { color: colors.textFaint }]}>
+                            {Math.round(item.proteinG)} P · {Math.round(item.carbsG)} C ·{' '}
+                            {Math.round(item.fatG)} F
+                            {/*
+                              What it assumed about this food, where it assumed
+                              anything. It used to be a sentence telling you to
+                              go and look on another screen, which is the one
+                              thing nobody does while holding a plate.
+                            */}
+                            {item.assumption ? ` — ${item.assumption}` : ''}
                           </Text>
                         </View>
-                      </View>
-                    ))}
-                    <Text style={[styles.hint, { color: colors.textFaint }]}>
-                      What it assumed, and the portions, are on the screen behind this.
-                    </Text>
-                  </ScrollView>
+                      ))}
+                    </ScrollView>
+                  </>
                 )}
 
                 {photo && !busy && items.length === 0 && (
@@ -261,12 +290,18 @@ const styles = StyleSheet.create({
     padding: space.lg,
     gap: space.sm,
   },
-  // About five rows. Past that the panel would start eating the photo it is
-  // describing, which is the thing you are checking it against.
-  items: { maxHeight: 220 },
+  // About four rows now that each carries its macros. Past that the panel would
+  // start eating the photo it is describing, which is the thing you are
+  // checking it against.
+  items: { maxHeight: 200 },
   itemsContent: { gap: space.sm },
+  total: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  totalKcal: { fontFamily: font.display, fontSize: 22 },
+  totalMacros: { fontFamily: font.figure, fontSize: 13 },
+  item: { gap: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   itemName: { flex: 1, fontFamily: font.uiStrong, fontSize: 14 },
+  itemMacros: { fontFamily: font.ui, fontSize: 11, lineHeight: 15 },
   figure: { fontFamily: font.figure, fontSize: 12 },
   badge: {
     borderWidth: StyleSheet.hairlineWidth,
