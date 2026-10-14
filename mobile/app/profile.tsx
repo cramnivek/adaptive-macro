@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
@@ -8,7 +8,7 @@ import { PostCard } from '../src/components/PostCard';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
 import { confirm, notify } from '../src/dialog';
-import { cursorAfter, follow, followCounts, followState, like, postsBy, profileByUsername, unfollow, unlike } from '../src/social/feed';
+import { cursorAfter, follow, followCounts, followState, like, PAGE, postsBy, profileByUsername, unfollow, unlike } from '../src/social/feed';
 import { postView } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
 import type { FeedPost, FollowState, PublicProfile } from '../src/social/types';
@@ -38,6 +38,12 @@ export default function ProfileScreen() {
   const [more, setMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Refs, not state: both are read in the same tick a second tap arrives, before
+  // any re-render could have carried the new value to them.
+  const postsRef = useRef<FeedPost[]>([]);
+  postsRef.current = posts;
+  const loadingMoreRef = useRef(false);
+  const likesInFlight = useRef(new Set<string>());
 
   const load = useCallback(async () => {
     setProblem(null);
@@ -52,7 +58,7 @@ export default function ProfileScreen() {
       setCounts(theirCounts);
       setState(theirState);
       setPosts(page);
-      setMore(page.length === 20);
+      setMore(page.length === PAGE);
     } catch (error) {
       setProblem((error as Error).message);
     }
@@ -65,21 +71,36 @@ export default function ProfileScreen() {
   );
 
   const loadMore = async () => {
-    if (posts.length === 0 || loadingMore || !person) return;
+    const current = postsRef.current;
+    if (current.length === 0 || loadingMoreRef.current || !person) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const page = await postsBy(person.id, cursorAfter(posts));
-      setPosts([...posts, ...page]);
-      setMore(page.length === 20);
+      const page = await postsBy(person.id, cursorAfter(current));
+      // Appended to whatever the list is now, not to what it was when the page
+      // was asked for: a like or a reload that landed meanwhile must survive.
+      // A post already in the list is skipped, so a reload that raced this page
+      // cannot give React two rows with one key.
+      setPosts((latest) => {
+        const have = new Set(latest.map((p) => p.id));
+        return [...latest, ...page.filter((p) => !have.has(p.id))];
+      });
+      setMore(page.length === PAGE);
     } catch (error) {
       notify('Could not load more', (error as Error).message);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
 
   // Optimistic: the heart changes at once and is put back if the server says no.
+  // One tap at a time per post — two in flight would finish in whichever order
+  // the server chose, and the heart would be left disagreeing with it until the
+  // next reload.
   const toggleLike = async (post: FeedPost) => {
+    if (likesInFlight.current.has(post.id)) return;
+    likesInFlight.current.add(post.id);
     const flip = (p: FeedPost): FeedPost =>
       p.id === post.id ? { ...p, liked: !p.liked, like_count: p.like_count + (p.liked ? -1 : 1) } : p;
     setPosts((current) => current.map(flip));
@@ -88,6 +109,8 @@ export default function ProfileScreen() {
     } catch (error) {
       setPosts((current) => current.map(flip));
       notify('Could not save that', (error as Error).message);
+    } finally {
+      likesInFlight.current.delete(post.id);
     }
   };
 
@@ -111,11 +134,11 @@ export default function ProfileScreen() {
 
   const say = (words: string) => <Text style={[styles.note, { color: colors.textMuted }]}>{words}</Text>;
 
-  if (!configured) return <Screen title="Profile">{say('Social is not set up in this build.')}</Screen>;
-  if (session === undefined || me === undefined) return <Screen title="Profile"><ActivityIndicator color={colors.text} /></Screen>;
+  if (!configured) return <Screen>{say('Social is not set up in this build.')}</Screen>;
+  if (session === undefined || me === undefined) return <Screen><ActivityIndicator color={colors.text} /></Screen>;
   if (session === null || me === null) {
     return (
-      <Screen title="Profile">
+      <Screen>
         <Card>
           {say('Sign in and choose a username to see profiles.')}
           <Button label={session === null ? 'Sign in' : 'Choose a username'} onPress={() => router.push(session === null ? '/sign-in' : '/profile-setup')} />
@@ -125,14 +148,14 @@ export default function ProfileScreen() {
   }
   if (problem !== null) {
     return (
-      <Screen title="Profile">
+      <Screen>
         {say(problem)}
         <Button label="Try again" onPress={() => void load()} />
       </Screen>
     );
   }
-  if (person === undefined) return <Screen title="Profile"><ActivityIndicator color={colors.text} /></Screen>;
-  if (person === null) return <Screen title="Profile">{say("That account isn't available.")}</Screen>;
+  if (person === undefined) return <Screen><ActivityIndicator color={colors.text} /></Screen>;
+  if (person === null) return <Screen>{say("That account isn't available.")}</Screen>;
 
   const own = state === 'self';
   const locked = person.is_private && state !== 'following' && state !== 'self';
@@ -140,7 +163,6 @@ export default function ProfileScreen() {
 
   return (
     <Screen
-      title="Profile"
       action={
         own ? undefined : (
           <Tappable

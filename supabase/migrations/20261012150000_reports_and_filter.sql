@@ -109,10 +109,14 @@ alter table public.blocks
 -- The row is always overwritten, so what a user sends for these columns is ignored.
 -- The Instagram handle is deliberately not kept: the list shows a name and a
 -- username, and a handle added after the block must never reach the blocked person.
--- One signal remains and is accepted on purpose: the snapshot is what you could see
--- when you blocked them, and blocking again (after unblocking) refreshes it, so
--- someone can learn the name you use at that moment. The alternative is a row with
--- no name, or one that disappears, and either would tell you that you had been blocked.
+-- One signal remains and is accepted on purpose. This runs as the owner, so it reads
+-- the profile of someone who has blocked the person doing the blocking — which is the
+-- only way their own list can name them — and it writes down the username, the display
+-- name and the privacy flag as they stand at that moment. Someone who knows a uuid can
+-- therefore learn that much by blocking them, and can repeat it by unblocking and
+-- blocking again to follow a rename. The alternative is a row with no name, or one that
+-- disappears, and either of those would say outright that you had been blocked. Nothing
+-- here opens their posts, their followers or anything they did after the block.
 -- Triggers fire in name order, so this runs before blocks_target_exists; a block of
 -- an account that does not exist gets nulls here and is then dropped by that
 -- trigger, so it never lands. Either order would be correct.
@@ -130,7 +134,9 @@ create trigger blocks_snapshot_profile before insert on public.blocks
   for each row execute function public.snapshot_blocked_profile();
 
 -- Security invoker: the blocks policy already limits the rows to your own blocks.
--- instagram stays in the declared type because the app reads it; it is always null.
+-- instagram is in the declared type only so the row matches the shape every other
+-- profile call returns, which is what spares the app a type of its own for this list.
+-- It is always null, and nothing reads it: the blocked list shows a name and a username.
 create function public.my_blocked_profiles()
   returns table (id uuid, username text, display_name text, instagram text, is_private boolean)
   language sql stable security invoker set search_path = ''

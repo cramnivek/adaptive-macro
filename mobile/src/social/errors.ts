@@ -20,7 +20,7 @@ export const isAlreadyPosted = (error: ServerError): boolean =>
 
 export const messageFor = (error: ServerError): string => {
   if (error.code === '23505' && error.message?.includes('profiles_username_key')) return 'That username is taken.';
-  // The database's word filter (Task 4) raises P0001 with this message.
+  // The database's word filter raises P0001 with exactly this message.
   if (error.code === 'P0001' && error.message === 'blocked_word') {
     return 'That has a word Ascend doesn’t allow. Change it and try again.';
   }

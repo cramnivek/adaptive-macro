@@ -12,7 +12,7 @@ import type { Post, Profile } from './types';
  * and displays it and never has to know what Postgres or the auth server said.
  */
 
-const PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
+export const PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
 const POST_COLUMNS =
   'id, author_id, session_id, title, performed_on, duration_min, sets, volume_kg, exercises, highlight, caption, created_at';
 

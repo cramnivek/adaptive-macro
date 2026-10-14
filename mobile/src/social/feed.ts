@@ -1,4 +1,4 @@
-import { client, fail, userId } from './api';
+import { client, fail, PROFILE_COLUMNS, userId } from './api';
 import { cursorAfter, escapeSearch, followStateFor, toFeedPost, type FeedCursor } from './feedRules';
 import type { FeedPost, FollowState, PublicProfile } from './types';
 
@@ -13,8 +13,8 @@ import type { FeedPost, FollowState, PublicProfile } from './types';
  * PGRST116 and tell the caller they had been blocked. Screens re-read the state afterwards.
  */
 
-const PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
-const PAGE = 20;
+
+export const PAGE = 20;
 
 export type ReportReason = 'spam' | 'abuse' | 'nudity' | 'other';
 
@@ -29,7 +29,7 @@ export const searchProfiles = async (text: string): Promise<PublicProfile[]> => 
     .select(PROFILE_COLUMNS)
     .like('username', `${prefix}%`)
     .order('username')
-    .limit(20);
+    .limit(PAGE);
   if (error) fail(error);
   return (data ?? []) as PublicProfile[];
 };

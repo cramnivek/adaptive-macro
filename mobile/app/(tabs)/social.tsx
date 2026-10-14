@@ -8,7 +8,7 @@ import { PostCard } from '../../src/components/PostCard';
 import { Screen } from '../../src/components/Screen';
 import { Tappable } from '../../src/components/Tappable';
 import { notify } from '../../src/dialog';
-import { cursorAfter, feedPage, like, pendingRequests, unlike } from '../../src/social/feed';
+import { cursorAfter, feedPage, like, PAGE, pendingRequests, unlike } from '../../src/social/feed';
 import { postView } from '../../src/social/postPayload';
 import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
@@ -44,7 +44,7 @@ export default function SocialScreen() {
     try {
       const [page, pending] = await Promise.all([feedPage(null), pendingRequests()]);
       setPosts(page);
-      setMore(page.length === 20);
+      setMore(page.length === PAGE);
       setRequests(pending.length);
     } catch (error) {
       setProblem((error as Error).message);
@@ -73,7 +73,7 @@ export default function SocialScreen() {
         const have = new Set(latest.map((p) => p.id));
         return [...latest, ...page.filter((p) => !have.has(p.id))];
       });
-      setMore(page.length === 20);
+      setMore(page.length === PAGE);
     } catch (error) {
       notify('Could not load more', (error as Error).message);
     } finally {
@@ -182,7 +182,18 @@ export default function SocialScreen() {
                 onPress: () => router.push({ pathname: '/profile', params: { username: post.username } }),
               }}
               likes={{ count: post.like_count, liked: post.liked, onToggle: () => void toggleLike(post) }}
-              onMore={() => router.push({ pathname: '/report', params: { postId: post.id, profileId: post.author_id, username: post.username } })}
+              // Nothing to report or block on your own workout, and the database
+              // refuses to let anyone block themselves, so the menu would only
+              // ever end in a failure.
+              onMore={
+                post.author_id === profile?.id
+                  ? undefined
+                  : () =>
+                      router.push({
+                        pathname: '/report',
+                        params: { postId: post.id, profileId: post.author_id, username: post.username },
+                      })
+              }
             />
           ))}
           {more && <Button label={loadingMore ? 'Loading…' : 'Load more'} variant="subtle" disabled={loadingMore} onPress={() => void loadMore()} />}
