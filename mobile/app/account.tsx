@@ -81,6 +81,7 @@ export default function AccountScreen() {
           {note(profile.is_private ? 'Private: only people you approve will see your posts.' : 'Public: anyone will be able to see your posts.')}
           <Button label="Edit profile" onPress={() => router.push('/profile-setup')} />
           <Button label="Your posts" variant="subtle" onPress={() => router.push('/my-posts')} />
+          <Button label="Blocked people" variant="subtle" onPress={() => router.push('/blocked')} />
         </Card>
         <Card>
           <Button label="Sign out" variant="subtle" disabled={busy} onPress={() => void leave(signOut, 'Could not sign out')} />

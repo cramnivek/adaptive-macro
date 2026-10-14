@@ -35,13 +35,14 @@ export const USER_A = '00000000-0000-4000-8000-00000000000a';
 export const USER_B = '00000000-0000-4000-8000-00000000000b';
 /** Signed up, but has not chosen a username yet. */
 export const USER_C = '00000000-0000-4000-8000-00000000000c';
+export const USER_D = '00000000-0000-4000-8000-00000000000d';
 
 export const freshDatabase = async (): Promise<PGlite> => {
   const db = new PGlite();
   await db.exec(SUPABASE_STAND_IN);
   const files = readdirSync(MIGRATIONS).filter((name) => name.endsWith('.sql')).sort();
   for (const file of files) await db.exec(readFileSync(join(MIGRATIONS, file), 'utf8'));
-  await db.exec(`insert into auth.users (id) values ('${USER_A}'), ('${USER_B}'), ('${USER_C}')`);
+  await db.exec(`insert into auth.users (id) values ('${USER_A}'), ('${USER_B}'), ('${USER_C}'), ('${USER_D}')`);
   return db;
 };
 

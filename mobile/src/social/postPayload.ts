@@ -152,10 +152,23 @@ const readableHighlight = (highlight: unknown): Milestone | null => {
   return { kind, value, ...(exercise === undefined ? {} : { exercise }) };
 };
 
+/**
+ * Whether a stored lift was cardio.
+ *
+ * The name is the first answer, but someone can type any name into the Cardio
+ * tab — "Ski erg", "Spin class" — and `detectCardio` will not know it. What the
+ * writer does know is written into the row: cardio is stored with no sets, no
+ * weight and no reps, which a strength lift never is, because it always has at
+ * least the set it was written from. Reading that back is what stops a ski erg
+ * from being posted as "0 reps".
+ */
+const wasCardio = (lift: PostExercise): boolean =>
+  detectCardio(lift.name) || (lift.sets === 0 && lift.best_kg === null && lift.best_reps === 0);
+
 export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): PostView => {
   const unit = units === 'metric' ? 'kg' : 'lb';
   const best = (lift: PostExercise): string => {
-    if (detectCardio(lift.name)) {
+    if (wasCardio(lift)) {
       return 'Cardio';
     }
     return lift.best_kg === null
@@ -176,7 +189,7 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
         ? null
         : `${Math.round(displayWeight(row.volume_kg, units)).toLocaleString('en-US')} ${unit}`,
     exercises: lifts.slice(0, maxExercises).map((lift) => {
-      const isCardio = detectCardio(lift.name);
+      const isCardio = wasCardio(lift);
       return {
         name: lift.name,
         sets: lift.sets,
