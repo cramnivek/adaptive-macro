@@ -98,7 +98,12 @@ const wordmark = (ctx: CanvasRenderingContext2D, x: number, y: number, px: numbe
  */
 const heroOf = (summary: ShareCard): { figure: string; label: string; red: boolean } => {
   if (summary.highlight) {
-    return { figure: summary.highlight.figure, label: `NEW BEST · ${summary.highlight.label}`, red: true };
+    // An exercise carries its equipment in brackets — ARNOLD PRESS (DUMBBELL) —
+    // and that is the part the line runs out of room for, so it goes first. A
+    // best is a best whichever dumbbell it was on, and "ARNOLD PRESS (DUMBBE…"
+    // tells nobody anything.
+    const lift = summary.highlight.label.replace(/\s*\([^)]*\)\s*$/, '');
+    return { figure: summary.highlight.figure, label: `NEW BEST · ${lift}`, red: true };
   }
   if (summary.volume) {
     const cut = summary.volume.lastIndexOf(' ');
