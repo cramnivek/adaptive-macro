@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { shareCardFile, shareWorkout } from '../platform/shareImage';
-import type { ShareSummary } from '../shareCard';
+import { pickCardPhoto, shareCardFile, shareWorkout } from '../platform/shareImage';
+import type { ShareCard } from '../shareCard';
 import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -11,7 +11,7 @@ import { Tappable } from './Tappable';
 
 interface FinishSheetProps {
   /** The finished workout, or null when the sheet is closed. */
-  summary: ShareSummary | null;
+  summary: ShareCard | null;
   /** Out of the way while sign-in is open over it, keeping the caption typed so far. */
   hidden: boolean;
   /** Whether posting is possible, and if not, what stands in the way. */
@@ -44,24 +44,38 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [writing, setWriting] = useState(postFirst);
   const [posting, setPosting] = useState(false);
   const [posted, setPosted] = useState(false);
+  // The picked picture, held against the workout it was picked for, so the next
+  // workout starts on the dark card rather than on someone else's photo.
+  const [picked, setPicked] = useState<{ workout: ShareCard; image: HTMLImageElement } | null>(null);
+  const photo = picked !== null && picked.workout === summary ? picked.image : null;
+
+  useEffect(() => {
+    if (summary === null) return;
+    setNote(null);
+    setCaption('');
+    setPosted(false);
+    setWriting(postFirst);
+  // `postFirst` is read once per finished workout: posting flips the setting while the sheet is
+  // still open, and that must not snap the caption shut.
+  }, [summary]);
 
   useEffect(() => {
     if (summary === null) return;
     let live = true;
     setDrawing(true);
-    setNote(null);
-    setCaption('');
-    setPosted(false);
-    setWriting(postFirst);
-    void shareCardFile(summary)
+    void shareCardFile(summary, photo)
       .then((drawn) => live && setCard(drawn))
       .finally(() => live && setDrawing(false));
     return () => {
       live = false;
     };
-  // `postFirst` is read once per finished workout: posting flips the setting while the sheet is
-  // still open, and that must not snap the caption shut.
-  }, [summary]);
+  }, [summary, photo]);
+
+  const choosePhoto = async () => {
+    if (summary === null) return;
+    const image = await pickCardPhoto();
+    if (image) setPicked({ workout: summary, image });
+  };
 
   const share = async () => {
     if (summary === null) return;
@@ -147,6 +161,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             ) : null}
           </View>
 
+          {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
+          {card !== null && (
+            <View style={styles.photoRow}>
+              <Tappable onPress={() => void choosePhoto()} accessibilityRole="button" style={styles.photoAction}>
+                <Text style={styles.photoLabel}>{photo ? 'CHANGE PHOTO' : 'ADD A PHOTO'}</Text>
+              </Tappable>
+              {photo !== null && (
+                <Tappable onPress={() => setPicked(null)} accessibilityRole="button" style={styles.photoAction}>
+                  <Text style={styles.photoLabel}>REMOVE</Text>
+                </Tappable>
+              )}
+            </View>
+          )}
+
           {account !== 'unavailable' && writing && !posted && (
             <TextInput
               value={caption}
@@ -208,6 +236,10 @@ const styles = StyleSheet.create({
   // A story is 9:16; the preview keeps that shape at a size that leaves the buttons on screen.
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
+  photoRow: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginBottom: space.xs },
+  // Small type, but a full touch target: hitSlop is ignored on the web.
+  photoAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md },
+  photoLabel: { fontFamily: font.uiStrong, fontSize: 12, letterSpacing: 1.2, color: loud.figureMuted },
   caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
   spent: { opacity: 0.6 },
