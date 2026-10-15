@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, PanResponder, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cardFileFrom,
@@ -20,6 +30,7 @@ import {
   type Placement,
   placementOrigin,
 } from '../shareCardPlacement';
+import { subjectOf } from '../platform/depth';
 import { useApp } from '../state/AppStore';
 
 /** The card's own size. The preview is a fraction of it, and the sticker's place is kept as a fraction of both. */
@@ -79,6 +90,10 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [dragging, setDragging] = useState(false);
   const [ground, setGround] = useState<string | null>(null);
   const [sticker, setSticker] = useState<{ uri: string; width: number; height: number } | null>(null);
+  // The person, cut out of the photograph, so the type can pass behind them.
+  const [subject, setSubject] = useState<{ canvas: HTMLCanvasElement; uri: string } | null>(null);
+  const [cutting, setCutting] = useState(false);
+  const depth = settings.cardDepth;
 
   useEffect(() => {
     if (summary === null) return;
@@ -103,7 +118,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       void (async () => {
         await cardFontsReady();
         const overlay = drawOverlay(summary, blocks);
-        return cardFileFrom(composeCard(photo, overlay, place), summary.title, true);
+        return cardFileFrom(composeCard(photo, overlay, place, subject?.canvas ?? null), summary.title, true);
       })()
         .then((drawn) => {
           if (!alive) return;
@@ -140,7 +155,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     return () => {
       live = false;
     };
-  }, [summary, photo, blocks, place, dragging, sticker]);
+  }, [summary, photo, blocks, place, dragging, sticker, subject]);
 
   // The picture, graded once. The preview shows this rather than the raw
   // photograph so that what is on screen while you place the block is what the
@@ -172,6 +187,39 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       live = false;
     };
   }, [summary, photo, blocks]);
+
+  // The cut-out: asked for once per photograph, and only when depth is on,
+  // because the first one fetches the runtime that does it.
+  useEffect(() => {
+    if (photo === null || !depth) {
+      setSubject(null);
+      return;
+    }
+    let live = true;
+    setCutting(true);
+    void subjectOf(photo, CARD)
+      .then((cut) => {
+        if (!live) return;
+        if (cut === null) {
+          // Either there is no one in the picture or the model could not find
+          // them. Cutting nothing out would leave the card exactly as it was,
+          // so saying so beats a toggle that appears to do nothing.
+          setNote('No one to cut out of that picture, so the type stays in front.');
+          setSubject(null);
+          return;
+        }
+        setSubject({ canvas: cut, uri: cut.toDataURL() });
+      })
+      .catch(() => {
+        if (!live) return;
+        setNote('Depth needs a download that could not be had just now.');
+        void updateSettings({ cardDepth: false });
+      })
+      .finally(() => live && setCutting(false));
+    return () => {
+      live = false;
+    };
+  }, [photo, depth]);
 
   const choosePhoto = async () => {
     if (summary === null) return;
@@ -353,6 +401,10 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                     }}
                   />
                 )}
+                {subject !== null && (
+                  /* The person, over the type, exactly as the file will have it. */
+                  <Image source={{ uri: subject.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                )}
               </View>
             ) : card ? (
               <Image source={{ uri: card.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
@@ -364,7 +416,12 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           {/* The blocks, and a way back to the middle. Only over a photo: without
               one the card is the poster, which has nowhere to be put. */}
           {ground !== null && (
-            <View style={styles.blocks}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.blocks}
+              contentContainerStyle={styles.blocksRow}
+            >
               {CARD_BLOCKS.map((block) => (
                 <Tappable
                   key={block}
@@ -378,10 +435,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                   </Text>
                 </Tappable>
               ))}
+              <Tappable
+                onPress={() => void updateSettings({ cardDepth: !depth })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: depth, busy: cutting }}
+                style={[styles.chip, depth && styles.chipOn]}
+              >
+                <Text style={[styles.chipLabel, { color: depth ? loud.ground : loud.figureMuted }]}>
+                  {cutting ? 'CUTTING…' : 'DEPTH'}
+                </Text>
+              </Tappable>
               <Tappable onPress={() => setPlace(CENTRED)} accessibilityRole="button" style={styles.chip}>
                 <Text style={[styles.chipLabel, { color: loud.figureMuted }]}>RESET</Text>
               </Tappable>
-            </View>
+            </ScrollView>
           )}
 
           {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
@@ -471,7 +538,10 @@ const styles = StyleSheet.create({
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
   frame: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: loud.ground },
-  blocks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.xs, marginBottom: space.xs },
+  // Scrolled rather than wrapped: the number of chips is not fixed, and a row
+  // that silently loses its last one is worse than one that slides.
+  blocks: { flexGrow: 0, marginBottom: space.xs },
+  blocksRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.xs },
   chip: {
     minHeight: 34,
     justifyContent: 'center',

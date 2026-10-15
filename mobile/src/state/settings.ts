@@ -96,6 +96,12 @@ export interface AppSettings {
    * starts where they left it rather than back at everything.
    */
   cardBlocks: CardBlocks;
+  /**
+   * Whether the card cuts the person out of the photograph so the type passes
+   * behind them. Off by default: the first use fetches about nine megabytes of
+   * runtime, which is not something to spend on someone who never asked for it.
+   */
+  cardDepth: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -128,6 +134,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restSound: true,
   postWorkouts: false,
   cardBlocks: ALL_BLOCKS,
+  cardDepth: false,
 };
 
 export const SETTINGS_KEY = 'app.settings';

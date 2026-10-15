@@ -1,5 +1,6 @@
 import { Platform, Share } from 'react-native';
 import { type ShareCard, titleLines } from '../shareCard';
+import { coverRect } from './depth';
 import {
   ALL_BLOCKS,
   type CardBlocks,
@@ -185,12 +186,12 @@ const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   const light = brightnessOf(photo) ?? 0.45;
   const heavy = Math.min(1, Math.max(0, (light - 0.2) / 0.45));
 
-  const scale = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
-  const w = photo.naturalWidth * scale;
-  const h = photo.naturalHeight * scale;
+  // The same geometry the cut-out uses, so a person and their own silhouette
+  // cannot end up a pixel apart.
+  const rect = coverRect(photo, { width: W, height: H });
   ctx.save();
   ctx.filter = `grayscale(${(0.2 + 0.25 * heavy).toFixed(2)}) contrast(${(1.04 + 0.1 * heavy).toFixed(2)}) brightness(${(1 - 0.32 * heavy).toFixed(2)})`;
-  ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
+  ctx.drawImage(photo, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 
   ctx.fillStyle = `rgba(10,10,12,${(0.04 + 0.2 * heavy).toFixed(2)})`;
@@ -820,6 +821,7 @@ export const composeCard = (
   photo: HTMLImageElement,
   overlay: HTMLCanvasElement,
   place: Placement,
+  subject: HTMLCanvasElement | null = null,
 ): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -835,5 +837,15 @@ export const composeCard = (
   ctx.shadowBlur = 30;
   ctx.shadowOffsetY = 6;
   ctx.drawImage(overlay, left, top, overlay.width * legal.scale, overlay.height * legal.scale);
+
+  // The person, last, over the type that was over the picture. That order is
+  // the whole of the depth: a headline disappearing behind a shoulder reads as
+  // somewhere the words are, rather than something stuck on the front. The
+  // cut-out is the photograph ungraded, so the subject keeps the light the
+  // background has given up.
+  if (subject !== null) {
+    ctx.shadowColor = 'transparent';
+    ctx.drawImage(subject, 0, 0, W, H);
+  }
   return canvas;
 };
