@@ -30,8 +30,15 @@ export interface Placement {
   scale: number;
 }
 
-/** The middle of the frame, at the size it was drawn. */
-export const CENTRED: Placement = { x: 0.5, y: 0.5, scale: 1 };
+/**
+ * Where a block starts, and where RESET puts it back.
+ *
+ * Low rather than centred: the middle of a photograph of a workout is usually
+ * somebody's face, and a block that lands on the face is the first thing anyone
+ * would move. Dropped low it lands on the floor, the bench or the mirror, which
+ * is where a caption goes anyway.
+ */
+export const RESTING: Placement = { x: 0.5, y: 0.68, scale: 1 };
 
 export const MIN_SCALE = 0.6;
 export const MAX_SCALE = 1.4;
