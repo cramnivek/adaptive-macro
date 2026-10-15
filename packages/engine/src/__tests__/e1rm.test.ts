@@ -213,12 +213,19 @@ describe('evaluatePRTarget', () => {
 
   it('marks load as too-light when weight cannot challenge 1RM within 10 reps', () => {
     // Target 100 kg. At 50 kg, 10 reps yields only 66.67 kg.
-    // The lifter must load at least ceil(100 / (1 + 10/30)) = 75 kg.
+    // To strictly exceed 100 kg in 10 reps, the lifter must load > 75 kg (75.5 kg).
     const result = evaluatePRTarget({ weight: 50, reps: 0, bestPR: existingPR });
     expect(result.status).toBe('too-light');
     if (result.status === 'too-light') {
-      expect(result.minWeightForPR).toBe(75);
+      expect(result.minWeightForPR).toBe(75.5);
       expect(result.targetE1rm).toBe(100);
+    }
+
+    // When weight is 75 kg (which at 10 reps only ties 100 kg), minWeight must be strictly greater:
+    const at75 = evaluatePRTarget({ weight: 75, reps: 0, bestPR: existingPR });
+    expect(at75.status).toBe('too-light');
+    if (at75.status === 'too-light') {
+      expect(at75.minWeightForPR).toBeGreaterThan(75);
     }
   });
 });

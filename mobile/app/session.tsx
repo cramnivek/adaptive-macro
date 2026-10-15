@@ -2,6 +2,7 @@ import {
   bodyweightForDates,
   estimate1RM,
   evaluatePRTarget,
+  lbToKg,
   milestonesOn,
   todayISO,
 } from '@adaptive-macros/engine';
@@ -181,6 +182,10 @@ export default function SessionScreen() {
   const insets = useSafeAreaInsets();
   const { series, settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
+  const currentBodyweightKg = useMemo(
+    () => series[series.length - 1]?.trendWeightKg ?? settings.goalWeightKg ?? null,
+    [series, settings.goalWeightKg],
+  );
   const params = useLocalSearchParams<{ start?: string; routine?: string; cardio?: string }>();
 
   const [session, setSession] = useState<ActiveSession | null>(null);
@@ -553,11 +558,11 @@ export default function SessionScreen() {
       cardioMode,
       rows,
       previous: await lastSessionSets(name),
-      bestPR: await exerciseBestPR(name),
+      bestPR: await exerciseBestPR(name, bodyweightBased, series, currentBodyweightKg),
       target,
       supersetGroup,
     }),
-    [],
+    [series, currentBodyweightKg],
   );
 
   /**
@@ -1082,7 +1087,15 @@ export default function SessionScreen() {
         if (!row.done || row.setType === 'warmup') continue;
         const reps = Number(row.reps);
         if (!Number.isFinite(reps) || reps <= 0) continue;
-        const kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+        let kg: number | null = null;
+        if (block.bodyweightBased) {
+          const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+          if (currentBodyweightKg !== null) {
+            kg = currentBodyweightKg + (added ?? 0);
+          }
+        } else {
+          kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+        }
         if (kg === null || kg <= 0) continue;
         const e1rm = estimate1RM(kg, reps);
         if (!best || e1rm > best.e1rm) {
@@ -1091,7 +1104,7 @@ export default function SessionScreen() {
       }
       return best;
     },
-    [settings.units],
+    [currentBodyweightKg, settings.units],
   );
 
   /** Ticking writes the set; unticking removes it. */
@@ -1220,11 +1233,14 @@ export default function SessionScreen() {
     editRow(blockIndex, rowIndex, { done: true, id: written[written.length - 1]?.id ?? null });
 
     const currentBestPR = effectiveBestPRFor(block);
+    const effectiveKg = block.bodyweightBased
+      ? (currentBodyweightKg !== null ? currentBodyweightKg + (kg ?? 0) : null)
+      : kg;
     const isNewPR =
       row.setType !== 'warmup' &&
-      kg !== null &&
-      kg > 0 &&
-      (!currentBestPR || estimate1RM(kg, reps) > currentBestPR.e1rm);
+      effectiveKg !== null &&
+      effectiveKg > 0 &&
+      (!currentBestPR || estimate1RM(effectiveKg, reps) > currentBestPR.e1rm);
 
     if (isNewPR) {
       thud('heavy');
@@ -1724,7 +1740,14 @@ export default function SessionScreen() {
             {!block.isCardio && (() => {
               const pattern = patterns[block.name];
               const isCompound = pattern === 'squat' || pattern === 'hinge' || pattern === 'push' || pattern === 'pull';
-              const hint = nextLoadHint(block.previous, settings.units, block.target?.reps, isCompound);
+              const hint = nextLoadHint(
+                block.previous,
+                settings.units,
+                block.target?.reps,
+                isCompound,
+                block.bodyweightBased,
+                currentBodyweightKg,
+              );
               return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
             })()}
             {!block.isCardio && block.target && (
@@ -2025,7 +2048,15 @@ export default function SessionScreen() {
 
                     {!block.isCardio && row.setType !== 'warmup' && (() => {
                       const currentBest = effectiveBestPRFor(block);
-                      const parsedWeight = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+                      let parsedWeight: number | null = null;
+                      if (block.bodyweightBased) {
+                        const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+                        if (currentBodyweightKg !== null) {
+                          parsedWeight = currentBodyweightKg + (added ?? 0);
+                        }
+                      } else {
+                        parsedWeight = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+                      }
                       const parsedReps = Number(row.reps);
                       const validReps = Number.isFinite(parsedReps) && parsedReps > 0 ? parsedReps : 0;
 
@@ -2035,6 +2066,7 @@ export default function SessionScreen() {
                         weight: parsedWeight,
                         reps: validReps,
                         bestPR: currentBest,
+                        stepKg: settings.units === 'metric' ? 2.5 : lbToKg(5),
                       });
 
                       if (evalResult.status === 'none') return null;
@@ -2068,7 +2100,9 @@ export default function SessionScreen() {
                             </Text>
                           ) : evalResult.status === 'too-light' ? (
                             <Text style={styles.prRowTextTarget}>
-                              🎯 LOAD ≥ {displayWeight(evalResult.minWeightForPR, settings.units).toFixed(1)} {unit.toUpperCase()} TO TEST 1RM
+                              {block.bodyweightBased && currentBodyweightKg !== null
+                                ? `🎯 ADD ≥ ${displayWeight(Math.max(0, evalResult.minWeightForPR - currentBodyweightKg), settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`
+                                : `🎯 LOAD ≥ ${displayWeight(evalResult.minWeightForPR, settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`}
                             </Text>
                           ) : (
                             <Text style={styles.prRowTextTarget}>

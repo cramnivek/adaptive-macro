@@ -693,11 +693,13 @@ export const evaluatePRTarget = ({
   reps,
   bestPR,
   maxReps = MAX_1RM_VALID_REPS,
+  stepKg,
 }: {
   weight: number;
   reps: number;
   bestPR: ExercisePR | null;
   maxReps?: number;
+  stepKg?: number;
 }): PRTargetEvaluation => {
   if (weight <= 0) return { status: 'none' };
 
@@ -710,6 +712,19 @@ export const evaluatePRTarget = ({
   }
 
   const target = bestPR.e1rm;
+
+  const calcMinWeight = (): number => {
+    // To strictly exceed target in <= maxReps:
+    // load * (1 + maxReps / 30) > target  =>  load > target / (1 + maxReps / 30)
+    const rawMin = target / (1 + maxReps / 30);
+    const step = stepKg && stepKg > 0 ? stepKg : 0.5;
+    let minWeight = Math.ceil((rawMin + 1e-4) / step) * step;
+    if (minWeight <= weight) {
+      minWeight = Math.round((weight + step) * 100) / 100;
+    }
+    return Math.round(minWeight * 100) / 100;
+  };
+
   if (reps > 0) {
     const e1rm = estimate1RM(weight, reps);
     if (e1rm > target) {
@@ -717,8 +732,7 @@ export const evaluatePRTarget = ({
     }
     const rBeat = repsToBeat(weight, target, maxReps);
     if (rBeat === null) {
-      const minWeight = Math.ceil((target / (1 + maxReps / 30)) * 10) / 10;
-      return { status: 'too-light', minWeightForPR: minWeight, targetE1rm: target, weight };
+      return { status: 'too-light', minWeightForPR: calcMinWeight(), targetE1rm: target, weight };
     }
     if (reps === rBeat - 1) {
       return { status: 'close', repsAway: 1, repsToBeat: rBeat, targetE1rm: target, weight };
@@ -728,8 +742,7 @@ export const evaluatePRTarget = ({
 
   const rBeat = repsToBeat(weight, target, maxReps);
   if (rBeat === null) {
-    const minWeight = Math.ceil((target / (1 + maxReps / 30)) * 10) / 10;
-    return { status: 'too-light', minWeightForPR: minWeight, targetE1rm: target, weight };
+    return { status: 'too-light', minWeightForPR: calcMinWeight(), targetE1rm: target, weight };
   }
   return { status: 'target', repsToBeat: rBeat, targetE1rm: target, weight };
 };

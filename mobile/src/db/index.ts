@@ -1969,7 +1969,12 @@ export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]
 /**
  * The highest estimated 1RM logged for this exercise across all finished sessions.
  */
-export const exerciseBestPR = async (exerciseName: string): Promise<ExercisePR | null> => {
+export const exerciseBestPR = async (
+  exerciseName: string,
+  bodyweightBased = false,
+  series: readonly { date: ISODate; trendWeightKg: number }[] = [],
+  fallbackBodyweightKg?: number | null,
+): Promise<ExercisePR | null> => {
   const db = await getDb();
   const rows = await db.getAllAsync<{
     weight_kg: number | null;
@@ -1981,21 +1986,38 @@ export const exerciseBestPR = async (exerciseName: string): Promise<ExercisePR |
       WHERE s.exercise_name = ?
         AND s.set_type != 'warmup'
         AND s.reps > 0
-        AND s.weight_kg IS NOT NULL
-        AND s.weight_kg > 0
         AND w.finished_at IS NOT NULL`,
     exerciseName,
   );
   if (rows.length === 0) return null;
 
+  const lookupBw = (date: ISODate): number | null => {
+    if (!series || series.length === 0) return fallbackBodyweightKg ?? null;
+    const exact = series.find((s) => s.date === date);
+    if (exact) return exact.trendWeightKg;
+    if (date < series[0].date) return series[0].trendWeightKg;
+    if (date > series[series.length - 1].date) return series[series.length - 1].trendWeightKg;
+    return fallbackBodyweightKg ?? series[series.length - 1].trendWeightKg;
+  };
+
   let best: ExercisePR | null = null;
   for (const row of rows) {
-    if (row.weight_kg === null || row.weight_kg <= 0) continue;
-    const e1rm = estimate1RM(row.weight_kg, row.reps);
+    let load: number | null = null;
+    if (bodyweightBased) {
+      const bw = lookupBw(row.date);
+      if (bw === null) continue;
+      load = bw + (row.weight_kg ?? 0);
+    } else {
+      if (row.weight_kg === null || row.weight_kg <= 0) continue;
+      load = row.weight_kg;
+    }
+    if (load === null || load <= 0) continue;
+
+    const e1rm = estimate1RM(load, row.reps);
     if (!best || e1rm > best.e1rm) {
       best = {
         e1rm,
-        weight: row.weight_kg,
+        weight: load,
         reps: row.reps,
         date: row.date,
       };
