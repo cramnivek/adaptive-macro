@@ -34,4 +34,28 @@ describe('chimeWav', () => {
     expect(peak).toBeGreaterThan(15000);
     expect(peak).toBeLessThan(21000);
   });
+
+  it('generates valid, click-free audio for all chime choices', () => {
+    const choices = ['chime', 'bell', 'rising', 'gong', 'beeps'] as const;
+    for (const choice of choices) {
+      const samples = chimeSamples(choice);
+      const wav = chimeWav(choice);
+      const view = new DataView(wav.buffer);
+
+      expect(ascii(wav, 0, 4)).toBe('RIFF');
+      expect(ascii(wav, 8, 4)).toBe('WAVE');
+      expect(view.getUint16(20, true)).toBe(1);
+      expect(view.getUint16(22, true)).toBe(1);
+      expect(samples[0]).toBe(0);
+      expect(Math.abs(samples[samples.length - 1])).toBeLessThan(200);
+
+      const duration = samples.length / 22050;
+      expect(duration).toBeGreaterThan(0.5);
+      expect(duration).toBeLessThan(1.1);
+
+      const peak = samples.reduce((max, s) => Math.max(max, Math.abs(s)), 0);
+      expect(peak).toBeGreaterThan(10000);
+      expect(peak).toBeLessThan(32000);
+    }
+  });
 });

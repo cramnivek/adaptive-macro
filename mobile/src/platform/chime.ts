@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { chimeWav } from './chimeSound';
+import { type ChimeChoice, chimeWav } from './chimeSound';
 
 /**
  * The rest-is-up chime, on the web build.
@@ -15,7 +15,7 @@ import { chimeWav } from './chimeSound';
  * there.
  */
 
-let element: HTMLAudioElement | null = null;
+const audioCache = new Map<ChimeChoice, HTMLAudioElement>();
 let audioCtx: any = null;
 
 const getAudioContext = (): any => {
@@ -28,52 +28,118 @@ const getAudioContext = (): any => {
   return audioCtx;
 };
 
-/** Synthesizes the 5-beep alert sequence via Web Audio when HTMLAudioElement cannot play. */
-const playWebAudioFallback = (): void => {
+/** Synthesizes alert sound via Web Audio when HTMLAudioElement cannot play. */
+const playWebAudioFallback = (choice: ChimeChoice): void => {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
     if (ctx.state === 'suspended') {
       void ctx.resume();
     }
-    const beepsHz = [1046.5, 1046.5, 1046.5, 1046.5, 1318.5];
-    const beepsSec = [0.09, 0.09, 0.09, 0.09, 0.14];
-    const gapSec = 0.06;
-    let t = ctx.currentTime;
+    const t = ctx.currentTime;
 
-    for (let i = 0; i < beepsHz.length; i += 1) {
-      const hz = beepsHz[i];
-      const dur = beepsSec[i];
+    if (choice === 'bell') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.frequency.setValueAtTime(hz, t);
+      osc.frequency.setValueAtTime(880, t);
       gain.gain.setValueAtTime(0.001, t);
-      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(t);
-      osc.stop(t + dur);
-      t += dur + gapSec;
+      osc.stop(t + 0.7);
+    } else if (choice === 'rising') {
+      const notes = [523.25, 659.25, 783.99];
+      notes.forEach((hz, idx) => {
+        const noteT = t + idx * 0.12;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(hz, noteT);
+        gain.gain.setValueAtTime(0.001, noteT);
+        gain.gain.exponentialRampToValueAtTime(0.28, noteT + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteT + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(noteT);
+        osc.stop(noteT + 0.4);
+      });
+    } else if (choice === 'gong') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.setValueAtTime(261.63, t);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.9);
+    } else if (choice === 'chime') {
+      const notes = [
+        { hz: 659.25, start: 0, dur: 0.35 },
+        { hz: 987.77, start: 0.18, dur: 0.5 },
+      ];
+      notes.forEach((note) => {
+        const noteT = t + note.start;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(note.hz, noteT);
+        gain.gain.setValueAtTime(0.001, noteT);
+        gain.gain.exponentialRampToValueAtTime(0.3, noteT + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteT + note.dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(noteT);
+        osc.stop(noteT + note.dur);
+      });
+    } else {
+      // 'beeps'
+      const beepsHz = [1046.5, 1046.5, 1046.5, 1046.5, 1318.5];
+      const beepsSec = [0.09, 0.09, 0.09, 0.09, 0.14];
+      const gapSec = 0.06;
+      let curr = t;
+
+      for (let i = 0; i < beepsHz.length; i += 1) {
+        const hz = beepsHz[i];
+        const dur = beepsSec[i];
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(hz, curr);
+        gain.gain.setValueAtTime(0.001, curr);
+        gain.gain.exponentialRampToValueAtTime(0.25, curr + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, curr + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(curr);
+        osc.stop(curr + dur);
+        curr += dur + gapSec;
+      }
     }
   } catch {
     // Ignore audio errors silently
   }
 };
 
-const audio = (): HTMLAudioElement | null => {
+const audio = (choice: ChimeChoice): HTMLAudioElement | null => {
   if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
-  if (element === null) {
-    const url = URL.createObjectURL(new Blob([chimeWav().buffer as ArrayBuffer], { type: 'audio/wav' }));
-    element = new Audio(url);
-    element.preload = 'auto';
+  let element = audioCache.get(choice);
+  if (!element) {
+    try {
+      const url = URL.createObjectURL(new Blob([chimeWav(choice).buffer as ArrayBuffer], { type: 'audio/wav' }));
+      element = new Audio(url);
+      element.preload = 'auto';
+      audioCache.set(choice, element);
+    } catch {
+      return null;
+    }
   }
   return element;
 };
 
 /** Call from a tap. Plays the chime silently so the browser will allow it later. */
-export const primeChime = (): void => {
-  const a = audio();
+export const primeChime = (choice: ChimeChoice = 'chime'): void => {
+  const a = audio(choice);
   if (a !== null) {
     a.muted = true;
     void a
@@ -94,18 +160,18 @@ export const primeChime = (): void => {
 };
 
 /** Plays the chime, if a tap has primed it. Quietly nothing if the browser still says no. */
-export const playChime = (): void => {
-  const a = audio();
+export const playChime = (choice: ChimeChoice = 'chime'): void => {
+  const a = audio(choice);
   if (a !== null) {
     a.muted = false;
     a.currentTime = 0;
     const playPromise = a.play();
     if (playPromise !== undefined) {
       playPromise.catch(() => {
-        playWebAudioFallback();
+        playWebAudioFallback(choice);
       });
       return;
     }
   }
-  playWebAudioFallback();
+  playWebAudioFallback(choice);
 };

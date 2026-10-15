@@ -5,6 +5,7 @@ import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
 import type { BarChoice } from '../plates';
 import { EQUIPMENT_ITEMS, type EquipmentItem, type TrainingLevel } from '../ai/routineBuild';
+import type { ChimeChoice } from '../platform/chimeSound';
 
 export type UnitSystem = 'metric' | 'imperial';
 export type WeightUnitSetting = 'switchable' | 'kg' | 'lbs';
@@ -83,6 +84,8 @@ export interface AppSettings {
   trainingLevel: TrainingLevel;
   /** Whether the rest timer chimes when it runs out. Off for anyone training in headphones. */
   restSound: boolean;
+  /** The sound played when the rest timer finishes. Defaults to 'chime'. */
+  restChimeChoice: ChimeChoice;
   /**
    * Whether the finish sheet leads with POST. Set by what someone did last
    * time — posted, or left without posting — so a regular poster gets one tap
@@ -119,6 +122,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   routineEquipment: [...EQUIPMENT_ITEMS],
   trainingLevel: 'intermediate',
   restSound: true,
+  restChimeChoice: 'chime',
   postWorkouts: false,
 };
 
