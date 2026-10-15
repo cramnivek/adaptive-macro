@@ -11,7 +11,9 @@ import {
   estimateCostUsd,
   estimateMeal,
 } from '../src/ai/describeMeal';
+import { scanPhaseOf } from '../src/ai/foodScan';
 import { captureWithSystemCamera, chooseMealPhoto, preparePhoto } from '../src/ai/mealPhoto';
+import { FoodScanOverlay } from '../src/components/FoodScanOverlay';
 import { MealCameraSheet } from '../src/components/MealCameraSheet';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
@@ -316,10 +318,13 @@ export default function DescribeScreen() {
       <Card title="What did you eat?" subtitle="Photograph it, write it, or both.">
         {photo ? (
           <View style={styles.photoRow}>
-            <Image
-              source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
-              style={[styles.photoPreview, { borderColor: colors.border }]}
-            />
+            <View style={[styles.photoPreview, { borderColor: colors.border, overflow: 'hidden' }]}>
+              <Image
+                source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
+                style={StyleSheet.absoluteFill}
+              />
+              {busy && <FoodScanOverlay compact elapsed={elapsed} />}
+            </View>
             <View style={{ flex: 1 }}>
               <Button label="Remove photo" variant="subtle" onPress={() => setPhoto(null)} />
             </View>
@@ -372,9 +377,11 @@ export default function DescribeScreen() {
         <Card>
           <ActivityIndicator color={colors.accent} />
           <Text style={[styles.body, { color: colors.textMuted, textAlign: 'center', marginTop: space.md }]}>
-            {usingLocal
-              ? `Running ${settings.ollamaModel} on this machine — a large local model usually takes 10 to 45 seconds.`
-              : `Asking ${settings.aiProvider === 'gemini' ? 'Gemini' : 'Claude'}…`}
+            {photo
+              ? `${scanPhaseOf(elapsed).label} (${elapsed}s)`
+              : usingLocal
+                ? `Running ${settings.ollamaModel} on this machine — a large local model usually takes 10 to 45 seconds.`
+                : `Asking ${settings.aiProvider === 'gemini' ? 'Gemini' : 'Claude'}…`}
           </Text>
         </Card>
       )}

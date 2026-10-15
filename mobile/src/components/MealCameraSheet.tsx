@@ -12,8 +12,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { EstimatedItem, MealEstimate, MealPhoto } from '../ai/describeMeal';
+import { scanPhaseOf } from '../ai/foodScan';
 import { font, radius, space, useTheme } from '../theme';
+import { session as loud } from '../theme/sessionTheme';
 import { Button } from './Controls';
+import { FoodScanOverlay } from './FoodScanOverlay';
 
 interface MealCameraSheetProps {
   visible: boolean;
@@ -124,11 +127,14 @@ export const MealCameraSheet = ({
             {!livePreview && !photo ? null : photo ? (
               // The still replaces the preview the moment the shutter fires, so
               // the frame being judged is visibly the frame that was sent.
-              <Image
-                source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-              />
+              <View style={StyleSheet.absoluteFill}>
+                <Image
+                  source={{ uri: `data:${photo.mimeType};base64,${photo.base64}` }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
+                {busy && <FoodScanOverlay elapsed={elapsed} />}
+              </View>
             ) : (
               <CameraView
                 ref={camera}
@@ -181,12 +187,17 @@ export const MealCameraSheet = ({
                 )}
 
                 {photo && busy && (
-                  <>
-                    <ActivityIndicator color={colors.accent} />
-                    <Text style={[styles.hint, { color: colors.textMuted }]}>
-                      Estimating… {elapsed}s
-                    </Text>
-                  </>
+                  <View style={styles.scanningPanel}>
+                    <View style={styles.scanningRow}>
+                      <ActivityIndicator size="small" color={loud.loud} />
+                      <Text style={[styles.scanningLabel, { color: colors.text }]}>
+                        {scanPhaseOf(elapsed).label}
+                      </Text>
+                      <Text style={[styles.scanningSecs, { color: colors.textMuted }]}>
+                        {elapsed}s
+                      </Text>
+                    </View>
+                  </View>
                 )}
 
                 {photo && !busy && items.length > 0 && (
@@ -290,6 +301,10 @@ const styles = StyleSheet.create({
     padding: space.lg,
     gap: space.sm,
   },
+  scanningPanel: { paddingVertical: space.xs, alignItems: 'center', justifyContent: 'center' },
+  scanningRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  scanningLabel: { fontFamily: font.uiStrong, fontSize: 14 },
+  scanningSecs: { fontFamily: font.figure, fontSize: 13 },
   // About four rows now that each carries its macros. Past that the panel would
   // start eating the photo it is describing, which is the thing you are
   // checking it against.
