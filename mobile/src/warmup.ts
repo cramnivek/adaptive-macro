@@ -48,6 +48,7 @@ export const generateWarmupRamp = (
   targetWeight: number,
   units: UnitSystem,
   bar: BarChoice,
+  customPlates?: number[],
 ): WarmupSet[] => {
   const barWeight = BAR_WEIGHT[units][bar];
   const step = units === 'metric' ? 2.5 : 5;
@@ -117,7 +118,7 @@ export const generateWarmupRamp = (
       break;
     }
 
-    const { perSide } = platesFor(weight, units, bar);
+    const { perSide } = platesFor(weight, units, bar, customPlates);
     const percent = Math.round((weight / targetWeight) * 100);
     const platesLabel = perSide.length === 0 ? 'Bar only' : describePlates(perSide);
 

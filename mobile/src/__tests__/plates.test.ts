@@ -123,3 +123,17 @@ describe('describeFormula', () => {
   });
 });
 
+describe('custom plates', () => {
+  it('incorporates custom plate sizes into the loading breakdown', () => {
+    // 75 lb on 45 lb bar = 30 lb total plates = 15 lb per side.
+    // Standard plates would use 10 + 5.
+    // With custom 15 lb plate, it uses 15.
+    expect(platesFor(75, 'imperial', 'standard', [15]).perSide).toEqual([15]);
+  });
+
+  it('supports fractional microplates in metric', () => {
+    // 21 kg on 20 kg bar = 1 kg total plates = 0.5 kg per side.
+    expect(platesFor(21, 'metric', 'standard', [0.5]).perSide).toEqual([0.5]);
+  });
+});
+

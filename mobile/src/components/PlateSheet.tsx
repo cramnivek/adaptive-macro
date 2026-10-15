@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { thud } from '../platform/haptics';
 import {
@@ -27,11 +27,17 @@ interface PlateSheetProps {
   bar: BarChoice;
   /** Name of the exercise this calculation targets, e.g. "Bench Press". */
   exerciseName?: string | null;
+  /** Custom plate sizes available in the gym, in the display unit. */
+  customPlates?: number[];
   onBarChange: (bar: BarChoice) => void;
   /** Callback to write the calculated total back to the target set. */
   onApplyWeight?: (weight: number) => void;
   /** Callback to insert warm-up sets directly into the active exercise. */
   onInsertWarmups?: (warmups: WarmupSet[]) => void;
+  /** Callback when a new custom plate size is added. */
+  onAddCustomPlate?: (plate: number) => void;
+  /** Callback when a custom plate size is removed. */
+  onRemoveCustomPlate?: (plate: number) => void;
   onClose: () => void;
 }
 
@@ -59,9 +65,12 @@ export const PlateSheet = ({
   units,
   bar,
   exerciseName,
+  customPlates = [],
   onBarChange,
   onApplyWeight,
   onInsertWarmups,
+  onAddCustomPlate,
+  onRemoveCustomPlate,
   onClose,
 }: PlateSheetProps) => {
   const isVisible = open ?? weight !== null;
@@ -72,19 +81,22 @@ export const PlateSheet = ({
 
   const [perSide, setPerSide] = useState<number[]>([]);
   const [mode, setMode] = useState<'plates' | 'warmup'>('plates');
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customInputVal, setCustomInputVal] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isVisible) return;
     if (weight !== null && weight > 0) {
-      setPerSide(platesFor(weight, units, bar).perSide);
+      setPerSide(platesFor(weight, units, bar, customPlates).perSide);
     } else {
       setPerSide([]);
     }
-  }, [isVisible, weight, units, bar]);
+  }, [isVisible, weight, units, bar, customPlates]);
 
   const total = totalFromPlates(perSide, units, bar);
   const formula = describeFormula(perSide, units, bar);
-  const warmups = generateWarmupRamp(total, units, bar);
+  const warmups = generateWarmupRamp(total, units, bar, customPlates);
 
   const addPlate = (plate: number) => {
     thud('light');
@@ -111,6 +123,25 @@ export const PlateSheet = ({
     thud('heavy');
     onInsertWarmups?.(warmups);
     onClose();
+  };
+
+  const handleAddCustomPlateSubmit = () => {
+    const parsed = Number.parseFloat(customInputVal.replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setCustomError('Enter a positive plate weight.');
+      return;
+    }
+    if (parsed > 500) {
+      setCustomError('Plate weight too large.');
+      return;
+    }
+    const rounded = Math.round(parsed * 100) / 100;
+    thud('light');
+    onAddCustomPlate?.(rounded);
+    setPerSide((prev) => [...prev, rounded]);
+    setShowCustomInput(false);
+    setCustomInputVal('');
+    setCustomError(null);
   };
 
   return (
@@ -194,9 +225,12 @@ export const PlateSheet = ({
                 <View style={styles.collar} />
                 {perSide.map((plate, index) => {
                   const rank = plates.indexOf(plate);
-                  const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
-                  const plateHeight = 36 + 64 * (plate / largest);
-                  const plateWidth = plate >= plates[2] ? 20 : 15;
+                  const isCustom = rank === -1;
+                  const color = isCustom
+                    ? '#8E44AD'
+                    : (PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]);
+                  const plateHeight = Math.max(30, Math.min(104, 36 + 64 * (plate / largest)));
+                  const plateWidth = Math.max(14, Math.min(22, plate >= plates[2] ? 20 : 15));
                   return (
                     <Tappable
                       key={`${plate}-${index}`}
@@ -254,13 +288,76 @@ export const PlateSheet = ({
 
             {/* Plate Rack: Add Plates */}
             <View style={styles.rackSection}>
-              <Text style={styles.rackHeader}>ADD PLATES (EACH SIDE)</Text>
+              <View style={styles.rackHeaderRow}>
+                <Text style={styles.rackHeader}>ADD PLATES (EACH SIDE)</Text>
+                {!showCustomInput && (
+                  <Tappable
+                    onPress={() => {
+                      thud('light');
+                      setShowCustomInput(true);
+                    }}
+                    scaleTo={0.92}
+                    style={styles.customTrigger}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add custom plate weight"
+                  >
+                    <Text style={styles.customTriggerLabel}>+ CUSTOM</Text>
+                  </Tappable>
+                )}
+              </View>
+
+              {showCustomInput && (
+                <View style={styles.customInputBox}>
+                  <View style={styles.customInputHeader}>
+                    <Text style={styles.customInputTitle}>
+                      CUSTOM PLATE ({unit.toUpperCase()} EACH SIDE)
+                    </Text>
+                    <Tappable
+                      onPress={() => {
+                        setShowCustomInput(false);
+                        setCustomInputVal('');
+                        setCustomError(null);
+                      }}
+                      scaleTo={0.88}
+                      style={styles.customCloseBtn}
+                    >
+                      <Text style={styles.customCloseText}>✕</Text>
+                    </Tappable>
+                  </View>
+                  <View style={styles.customInputRow}>
+                    <TextInput
+                      value={customInputVal}
+                      onChangeText={(val) => {
+                        setCustomInputVal(val);
+                        setCustomError(null);
+                      }}
+                      keyboardType="decimal-pad"
+                      placeholder={`e.g. ${units === 'metric' ? '0.5, 7.5' : '15, 1.25'}`}
+                      placeholderTextColor={loud.figureFaint}
+                      style={styles.customTextInput}
+                      autoFocus
+                    />
+                    <Tappable
+                      onPress={handleAddCustomPlateSubmit}
+                      scaleTo={0.94}
+                      style={styles.customAddBtn}
+                    >
+                      <SlashPanel color={loud.loud} style={styles.customAddSlab}>
+                        <Text style={styles.customAddText}>+ ADD</Text>
+                      </SlashPanel>
+                    </Tappable>
+                  </View>
+                  {customError && <Text style={styles.customErrorText}>{customError}</Text>}
+                </View>
+              )}
+
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.rackStrip}
                 contentContainerStyle={styles.rackContent}
               >
+                {/* Standard plates */}
                 {plates.map((plate) => {
                   const rank = plates.indexOf(plate);
                   const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
@@ -278,6 +375,37 @@ export const PlateSheet = ({
                     </Tappable>
                   );
                 })}
+
+                {/* Saved Custom plates */}
+                {customPlates
+                  .filter((p) => !plates.includes(p))
+                  .map((plate) => (
+                    <View key={`custom-${plate}`} style={styles.customPlatePillWrap}>
+                      <Tappable
+                        onPress={() => addPlate(plate)}
+                        scaleTo={0.94}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add custom ${plate} ${unit} to each side`}
+                        style={[styles.rackBtn, styles.customPlateBtn]}
+                      >
+                        <View style={[styles.rackPip, { backgroundColor: '#8E44AD' }]} />
+                        <Text style={styles.rackBtnText}>+{plate}</Text>
+                      </Tappable>
+                      {onRemoveCustomPlate && (
+                        <Tappable
+                          onPress={() => {
+                            thud('light');
+                            onRemoveCustomPlate(plate);
+                          }}
+                          scaleTo={0.85}
+                          style={styles.customPlateDelete}
+                          accessibilityLabel={`Delete custom plate ${plate} from rack`}
+                        >
+                          <Text style={styles.customPlateDeleteText}>✕</Text>
+                        </Tappable>
+                      )}
+                    </View>
+                  ))}
               </ScrollView>
             </View>
           </>
@@ -328,7 +456,10 @@ export const PlateSheet = ({
                         <View style={styles.warmupPillsRow}>
                           {ws.perSide.map((plate, pIdx) => {
                             const rank = plates.indexOf(plate);
-                            const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
+                            const color =
+                              rank >= 0
+                                ? PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]
+                                : '#8E44AD';
                             return (
                               <View key={pIdx} style={[styles.warmupPlatePill, { borderColor: color }]}>
                                 <View style={[styles.platePip, { backgroundColor: color }]} />
@@ -541,12 +672,102 @@ const styles = StyleSheet.create({
   rackSection: {
     marginBottom: space.lg,
   },
+  rackHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: space.xs,
+  },
   rackHeader: {
     fontFamily: font.uiStrong,
     fontSize: 10,
     letterSpacing: 1.2,
     color: loud.figureFaint,
-    marginBottom: space.xs,
+  },
+  customTrigger: {
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(142, 68, 173, 0.4)',
+    backgroundColor: 'rgba(142, 68, 173, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customTriggerLabel: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: '#B370D4',
+  },
+  customInputBox: {
+    backgroundColor: loud.panel,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(142, 68, 173, 0.45)',
+    padding: space.sm,
+    marginBottom: space.sm,
+    gap: space.xs,
+  },
+  customInputHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  customInputTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#B370D4',
+  },
+  customCloseBtn: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customCloseText: {
+    fontSize: 13,
+    color: loud.figureMuted,
+  },
+  customInputRow: {
+    flexDirection: 'row',
+    gap: space.xs,
+    alignItems: 'center',
+  },
+  customTextInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: loud.ground,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    paddingHorizontal: space.sm,
+    fontFamily: font.figure,
+    fontSize: 15,
+    color: loud.figure,
+  },
+  customAddBtn: {
+    minHeight: 40,
+  },
+  customAddSlab: {
+    minHeight: 40,
+    paddingHorizontal: space.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customAddText: {
+    fontFamily: font.display,
+    fontSize: 11,
+    letterSpacing: 1,
+    color: loud.onLoud,
+  },
+  customErrorText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: loud.warn,
+    marginTop: 2,
   },
   rackStrip: {
     flexGrow: 0,
@@ -554,7 +775,8 @@ const styles = StyleSheet.create({
   rackContent: {
     flexDirection: 'row',
     gap: space.xs,
-    paddingVertical: 2,
+    paddingVertical: 4,
+    alignItems: 'center',
   },
   rackBtn: {
     minHeight: 44,
@@ -567,6 +789,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+  },
+  customPlatePillWrap: {
+    position: 'relative',
+    marginRight: 4,
+  },
+  customPlateBtn: {
+    borderColor: '#8E44AD',
+    paddingRight: space.sm + 4,
+  },
+  customPlateDelete: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: loud.panel,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 87, 87, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  customPlateDeleteText: {
+    fontSize: 9,
+    color: loud.warn,
+    fontWeight: '700',
+    lineHeight: 11,
   },
   rackPip: {
     width: 8,
@@ -779,6 +1029,7 @@ interface PlatePreviewProps {
   weight: number | null;
   units: UnitSystem;
   bar: BarChoice;
+  customPlates?: number[];
   onPress: () => void;
 }
 
@@ -788,9 +1039,9 @@ interface PlatePreviewProps {
  * One side of the bar in plate colours and the plates in words. Tapping
  * opens the interactive plate calculator.
  */
-export const PlatePreview = ({ weight, units, bar, onPress }: PlatePreviewProps) => {
+export const PlatePreview = ({ weight, units, bar, customPlates = [], onPress }: PlatePreviewProps) => {
   const unit = units === 'metric' ? 'kg' : 'lb';
-  const load = weight === null ? null : platesFor(weight, units, bar);
+  const load = weight === null ? null : platesFor(weight, units, bar, customPlates);
   const plates = PLATE_SETS[units];
   const largest = plates[0];
 
@@ -814,17 +1065,24 @@ export const PlatePreview = ({ weight, units, bar, onPress }: PlatePreviewProps)
       <View style={previewStyles.bar}>
         <View style={[previewStyles.sleeve, { backgroundColor: loud.rule }]} />
         <View style={[previewStyles.collar, { backgroundColor: loud.figureMuted }]} />
-        {(load?.perSide ?? []).map((plate, index) => (
-          <View
-            key={`${plate}-${index}`}
-            style={{
-              width: plate >= plates[2] ? 6 : 4,
-              height: 12 + 22 * (plate / largest),
-              borderRadius: 1,
-              backgroundColor: PLATE_COLOURS[plates.indexOf(plate)] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1],
-            }}
-          />
-        ))}
+        {(load?.perSide ?? []).map((plate, index) => {
+          const rank = plates.indexOf(plate);
+          const color =
+            rank >= 0
+              ? PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]
+              : '#8E44AD';
+          return (
+            <View
+              key={`${plate}-${index}`}
+              style={{
+                width: plate >= plates[2] ? 6 : 4,
+                height: 12 + 22 * (plate / largest),
+                borderRadius: 1,
+                backgroundColor: color,
+              }}
+            />
+          );
+        })}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[previewStyles.label, { color: loud.loud }]}>

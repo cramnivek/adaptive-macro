@@ -957,6 +957,23 @@ export default function SessionScreen() {
     setCalcTarget(null);
   };
 
+  const addCustomPlate = async (plate: number) => {
+    const current = settings.customPlates?.[settings.units] ?? [];
+    if (current.includes(plate)) return;
+    const updated = [...current, plate].sort((a, b) => b - a);
+    await updateSettings({
+      customPlates: { ...settings.customPlates, [settings.units]: updated },
+    });
+  };
+
+  const removeCustomPlate = async (plate: number) => {
+    const current = settings.customPlates?.[settings.units] ?? [];
+    const updated = current.filter((p) => p !== plate);
+    await updateSettings({
+      customPlates: { ...settings.customPlates, [settings.units]: updated },
+    });
+  };
+
   /** Ticking writes the set; unticking removes it. */
   const toggleRow = async (blockIndex: number, rowIndex: number) => {
     if (!session) return;
@@ -1470,6 +1487,7 @@ export default function SessionScreen() {
                 weight={plateWeightFor(block)}
                 units={settings.units}
                 bar={settings.barbell}
+                customPlates={settings.customPlates?.[settings.units] ?? []}
                 onPress={() => openPlates(block, blockIndex)}
               />
             )}
@@ -1883,6 +1901,9 @@ export default function SessionScreen() {
       exerciseName={calcTarget?.exerciseName ?? null}
       units={settings.units}
       bar={settings.barbell}
+      customPlates={settings.customPlates?.[settings.units] ?? []}
+      onAddCustomPlate={addCustomPlate}
+      onRemoveCustomPlate={removeCustomPlate}
       onBarChange={(barbell) => void updateSettings({ barbell })}
       onApplyWeight={
         calcTarget?.blockIndex !== null && calcTarget?.rowIndex !== null

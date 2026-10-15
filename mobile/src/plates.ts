@@ -41,13 +41,22 @@ const EPSILON = 1e-6;
  * comes out 45 + 10 + 5 where 35 + 25 is one plate fewer — but it is what
  * people actually reach for, and the sheet should match the rack.
  */
-export const platesFor = (total: number, units: UnitSystem, bar: BarChoice): PlateLoad => {
+export const platesFor = (
+  total: number,
+  units: UnitSystem,
+  bar: BarChoice,
+  customPlates?: number[],
+): PlateLoad => {
   const barWeight = BAR_WEIGHT[units][bar];
   if (total < barWeight - EPSILON) return { bar: barWeight, perSide: [], loaded: barWeight, belowBar: true };
 
+  const allPlates = customPlates && customPlates.length > 0
+    ? [...new Set([...PLATE_SETS[units], ...customPlates])].sort((a, b) => b - a)
+    : PLATE_SETS[units];
+
   let side = (total - barWeight) / 2;
   const perSide: number[] = [];
-  for (const plate of PLATE_SETS[units]) {
+  for (const plate of allPlates) {
     while (side >= plate - EPSILON) {
       perSide.push(plate);
       side -= plate;

@@ -80,6 +80,8 @@ export interface AppSettings {
   checkInSeenWeek: ISODate | null;
   /** The bar the plate calculator assumes: 20 kg / 45 lb, or the 15 kg / 35 lb one. */
   barbell: BarChoice;
+  /** Custom plate sizes available in the gym, per unit system. */
+  customPlates: Record<UnitSystem, number[]>;
   /** What routine building may use, and who it is for. Remembered so the next build starts there. */
   routineEquipment: EquipmentItem[];
   trainingLevel: TrainingLevel;
@@ -132,6 +134,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   checkInSeenWeek: null,
   barbell: 'standard',
+  customPlates: {
+    metric: [],
+    imperial: [],
+  },
   routineEquipment: [...EQUIPMENT_ITEMS],
   trainingLevel: 'intermediate',
   restSound: true,
@@ -157,4 +163,8 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
   profile: { ...DEFAULT_SETTINGS.profile, ...stored?.profile },
   goal: { ...DEFAULT_SETTINGS.goal, ...stored?.goal },
   foodLookup: { ...DEFAULT_SETTINGS.foodLookup, ...stored?.foodLookup },
+  customPlates: {
+    metric: stored?.customPlates?.metric ?? DEFAULT_SETTINGS.customPlates.metric,
+    imperial: stored?.customPlates?.imperial ?? DEFAULT_SETTINGS.customPlates.imperial,
+  },
 });
