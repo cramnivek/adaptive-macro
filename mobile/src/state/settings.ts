@@ -1,4 +1,5 @@
 import { ALL_BLOCKS, type CardBlocks } from '../shareCardPlacement';
+import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
 import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { defaultOllamaHost } from '../ai/ollama';
@@ -96,6 +97,8 @@ export interface AppSettings {
    * starts where they left it rather than back at everything.
    */
   cardBlocks: CardBlocks;
+  /** Which shape the card takes over a photo: the panel, a bar, a corner stamp, bare type. */
+  cardTemplate: TemplateId;
   /**
    * Whether the card cuts the person out of the photograph so the type passes
    * behind them. Off by default: the first use fetches about nine megabytes of
@@ -134,6 +137,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restSound: true,
   postWorkouts: false,
   cardBlocks: ALL_BLOCKS,
+  cardTemplate: DEFAULT_TEMPLATE,
   cardDepth: false,
 };
 

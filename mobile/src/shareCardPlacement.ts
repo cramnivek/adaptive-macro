@@ -30,18 +30,18 @@ export interface Placement {
   scale: number;
 }
 
-/**
- * Where a block starts, and where RESET puts it back.
- *
- * Low rather than centred: the middle of a photograph of a workout is usually
- * somebody's face, and a block that lands on the face is the first thing anyone
- * would move. Dropped low it lands on the floor, the bench or the mirror, which
- * is where a caption goes anyway.
- */
-export const RESTING: Placement = { x: 0.5, y: 0.68, scale: 1 };
+export const MIN_SCALE = 0.4;
+export const MAX_SCALE = 2.2;
 
-export const MIN_SCALE = 0.6;
-export const MAX_SCALE = 1.4;
+/**
+ * How much of the block has to stay on the card: a third of it, on each axis.
+ *
+ * The first version kept the whole block inside the frame, and it felt like a
+ * box rather than a card — type running off an edge is how these are made, and
+ * every attempt to do it hit a wall. A third is enough that the block can never
+ * be pushed somewhere it cannot be found again.
+ */
+const KEEP = 1 / 3;
 
 export interface Size {
   width: number;
@@ -53,22 +53,22 @@ const between = (low: number, value: number, high: number): number => Math.min(h
 /**
  * The placement, made legal.
  *
- * The overlay stays inside the frame: you can push it flush against an edge and
- * no further, because a card with its own title half off the side is not a
- * thing anyone meant to make. An overlay scaled past the frame — which only
- * happens in one dimension at a time, and only at the top of the scale — has
- * nowhere to go, so it is centred on that axis rather than jittering against
- * two impossible bounds.
+ * The block may hang off any edge, as long as a third of it is still on the
+ * card. A block bigger than the frame keeps a third of the frame instead —
+ * otherwise a figure blown up past the width could not be moved at all, which
+ * is the thing this rule exists to prevent.
  *
  * `overlay` is the size it is drawn at, before `scale`; the scale here is the
- * one being asked for, so that growing a block pinned to an edge pushes it back
- * into the frame rather than over it.
+ * one being asked for, so that growing a block against an edge pushes it back
+ * rather than letting it slide out from under itself.
  */
 export const clampPlacement = (place: Placement, overlay: Size, frame: Size): Placement => {
   const scale = between(MIN_SCALE, place.scale, MAX_SCALE);
   const axis = (centre: number, length: number, within: number): number => {
-    const half = (length * scale) / 2 / within;
-    return half >= 0.5 ? 0.5 : between(half, centre, 1 - half);
+    const size = length * scale;
+    // The bounds are symmetric: as far off the left as off the right.
+    const edge = (KEEP * Math.min(size, within) - size / 2) / within;
+    return between(edge, centre, 1 - edge);
   };
   return {
     x: axis(place.x, overlay.width, frame.width),

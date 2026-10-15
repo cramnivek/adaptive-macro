@@ -6,7 +6,6 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   placementOrigin,
-  RESTING,
 } from '../shareCardPlacement';
 
 const frame = { width: 1080, height: 1920 };
@@ -20,23 +19,19 @@ describe('clampPlacement', () => {
     expect(clampPlacement(CENTRED, overlay, frame)).toEqual(CENTRED);
   });
 
-  it('stops the overlay before it crosses an edge, on all four', () => {
-    const left = clampPlacement({ ...CENTRED, x: 0 }, overlay, frame);
-    const right = clampPlacement({ ...CENTRED, x: 1 }, overlay, frame);
-    const top = clampPlacement({ ...CENTRED, y: 0 }, overlay, frame);
-    const bottom = clampPlacement({ ...CENTRED, y: 1 }, overlay, frame);
-    // Half the overlay's width is a sixth of the frame; its height, a ninth.
-    expect(left.x).toBeCloseTo(360 / 2 / 1080);
-    expect(right.x).toBeCloseTo(1 - 360 / 2 / 1080);
-    expect(top.y).toBeCloseTo(400 / 2 / 1920);
-    expect(bottom.y).toBeCloseTo(1 - 400 / 2 / 1920);
+  it('lets the overlay hang off an edge, keeping a third of it on the card', () => {
+    const pushed = clampPlacement({ ...CENTRED, x: -5, y: 9 }, overlay, frame);
+    const { left, top } = placementOrigin(pushed, overlay, frame);
+    // Two thirds of it are off the left, and two thirds off the bottom.
+    expect(left + overlay.width).toBeCloseTo(overlay.width / 3);
+    expect(top).toBeCloseTo(frame.height - overlay.height / 3);
   });
 
-  it('puts the overlay flush with an edge and not beyond it', () => {
-    const flush = clampPlacement({ ...CENTRED, x: -5, y: 9 }, overlay, frame);
-    const { left, top } = placementOrigin(flush, overlay, frame);
-    expect(left).toBeCloseTo(0);
-    expect(top).toBeCloseTo(frame.height - overlay.height);
+  it('holds the same third on the opposite edges', () => {
+    const right = clampPlacement({ ...CENTRED, x: 9 }, overlay, frame);
+    const top = clampPlacement({ ...CENTRED, y: -9 }, overlay, frame);
+    expect(placementOrigin(right, overlay, frame).left).toBeCloseTo(frame.width - overlay.width / 3);
+    expect(placementOrigin(top, overlay, frame).top + overlay.height).toBeCloseTo(overlay.height / 3);
   });
 
   it('keeps the scale within the limits', () => {
@@ -44,27 +39,24 @@ describe('clampPlacement', () => {
     expect(clampPlacement({ ...CENTRED, scale: 0 }, overlay, frame).scale).toBe(MIN_SCALE);
   });
 
-  it('accounts for the scale being asked for, so growing against an edge pushes back in', () => {
-    const pinned = clampPlacement({ x: 1, y: 0.5, scale: 1 }, overlay, frame);
-    const grown = clampPlacement({ ...pinned, scale: MAX_SCALE }, overlay, frame);
-    expect(grown.x).toBeLessThan(pinned.x);
-    expect(placementOrigin(grown, overlay, frame).left + overlay.width * MAX_SCALE).toBeCloseTo(frame.width);
+  it('measures the third against the scale being asked for, so shrinking at an edge pulls it back', () => {
+    const pinned = clampPlacement({ x: 9, y: 0.5, scale: 1 }, overlay, frame);
+    const shrunk = clampPlacement({ ...pinned, scale: MIN_SCALE }, overlay, frame);
+    // Left where it was, a block made smaller at the edge would have slid out
+    // from under itself until there was nothing to take hold of.
+    expect(shrunk.x).toBeLessThan(pinned.x);
+    expect(placementOrigin(shrunk, overlay, frame).left).toBeCloseTo(
+      frame.width - (overlay.width * MIN_SCALE) / 3,
+    );
   });
 
-  it('centres an overlay too big for the frame rather than fighting two bounds', () => {
+  it('leaves an overlay wider than the frame somewhere to go', () => {
     const huge = { width: 1600, height: 400 };
-    expect(clampPlacement({ ...CENTRED, x: 0.1 }, huge, frame).x).toBe(0.5);
-    // The other axis still fits, and is still free.
-    expect(clampPlacement({ ...CENTRED, y: 0.2 }, huge, frame).y).toBeCloseTo(0.2);
-  });
-});
-
-describe('RESTING', () => {
-  it('sits below the middle, and survives a full-height sticker unmoved', () => {
-    // The sticker is 760 wide and, with everything on, about twelve hundred tall.
-    const whole = { width: 760, height: 1200 };
-    expect(RESTING.y).toBeGreaterThan(CENTRED.y);
-    expect(clampPlacement(RESTING, whole, frame)).toEqual(RESTING);
+    const pushed = clampPlacement({ ...CENTRED, x: -9 }, huge, frame);
+    // A third of the frame rather than a third of the block: a third of this
+    // one is wider than the card, and the block would be stuck.
+    expect(placementOrigin(pushed, huge, frame).left + huge.width).toBeCloseTo(frame.width / 3);
+    expect(pushed.x).toBeLessThan(CENTRED.x);
   });
 });
 
