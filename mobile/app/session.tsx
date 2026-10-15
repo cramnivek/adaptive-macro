@@ -31,6 +31,7 @@ import { FadeIn } from '../src/components/FadeIn';
 import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
+import { PRCelebration, type PRCelebrationData } from '../src/components/PRCelebration';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { RestBar } from '../src/components/RestBar';
@@ -206,6 +207,8 @@ export default function SessionScreen() {
   const [landed, setLanded] = useState<{ rowKey: string; content: ImpactContent } | null>(null);
   // Stable, so the once-a-second clock re-render cannot restart a frame mid-flight.
   const clearLanded = useCallback(() => setLanded(null), []);
+  /** Active all-time PR celebration data; null when dismissed. */
+  const [celebrationPR, setCelebrationPR] = useState<PRCelebrationData | null>(null);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
   /** Active target for the barbell plate calculator; null when closed. */
@@ -1244,6 +1247,20 @@ export default function SessionScreen() {
 
     if (isNewPR) {
       thud('heavy');
+      const e1rm = estimate1RM(effectiveKg, reps);
+      const targetE1rm = currentBestPR?.e1rm ?? 0;
+      const delta = targetE1rm > 0 ? Math.max(0, e1rm - targetE1rm) : 0;
+      const isFirstLog = !currentBestPR;
+      const loadText = block.bodyweightBased
+        ? (kg !== null && kg > 0 ? `+${displayWeight(kg, settings.units).toFixed(1)} ${unit}` : 'BW')
+        : `${displayWeight(kg ?? 0, settings.units).toFixed(1)} ${unit}`;
+      setCelebrationPR({
+        exerciseName: block.name,
+        figure: `${loadText} × ${reps}`,
+        e1rm,
+        delta,
+        isFirstLog,
+      });
     }
 
     // Written, so now say so. The frame draws itself over the row and takes no
@@ -2286,6 +2303,14 @@ export default function SessionScreen() {
       onDisband={disbandSupersetGroup}
       onClose={() => setSupersetTargetIndex(null)}
     />
+
+    {celebrationPR && (
+      <PRCelebration
+        data={celebrationPR}
+        units={settings.units}
+        onDone={() => setCelebrationPR(null)}
+      />
+    )}
   </View>
 );
 }

@@ -5,6 +5,8 @@ export interface ImpactContent {
   figure: string;
   /** The word stamped under it. */
   verdict: string;
+  /** True when this set is an all-time personal record */
+  isPR?: boolean;
 }
 
 /**
@@ -34,4 +36,5 @@ export const impactContent = (
 ): ImpactContent => ({
   figure: `${weight === null ? 'BW' : Number.isInteger(weight) ? String(weight) : weight.toFixed(1)} × ${reps}`,
   verdict: isPR && setType !== 'warmup' ? 'NEW PR!' : VERDICTS[setType],
+  isPR: isPR && setType !== 'warmup',
 });
