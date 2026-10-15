@@ -30,7 +30,8 @@ export const impactContent = (
   weight: number | null,
   reps: number,
   setType: SetType,
+  isPR = false,
 ): ImpactContent => ({
   figure: `${weight === null ? 'BW' : Number.isInteger(weight) ? String(weight) : weight.toFixed(1)} × ${reps}`,
-  verdict: VERDICTS[setType],
+  verdict: isPR && setType !== 'warmup' ? 'NEW PR!' : VERDICTS[setType],
 });

@@ -1,6 +1,7 @@
 import type {
   DailyObservation,
   DatedSet,
+  ExercisePR,
   Food,
   FoodPortion,
   ISODate,
@@ -9,7 +10,7 @@ import type {
   Nutrients,
   SetType,
 } from '@adaptive-macros/engine';
-import { addDays } from '@adaptive-macros/engine';
+import { addDays, estimate1RM } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
@@ -1950,6 +1951,44 @@ export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]
     durationSeconds: row.duration_seconds,
     distanceKm: row.distance_km,
   }));
+};
+
+/**
+ * The highest estimated 1RM logged for this exercise across all finished sessions.
+ */
+export const exerciseBestPR = async (exerciseName: string): Promise<ExercisePR | null> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    weight_kg: number | null;
+    reps: number;
+    date: ISODate;
+  }>(
+    `SELECT s.weight_kg, s.reps, w.date
+       FROM sets s JOIN sessions w ON w.id = s.session_id
+      WHERE s.exercise_name = ?
+        AND s.set_type != 'warmup'
+        AND s.reps > 0
+        AND s.weight_kg IS NOT NULL
+        AND s.weight_kg > 0
+        AND w.finished_at IS NOT NULL`,
+    exerciseName,
+  );
+  if (rows.length === 0) return null;
+
+  let best: ExercisePR | null = null;
+  for (const row of rows) {
+    if (row.weight_kg === null || row.weight_kg <= 0) continue;
+    const e1rm = estimate1RM(row.weight_kg, row.reps);
+    if (!best || e1rm > best.e1rm) {
+      best = {
+        e1rm,
+        weight: row.weight_kg,
+        reps: row.reps,
+        date: row.date,
+      };
+    }
+  }
+  return best;
 };
 
 /** Corrects a set already written, for editing a row after ticking it. */

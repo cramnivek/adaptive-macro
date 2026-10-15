@@ -500,3 +500,153 @@ export const suggestNextLoad = (
   const target = Math.max(lastWeightKg * 1.05, lastWeightKg + stepKg);
   return { weightKg: snap(target), reason: 'room-to-add' };
 };
+
+/**
+ * Estimated 1-Rep Max via the Epley formula.
+ *
+ * For 1 rep, the weight itself is by definition the 1RM.
+ * For > 1 rep: W × (1 + R / 30).
+ *
+ * Returns 0 if weight or reps are non-positive.
+ */
+export const estimate1RM = (weight: number, reps: number): number => {
+  if (weight <= 0 || reps <= 0) return 0;
+  const raw = reps === 1 ? weight : weight * (1 + reps / 30);
+  return Math.round(raw * 100) / 100;
+};
+
+/**
+ * The minimum whole number of reps needed at `weight` to strictly exceed `targetE1rm`.
+ *
+ * Solves:
+ *   weight × (1 + R / 30) > targetE1rm
+ *
+ * If weight > targetE1rm, 1 rep already beats the target.
+ * If weight === targetE1rm, 2 reps beat the target (1 rep only ties).
+ * Returns null if weight <= 0 or targetE1rm <= 0, or if the required reps exceed `maxReps` (default 30).
+ */
+export const repsToBeat = (
+  weight: number,
+  targetE1rm: number,
+  maxReps = 30,
+): number | null => {
+  if (weight <= 0 || targetE1rm <= 0) return null;
+  if (weight > targetE1rm) return 1;
+
+  let r = Math.max(2, Math.floor(30 * (targetE1rm / weight - 1) + 1e-9) + 1);
+  while (r <= maxReps && estimate1RM(weight, r) <= targetE1rm) {
+    r++;
+  }
+  return r <= maxReps ? r : null;
+};
+
+export interface ExercisePR {
+  e1rm: number;
+  weight: number;
+  reps: number;
+  date?: ISODate;
+}
+
+/**
+ * The highest estimated 1RM logged for an exercise across history.
+ *
+ * Warm-up sets and sets with reps <= 0 or invalid load are excluded.
+ */
+export const bestHistoricalE1RM = (
+  sets: DatedSet[],
+  exerciseName: string,
+  bodyweightByDate?: ReadonlyMap<ISODate, number>,
+): ExercisePR | null => {
+  let best: ExercisePR | null = null;
+
+  for (const { date, set } of sets) {
+    if (set.exerciseName !== exerciseName) continue;
+    if (!isWorkingSet(set)) continue;
+    if (set.reps === null || set.reps <= 0) continue;
+
+    const load = effectiveLoadKg(set, bodyweightByDate?.get(date) ?? null);
+    if (load === null || load <= 0) continue;
+
+    const e1rm = estimate1RM(load, set.reps);
+    if (!best || e1rm > best.e1rm) {
+      best = {
+        e1rm,
+        weight: load,
+        reps: set.reps,
+        date,
+      };
+    }
+  }
+
+  return best;
+};
+
+export type PRTargetEvaluation =
+  | {
+      status: 'pr';
+      e1rm: number;
+      delta: number;
+      isFirstLog: boolean;
+      reps: number;
+      weight: number;
+    }
+  | {
+      status: 'target';
+      repsToBeat: number;
+      targetE1rm: number;
+      weight: number;
+    }
+  | {
+      status: 'close';
+      repsAway: number;
+      repsToBeat: number;
+      targetE1rm: number;
+      weight: number;
+    }
+  | {
+      status: 'none';
+    };
+
+/**
+ * Evaluates live progress toward beating an all-time PR given the currently entered weight and reps.
+ */
+export const evaluatePRTarget = ({
+  weight,
+  reps,
+  bestPR,
+  maxReps = 30,
+}: {
+  weight: number;
+  reps: number;
+  bestPR: ExercisePR | null;
+  maxReps?: number;
+}): PRTargetEvaluation => {
+  if (weight <= 0) return { status: 'none' };
+
+  if (!bestPR) {
+    if (reps > 0) {
+      const e1rm = estimate1RM(weight, reps);
+      return { status: 'pr', e1rm, delta: 0, isFirstLog: true, reps, weight };
+    }
+    return { status: 'target', repsToBeat: 1, targetE1rm: 0, weight };
+  }
+
+  const target = bestPR.e1rm;
+  if (reps > 0) {
+    const e1rm = estimate1RM(weight, reps);
+    if (e1rm > target) {
+      return { status: 'pr', e1rm, delta: e1rm - target, isFirstLog: false, reps, weight };
+    }
+    const rBeat = repsToBeat(weight, target, maxReps);
+    if (rBeat === null) return { status: 'none' };
+    if (reps === rBeat - 1) {
+      return { status: 'close', repsAway: 1, repsToBeat: rBeat, targetE1rm: target, weight };
+    }
+    return { status: 'target', repsToBeat: rBeat, targetE1rm: target, weight };
+  }
+
+  const rBeat = repsToBeat(weight, target, maxReps);
+  if (rBeat === null) return { status: 'none' };
+  return { status: 'target', repsToBeat: rBeat, targetE1rm: target, weight };
+};
+
