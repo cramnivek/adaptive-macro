@@ -2101,6 +2101,31 @@ export const updateExerciseSupersetGroup = async (
 };
 
 /**
+ * Updates the exercise name and exercise ID for a list of set IDs in an active session,
+ * creating the exercise entry in catalogue/exercises table if necessary.
+ */
+export const updateSetsExercise = async (
+  setIds: string[],
+  exerciseName: string,
+  bodyweightBased: boolean,
+  isCardio = false,
+  cardioMode: 'treadmill' | 'outside' | null = null,
+): Promise<void> => {
+  if (setIds.length === 0) return;
+  const db = await getDb();
+  const exerciseId = await exerciseIdFor(db, exerciseName, bodyweightBased, isCardio, cardioMode);
+  const placeholders = setIds.map(() => '?').join(',');
+  await db.runAsync(
+    `UPDATE sets SET exercise_id = ?, exercise_name = ?, is_cardio = ?, cardio_mode = ? WHERE id IN (${placeholders})`,
+    exerciseId,
+    exerciseName,
+    isCardio ? 1 : 0,
+    cardioMode ?? null,
+    ...setIds,
+  );
+};
+
+/**
  * Muscle regions for every exercise that has them, keyed by recorded name.
  *
  * One query rather than one per exercise: the overview lights a body map from

@@ -36,6 +36,7 @@ import { SlashPanel } from '../src/components/SlashPanel';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
+import { SwapExerciseSheet, type SwapMode } from '../src/components/SwapExerciseSheet';
 import { Tappable } from '../src/components/Tappable';
 import { impactContent } from '../src/components/setImpact';
 import type { ImpactContent } from '../src/components/setImpact';
@@ -57,6 +58,7 @@ import {
   startSession,
   setSetRpe,
   updateExerciseSupersetGroup,
+  updateSetsExercise,
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
@@ -222,6 +224,10 @@ export default function SessionScreen() {
   } | null>(null);
   /** Which exercise is currently opening the superset management sheet; null when closed. */
   const [supersetTargetIndex, setSupersetTargetIndex] = useState<number | null>(null);
+  /** Which exercise is currently opening the swap sheet; null when closed. */
+  const [swapTargetIndex, setSwapTargetIndex] = useState<number | null>(null);
+  /** Full catalogue cache for swap recommendations and search. */
+  const [catalogue, setCatalogue] = useState<CatalogueEntry[]>([]);
 
   /**
    * The running rest, as the wall-clock time it ends at.
@@ -713,13 +719,15 @@ export default function SessionScreen() {
     if (loadedFor.current === key) return;
     loadedFor.current = key;
     void (async () => {
-      const [existing, loadedRoutines, names] = await Promise.all([
+      const [existing, loadedRoutines, names, allCatalogue] = await Promise.all([
         activeSession(),
         listRoutines(),
         listExerciseNames(),
+        loadAllCatalogueEntries(),
       ]);
       setRoutines(loadedRoutines);
       setKnown(names);
+      setCatalogue(allCatalogue);
       void warmCatalogueCache(loadAllCatalogueEntries);
 
       if (existing) {
@@ -1424,6 +1432,154 @@ export default function SessionScreen() {
     setSession(await activeSession());
   };
 
+  /**
+   * Replaces an exercise block with an alternative mid-workout.
+   *
+   * If 'swap-all' (or if no sets are logged yet), converts the block and any
+   * logged sets to the new exercise.
+   * If 'swap-remaining', keeps completed sets on the original exercise block,
+   * and splits the remaining planned sets into a new block for the replacement.
+   */
+  const swapExercise = async (
+    blockIndex: number,
+    newExercise: {
+      name: string;
+      bodyweightBased: boolean;
+      isCardio: boolean;
+      cardioMode?: CardioMode | null;
+    },
+    mode: SwapMode,
+  ) => {
+    const targetBlock = blocks[blockIndex];
+    if (!targetBlock) return;
+    const trimmed = newExercise.name.trim();
+    if (!trimmed || trimmed.toLowerCase() === targetBlock.name.toLowerCase()) return;
+
+    const isDetectedCardio = detectCardio(trimmed);
+    const isCardio =
+      newExercise.isCardio ||
+      (known.find((k) => k.name === trimmed)?.isCardio ?? false) ||
+      isDetectedCardio;
+    const cardioMode = (newExercise.cardioMode ??
+      known.find((k) => k.name === trimmed)?.cardioMode ??
+      detectCardioMode(trimmed)) as CardioMode;
+    const bodyweightBased =
+      known.find((k) => k.name === trimmed)?.bodyweightBased ?? newExercise.bodyweightBased;
+
+    const [newPrevious, newBestPR] = await Promise.all([
+      lastSessionSets(trimmed),
+      exerciseBestPR(trimmed, bodyweightBased, series, currentBodyweightKg),
+    ]);
+
+    const completedRows = targetBlock.rows.filter((r) => r.done && r.id != null);
+    const hasLoggedSets = completedRows.length > 0;
+
+    if (mode === 'swap-all' || !hasLoggedSets) {
+      if (hasLoggedSets) {
+        const setIds = completedRows.map((r) => r.id!).filter(Boolean);
+        await updateSetsExercise(setIds, trimmed, bodyweightBased, isCardio, cardioMode);
+        setSession(await activeSession());
+      }
+
+      const updatedRows: Row[] = targetBlock.rows.map((row, idx) => {
+        if (row.done) {
+          return {
+            ...row,
+            isCardio,
+            cardioMode,
+          };
+        }
+        const prev = newPrevious[idx];
+        return {
+          ...row,
+          weight:
+            prev?.weightKg != null
+              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              : row.weight,
+          reps: prev?.reps != null ? String(prev.reps) : row.reps || targetBlock.target?.reps || '8',
+          isCardio,
+          cardioMode,
+        };
+      });
+
+      setBlocks((current) =>
+        current.map((b, bi) =>
+          bi !== blockIndex
+            ? b
+            : {
+                ...b,
+                name: trimmed,
+                bodyweightBased,
+                isCardio,
+                cardioMode,
+                previous: newPrevious,
+                bestPR: newBestPR,
+                rows: updatedRows,
+              },
+        ),
+      );
+
+      void cataloguePatternsByExerciseName().then(setPatterns);
+      void listExerciseNames().then(setKnown);
+      notify('Movement swapped', `Replaced ${targetBlock.name} with ${trimmed}.`);
+    } else {
+      // mode === 'swap-remaining'
+      const completedList = targetBlock.rows.filter((r) => r.done);
+      const remainingDrafts = targetBlock.rows.filter((r) => !r.done);
+      const remainingCount = Math.max(1, remainingDrafts.length);
+
+      const newDraftRows: Row[] = Array.from({ length: remainingCount }, (_, offset) => {
+        const prev = newPrevious[offset];
+        return {
+          key: newKey(),
+          id: null,
+          weight:
+            prev?.weightKg != null
+              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              : '',
+          reps: repsPrefill(prev?.reps, targetBlock.target?.reps ?? null),
+          setType: 'normal',
+          rpe: null,
+          done: false,
+          isCardio,
+          cardioMode,
+        };
+      });
+
+      const newBlock: Block = {
+        name: trimmed,
+        bodyweightBased,
+        isCardio,
+        cardioMode,
+        rows: newDraftRows,
+        previous: newPrevious,
+        bestPR: newBestPR,
+        target: targetBlock.target
+          ? { ...targetBlock.target, sets: remainingCount }
+          : null,
+        supersetGroup: targetBlock.supersetGroup ?? null,
+      };
+
+      setBlocks((current) => {
+        const next = [...current];
+        const updatedTargetBlock: Block = {
+          ...targetBlock,
+          rows: completedList,
+          target: targetBlock.target ? { ...targetBlock.target, sets: completedList.length } : null,
+        };
+        next.splice(blockIndex, 1, updatedTargetBlock, newBlock);
+        return next;
+      });
+
+      void cataloguePatternsByExerciseName().then(setPatterns);
+      void listExerciseNames().then(setKnown);
+      notify(
+        'Swapped remaining sets',
+        `${trimmed} added for remaining ${remainingCount} set${remainingCount > 1 ? 's' : ''}.`,
+      );
+    }
+  };
+
   const finish = async () => {
     if (!session) return;
     const logged = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
@@ -1645,6 +1801,19 @@ export default function SessionScreen() {
                       {block.name.toUpperCase()}
                     </Text>
                   </SlashPanel>
+                </Tappable>
+
+                <Tappable
+                  onPress={() => setSwapTargetIndex(blockIndex)}
+                  style={styles.swapBtn}
+                  scaleTo={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Swap ${block.name} with an alternative`}
+                >
+                  <View style={styles.swapBadge}>
+                    <Ionicons name="swap-horizontal" size={12} color={loud.figureMuted} />
+                    <Text style={styles.swapText}>SWAP</Text>
+                  </View>
                 </Tappable>
 
                 {block.supersetGroup ? (
@@ -2307,6 +2476,22 @@ export default function SessionScreen() {
       onClose={() => setSupersetTargetIndex(null)}
     />
 
+    {swapTargetIndex !== null && blocks[swapTargetIndex] && (
+      <SwapExerciseSheet
+        open={swapTargetIndex !== null}
+        currentExerciseName={blocks[swapTargetIndex].name}
+        hasLoggedSets={blocks[swapTargetIndex].rows.some((r) => r.done && r.id != null)}
+        loggedSetsCount={blocks[swapTargetIndex].rows.filter((r) => r.done && r.id != null).length}
+        catalogue={catalogue}
+        known={known}
+        patterns={patterns}
+        onSelectSwap={(opt, mode) => {
+          void swapExercise(swapTargetIndex, opt, mode);
+        }}
+        onClose={() => setSwapTargetIndex(null)}
+      />
+    )}
+
     {celebrationPR && (
       <PRCelebration
         data={celebrationPR}
@@ -2499,6 +2684,28 @@ const styles = StyleSheet.create({
     backgroundColor: loud.panel,
   },
   linkSupersetText: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
+  swapBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  swapBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    backgroundColor: loud.panel,
+  },
+  swapText: {
     fontFamily: font.display,
     fontSize: 9.5,
     letterSpacing: 0.8,
