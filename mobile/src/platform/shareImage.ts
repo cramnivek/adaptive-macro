@@ -1,5 +1,13 @@
 import { Platform, Share } from 'react-native';
 import { type ShareCard, titleLines } from '../shareCard';
+import { coverRect } from './depth';
+import {
+  ALL_BLOCKS,
+  type CardBlocks,
+  clampPlacement,
+  type Placement,
+  placementOrigin,
+} from '../shareCardPlacement';
 import { font } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 
@@ -178,12 +186,12 @@ const backdrop = (ctx: CanvasRenderingContext2D, photo: HTMLImageElement) => {
   const light = brightnessOf(photo) ?? 0.45;
   const heavy = Math.min(1, Math.max(0, (light - 0.2) / 0.45));
 
-  const scale = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
-  const w = photo.naturalWidth * scale;
-  const h = photo.naturalHeight * scale;
+  // The same geometry the cut-out uses, so a person and their own silhouette
+  // cannot end up a pixel apart.
+  const rect = coverRect(photo, { width: W, height: H });
   ctx.save();
   ctx.filter = `grayscale(${(0.2 + 0.25 * heavy).toFixed(2)}) contrast(${(1.04 + 0.1 * heavy).toFixed(2)}) brightness(${(1 - 0.32 * heavy).toFixed(2)})`;
-  ctx.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
+  ctx.drawImage(photo, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 
   ctx.fillStyle = `rgba(10,10,12,${(0.04 + 0.2 * heavy).toFixed(2)})`;
@@ -526,6 +534,34 @@ export const pickCardPhoto = (): Promise<PickedPhoto> => {
  * several megabytes, which is slow to hand to a share sheet — and a card that
  * is flat colour and type stays a PNG, which is smaller and sharper.
  */
+/** The photograph alone, graded as the card grades it: the composer's backdrop. */
+export const drawBackdrop = (photo: HTMLImageElement): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  backdrop(canvas.getContext('2d') as CanvasRenderingContext2D, photo);
+  return canvas;
+};
+
+/**
+ * A drawn card as a file, ready before any tap so sharing can happen inside
+ * one. A card over a photograph is written as a JPEG — the same picture as a
+ * PNG is several megabytes — and a card that is flat colour and type stays a
+ * PNG, which is smaller and sharper.
+ */
+export const cardFileFrom = async (
+  canvas: HTMLCanvasElement,
+  title: string,
+  overPhoto: boolean,
+): Promise<{ file: File; url: string } | null> => {
+  const type = overPhoto ? 'image/jpeg' : 'image/png';
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.92));
+  if (!blob) return null;
+  const stem = title.replace(/[^\w-]+/g, '-').toLowerCase() || 'workout';
+  const name = `${stem}.${overPhoto ? 'jpg' : 'png'}`;
+  return { file: new File([blob], name, { type }), url: URL.createObjectURL(blob) };
+};
+
 export const shareCardFile = async (
   summary: ShareCard,
   photo: HTMLImageElement | null = null,
@@ -539,13 +575,23 @@ export const shareCardFile = async (
       document.fonts?.load(`40px ${face}`).catch(() => undefined),
     ),
   );
-  const canvas = drawShareCard(summary, photo);
-  const type = photo ? 'image/jpeg' : 'image/png';
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.92));
-  if (!blob) return null;
-  const name = `${summary.title.replace(/[^\w-]+/g, '-').toLowerCase() || 'workout'}.${photo ? 'jpg' : 'png'}`;
-  const file = new File([blob], name, { type });
-  return { file, url: URL.createObjectURL(blob) };
+  return cardFileFrom(drawShareCard(summary, photo), summary.title, photo !== null);
+};
+
+/**
+ * The fonts the card is drawn in, loaded before anything draws.
+ *
+ * A canvas never starts a font loading and `document.fonts.ready` only waits
+ * for loads already under way, so they are asked for by name. Without this the
+ * card falls back to a system face, which is the whole look gone.
+ */
+export const cardFontsReady = async (): Promise<void> => {
+  if (typeof document === 'undefined') return;
+  await Promise.all(
+    [font.ui, font.uiStrong, font.figure, font.display].map((face) =>
+      document.fonts?.load(`40px ${face}`).catch(() => undefined),
+    ),
+  );
 };
 
 const asText = (summary: ShareCard): string => {
@@ -594,4 +640,212 @@ export const shareWorkout = async (
   link.click();
   document.body.removeChild(link);
   return 'downloaded';
+};
+
+/* ---------------------------------------------------------------------------
+ * The sticker: the same card, as a block you can put where you like.
+ * ------------------------------------------------------------------------ */
+
+/** Wide enough to hold a two-line title at a size worth reading, narrow enough to move. */
+const STICKER_W = 760;
+const STICKER_PAD = 44;
+const STICKER_INNER = STICKER_W - STICKER_PAD * 2;
+/** Taller than any sticker can be; the drawn part is cut out of it afterwards. */
+const SCRATCH_H = 2400;
+
+/**
+ * The overlay, on nothing.
+ *
+ * Drawn with a transparent ground so it can be laid over a photograph and
+ * moved, which is the whole point of it: a layer that moves must not carry its
+ * own background around with it.
+ *
+ * It is drawn onto a canvas taller than it could ever need and then cut down to
+ * what was used, because the panel behind the type has to be drawn before the
+ * type and its height is not known until afterwards. Measuring everything
+ * twice would be the alternative, and twice as much to keep in step.
+ */
+export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS): HTMLCanvasElement => {
+  const scratch = document.createElement('canvas');
+  scratch.width = STICKER_W;
+  scratch.height = SCRATCH_H;
+  const ctx = scratch.getContext('2d') as CanvasRenderingContext2D;
+  const left = STICKER_PAD;
+  const right = STICKER_W - STICKER_PAD;
+  // A sticker is always over a picture, so it always takes the lighter grey.
+  const faint = loud.figureMuted;
+  let y = STICKER_PAD;
+
+  if (blocks.title) {
+    const lines = titleLines(summary.title);
+    const lineWidth = (line: { text: string }[], px: number): number => {
+      ctx.font = `700 ${px}px ${font.display}`;
+      return line.reduce((sum, part) => sum + ctx.measureText(part.text).width, 0);
+    };
+    let px = 118;
+    while (px > 44 && lines.some((line) => lineWidth(line, px) > STICKER_INNER)) px -= 2;
+    lines.forEach((line, i) => {
+      y += px;
+      let at = left;
+      for (const part of line) {
+        ctx.font = `700 ${px}px ${font.display}`;
+        ctx.fillStyle = part.red ? loud.loud : loud.figure;
+        const text = fit(ctx, part.text, right - at);
+        ctx.fillText(text, at, y);
+        at += ctx.measureText(text).width;
+      }
+      if (i < lines.length - 1) y += px * 0.06;
+    });
+    y += 18;
+  }
+
+  if (blocks.hero) {
+    const hero = heroOf(summary);
+    const px = sized(ctx, hero.figure, STICKER_INNER, font.display, 118, 56);
+    y += px;
+    ctx.font = `700 ${px}px ${font.display}`;
+    ctx.fillStyle = hero.red ? loud.loud : loud.figure;
+    ctx.fillText(hero.figure, left, y);
+    y += 38;
+    ctx.font = `600 24px ${font.uiStrong}`;
+    track(ctx, 8);
+    ctx.fillStyle = faint;
+    ctx.fillText(fit(ctx, hero.label, STICKER_INNER), left, y);
+    track(ctx, 0);
+    y += 20;
+  }
+
+  if (blocks.stats) {
+    const lifting = summary.sets > 0;
+    const lifts = summary.exercises.length + summary.more;
+    const stats: [string, string][] = [['TIME', summary.duration]];
+    if (lifting) stats.push(['SETS', String(summary.sets)]);
+    if (summary.volume) stats.push(['LIFTED', summary.volume]);
+    if (summary.cardioDistanceKm) stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
+    if (lifting) stats.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
+
+    const gap = 34;
+    const cell = (label: string, value: string, px: number): number => {
+      ctx.font = `700 ${px}px ${font.display}`;
+      const figure = ctx.measureText(value).width;
+      ctx.font = `600 20px ${font.uiStrong}`;
+      track(ctx, 6);
+      const under = ctx.measureText(label).width;
+      track(ctx, 0);
+      return Math.max(figure, under);
+    };
+    let px = 50;
+    const row = (at: number): number =>
+      stats.reduce((sum, [label, value]) => sum + cell(label, value, at), 0) + gap * (stats.length - 1);
+    while (px > 26 && row(px) > STICKER_INNER) px -= 2;
+
+    y += px + 18;
+    let x = left;
+    for (const [label, value] of stats) {
+      ctx.font = `700 ${px}px ${font.display}`;
+      ctx.fillStyle = loud.figure;
+      ctx.fillText(value, x, y);
+      ctx.font = `600 20px ${font.uiStrong}`;
+      track(ctx, 6);
+      ctx.fillStyle = faint;
+      ctx.fillText(label, x, y + 30);
+      track(ctx, 0);
+      x += cell(label, value, px) + gap;
+    }
+    y += 30 + 22;
+  }
+
+  if (blocks.lifts && summary.exercises.length > 0) {
+    for (const exercise of summary.exercises.slice(0, 3)) {
+      y += 42;
+      ctx.font = `500 28px ${font.figure}`;
+      ctx.fillStyle = loud.figure;
+      ctx.textAlign = 'right';
+      ctx.fillText(exercise.best, right, y);
+      const best = ctx.measureText(exercise.best).width;
+      ctx.textAlign = 'left';
+      ctx.font = `600 30px ${font.uiStrong}`;
+      ctx.fillText(fit(ctx, exercise.name.toUpperCase(), STICKER_INNER - best - 24), left, y);
+      const under = exercise.isCardio
+        ? (exercise.detail ?? '').toUpperCase()
+        : `${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`;
+      if (under !== '') {
+        ctx.font = `400 20px ${font.ui}`;
+        ctx.fillStyle = faint;
+        ctx.fillText(under, left, y + 24);
+      }
+      y += 24;
+    }
+    y += 16;
+  }
+
+  if (blocks.climb && summary.climb.length > 0) {
+    y += 12;
+    const step = Math.min(26, STICKER_INNER / summary.climb.length);
+    const barW = Math.max(3, Math.min(18, step * 0.7));
+    const tall = 64;
+    summary.climb.forEach((bar, i) => {
+      const h = 10 + bar.height * tall;
+      ctx.fillStyle = bar.top ? loud.loud : faint;
+      ctx.fillRect(left + i * step, y + tall + 10 - h, barW, h);
+    });
+    y += tall + 10 + 16;
+  }
+
+  y += 34;
+  wordmark(ctx, left, y, 26);
+  y += 12;
+
+  const height = y + STICKER_PAD - 20;
+  const sticker = document.createElement('canvas');
+  sticker.width = STICKER_W;
+  sticker.height = height;
+  const out = sticker.getContext('2d') as CanvasRenderingContext2D;
+  // The panel first, then everything that was drawn, over it.
+  out.fillStyle = 'rgba(12,12,15,0.78)';
+  roundRect(out, 0, 0, STICKER_W, height, 36);
+  out.fill();
+  out.strokeStyle = 'rgba(247,245,239,0.1)';
+  out.lineWidth = 2;
+  roundRect(out, 1, 1, STICKER_W - 2, height - 2, 35);
+  out.stroke();
+  out.drawImage(scratch, 0, 0, STICKER_W, height, 0, 0, STICKER_W, height);
+  return sticker;
+};
+
+/**
+ * The photograph, graded as the card always grades it, with the overlay put
+ * where it was left. The file that gets shared.
+ */
+export const composeCard = (
+  photo: HTMLImageElement,
+  overlay: HTMLCanvasElement,
+  place: Placement,
+  subject: HTMLCanvasElement | null = null,
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  backdrop(ctx, photo);
+
+  const legal = clampPlacement(place, overlay, { width: W, height: H });
+  const { left, top } = placementOrigin(legal, overlay, { width: W, height: H });
+  // The same shadow the poster's type carries, for the same reason: the block
+  // has to sit on whatever happens to be behind it.
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 6;
+  ctx.drawImage(overlay, left, top, overlay.width * legal.scale, overlay.height * legal.scale);
+
+  // The person, last, over the type that was over the picture. That order is
+  // the whole of the depth: a headline disappearing behind a shoulder reads as
+  // somewhere the words are, rather than something stuck on the front. The
+  // cut-out is the photograph ungraded, so the subject keeps the light the
+  // background has given up.
+  if (subject !== null) {
+    ctx.shadowColor = 'transparent';
+    ctx.drawImage(subject, 0, 0, W, H);
+  }
+  return canvas;
 };

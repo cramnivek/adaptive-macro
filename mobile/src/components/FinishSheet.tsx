@@ -1,8 +1,40 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  PanResponder,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { pickCardPhoto, shareCardFile, shareWorkout } from '../platform/shareImage';
+import {
+  cardFileFrom,
+  cardFontsReady,
+  composeCard,
+  drawBackdrop,
+  drawOverlay,
+  pickCardPhoto,
+  shareCardFile,
+  shareWorkout,
+} from '../platform/shareImage';
 import type { ShareCard } from '../shareCard';
+import {
+  CARD_BLOCKS,
+  type CardBlock,
+  CENTRED,
+  clampPlacement,
+  type Placement,
+  placementOrigin,
+} from '../shareCardPlacement';
+import { subjectOf } from '../platform/depth';
+import { useApp } from '../state/AppStore';
+
+/** The card's own size. The preview is a fraction of it, and the sticker's place is kept as a fraction of both. */
+const CARD = { width: 1080, height: 1920 };
 import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -49,6 +81,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [picked, setPicked] = useState<{ workout: ShareCard; image: HTMLImageElement } | null>(null);
   const photo = picked !== null && picked.workout === summary ? picked.image : null;
 
+  const { settings, updateSettings } = useApp();
+  const blocks = settings.cardBlocks;
+  // Over a photo the card becomes a block you put where you like, so where it
+  // was put is state, and the picture under it is drawn once rather than on
+  // every frame of a drag.
+  const [place, setPlace] = useState<Placement>(CENTRED);
+  const [dragging, setDragging] = useState(false);
+  const [ground, setGround] = useState<string | null>(null);
+  const [sticker, setSticker] = useState<{ uri: string; width: number; height: number } | null>(null);
+  // The person, cut out of the photograph, so the type can pass behind them.
+  const [subject, setSubject] = useState<{ canvas: HTMLCanvasElement; uri: string } | null>(null);
+  const [cutting, setCutting] = useState(false);
+  const depth = settings.cardDepth;
+
   useEffect(() => {
     if (summary === null) return;
     setNote(null);
@@ -61,9 +107,33 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   useEffect(() => {
     if (summary === null) return;
+    // A card over a photograph is composed from its two layers, and the layers
+    // are what the preview shows, so the file is made from exactly what was on
+    // screen. It waits for the drag to end: nobody needs a megabyte of JPEG
+    // made sixty times a second.
+    if (photo !== null) {
+      if (sticker === null || dragging) return;
+      let alive = true;
+      setDrawing(true);
+      void (async () => {
+        await cardFontsReady();
+        const overlay = drawOverlay(summary, blocks);
+        return cardFileFrom(composeCard(photo, overlay, place, subject?.canvas ?? null), summary.title, true);
+      })()
+        .then((drawn) => {
+          if (!alive) return;
+          if (drawn !== null) setCard(drawn);
+          else setNote('The card could not be made with that picture.');
+        })
+        .catch((error) => alive && setNote(`The card could not be drawn: ${(error as Error).message}`))
+        .finally(() => alive && setDrawing(false));
+      return () => {
+        alive = false;
+      };
+    }
     let live = true;
     setDrawing(true);
-    void shareCardFile(summary, photo)
+    void shareCardFile(summary, null)
       .then((drawn) => {
         if (!live) return;
         if (drawn !== null) {
@@ -85,7 +155,71 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     return () => {
       live = false;
     };
-  }, [summary, photo]);
+  }, [summary, photo, blocks, place, dragging, sticker, subject]);
+
+  // The picture, graded once. The preview shows this rather than the raw
+  // photograph so that what is on screen while you place the block is what the
+  // file will look like.
+  useEffect(() => {
+    if (photo === null) {
+      setGround(null);
+      setPlace(CENTRED);
+      return;
+    }
+    setGround(drawBackdrop(photo).toDataURL('image/jpeg', 0.8));
+    setPlace(CENTRED);
+  }, [photo]);
+
+  // The block itself, redrawn only when what it says changes — never while it
+  // is being moved, which is what keeps dragging free.
+  useEffect(() => {
+    if (summary === null || photo === null) {
+      setSticker(null);
+      return;
+    }
+    let live = true;
+    void cardFontsReady().then(() => {
+      if (!live) return;
+      const drawn = drawOverlay(summary, blocks);
+      setSticker({ uri: drawn.toDataURL(), width: drawn.width, height: drawn.height });
+    });
+    return () => {
+      live = false;
+    };
+  }, [summary, photo, blocks]);
+
+  // The cut-out: asked for once per photograph, and only when depth is on,
+  // because the first one fetches the runtime that does it.
+  useEffect(() => {
+    if (photo === null || !depth) {
+      setSubject(null);
+      return;
+    }
+    let live = true;
+    setCutting(true);
+    void subjectOf(photo, CARD)
+      .then((cut) => {
+        if (!live) return;
+        if (cut === null) {
+          // Either there is no one in the picture or the model could not find
+          // them. Cutting nothing out would leave the card exactly as it was,
+          // so saying so beats a toggle that appears to do nothing.
+          setNote('No one to cut out of that picture, so the type stays in front.');
+          setSubject(null);
+          return;
+        }
+        setSubject({ canvas: cut, uri: cut.toDataURL() });
+      })
+      .catch(() => {
+        if (!live) return;
+        setNote('Depth needs a download that could not be had just now.');
+        void updateSettings({ cardDepth: false });
+      })
+      .finally(() => live && setCutting(false));
+    return () => {
+      live = false;
+    };
+  }, [photo, depth]);
 
   const choosePhoto = async () => {
     if (summary === null) return;
@@ -139,6 +273,62 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   const postLeads = account !== 'unavailable' && writing;
   const height = writing ? 240 : 360;
+  /** The preview is the card's own 9:16, so a fraction here means the same there. */
+  const frame = { width: (height * 9) / 16, height };
+
+  // The gesture reads from refs rather than from state: a responder is made
+  // once and would otherwise be holding the first render's numbers for ever.
+  const placeRef = useRef(place);
+  placeRef.current = place;
+  const stickerRef = useRef(sticker);
+  stickerRef.current = sticker;
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
+  const start = useRef<{ place: Placement; spread: number } | null>(null);
+
+  const spreadOf = (touches: { pageX: number; pageY: number }[]): number =>
+    Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
+
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          const touches = event.nativeEvent.touches ?? [];
+          start.current = {
+            place: placeRef.current,
+            spread: touches.length >= 2 ? spreadOf(touches) : 0,
+          };
+          setDragging(true);
+        },
+        onPanResponderMove: (event, gesture) => {
+          const from = start.current;
+          const block = stickerRef.current;
+          if (from === null || block === null) return;
+          const touches = event.nativeEvent.touches ?? [];
+          // Two fingers size it, one moves it. A pinch that began as a drag
+          // keeps the position it had when the second finger landed.
+          const next =
+            touches.length >= 2 && from.spread > 0
+              ? { ...from.place, scale: from.place.scale * (spreadOf(touches) / from.spread) }
+              : {
+                  ...from.place,
+                  x: from.place.x + gesture.dx / frameRef.current.width,
+                  y: from.place.y + gesture.dy / frameRef.current.height,
+                };
+          setPlace(clampPlacement(next, block, frameRef.current));
+        },
+        onPanResponderEnd: () => {
+          start.current = null;
+          setDragging(false);
+        },
+      }),
+    [],
+  );
+
+  const toggleBlock = (block: CardBlock) =>
+    void updateSettings({ cardBlocks: { ...blocks, [block]: !blocks[block] } });
 
   const postButton = account === 'unavailable' ? null : (
     <Tappable
@@ -180,12 +370,86 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           )}
 
           <View style={[styles.preview, { height }]}>
-            {card ? (
+            {ground !== null ? (
+              /*
+                Over a photograph the preview is the two layers themselves
+                rather than a picture of them, so moving the block is a
+                transform instead of a redraw. What is composed on share is the
+                same photo, the same block, the same placement.
+              */
+              <View
+                style={[styles.frame, { width: frame.width, height: frame.height }]}
+                {...pan.panHandlers}
+                accessibilityLabel="The card that will be shared. Drag to move it, pinch to resize."
+              >
+                <Image source={{ uri: ground }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                {sticker !== null && (
+                  /*
+                    Everything here is in the preview's own points. The block is
+                    drawn at the card's size, so its place and its size are both
+                    taken down by the same fraction — a transform would have
+                    scaled the block and left its corner where it was.
+                  */
+                  <Image
+                    source={{ uri: sticker.uri }}
+                    style={{
+                      position: 'absolute',
+                      left: placementOrigin(place, sticker, CARD).left * (frame.width / CARD.width),
+                      top: placementOrigin(place, sticker, CARD).top * (frame.height / CARD.height),
+                      width: sticker.width * place.scale * (frame.width / CARD.width),
+                      height: sticker.height * place.scale * (frame.height / CARD.height),
+                    }}
+                  />
+                )}
+                {subject !== null && (
+                  /* The person, over the type, exactly as the file will have it. */
+                  <Image source={{ uri: subject.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                )}
+              </View>
+            ) : card ? (
               <Image source={{ uri: card.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
             ) : drawing ? (
               <ActivityIndicator color={loud.loud} />
             ) : null}
           </View>
+
+          {/* The blocks, and a way back to the middle. Only over a photo: without
+              one the card is the poster, which has nowhere to be put. */}
+          {ground !== null && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.blocks}
+              contentContainerStyle={styles.blocksRow}
+            >
+              {CARD_BLOCKS.map((block) => (
+                <Tappable
+                  key={block}
+                  onPress={() => toggleBlock(block)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: blocks[block] }}
+                  style={[styles.chip, blocks[block] && styles.chipOn]}
+                >
+                  <Text style={[styles.chipLabel, { color: blocks[block] ? loud.ground : loud.figureMuted }]}>
+                    {block.toUpperCase()}
+                  </Text>
+                </Tappable>
+              ))}
+              <Tappable
+                onPress={() => void updateSettings({ cardDepth: !depth })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: depth, busy: cutting }}
+                style={[styles.chip, depth && styles.chipOn]}
+              >
+                <Text style={[styles.chipLabel, { color: depth ? loud.ground : loud.figureMuted }]}>
+                  {cutting ? 'CUTTING…' : 'DEPTH'}
+                </Text>
+              </Tappable>
+              <Tappable onPress={() => setPlace(CENTRED)} accessibilityRole="button" style={styles.chip}>
+                <Text style={[styles.chipLabel, { color: loud.figureMuted }]}>RESET</Text>
+              </Tappable>
+            </ScrollView>
+          )}
 
           {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
           {card !== null && (
@@ -214,9 +478,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           )}
 
           {postLeads && postButton}
-          <Tappable onPress={() => void share()} scaleTo={0.97} style={styles.action}>
+          {/* While the card is being made again — which is what happens the
+              moment a drag ends — the file in hand is the one from before the
+              move, so sharing waits the half second rather than sending it. */}
+          <Tappable
+            onPress={() => { if (!drawing) void share(); }}
+            scaleTo={0.97}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: drawing }}
+            style={[styles.action, drawing && styles.spent]}
+          >
             <SlashPanel color={postLeads ? loud.panel : loud.loud} style={styles.button}>
-              <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>SHARE</Text>
+              <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>
+                {drawing ? 'DRAWING…' : 'SHARE'}
+              </Text>
             </SlashPanel>
           </Tappable>
           {!postLeads && postButton}
@@ -262,6 +537,21 @@ const styles = StyleSheet.create({
   // A story is 9:16; the preview keeps that shape at a size that leaves the buttons on screen.
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
+  frame: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: loud.ground },
+  // Scrolled rather than wrapped: the number of chips is not fixed, and a row
+  // that silently loses its last one is worse than one that slides.
+  blocks: { flexGrow: 0, marginBottom: space.xs },
+  blocksRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.xs },
+  chip: {
+    minHeight: 34,
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  chipOn: { backgroundColor: loud.figure, borderColor: loud.figure },
+  chipLabel: { fontFamily: font.uiStrong, fontSize: 10, letterSpacing: 0.4 },
   photoRow: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginBottom: space.xs },
   // Small type, but a full touch target: hitSlop is ignored on the web.
   photoAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md },
