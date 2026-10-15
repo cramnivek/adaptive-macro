@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  ALL_CATALOGUE_ENTRIES,
   CATALOGUE_BY_CANONICAL_NAME,
   CATALOGUE_BY_LINKED_NAME,
   PATTERNS_BY_CANONICAL_NAME,
@@ -96,6 +97,7 @@ describe('the migrations themselves', () => {
     // A query referencing a column a migration forgot throws here rather than
     // on someone's phone.
     for (const sql of [
+      ALL_CATALOGUE_ENTRIES,
       CATALOGUE_BY_LINKED_NAME,
       CATALOGUE_BY_CANONICAL_NAME,
       PATTERNS_BY_CANONICAL_NAME,
@@ -253,5 +255,22 @@ describe('the muscle map source', () => {
     const row = db.prepare(REGIONS_BY_LINKED_NAME).get() as Record<string, unknown>;
     expect(row.primary_region).toBe('quads');
     expect(row.secondary_regions).toBe('["glutes"]');
+  });
+});
+
+describe('loading all catalogue entries', () => {
+  it('returns all entries ordered by canonical name with their recorded names', () => {
+    catalogue('c1', 'Pull-Up');
+    catalogue('c2', 'Bench Press');
+    exercise('e1', 'Pull Up', 'c1');
+    session('s1');
+    loggedSet('set1', 's1', 'e1', 'Pull Up');
+
+    const rows = db.prepare(ALL_CATALOGUE_ENTRIES).all() as Record<string, unknown>[];
+    expect(rows.length).toBe(2);
+    expect(rows[0].canonical_name).toBe('Bench Press');
+    expect(rows[0].recorded_name).toBeNull();
+    expect(rows[1].canonical_name).toBe('Pull-Up');
+    expect(rows[1].recorded_name).toBe('Pull Up');
   });
 });

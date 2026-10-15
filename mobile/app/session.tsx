@@ -49,6 +49,7 @@ import {
   lastSessionSets,
   listAllSets,
   listExerciseNames,
+  loadAllCatalogueEntries,
   catalogueEntryForExercise,
   cataloguePatternsByExerciseName,
   listRoutines,
@@ -59,6 +60,7 @@ import {
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
+import { warmCatalogueCache } from '../src/exerciseSearch';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
@@ -718,6 +720,7 @@ export default function SessionScreen() {
       ]);
       setRoutines(loadedRoutines);
       setKnown(names);
+      void warmCatalogueCache(loadAllCatalogueEntries);
 
       if (existing) {
         // The routine's exercises come back too, not only those with a set

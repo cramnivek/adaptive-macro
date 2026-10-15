@@ -13,12 +13,14 @@ import {
   deleteRoutine,
   listExerciseNames,
   listRoutines,
+  loadAllCatalogueEntries,
   moveRoutine,
   recentSessions,
   setRoutineExercises,
 } from '../src/db';
 import type { Routine } from '../src/db';
 import type { MovementPattern } from '../src/ai/exercises';
+import { warmCatalogueCache } from '../src/exerciseSearch';
 import { confirm, notify } from '../src/dialog';
 import { useApp } from '../src/state/AppStore';
 import { formatDate } from '../src/format';
@@ -74,6 +76,7 @@ export default function RoutinesScreen() {
     setKnown(await listExerciseNames());
     setPast(await recentSessions(15));
     setPatterns(await cataloguePatternsByExerciseName());
+    void warmCatalogueCache(loadAllCatalogueEntries);
   };
 
   // On focus, so routines saved by the programme import show on return.

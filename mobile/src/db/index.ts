@@ -16,10 +16,12 @@ import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 import {
+  ALL_CATALOGUE_ENTRIES,
   CATALOGUE_BY_CANONICAL_NAME,
   CATALOGUE_BY_LINKED_NAME,
   PATTERNS_BY_CANONICAL_NAME,
   PATTERNS_BY_LINKED_NAME,
+  SEARCH_CATALOGUE,
 } from './catalogueQueries';
 import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
 import { LAST_MEALS_BEFORE } from './mealQueries';
@@ -1129,23 +1131,16 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
  */
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
-  const rows = await db.getAllAsync<CatalogueRow>(
-    `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
-            c.instruction_steps,
-            (SELECT e.name
-               FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
-              WHERE e.catalogue_id = c.id
-              GROUP BY e.id
-              ORDER BY COUNT(s.id) DESC, e.name
-              LIMIT 1) AS recorded_name
-       FROM exercise_catalogue c
-      WHERE c.canonical_name LIKE ?
-      ORDER BY c.canonical_name
-      LIMIT ?`,
-    `%${term}%`,
-    limit,
-  );
+  const rows = await db.getAllAsync<CatalogueRow>(SEARCH_CATALOGUE, `%${term}%`, limit);
+  return rows.map(toCatalogueEntry);
+};
+
+/**
+ * Loads all catalogue entries with their most-logged recorded names for in-memory indexing.
+ */
+export const loadAllCatalogueEntries = async (): Promise<CatalogueEntry[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<CatalogueRow>(ALL_CATALOGUE_ENTRIES);
   return rows.map(toCatalogueEntry);
 };
 
