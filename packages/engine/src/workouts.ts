@@ -35,6 +35,8 @@ export interface WorkoutSet {
   rpe: number | null;
   /** Carried on the set so load can be resolved without an exercise lookup. */
   bodyweightBased: boolean;
+  /** Links exercises performed back-to-back into a superset/giant set (e.g. 'A'). */
+  supersetGroup?: string | null;
 }
 
 export interface WorkoutSession {

@@ -24,7 +24,20 @@ describe('routineExercisesFromSets', () => {
       set({}),
     ]);
     expect(out).toEqual([
-      { name: 'Bench Press', bodyweightBased: false, targetSets: 3, targetReps: '8' },
+      { name: 'Bench Press', bodyweightBased: false, targetSets: 3, targetReps: '8', supersetGroup: null },
+    ]);
+  });
+
+  it('preserves superset groups across exercises', () => {
+    const out = routineExercisesFromSets([
+      set({ exerciseName: 'Bench Press', supersetGroup: 'A' }),
+      set({ exerciseName: 'Barbell Row', supersetGroup: 'A' }),
+      set({ exerciseName: 'Overhead Press', supersetGroup: null }),
+    ]);
+    expect(out.map((e) => ({ name: e.name, group: e.supersetGroup }))).toEqual([
+      { name: 'Bench Press', group: 'A' },
+      { name: 'Barbell Row', group: 'A' },
+      { name: 'Overhead Press', group: null },
     ]);
   });
 

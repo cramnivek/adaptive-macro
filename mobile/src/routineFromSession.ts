@@ -13,6 +13,7 @@ export interface RoutineExerciseDraft {
   targetDistance?: number | null;
   targetSpeed?: number | null;
   targetIncline?: number | null;
+  supersetGroup?: string | null;
 }
 
 /**
@@ -39,6 +40,7 @@ export const routineExercisesFromSets = (sets: LoggedSet[]): RoutineExerciseDraf
         targetDistance: first.distanceKm ?? null,
         targetSpeed: first.speedKph ?? null,
         targetIncline: first.inclinePct ?? null,
+        supersetGroup: first.supersetGroup ?? null,
       };
     }
 
@@ -52,5 +54,6 @@ export const routineExercisesFromSets = (sets: LoggedSet[]): RoutineExerciseDraf
       bodyweightBased: first.bodyweightBased,
       targetSets: counted.length,
       targetReps: low === high ? String(low) : `${low}-${high}`,
+      supersetGroup: first.supersetGroup ?? null,
     };
   });

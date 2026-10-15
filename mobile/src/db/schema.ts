@@ -197,4 +197,12 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sets ADD COLUMN duration_seconds INTEGER;
   ALTER TABLE sets ADD COLUMN distance_km REAL;
   `,
+  // v9 — supersets and giant sets in routines and sessions
+  //
+  // superset_group links two or more exercises performed back-to-back:
+  // e.g. 'A', 'B'. Null means an independent exercise block.
+  `
+  ALTER TABLE routine_exercises ADD COLUMN superset_group TEXT;
+  ALTER TABLE sets ADD COLUMN superset_group TEXT;
+  `,
 ];

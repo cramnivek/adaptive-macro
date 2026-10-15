@@ -1242,6 +1242,7 @@ export interface LoggedSet {
   inclinePct?: number | null;
   durationSeconds?: number | null;
   distanceKm?: number | null;
+  supersetGroup?: string | null;
 }
 
 /**
@@ -1292,10 +1293,11 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     incline_pct: number | null;
     duration_seconds: number | null;
     distance_km: number | null;
+    superset_group: string | null;
   }>(
     `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
             s.reps, s.set_type, s.rpe, s.is_cardio, s.cardio_mode, s.speed_kph,
-            s.incline_pct, s.duration_seconds, s.distance_km
+            s.incline_pct, s.duration_seconds, s.distance_km, s.superset_group
        FROM sets s JOIN exercises e ON e.id = s.exercise_id
       WHERE s.session_id = ?
       ORDER BY s.created_at, s.set_index`,
@@ -1317,6 +1319,7 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     inclinePct: row.incline_pct,
     durationSeconds: row.duration_seconds,
     distanceKm: row.distance_km,
+    supersetGroup: row.superset_group ?? null,
   }));
 };
 
@@ -1402,6 +1405,7 @@ export const addSetToSession = async (
     inclinePct?: number | null;
     durationSeconds?: number | null;
     distanceKm?: number | null;
+    supersetGroup?: string | null;
   },
 ): Promise<void> => {
   const db = await getDb();
@@ -1415,8 +1419,8 @@ export const addSetToSession = async (
 
   await db.runAsync(
     `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe,
-                       is_cardio, cardio_mode, speed_kph, incline_pct, duration_seconds, distance_km, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                       is_cardio, cardio_mode, speed_kph, incline_pct, duration_seconds, distance_km, superset_group, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     newId(),
     sessionId,
     exerciseId,
@@ -1432,6 +1436,7 @@ export const addSetToSession = async (
     set.inclinePct ?? null,
     set.durationSeconds ?? null,
     set.distanceKm ?? null,
+    set.supersetGroup ?? null,
     new Date().toISOString(),
   );
 };
@@ -1522,6 +1527,7 @@ export interface RoutineExerciseItem {
   targetDistance?: number | null;
   targetSpeed?: number | null;
   targetIncline?: number | null;
+  supersetGroup?: string | null;
 }
 
 export interface Routine {
@@ -1551,9 +1557,11 @@ export const listRoutines = async (): Promise<Routine[]> => {
       target_distance: number | null;
       target_speed: number | null;
       target_incline: number | null;
+      superset_group: string | null;
     }>(
       `SELECT e.name, e.bodyweight_based, re.target_sets, re.target_reps, re.position,
-              re.is_cardio, re.cardio_mode, re.target_time, re.target_distance, re.target_speed, re.target_incline
+              re.is_cardio, re.cardio_mode, re.target_time, re.target_distance, re.target_speed, re.target_incline,
+              re.superset_group
          FROM routine_exercises re JOIN exercises e ON e.id = re.exercise_id
         WHERE re.routine_id = ? ORDER BY re.position`,
       row.id,
@@ -1574,6 +1582,7 @@ export const listRoutines = async (): Promise<Routine[]> => {
         targetDistance: e.target_distance,
         targetSpeed: e.target_speed,
         targetIncline: e.target_incline,
+        supersetGroup: e.superset_group ?? null,
       })),
     });
   }
@@ -1593,6 +1602,7 @@ export const createRoutine = async (
     targetDistance?: number | null;
     targetSpeed?: number | null;
     targetIncline?: number | null;
+    supersetGroup?: string | null;
   }[],
 ): Promise<string> => {
   const db = await getDb();
@@ -1621,13 +1631,13 @@ export const createRoutine = async (
       );
       await db.runAsync(
         `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
-                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline, superset_group)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
            SET position = excluded.position, target_sets = excluded.target_sets,
                target_reps = excluded.target_reps, is_cardio = excluded.is_cardio,
                cardio_mode = excluded.cardio_mode, target_time = excluded.target_time,
                target_distance = excluded.target_distance, target_speed = excluded.target_speed,
-               target_incline = excluded.target_incline`,
+               target_incline = excluded.target_incline, superset_group = excluded.superset_group`,
         id,
         exerciseId,
         index,
@@ -1639,6 +1649,7 @@ export const createRoutine = async (
         exercise.targetDistance ?? null,
         exercise.targetSpeed ?? null,
         exercise.targetIncline ?? null,
+        exercise.supersetGroup ?? null,
       );
     }
   });
@@ -1665,6 +1676,7 @@ export const setRoutineExercises = async (
     targetDistance?: number | null;
     targetSpeed?: number | null;
     targetIncline?: number | null;
+    supersetGroup?: string | null;
   }[],
 ): Promise<void> => {
   const db = await getDb();
@@ -1680,8 +1692,8 @@ export const setRoutineExercises = async (
       );
       await db.runAsync(
         `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
-                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline, superset_group)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         exerciseId,
         index,
@@ -1693,6 +1705,7 @@ export const setRoutineExercises = async (
         exercise.targetDistance ?? null,
         exercise.targetSpeed ?? null,
         exercise.targetIncline ?? null,
+        exercise.supersetGroup ?? null,
       );
     }
   });
@@ -2051,6 +2064,23 @@ export const updateSetValues = async (
 export const setSetRpe = async (id: string, rpe: number | null): Promise<void> => {
   const db = await getDb();
   await db.runAsync('UPDATE sets SET rpe = ? WHERE id = ?', rpe, id);
+};
+
+/**
+ * Updates the superset group for all sets of an exercise in an active session.
+ */
+export const updateExerciseSupersetGroup = async (
+  sessionId: string,
+  exerciseName: string,
+  supersetGroup: string | null,
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE sets SET superset_group = ? WHERE session_id = ? AND exercise_name = ?',
+    supersetGroup,
+    sessionId,
+    exerciseName,
+  );
 };
 
 /**

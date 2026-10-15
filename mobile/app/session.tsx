@@ -53,6 +53,7 @@ import {
   sessionSets,
   startSession,
   setSetRpe,
+  updateExerciseSupersetGroup,
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
@@ -62,6 +63,7 @@ import { playChime, primeChime } from '../src/platform/chime';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
 import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
+import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
 import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
@@ -133,6 +135,8 @@ interface Block {
     targetSpeed?: number | null;
     targetIncline?: number | null;
   } | null;
+  /** Superset group letter, e.g. 'A', 'B', 'C' */
+  supersetGroup?: string | null;
 }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -206,6 +210,8 @@ export default function SessionScreen() {
     exerciseName: string | null;
     initialWeight: number | null;
   } | null>(null);
+  /** Which exercise is currently opening the superset management sheet; null when closed. */
+  const [supersetTargetIndex, setSupersetTargetIndex] = useState<number | null>(null);
 
   /**
    * The running rest, as the wall-clock time it ends at.
@@ -270,9 +276,10 @@ export default function SessionScreen() {
     // at the top of the workout, often off screen while the next set is set up.
     const nextBlock = blocks.find((block) => block.rows.some((row) => !row.done));
     const nextRow = nextBlock ? nextBlock.rows.findIndex((row) => !row.done) : -1;
+    const supersetNotice = nextBlock?.supersetGroup ? ` (Superset ${nextBlock.supersetGroup})` : '';
     notify(
       'Rest is up',
-      nextBlock ? `Next: ${nextBlock.name}, set ${nextRow + 1}.` : 'On to the next one.',
+      nextBlock ? `Next: ${nextBlock.name}${supersetNotice}, set ${nextRow + 1}.` : 'On to the next one.',
     );
 
     // Left on screen for a moment rather than cleared at once. On the iOS PWA
@@ -538,6 +545,7 @@ export default function SessionScreen() {
       target: Block['target'] = null,
       isCardio = false,
       cardioMode: CardioMode = 'treadmill',
+      supersetGroup: string | null = null,
     ): Promise<Block> => ({
       name,
       bodyweightBased,
@@ -547,6 +555,7 @@ export default function SessionScreen() {
       previous: await lastSessionSets(name),
       bestPR: await exerciseBestPR(name),
       target,
+      supersetGroup,
     }),
     [],
   );
@@ -638,6 +647,7 @@ export default function SessionScreen() {
           const planned = plan.find((e) => e.name === name);
           const isCardio = mine[0]?.isCardio ?? planned?.isCardio ?? detectCardio(name);
           const cardioMode = (mine[0]?.cardioMode ?? planned?.cardioMode ?? detectCardioMode(name)) as CardioMode;
+          const supersetGroup = mine[0]?.supersetGroup ?? planned?.supersetGroup ?? null;
           const block = await blockFor(
             name,
             mine[0]?.bodyweightBased ?? planned?.bodyweightBased ?? false,
@@ -671,6 +681,7 @@ export default function SessionScreen() {
               : null,
             isCardio,
             cardioMode,
+            supersetGroup,
           );
           return withTargetRows(block);
         }),
@@ -730,6 +741,7 @@ export default function SessionScreen() {
                   },
                   e.isCardio ?? false,
                   (e.cardioMode as CardioMode) ?? 'treadmill',
+                  e.supersetGroup ?? null,
                 ),
               ),
             ),
@@ -984,6 +996,81 @@ export default function SessionScreen() {
     });
   };
 
+  /** Links multiple exercise blocks into a superset group. */
+  const assignSupersetGroup = async (exerciseIndices: number[], group: string) => {
+    setBlocks((current) =>
+      current.map((b, idx) => {
+        if (exerciseIndices.includes(idx)) {
+          return { ...b, supersetGroup: group };
+        }
+        return b;
+      }),
+    );
+
+    if (session) {
+      for (const idx of exerciseIndices) {
+        const b = blocks[idx];
+        if (b) {
+          await updateExerciseSupersetGroup(session.id, b.name, group);
+        }
+      }
+      setSession(await activeSession());
+    }
+    thud('heavy');
+    notify(
+      `Superset ${group} linked`,
+      `${exerciseIndices.map((i) => blocks[i]?.name).filter(Boolean).join(' & ')} are now paired.`,
+    );
+  };
+
+  /** Unlinks a single exercise from its superset group. Disbands if only 1 remains. */
+  const unlinkExerciseFromSuperset = async (exerciseIndex: number) => {
+    const block = blocks[exerciseIndex];
+    if (!block || !block.supersetGroup) return;
+    const group = block.supersetGroup;
+    const othersInGroup = blocks.filter((b, idx) => idx !== exerciseIndex && b.supersetGroup === group);
+
+    const shouldDisband = othersInGroup.length <= 1;
+
+    setBlocks((current) =>
+      current.map((b, idx) => {
+        if (idx === exerciseIndex || (shouldDisband && b.supersetGroup === group)) {
+          return { ...b, supersetGroup: null };
+        }
+        return b;
+      }),
+    );
+
+    if (session) {
+      await updateExerciseSupersetGroup(session.id, block.name, null);
+      if (shouldDisband) {
+        for (const other of othersInGroup) {
+          await updateExerciseSupersetGroup(session.id, other.name, null);
+        }
+      }
+      setSession(await activeSession());
+    }
+    thud('light');
+    notify('Unlinked', `${block.name} unlinked from Superset ${group}.`);
+  };
+
+  /** Disbands an entire superset group, unlinking all exercises in it. */
+  const disbandSupersetGroup = async (group: string) => {
+    const affectedBlocks = blocks.filter((b) => b.supersetGroup === group);
+    setBlocks((current) =>
+      current.map((b) => (b.supersetGroup === group ? { ...b, supersetGroup: null } : b)),
+    );
+
+    if (session) {
+      for (const b of affectedBlocks) {
+        await updateExerciseSupersetGroup(session.id, b.name, null);
+      }
+      setSession(await activeSession());
+    }
+    thud('light');
+    notify('Disbanded', `Superset ${group} removed.`);
+  };
+
   /**
    * Evaluates the best e1RM for an exercise, checking both history and any
    * working sets completed in the current workout session.
@@ -1054,6 +1141,7 @@ export default function SessionScreen() {
         inclinePct: parsedIncline,
         durationSeconds: parsedTime,
         distanceKm: parsedDistance,
+        supersetGroup: block.supersetGroup ?? null,
       });
 
       const refreshed = await activeSession();
@@ -1084,6 +1172,23 @@ export default function SessionScreen() {
           verdict: 'CARDIO DONE',
         },
       });
+
+      if (block.supersetGroup) {
+        const groupBlocks = blocks.filter((b) => b.supersetGroup === block.supersetGroup);
+        const myIndexInGroup = groupBlocks.findIndex((b) => b.name === block.name);
+        const isLastInGroup = myIndexInGroup === groupBlocks.length - 1;
+
+        if (!isLastInGroup) {
+          const nextBlock = groupBlocks[myIndexInGroup + 1];
+          setRest(null);
+          notify(`Next Up · Superset ${block.supersetGroup}`, `Move straight to ${nextBlock.name}!`);
+        } else {
+          const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
+          if (settings.restSound) primeChime();
+          setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+          notify(`Round ${completedRounds} Done!`, `Rest now before the next round of Superset ${block.supersetGroup}.`);
+        }
+      }
       return;
     }
 
@@ -1106,6 +1211,7 @@ export default function SessionScreen() {
       reps,
       setType: row.setType,
       rpe: null,
+      supersetGroup: block.supersetGroup ?? null,
     });
 
     const refreshed = await activeSession();
@@ -1136,11 +1242,36 @@ export default function SessionScreen() {
       ),
     });
 
-    // Rest starts itself. The alternative is tapping "start rest" after every
-    // set, which nobody does twice. The tick is a tap, which is what a browser
-    // needs before it will let the chime play when the rest runs out.
-    if (settings.restSound) primeChime();
-    setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+    if (block.supersetGroup) {
+      const groupBlocks = blocks.filter((b) => b.supersetGroup === block.supersetGroup);
+      const myIndexInGroup = groupBlocks.findIndex((b) => b.name === block.name);
+      const isLastInGroup = myIndexInGroup === groupBlocks.length - 1;
+
+      if (!isLastInGroup) {
+        // Not the last in round: prompt next exercise immediately with zero rest delay
+        const nextBlock = groupBlocks[myIndexInGroup + 1];
+        setRest(null);
+        notify(
+          `Next Up · Superset ${block.supersetGroup}`,
+          `Move straight to ${nextBlock.name}!`,
+        );
+      } else {
+        // Last exercise in the superset round completed: trigger full rest timer!
+        const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
+        if (settings.restSound) primeChime();
+        setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+        notify(
+          `Round ${completedRounds} Done!`,
+          `Rest now before the next round of Superset ${block.supersetGroup}.`,
+        );
+      }
+    } else {
+      // Rest starts itself. The alternative is tapping "start rest" after every
+      // set, which nobody does twice. The tick is a tap, which is what a browser
+      // needs before it will let the chime play when the rest runs out.
+      if (settings.restSound) primeChime();
+      setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+    }
   };
 
   /** Keeps an already-written set in step with an edited row. */
@@ -1430,44 +1561,111 @@ export default function SessionScreen() {
         />
       )}
 
-      {blocks.map((block, blockIndex) => (
-        <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
-          <View style={styles.block}>
-            {/*
-              A red tab holding the movement glyph, then the name on its own
-              leaning slab. The name was 16px semibold beside a muted glyph,
-              which is most of why this screen read as a spreadsheet with a
-              title on it.
-            */}
-            <View style={styles.blockHeader}>
-              <Tappable
-                onPress={() => void showInfoFor(block.name)}
-                style={styles.blockTitle}
-                scaleTo={0.985}
-                accessibilityLabel={`How to do ${block.name}`}
-              >
-                <SlashPanel color={loud.loud} style={styles.glyphTab}>
-                  <ExerciseIcon
-                    pattern={patterns[block.name]}
-                    isCardio={block.isCardio}
-                    size={18}
-                    color={loud.onLoud}
-                  />
-                </SlashPanel>
-                <SlashPanel color={loud.panel} style={styles.nameSlab}>
-                  <Text style={styles.blockName} numberOfLines={1}>
-                    {block.name.toUpperCase()}
-                  </Text>
-                </SlashPanel>
-              </Tappable>
-              <Tappable
-                onPress={() => void removeExercise(blockIndex)}
-                style={styles.iconBtn}
-                scaleTo={0.85}
-              >
-                <Text style={styles.remove}>✕</Text>
-              </Tappable>
-            </View>
+      {blocks.map((block, blockIndex) => {
+        const group = block.supersetGroup;
+        const supersetStyle = group ? getSupersetStyle(group) : null;
+        const countInGroup = group ? blocks.filter((b) => b.supersetGroup === group).length : 0;
+        const isGiantSet = countInGroup >= 3;
+        const isLastInGroup = group
+          ? blockIndex === blocks.length - 1 || blocks[blockIndex + 1]?.supersetGroup !== group
+          : true;
+
+        return (
+          <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
+            <View
+              style={[
+                styles.block,
+                supersetStyle && {
+                  borderLeftWidth: 3,
+                  borderLeftColor: supersetStyle.border,
+                  paddingLeft: space.sm + 2,
+                  marginBottom: isLastInGroup ? space.xl : space.md,
+                },
+              ]}
+            >
+              {/*
+                A red tab holding the movement glyph, then the name on its own
+                leaning slab. The name was 16px semibold beside a muted glyph,
+                which is most of why this screen read as a spreadsheet with a
+                title on it.
+              */}
+              <View style={styles.blockHeader}>
+                <Tappable
+                  onPress={() => void showInfoFor(block.name)}
+                  style={styles.blockTitle}
+                  scaleTo={0.985}
+                  accessibilityLabel={`How to do ${block.name}`}
+                >
+                  <SlashPanel color={loud.loud} style={styles.glyphTab}>
+                    <ExerciseIcon
+                      pattern={patterns[block.name]}
+                      isCardio={block.isCardio}
+                      size={18}
+                      color={loud.onLoud}
+                    />
+                  </SlashPanel>
+                  <SlashPanel color={loud.panel} style={styles.nameSlab}>
+                    <Text style={styles.blockName} numberOfLines={1}>
+                      {block.name.toUpperCase()}
+                    </Text>
+                  </SlashPanel>
+                </Tappable>
+
+                {block.supersetGroup ? (
+                  <Tappable
+                    onPress={() => setSupersetTargetIndex(blockIndex)}
+                    style={styles.supersetBadgeBtn}
+                    scaleTo={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isGiantSet ? 'Giant Set' : 'Superset'} ${block.supersetGroup}. Tap to manage.`}
+                  >
+                    <View
+                      style={[
+                        styles.supersetBadge,
+                        {
+                          borderColor: supersetStyle?.border ?? loud.rule,
+                          backgroundColor: supersetStyle?.bg ?? loud.panel,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isGiantSet ? 'flash' : 'link'}
+                        size={11}
+                        color={supersetStyle?.text ?? loud.figure}
+                      />
+                      <Text
+                        style={[
+                          styles.supersetBadgeText,
+                          { color: supersetStyle?.text ?? loud.figure },
+                        ]}
+                      >
+                        {isGiantSet ? 'GIANT' : 'SUPER'} {block.supersetGroup}
+                      </Text>
+                    </View>
+                  </Tappable>
+                ) : (
+                  <Tappable
+                    onPress={() => setSupersetTargetIndex(blockIndex)}
+                    style={styles.linkSupersetBtn}
+                    scaleTo={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Link ${block.name} into a superset`}
+                  >
+                    <View style={styles.linkSupersetBadge}>
+                      <Ionicons name="link-outline" size={12} color={loud.figureMuted} />
+                      <Text style={styles.linkSupersetText}>LINK</Text>
+                    </View>
+                  </Tappable>
+                )}
+
+                <Tappable
+                  onPress={() => void removeExercise(blockIndex)}
+                  style={styles.iconBtn}
+                  scaleTo={0.85}
+                >
+                  <Text style={styles.remove}>✕</Text>
+                </Tappable>
+              </View>
 
             {block.isCardio && (
               <View style={styles.cardioModeRow}>
@@ -1886,7 +2084,8 @@ export default function SessionScreen() {
             </Tappable>
           </View>
         </FadeIn>
-      ))}
+      );
+    })}
 
       {picking ? (
         <ExercisePicker
@@ -2037,6 +2236,16 @@ export default function SessionScreen() {
       }
       onClose={() => setCalcTarget(null)}
     />
+
+    <SupersetSheet
+      open={supersetTargetIndex !== null}
+      exerciseIndex={supersetTargetIndex}
+      blocks={blocks}
+      onAssignGroup={assignSupersetGroup}
+      onUnlink={unlinkExerciseFromSuperset}
+      onDisband={disbandSupersetGroup}
+      onClose={() => setSupersetTargetIndex(null)}
+    />
   </View>
 );
 }
@@ -2185,6 +2394,48 @@ const styles = StyleSheet.create({
   nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
   blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
+  supersetBadgeBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  supersetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  supersetBadgeText: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.9,
+    fontWeight: '700',
+  },
+  linkSupersetBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  linkSupersetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    backgroundColor: loud.panel,
+  },
+  linkSupersetText: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
   target: {
