@@ -8,6 +8,7 @@ import {
   type Placement,
   placementOrigin,
 } from '../shareCardPlacement';
+import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
 import { font } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 
@@ -646,65 +647,149 @@ export const shareWorkout = async (
 };
 
 /* ---------------------------------------------------------------------------
- * The sticker: the same card, as a block you can put where you like.
+ * The overlay: the card as a block you put where you like, in the shape you
+ * chose. Four layouts share the type, the figures and the rule that no number
+ * is said twice; what they do not share is what they are for.
  * ------------------------------------------------------------------------ */
 
-/** Wide enough to hold a two-line title at a size worth reading, narrow enough to move. */
-const STICKER_W = 760;
-const STICKER_PAD = 44;
-const STICKER_INNER = STICKER_W - STICKER_PAD * 2;
-/** Taller than any sticker can be; the drawn part is cut out of it afterwards. */
+/** Taller than any overlay can be; the drawn part is cut out of it afterwards. */
 const SCRATCH_H = 2400;
 
-/**
- * The overlay, on nothing.
- *
- * Drawn with a transparent ground so it can be laid over a photograph and
- * moved, which is the whole point of it: a layer that moves must not carry its
- * own background around with it.
- *
- * It is drawn onto a canvas taller than it could ever need and then cut down to
- * what was used, because the panel behind the type has to be drawn before the
- * type and its height is not known until afterwards. Measuring everything
- * twice would be the alternative, and twice as much to keep in step.
- */
-export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS): HTMLCanvasElement => {
-  const scratch = document.createElement('canvas');
-  scratch.width = STICKER_W;
-  scratch.height = SCRATCH_H;
-  const ctx = scratch.getContext('2d') as CanvasRenderingContext2D;
-  const left = STICKER_PAD;
-  const right = STICKER_W - STICKER_PAD;
-  // A sticker is always over a picture, so it always takes the lighter grey.
-  const faint = loud.figureMuted;
-  let y = STICKER_PAD;
+/** A sticker is always over a picture, so its quiet type always takes the lighter grey. */
+const faint = loud.figureMuted;
 
-  if (blocks.title) {
-    const lines = titleLines(summary.title);
-    const lineWidth = (line: { text: string }[], px: number): number => {
-      ctx.font = `700 ${px}px ${font.display}`;
-      return line.reduce((sum, part) => sum + ctx.measureText(part.text).width, 0);
-    };
-    let px = 118;
-    while (px > 44 && lines.some((line) => lineWidth(line, px) > STICKER_INNER)) px -= 2;
-    lines.forEach((line, i) => {
-      y += px;
-      let at = left;
-      for (const part of line) {
-        ctx.font = `700 ${px}px ${font.display}`;
-        ctx.fillStyle = part.red ? loud.loud : loud.figure;
-        const text = fit(ctx, part.text, right - at);
-        ctx.fillText(text, at, y);
-        at += ctx.measureText(text).width;
-      }
-      if (i < lines.length - 1) y += px * 0.06;
-    });
-    y += 18;
+/**
+ * The day's figures, minus whatever the hero has already said.
+ *
+ * The hero may be turned off — then there is nothing above repeating anything
+ * and every figure comes back, which is the only way a card without a headline
+ * still says what was moved.
+ */
+const statCells = (summary: ShareCard, blocks: CardBlocks): [string, string][] => {
+  const lifting = summary.sets > 0;
+  const lifts = summary.exercises.length + summary.more;
+  const hero = blocks.hero ? heroOf(summary) : null;
+  const cells: [string, string][] = [['TIME', summary.duration]];
+  if (lifting && hero?.label !== 'SETS DONE') cells.push(['SETS', String(summary.sets)]);
+  if (summary.volume && (hero === null || hero.red)) cells.push(['LIFTED', summary.volume]);
+  if (summary.cardioDistanceKm && hero?.label !== 'KM COVERED') {
+    cells.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
   }
+  if (summary.steps && hero?.label !== 'STEPS') {
+    cells.push(['STEPS', `~${summary.steps.toLocaleString('en-US')}`]);
+  }
+  // Counting the treadmill as a lift would be a lie, and the panel below names
+  // what was done anyway, so the count is only there on a day that lifted.
+  if (lifting) cells.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
+  return cells;
+};
+
+/**
+ * The figures across one row, each as wide as it needs to be, shrinking until
+ * the row fits. Returns how far below the baseline it reached, so a layout that
+ * has something underneath knows where it is.
+ */
+const statRow = (
+  ctx: CanvasRenderingContext2D,
+  cells: [string, string][],
+  x: number,
+  baseline: number,
+  width: number,
+  cap: number,
+): { px: number; under: number } => {
+  const labelPx = Math.max(16, Math.round(cap * 0.4));
+  const gap = Math.max(22, Math.round(cap * 0.68));
+  const cell = (label: string, value: string, px: number): number => {
+    ctx.font = `700 ${px}px ${font.display}`;
+    const figure = ctx.measureText(value).width;
+    ctx.font = `600 ${labelPx}px ${font.uiStrong}`;
+    track(ctx, 6);
+    const under = ctx.measureText(label).width;
+    track(ctx, 0);
+    return Math.max(figure, under);
+  };
+  const row = (px: number): number =>
+    cells.reduce((sum, [label, value]) => sum + cell(label, value, px), 0) + gap * (cells.length - 1);
+  let px = cap;
+  while (px > cap * 0.5 && row(px) > width) px -= 2;
+
+  let at = x;
+  for (const [label, value] of cells) {
+    ctx.font = `700 ${px}px ${font.display}`;
+    ctx.fillStyle = loud.figure;
+    ctx.fillText(value, at, baseline);
+    ctx.font = `600 ${labelPx}px ${font.uiStrong}`;
+    track(ctx, 6);
+    ctx.fillStyle = faint;
+    ctx.fillText(label, at, baseline + labelPx * 1.5);
+    track(ctx, 0);
+    at += cell(label, value, px) + gap;
+  }
+  return { px, under: labelPx * 1.5 };
+};
+
+/** How wide the wordmark comes out, for the layouts that hang it off the right. */
+const wordmarkWidth = (ctx: CanvasRenderingContext2D, px: number): number => {
+  ctx.font = `700 ${px}px ${font.display}`;
+  track(ctx, px * 0.1);
+  const width = ctx.measureText('ASCEND').width + px * 0.4 + ctx.measureText('///').width;
+  track(ctx, 0);
+  return width;
+};
+
+/**
+ * The title, set as big as it fits, in the two lines the summary broke it into.
+ * Returns the baseline it finished on.
+ */
+const titleAt = (
+  ctx: CanvasRenderingContext2D,
+  summary: ShareCard,
+  left: number,
+  right: number,
+  top: number,
+  cap: number,
+  floor: number,
+): number => {
+  const lines = titleLines(summary.title);
+  const lineWidth = (line: { text: string }[], px: number): number => {
+    ctx.font = `700 ${px}px ${font.display}`;
+    return line.reduce((sum, part) => sum + ctx.measureText(part.text).width, 0);
+  };
+  let px = cap;
+  while (px > floor && lines.some((line) => lineWidth(line, px) > right - left)) px -= 2;
+  let y = top;
+  lines.forEach((line, i) => {
+    y += px;
+    let at = left;
+    for (const part of line) {
+      ctx.font = `700 ${px}px ${font.display}`;
+      ctx.fillStyle = part.red ? loud.loud : loud.figure;
+      const text = fit(ctx, part.text, right - at);
+      ctx.fillText(text, at, y);
+      at += ctx.measureText(text).width;
+    }
+    if (i < lines.length - 1) y += px * 0.06;
+  });
+  return y;
+};
+
+/* --- BLOCK: the whole workout, in a panel ------------------------------- */
+
+/** Wide enough to hold a two-line title at a size worth reading, narrow enough to move. */
+const BLOCK_W = 760;
+const BLOCK_PAD = 44;
+const BLOCK_INNER = BLOCK_W - BLOCK_PAD * 2;
+
+const drawBlock = (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: CardBlocks): number => {
+  const left = BLOCK_PAD;
+  const right = BLOCK_W - BLOCK_PAD;
+  let y = BLOCK_PAD;
+
+  if (blocks.title) y = titleAt(ctx, summary, left, right, y, 118, 44) + 18;
 
   if (blocks.hero) {
     const hero = heroOf(summary);
-    const px = sized(ctx, hero.figure, STICKER_INNER, font.display, 118, 56);
+    const px = sized(ctx, hero.figure, BLOCK_INNER, font.display, 118, 56);
     y += px;
     ctx.font = `700 ${px}px ${font.display}`;
     ctx.fillStyle = hero.red ? loud.loud : loud.figure;
@@ -713,59 +798,16 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
     ctx.font = `600 24px ${font.uiStrong}`;
     track(ctx, 8);
     ctx.fillStyle = faint;
-    ctx.fillText(fit(ctx, hero.label, STICKER_INNER), left, y);
+    ctx.fillText(fit(ctx, hero.label, BLOCK_INNER), left, y);
     track(ctx, 0);
     y += 20;
   }
 
   if (blocks.stats) {
-    const lifting = summary.sets > 0;
-    const lifts = summary.exercises.length + summary.more;
-    // The same rule the poster keeps — no figure twice — except that here the
-    // hero may have been turned off, and then there is nothing above to repeat
-    // and every figure comes back. Without this a sticker said "2,732" and
-    // "2,732 lb LIFTED" one under the other.
-    const hero = blocks.hero ? heroOf(summary) : null;
-    const stats: [string, string][] = [['TIME', summary.duration]];
-    if (lifting && hero?.label !== 'SETS DONE') stats.push(['SETS', String(summary.sets)]);
-    if (summary.volume && (hero === null || hero.red)) stats.push(['LIFTED', summary.volume]);
-    if (summary.cardioDistanceKm && hero?.label !== 'KM COVERED') {
-      stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
-    }
-    if (summary.steps && hero?.label !== 'STEPS') {
-      stats.push(['STEPS', `~${summary.steps.toLocaleString('en-US')}`]);
-    }
-    if (lifting) stats.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
-
-    const gap = 34;
-    const cell = (label: string, value: string, px: number): number => {
-      ctx.font = `700 ${px}px ${font.display}`;
-      const figure = ctx.measureText(value).width;
-      ctx.font = `600 20px ${font.uiStrong}`;
-      track(ctx, 6);
-      const under = ctx.measureText(label).width;
-      track(ctx, 0);
-      return Math.max(figure, under);
-    };
-    let px = 50;
-    const row = (at: number): number =>
-      stats.reduce((sum, [label, value]) => sum + cell(label, value, at), 0) + gap * (stats.length - 1);
-    while (px > 26 && row(px) > STICKER_INNER) px -= 2;
-
-    y += px + 18;
-    let x = left;
-    for (const [label, value] of stats) {
-      ctx.font = `700 ${px}px ${font.display}`;
-      ctx.fillStyle = loud.figure;
-      ctx.fillText(value, x, y);
-      ctx.font = `600 20px ${font.uiStrong}`;
-      track(ctx, 6);
-      ctx.fillStyle = faint;
-      ctx.fillText(label, x, y + 30);
-      track(ctx, 0);
-      x += cell(label, value, px) + gap;
-    }
-    y += 30 + 22;
+    const cells = statCells(summary, blocks);
+    y += 50 + 18;
+    const { under } = statRow(ctx, cells, left, y, BLOCK_INNER, 50);
+    y += under + 22;
   }
 
   if (blocks.lifts && summary.exercises.length > 0) {
@@ -778,7 +820,7 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
       const best = ctx.measureText(exercise.best).width;
       ctx.textAlign = 'left';
       ctx.font = `600 30px ${font.uiStrong}`;
-      ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), STICKER_INNER - best - 24), left, y);
+      ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), BLOCK_INNER - best - 24), left, y);
       const under = exercise.isCardio
         ? (exercise.detail ?? '').toUpperCase()
         : `${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`;
@@ -794,7 +836,7 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
 
   if (blocks.climb && summary.climb.length > 0) {
     y += 12;
-    const step = Math.min(26, STICKER_INNER / summary.climb.length);
+    const step = Math.min(26, BLOCK_INNER / summary.climb.length);
     const barW = Math.max(3, Math.min(18, step * 0.7));
     const tall = 64;
     summary.climb.forEach((bar, i) => {
@@ -807,25 +849,222 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
 
   y += 34;
   wordmark(ctx, left, y, 26);
-  y += 12;
+  return y + BLOCK_PAD - 8;
+};
 
-  const height = y + STICKER_PAD - 20;
-  const sticker = document.createElement('canvas');
-  sticker.width = STICKER_W;
-  sticker.height = height;
-  const out = sticker.getContext('2d') as CanvasRenderingContext2D;
-  // The panel first, then everything that was drawn, over it. Nearly opaque:
-  // a gym is a busy photograph, and at three-quarters the plates and the
-  // lighting behind the block came through the type and muddied it.
-  out.fillStyle = 'rgba(12,12,15,0.9)';
-  roundRect(out, 0, 0, STICKER_W, height, 36);
-  out.fill();
-  out.strokeStyle = 'rgba(247,245,239,0.1)';
-  out.lineWidth = 2;
-  roundRect(out, 1, 1, STICKER_W - 2, height - 2, 35);
-  out.stroke();
-  out.drawImage(scratch, 0, 0, STICKER_W, height, 0, 0, STICKER_W, height);
-  return sticker;
+/* --- BAR: the day in a line, along an edge ------------------------------ */
+
+const BAR_W = 1000;
+const BAR_PAD = 40;
+const BAR_INNER = BAR_W - BAR_PAD * 2;
+
+const drawBar = (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: CardBlocks): number => {
+  const left = BAR_PAD;
+  const right = BAR_W - BAR_PAD;
+  let y = BAR_PAD;
+
+  // The title runs as one line here however the summary broke it: a bar two
+  // lines deep is not a bar.
+  if (blocks.title) {
+    const parts = titleLines(summary.title).flat();
+    let px = 60;
+    const width = (at: number): number => {
+      ctx.font = `700 ${at}px ${font.display}`;
+      return parts.reduce((sum, part) => sum + ctx.measureText(`${part.text} `).width, 0);
+    };
+    while (px > 34 && width(px) > BAR_INNER) px -= 2;
+    y += px;
+    let at = left;
+    for (const part of parts) {
+      ctx.font = `700 ${px}px ${font.display}`;
+      ctx.fillStyle = part.red ? loud.loud : loud.figure;
+      const text = fit(ctx, `${part.text} `, right - at);
+      ctx.fillText(text, at, y);
+      at += ctx.measureText(text).width;
+    }
+    y += 16;
+  }
+
+  if (blocks.hero) {
+    const hero = heroOf(summary);
+    const mark = wordmarkWidth(ctx, 26);
+    const room = BAR_INNER - mark - 48;
+    // Smaller than the block's figure on purpose: the label stands beside it
+    // here rather than under it, and a figure set to the full height of the
+    // strip leaves that label an ellipsis.
+    const px = sized(ctx, hero.figure, room * 0.55, font.display, 84, 44);
+    y += px;
+    ctx.font = `700 ${px}px ${font.display}`;
+    ctx.fillStyle = hero.red ? loud.loud : loud.figure;
+    ctx.fillText(hero.figure, left, y);
+    const figure = ctx.measureText(hero.figure).width;
+    // The label sits beside the figure rather than under it, and the mark holds
+    // the far end: a bar is read left to right and has no room to stack.
+    ctx.font = `600 22px ${font.uiStrong}`;
+    track(ctx, 8);
+    ctx.fillStyle = faint;
+    // What it was rather than which lift it was on, for the room: NEW BEST
+    // beside the figure, where the full label would end in an ellipsis.
+    ctx.fillText(fit(ctx, hero.label.split(' · ')[0], room - figure - 24), left + figure + 24, y);
+    track(ctx, 0);
+    wordmark(ctx, right - mark, y, 26);
+    y += 18;
+  }
+
+  if (blocks.stats) {
+    const cells = statCells(summary, blocks);
+    y += 46 + 14;
+    const { under } = statRow(ctx, cells, left, y, BAR_INNER, 46);
+    y += under;
+  }
+
+  // Nothing but the title: the mark has not been drawn yet, and a bar with one
+  // word in it is a caption rather than a card.
+  if (!blocks.hero) {
+    const mark = wordmarkWidth(ctx, 26);
+    wordmark(ctx, right - mark, y, 26);
+  }
+  return y + BAR_PAD;
+};
+
+/* --- TAG: a stamp in the corner ----------------------------------------- */
+
+const TAG_W = 420;
+const TAG_PAD = 34;
+const TAG_INNER = TAG_W - TAG_PAD * 2;
+
+const drawTag = (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: CardBlocks): number => {
+  const left = TAG_PAD;
+  let y = TAG_PAD;
+
+  if (blocks.title) {
+    ctx.font = `600 24px ${font.uiStrong}`;
+    track(ctx, 8);
+    ctx.fillStyle = faint;
+    y += 24;
+    ctx.fillText(fit(ctx, summary.title.toUpperCase(), TAG_INNER), left, y);
+    track(ctx, 0);
+    y += 16;
+  }
+
+  if (blocks.hero) {
+    const hero = heroOf(summary);
+    const px = sized(ctx, hero.figure, TAG_INNER, font.display, 88, 40);
+    y += px;
+    ctx.font = `700 ${px}px ${font.display}`;
+    ctx.fillStyle = hero.red ? loud.loud : loud.figure;
+    ctx.fillText(hero.figure, left, y);
+    y += 30;
+    ctx.font = `600 20px ${font.uiStrong}`;
+    track(ctx, 6);
+    ctx.fillStyle = faint;
+    // What it was, not which lift it was on: a stamp this size has room for
+    // NEW BEST and no room at all for NEW BEST · INCLINE BENCH PR…
+    ctx.fillText(fit(ctx, hero.label.split(' · ')[0], TAG_INNER), left, y);
+    track(ctx, 0);
+    y += 14;
+  }
+
+  y += 24;
+  wordmark(ctx, left, y, 22);
+  return y + TAG_PAD - 6;
+};
+
+/* --- FIGURE: no panel, the type on the photograph itself ---------------- */
+
+const FIGURE_W = 920;
+
+const drawFigure = (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: CardBlocks): number => {
+  let y = 0;
+
+  if (blocks.title) y = titleAt(ctx, summary, 0, FIGURE_W, y, 132, 56) + 12;
+
+  if (blocks.hero) {
+    const hero = heroOf(summary);
+    const px = sized(ctx, hero.figure, FIGURE_W, font.display, 156, 64);
+    y += px;
+    ctx.font = `700 ${px}px ${font.display}`;
+    ctx.fillStyle = hero.red ? loud.loud : loud.figure;
+    ctx.fillText(hero.figure, 0, y);
+    y += 42;
+    ctx.font = `600 28px ${font.uiStrong}`;
+    track(ctx, 10);
+    ctx.fillStyle = faint;
+    ctx.fillText(fit(ctx, hero.label, FIGURE_W), 0, y);
+    track(ctx, 0);
+    y += 16;
+  }
+
+  if (blocks.stats) {
+    const cells = statCells(summary, blocks);
+    y += 62 + 20;
+    const { under } = statRow(ctx, cells, 0, y, FIGURE_W, 62);
+    y += under;
+  }
+
+  y += 44;
+  wordmark(ctx, 0, y, 28);
+  return y + 14;
+};
+
+interface Layout {
+  /** The overlay's width, in the card's own units. */
+  width: number;
+  /** Draws from the top-left of the scratch and says how tall it came out. */
+  body: (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: CardBlocks) => number;
+  /** The corner radius of the ground behind the type, or null for no ground. */
+  panel: number | null;
+}
+
+const LAYOUTS: Record<TemplateId, Layout> = {
+  block: { width: BLOCK_W, body: drawBlock, panel: 36 },
+  bar: { width: BAR_W, body: drawBar, panel: 28 },
+  tag: { width: TAG_W, body: drawTag, panel: 30 },
+  figure: { width: FIGURE_W, body: drawFigure, panel: null },
+};
+
+/**
+ * The overlay, on nothing.
+ *
+ * Drawn with a transparent ground so it can be laid over a photograph and
+ * moved, which is the whole point of it: a layer that moves must not carry its
+ * own background around with it.
+ *
+ * It is drawn onto a canvas taller than it could ever need and then cut down to
+ * what was used, because the ground behind the type has to be drawn before the
+ * type and its height is not known until afterwards. Measuring everything twice
+ * would be the alternative, and twice as much to keep in step.
+ */
+export const drawOverlay = (
+  summary: ShareCard,
+  blocks: CardBlocks = ALL_BLOCKS,
+  template: TemplateId = DEFAULT_TEMPLATE,
+): HTMLCanvasElement => {
+  const layout = LAYOUTS[template];
+  const scratch = document.createElement('canvas');
+  scratch.width = layout.width;
+  scratch.height = SCRATCH_H;
+  const ctx = scratch.getContext('2d') as CanvasRenderingContext2D;
+  const height = Math.min(SCRATCH_H, Math.max(1, layout.body(ctx, summary, blocks)));
+
+  const overlay = document.createElement('canvas');
+  overlay.width = layout.width;
+  overlay.height = height;
+  const out = overlay.getContext('2d') as CanvasRenderingContext2D;
+  if (layout.panel !== null) {
+    // The ground first, then everything that was drawn, over it. Nearly opaque:
+    // a gym is a busy photograph, and at three-quarters the plates and the
+    // lighting behind the block came through the type and muddied it.
+    out.fillStyle = 'rgba(12,12,15,0.9)';
+    roundRect(out, 0, 0, layout.width, height, layout.panel);
+    out.fill();
+    out.strokeStyle = 'rgba(247,245,239,0.1)';
+    out.lineWidth = 2;
+    roundRect(out, 1, 1, layout.width - 2, height - 2, layout.panel - 1);
+    out.stroke();
+  }
+  out.drawImage(scratch, 0, 0, layout.width, height, 0, 0, layout.width, height);
+  return overlay;
 };
 
 /**
