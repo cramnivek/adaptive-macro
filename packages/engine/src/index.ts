@@ -9,3 +9,4 @@ export * from './foods.ts';
 export * from './simulate.ts';
 export * from './workouts.ts';
 export * from './checkIn.ts';
+export * from './volumeLandmarks.ts';
