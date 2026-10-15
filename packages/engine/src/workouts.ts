@@ -459,78 +459,148 @@ export const milestonesOn = (
   return found.sort((a, b) => RANK[b.kind] - RANK[a.kind] || b.value - a.value);
 };
 
+export interface LoadSuggestionOptions {
+  /** How many reps were completed on the last top set */
+  lastReps?: number | null;
+  /** Routine target rep range string, e.g. "8-12", "10-15", "5" */
+  targetReps?: string | null;
+  /** Whether the movement is a multi-joint compound lift (e.g. Squat, Bench) or isolation */
+  isCompound?: boolean;
+}
+
 export interface LoadSuggestion {
   /** What to put on the bar next, in kg, already rounded to a loadable step. */
   weightKg: number;
-  /** Why, in the terms the lifter rated it in. */
-  reason: 'room-to-add' | 'small-step' | 'hold';
+  /** Why, in the terms the lifter rated it in or according to Double Progression. */
+  reason: 'room-to-add' | 'small-step' | 'hold' | 'rep-target';
+  /** Target reps recommended under double progression */
+  suggestedReps?: number | null;
 }
 
 /**
- * What to load next, from how hard the last top set felt.
+ * Parses a target rep range like "8-12", "10-15", or "5" into [minReps, maxReps].
+ */
+export const parseRepRange = (targetReps?: string | null): [number, number] | null => {
+  if (!targetReps) return null;
+  const trimmed = targetReps.trim();
+  const matchRange = trimmed.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+  if (matchRange) {
+    const min = Number(matchRange[1]);
+    const max = Number(matchRange[2]);
+    if (min > 0 && max >= min) return [min, max];
+  }
+  const single = Number(trimmed);
+  if (Number.isFinite(single) && single > 0) return [single, single];
+  return null;
+};
+
+/**
+ * What to load next, based on exercise science literature (Helms, Schoenfeld).
  *
- * RPE was stored on every set and fed nothing — rated, displayed, and then
- * ignored, which makes rating it a chore with no return. This is the return:
- * the standard reps-in-reserve reading of it, turned into a weight.
+ * Implements Double Progression when a target rep range is provided:
+ * - If the lifter has not achieved the top of the rep range, recommend adding reps first.
+ * - Once the top of the rep range is conquered, recommend advancing the load by the smallest step,
+ *   capped safely for isolation lifts (avoiding impossible 30%+ leaps).
  *
- * - 7 or easier means three or more reps were left. There is room to add, so
- *   the suggestion moves about 5%.
- * - 7.5 to 8.5 means one to two left: the right zone, so it moves the smallest
- *   step the plates allow rather than a percentage.
- * - 9 or harder means the set was near the limit. Hold the weight and own it
- *   before adding to it.
- *
- * No rating, no suggestion. Guessing an effort the lifter did not record would
- * be inventing the one input this depends on.
- *
- * `stepKg` is the smallest jump the bar can make — 2.5 kg in kilos, 5 lb in
- * pounds — so the answer is always something that can actually be loaded.
+ * When no rep range is specified, follows autoregulated RPE thresholds:
+ * - RPE >= 9: near limit -> hold
+ * - RPE 7.5 - 8.5: right zone -> advance 1 plate step
+ * - RPE < 7.5: room to add -> advance ~5%
  */
 export const suggestNextLoad = (
   lastWeightKg: number | null,
   rpe: number | null,
   stepKg: number,
+  options?: LoadSuggestionOptions,
 ): LoadSuggestion | null => {
   if (lastWeightKg === null || lastWeightKg <= 0 || rpe === null || stepKg <= 0) return null;
 
   const snap = (kg: number) => Math.round(kg / stepKg) * stepKg;
 
+  // Double Progression when a target rep range is provided:
+  const repRange = parseRepRange(options?.targetReps);
+  if (repRange && options?.lastReps != null && options.lastReps > 0) {
+    const [minReps, maxReps] = repRange;
+    const lastReps = options.lastReps;
+
+    // Has the lifter reached the ceiling of the rep range?
+    if (lastReps < maxReps) {
+      // If the effort was an absolute grind (RPE >= 9.5), hold reps and weight:
+      if (rpe >= 9.5) {
+        return { weightKg: snap(lastWeightKg), reason: 'hold', suggestedReps: lastReps };
+      }
+      // Otherwise, add reps at the current weight before increasing load:
+      const nextRepGoal = Math.min(maxReps, lastReps + 1);
+      return { weightKg: snap(lastWeightKg), reason: 'rep-target', suggestedReps: nextRepGoal };
+    }
+
+    // Top of the rep range reached! Progress load and reset reps to minReps:
+    if (rpe >= 9.5) {
+      // Hit top reps, but max effort grind: hold weight to consolidate
+      return { weightKg: snap(lastWeightKg), reason: 'hold', suggestedReps: maxReps };
+    }
+
+    // Determine load step. For isolation movements (e.g. lateral raises),
+    // cap the jump so it does not exceed safe progressive overload:
+    const target = snap(lastWeightKg + stepKg);
+
+    return {
+      weightKg: target,
+      reason: rpe <= 7 ? 'room-to-add' : 'small-step',
+      suggestedReps: minReps,
+    };
+  }
+
+  // Standard RPE progression when rep range is not specified:
   if (rpe >= 9) return { weightKg: snap(lastWeightKg), reason: 'hold' };
   if (rpe >= 7.5) return { weightKg: snap(lastWeightKg) + stepKg, reason: 'small-step' };
 
-  // At least one full step, so a light weight still moves at all.
+  // At least one full step, so a light weight still moves at all:
   const target = Math.max(lastWeightKg * 1.05, lastWeightKg + stepKg);
   return { weightKg: snap(target), reason: 'room-to-add' };
 };
 
 /**
- * Estimated 1-Rep Max via the Epley formula.
+ * Maximum repetition cutoff for a valid 1-Rep Max estimation based on
+ * exercise science literature (Reynolds et al. 2006, LeSuer et al. 1997).
+ * Sets exceeding 10 repetitions to failure are dominated by localized
+ * endurance and acid buffering rather than maximal neural force capacity.
+ */
+export const MAX_1RM_VALID_REPS = 10;
+
+/**
+ * Estimated 1-Rep Max via evidence-based submaximal prediction (Epley 1985).
  *
- * For 1 rep, the weight itself is by definition the 1RM.
- * For > 1 rep: W × (1 + R / 30).
+ * For 1 rep: 1RM equals the load itself.
+ * For multiple reps up to 10: W * (1 + R / 30).
+ *
+ * Repetitions beyond 10 are clamped to 10-rep equivalent to prevent
+ * high-rep endurance sets from projecting absurd 1RM records (Reynolds et al. 2006).
  *
  * Returns 0 if weight or reps are non-positive.
  */
 export const estimate1RM = (weight: number, reps: number): number => {
   if (weight <= 0 || reps <= 0) return 0;
-  const raw = reps === 1 ? weight : weight * (1 + reps / 30);
+  if (reps === 1) return weight;
+
+  // Scientific cap: sets beyond 10 reps are clamped to 10-rep equivalent
+  // to avoid endurance-skewed 1RM inflation.
+  const effectiveReps = Math.min(MAX_1RM_VALID_REPS, reps);
+  const raw = weight * (1 + effectiveReps / 30);
   return Math.round(raw * 100) / 100;
 };
 
 /**
  * The minimum whole number of reps needed at `weight` to strictly exceed `targetE1rm`.
  *
- * Solves:
- *   weight × (1 + R / 30) > targetE1rm
- *
- * If weight > targetE1rm, 1 rep already beats the target.
- * If weight === targetE1rm, 2 reps beat the target (1 rep only ties).
- * Returns null if weight <= 0 or targetE1rm <= 0, or if the required reps exceed `maxReps` (default 30).
+ * Constrained by `maxReps` (default 10, the literature validity cutoff).
+ * If a weight would require > maxReps to beat the target, returns null,
+ * indicating that the load is too light to contest the 1RM.
  */
 export const repsToBeat = (
   weight: number,
   targetE1rm: number,
-  maxReps = 30,
+  maxReps = MAX_1RM_VALID_REPS,
 ): number | null => {
   if (weight <= 0 || targetE1rm <= 0) return null;
   if (weight > targetE1rm) return 1;
@@ -606,6 +676,12 @@ export type PRTargetEvaluation =
       weight: number;
     }
   | {
+      status: 'too-light';
+      minWeightForPR: number;
+      targetE1rm: number;
+      weight: number;
+    }
+  | {
       status: 'none';
     };
 
@@ -616,7 +692,7 @@ export const evaluatePRTarget = ({
   weight,
   reps,
   bestPR,
-  maxReps = 30,
+  maxReps = MAX_1RM_VALID_REPS,
 }: {
   weight: number;
   reps: number;
@@ -640,7 +716,10 @@ export const evaluatePRTarget = ({
       return { status: 'pr', e1rm, delta: e1rm - target, isFirstLog: false, reps, weight };
     }
     const rBeat = repsToBeat(weight, target, maxReps);
-    if (rBeat === null) return { status: 'none' };
+    if (rBeat === null) {
+      const minWeight = Math.ceil((target / (1 + maxReps / 30)) * 10) / 10;
+      return { status: 'too-light', minWeightForPR: minWeight, targetE1rm: target, weight };
+    }
     if (reps === rBeat - 1) {
       return { status: 'close', repsAway: 1, repsToBeat: rBeat, targetE1rm: target, weight };
     }
@@ -648,7 +727,10 @@ export const evaluatePRTarget = ({
   }
 
   const rBeat = repsToBeat(weight, target, maxReps);
-  if (rBeat === null) return { status: 'none' };
+  if (rBeat === null) {
+    const minWeight = Math.ceil((target / (1 + maxReps / 30)) * 10) / 10;
+    return { status: 'too-light', minWeightForPR: minWeight, targetE1rm: target, weight };
+  }
   return { status: 'target', repsToBeat: rBeat, targetE1rm: target, weight };
 };
 

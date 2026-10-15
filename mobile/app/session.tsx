@@ -1722,7 +1722,9 @@ export default function SessionScreen() {
               );
             })()}
             {!block.isCardio && (() => {
-              const hint = nextLoadHint(block.previous, settings.units);
+              const pattern = patterns[block.name];
+              const isCompound = pattern === 'squat' || pattern === 'hinge' || pattern === 'push' || pattern === 'pull';
+              const hint = nextLoadHint(block.previous, settings.units, block.target?.reps, isCompound);
               return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
             })()}
             {!block.isCardio && block.target && (
@@ -2063,6 +2065,10 @@ export default function SessionScreen() {
                           ) : evalResult.status === 'close' ? (
                             <Text style={styles.prRowTextClose}>
                               ⚡ 1 REP TO PR · HIT {evalResult.repsToBeat} REPS FOR ALL-TIME RECORD
+                            </Text>
+                          ) : evalResult.status === 'too-light' ? (
+                            <Text style={styles.prRowTextTarget}>
+                              🎯 LOAD ≥ {displayWeight(evalResult.minWeightForPR, settings.units).toFixed(1)} {unit.toUpperCase()} TO TEST 1RM
                             </Text>
                           ) : (
                             <Text style={styles.prRowTextTarget}>

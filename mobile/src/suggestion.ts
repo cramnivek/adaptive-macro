@@ -20,7 +20,12 @@ interface PreviousSet {
  * rating would describe a different effort and suggest from it as if it were
  * the same one.
  */
-export const nextLoadHint = (previous: PreviousSet[], units: UnitSystem): string | null => {
+export const nextLoadHint = (
+  previous: PreviousSet[],
+  units: UnitSystem,
+  targetReps?: string | null,
+  isCompound?: boolean,
+): string | null => {
   const working = previous.filter(
     (set) => set.setType !== 'warmup' && set.weightKg !== null && set.weightKg > 0,
   );
@@ -28,7 +33,11 @@ export const nextLoadHint = (previous: PreviousSet[], units: UnitSystem): string
 
   const top = working.reduce((best, set) => ((set.weightKg ?? 0) > (best.weightKg ?? 0) ? set : best));
   const step = units === 'metric' ? 2.5 : lbToKg(5);
-  const suggestion = suggestNextLoad(top.weightKg, top.rpe, step);
+  const suggestion = suggestNextLoad(top.weightKg, top.rpe, step, {
+    lastReps: top.reps,
+    targetReps,
+    isCompound,
+  });
   if (suggestion === null || top.rpe === null) return null;
 
   const unit = units === 'metric' ? 'kg' : 'lb';
@@ -42,6 +51,12 @@ export const nextLoadHint = (previous: PreviousSet[], units: UnitSystem): string
   const last = `${show(top.weightKg ?? 0)} × ${top.reps ?? '?'} @${formatRpe(top.rpe)}`;
   const next = `${show(suggestion.weightKg)} ${unit}`;
 
+  if (suggestion.reason === 'rep-target') {
+    return `Last top set ${last} — aim for ${suggestion.suggestedReps} reps before adding weight.`;
+  }
+  if (suggestion.suggestedReps && suggestion.reason !== 'hold') {
+    return `Last top set ${last} — top of range hit! Try ${next} for ${suggestion.suggestedReps} reps.`;
+  }
   if (suggestion.reason === 'hold') return `Last top set ${last} — near the limit. Hold ${next}.`;
   return `Last top set ${last} — try ${next}.`;
 };

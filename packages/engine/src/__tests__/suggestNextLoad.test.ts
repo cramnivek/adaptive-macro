@@ -54,4 +54,48 @@ describe('suggestNextLoad', () => {
     expect(suggestNextLoad(null, 8, KG_STEP)).toBeNull();
     expect(suggestNextLoad(0, 8, KG_STEP)).toBeNull();
   });
+
+  describe('Double Progression', () => {
+    it('suggests adding reps when under the rep ceiling', () => {
+      // Routine targets 8-12 reps. Last session top set: 20 kg for 9 reps @ RPE 8.
+      // Should suggest aiming for 10 reps at the same 20 kg weight.
+      const suggestion = suggestNextLoad(20, 8, KG_STEP, {
+        lastReps: 9,
+        targetReps: '8-12',
+      });
+      expect(suggestion).toEqual({
+        weightKg: 20,
+        reason: 'rep-target',
+        suggestedReps: 10,
+      });
+    });
+
+    it('holds when under rep ceiling but effort was a maximum grind', () => {
+      // 9 reps @ RPE 9.5 (0.5 RIR / near failure). Hold weight and consolidate reps.
+      const suggestion = suggestNextLoad(20, 9.5, KG_STEP, {
+        lastReps: 9,
+        targetReps: '8-12',
+      });
+      expect(suggestion).toEqual({
+        weightKg: 20,
+        reason: 'hold',
+        suggestedReps: 9,
+      });
+    });
+
+    it('advances weight and resets reps to bottom of range when ceiling is reached', () => {
+      // Reached 12 reps @ RPE 8!
+      // Should advance weight by 1 step (22.5 kg) and reset target reps to 8.
+      const suggestion = suggestNextLoad(20, 8, KG_STEP, {
+        lastReps: 12,
+        targetReps: '8-12',
+      });
+      expect(suggestion).toEqual({
+        weightKg: 22.5,
+        reason: 'small-step',
+        suggestedReps: 8,
+      });
+    });
+  });
 });
+

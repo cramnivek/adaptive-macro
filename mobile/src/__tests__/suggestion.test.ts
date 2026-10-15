@@ -45,4 +45,16 @@ describe('nextLoadHint', () => {
     expect(hint).toContain('lb');
     expect(hint).toMatch(/try 230 lb/);
   });
+
+  it('suggests adding reps when within a rep range (double progression)', () => {
+    expect(nextLoadHint([set(20, 9, 8)], 'metric', '8-12', false)).toBe(
+      'Last top set 20 × 9 @8 — aim for 10 reps before adding weight.',
+    );
+  });
+
+  it('suggests advancing weight when rep ceiling is reached', () => {
+    expect(nextLoadHint([set(20, 12, 8)], 'metric', '8-12', false)).toBe(
+      'Last top set 20 × 12 @8 — top of range hit! Try 22.5 kg for 8 reps.',
+    );
+  });
 });

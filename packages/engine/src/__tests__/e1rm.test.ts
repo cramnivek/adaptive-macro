@@ -203,4 +203,23 @@ describe('evaluatePRTarget', () => {
       weight: 85,
     });
   });
+
+  it('clamps 1RM calculation at 10 reps to prevent high-rep endurance inflation', () => {
+    // 50 kg × 25 reps uncapped would be 50 * (1 + 25/30) = 91.67 kg.
+    // Clamped at 10 reps: 50 * (1 + 10/30) = 66.67 kg.
+    expect(estimate1RM(50, 25)).toBe(66.67);
+    expect(estimate1RM(100, 30)).toBe(133.33);
+  });
+
+  it('marks load as too-light when weight cannot challenge 1RM within 10 reps', () => {
+    // Target 100 kg. At 50 kg, 10 reps yields only 66.67 kg.
+    // The lifter must load at least ceil(100 / (1 + 10/30)) = 75 kg.
+    const result = evaluatePRTarget({ weight: 50, reps: 0, bestPR: existingPR });
+    expect(result.status).toBe('too-light');
+    if (result.status === 'too-light') {
+      expect(result.minWeightForPR).toBe(75);
+      expect(result.targetE1rm).toBe(100);
+    }
+  });
 });
+
