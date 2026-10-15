@@ -1,3 +1,4 @@
+import { ALL_BLOCKS, type CardBlocks } from '../shareCardPlacement';
 import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { defaultOllamaHost } from '../ai/ollama';
@@ -89,6 +90,12 @@ export interface AppSettings {
    * and someone who never posts is not nagged.
    */
   postWorkouts: boolean;
+  /**
+   * Which parts of the share card are on when it is laid over a photo. Someone
+   * who wants only the figure wants only the figure every time, so the sheet
+   * starts where they left it rather than back at everything.
+   */
+  cardBlocks: CardBlocks;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -120,6 +127,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trainingLevel: 'intermediate',
   restSound: true,
   postWorkouts: false,
+  cardBlocks: ALL_BLOCKS,
 };
 
 export const SETTINGS_KEY = 'app.settings';
