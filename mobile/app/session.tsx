@@ -55,6 +55,7 @@ import { playChime, primeChime } from '../src/platform/chime';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
 import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
+import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
@@ -917,6 +918,42 @@ export default function SessionScreen() {
         }
       }
     }
+    setCalcTarget(null);
+  };
+
+  /**
+   * Inserts the generated warm-up sets into the active exercise block.
+   * Prepends the warm-up rows before any existing working sets.
+   */
+  const insertWarmups = (warmupSets: WarmupSet[]) => {
+    if (calcTarget?.blockIndex == null) return;
+    const bi = calcTarget.blockIndex;
+    const block = blocks[bi];
+    if (!block) return;
+
+    const warmupRows: Row[] = warmupSets.map((ws) => ({
+      key: newKey(),
+      id: null,
+      weight: String(ws.weight),
+      reps: String(ws.reps),
+      setType: 'warmup',
+      done: false,
+      rpe: null,
+    }));
+
+    setBlocks((current) =>
+      current.map((b, index) => {
+        if (index !== bi) return b;
+        const firstWorkingIndex = b.rows.findIndex((r) => r.setType !== 'warmup');
+        const insertAt = firstWorkingIndex !== -1 ? firstWorkingIndex : 0;
+        const newRows = [...b.rows];
+        newRows.splice(insertAt, 0, ...warmupRows);
+        return { ...b, rows: newRows };
+      }),
+    );
+
+    thud('heavy');
+    notify('Warm-ups added', `Added ${warmupSets.length} warm-up sets for ${block.name}.`);
     setCalcTarget(null);
   };
 
@@ -1850,6 +1887,11 @@ export default function SessionScreen() {
       onApplyWeight={
         calcTarget?.blockIndex !== null && calcTarget?.rowIndex !== null
           ? (w) => void applyCalculatedWeight(w)
+          : undefined
+      }
+      onInsertWarmups={
+        calcTarget?.blockIndex !== null
+          ? insertWarmups
           : undefined
       }
       onClose={() => setCalcTarget(null)}

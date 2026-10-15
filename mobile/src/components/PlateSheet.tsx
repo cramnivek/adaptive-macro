@@ -11,6 +11,7 @@ import {
   platesFor,
   totalFromPlates,
 } from '../plates';
+import { generateWarmupRamp, type WarmupSet } from '../warmup';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -29,6 +30,8 @@ interface PlateSheetProps {
   onBarChange: (bar: BarChoice) => void;
   /** Callback to write the calculated total back to the target set. */
   onApplyWeight?: (weight: number) => void;
+  /** Callback to insert warm-up sets directly into the active exercise. */
+  onInsertWarmups?: (warmups: WarmupSet[]) => void;
   onClose: () => void;
 }
 
@@ -58,6 +61,7 @@ export const PlateSheet = ({
   exerciseName,
   onBarChange,
   onApplyWeight,
+  onInsertWarmups,
   onClose,
 }: PlateSheetProps) => {
   const isVisible = open ?? weight !== null;
@@ -67,6 +71,7 @@ export const PlateSheet = ({
   const largest = plates[0];
 
   const [perSide, setPerSide] = useState<number[]>([]);
+  const [mode, setMode] = useState<'plates' | 'warmup'>('plates');
 
   useEffect(() => {
     if (!isVisible) return;
@@ -79,6 +84,7 @@ export const PlateSheet = ({
 
   const total = totalFromPlates(perSide, units, bar);
   const formula = describeFormula(perSide, units, bar);
+  const warmups = generateWarmupRamp(total, units, bar);
 
   const addPlate = (plate: number) => {
     thud('light');
@@ -98,6 +104,12 @@ export const PlateSheet = ({
   const handleApply = () => {
     thud('light');
     onApplyWeight?.(total);
+    onClose();
+  };
+
+  const handleInsertWarmups = () => {
+    thud('heavy');
+    onInsertWarmups?.(warmups);
     onClose();
   };
 
@@ -126,123 +138,271 @@ export const PlateSheet = ({
           <Text style={styles.formulaText}>{formula}</Text>
         </View>
 
-        {/* Interactive Barbell Sleeve */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.barScroll}
-          contentContainerStyle={styles.barScrollContent}
-        >
-          <View style={styles.bar} accessibilityLabel={`Each side: ${describePlates(perSide) || 'nothing'}`}>
-            <View style={styles.sleeve} />
-            <View style={styles.collar} />
-            {perSide.map((plate, index) => {
-              const rank = plates.indexOf(plate);
-              const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
-              const plateHeight = 36 + 64 * (plate / largest);
-              const plateWidth = plate >= plates[2] ? 20 : 15;
-              return (
-                <Tappable
-                  key={`${plate}-${index}`}
-                  onPress={() => removePlateAt(index)}
-                  scaleTo={0.92}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${plate} ${unit} plate`}
-                  style={[
-                    styles.plate,
-                    {
-                      height: plateHeight,
-                      width: plateWidth,
-                      backgroundColor: color,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.plateNumber,
-                      { color: rank === 4 ? '#111' : '#FFF' },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {plate}
-                  </Text>
-                </Tappable>
-              );
-            })}
-            {perSide.length === 0 && (
-              <Text style={styles.emptyPrompt}>EMPTY BAR · TAP PLATES BELOW</Text>
-            )}
-          </View>
-        </ScrollView>
-        <Text style={styles.hint}>
-          {perSide.length > 0
-            ? 'Tap any plate on the sleeve to remove it'
-            : 'Barbell is symmetrical · plates chosen are added to both sides'}
-        </Text>
-
-        {/* Bar Weight Selection */}
-        <View style={styles.bars}>
-          {(['standard', 'light'] as const).map((choice) => {
-            const on = bar === choice;
-            return (
-              <Tappable key={choice} onPress={() => onBarChange(choice)} scaleTo={0.95} style={{ flex: 1 }}>
-                <SlashPanel color={on ? loud.loud : loud.panel} style={styles.barChoice}>
-                  <Text style={[styles.barLabel, { color: on ? loud.onLoud : loud.figureMuted }]}>
-                    {BAR_WEIGHT[units][choice]} {unit.toUpperCase()} {choice === 'standard' ? 'STANDARD' : 'LIGHT'}
-                  </Text>
-                </SlashPanel>
-              </Tappable>
-            );
-          })}
-        </View>
-
-        {/* Plate Rack: Add Plates */}
-        <View style={styles.rackSection}>
-          <Text style={styles.rackHeader}>ADD PLATES (EACH SIDE)</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.rackStrip}
-            contentContainerStyle={styles.rackContent}
-          >
-            {plates.map((plate) => {
-              const rank = plates.indexOf(plate);
-              const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
-              return (
-                <Tappable
-                  key={plate}
-                  onPress={() => addPlate(plate)}
-                  scaleTo={0.94}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Add ${plate} ${unit} to each side`}
-                  style={[styles.rackBtn, { borderColor: color }]}
-                >
-                  <View style={[styles.rackPip, { backgroundColor: color }]} />
-                  <Text style={styles.rackBtnText}>+{plate}</Text>
-                </Tappable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Bottom Actions */}
-        <View style={styles.actionsRow}>
-          {perSide.length > 0 && (
-            <Tappable onPress={clearPlates} scaleTo={0.95} style={styles.clearBtn}>
-              <Text style={styles.clearText}>CLEAR</Text>
-            </Tappable>
-          )}
+        {/* Mode Selector Tabs: Load Plates vs Warm-up Ramp */}
+        <View style={styles.tabRow}>
           <Tappable
-            onPress={onApplyWeight ? handleApply : onClose}
-            scaleTo={0.97}
-            style={styles.mainActionBtn}
+            onPress={() => {
+              thud('light');
+              setMode('plates');
+            }}
+            scaleTo={0.96}
+            style={{ flex: 1 }}
           >
-            <SlashPanel color={onApplyWeight ? loud.loud : loud.panel} style={styles.actionSlab}>
-              <Text style={[styles.actionLabel, { color: onApplyWeight ? loud.onLoud : loud.figure }]}>
-                {onApplyWeight ? `APPLY ${total} ${unit.toUpperCase()}` : 'DONE'}
+            <SlashPanel color={mode === 'plates' ? loud.loud : loud.panel} style={styles.tabBtn}>
+              <Text style={[styles.tabLabel, { color: mode === 'plates' ? loud.onLoud : loud.figureMuted }]}>
+                LOAD PLATES
               </Text>
             </SlashPanel>
           </Tappable>
+
+          <Tappable
+            onPress={() => {
+              thud('light');
+              setMode('warmup');
+            }}
+            scaleTo={0.96}
+            style={{ flex: 1 }}
+          >
+            <SlashPanel color={mode === 'warmup' ? loud.loud : loud.panel} style={styles.tabBtn}>
+              <View style={styles.tabBadgeRow}>
+                <Text style={[styles.tabLabel, { color: mode === 'warmup' ? loud.onLoud : loud.figureMuted }]}>
+                  WARM-UP RAMP
+                </Text>
+                {warmups.length > 0 && (
+                  <View style={[styles.warmupBadge, mode === 'warmup' && { backgroundColor: loud.onLoud }]}>
+                    <Text style={[styles.warmupBadgeText, mode === 'warmup' && { color: loud.loud }]}>
+                      {warmups.length}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </SlashPanel>
+          </Tappable>
+        </View>
+
+        {mode === 'plates' ? (
+          <>
+            {/* Interactive Barbell Sleeve */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.barScroll}
+              contentContainerStyle={styles.barScrollContent}
+            >
+              <View style={styles.bar} accessibilityLabel={`Each side: ${describePlates(perSide) || 'nothing'}`}>
+                <View style={styles.sleeve} />
+                <View style={styles.collar} />
+                {perSide.map((plate, index) => {
+                  const rank = plates.indexOf(plate);
+                  const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
+                  const plateHeight = 36 + 64 * (plate / largest);
+                  const plateWidth = plate >= plates[2] ? 20 : 15;
+                  return (
+                    <Tappable
+                      key={`${plate}-${index}`}
+                      onPress={() => removePlateAt(index)}
+                      scaleTo={0.92}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${plate} ${unit} plate`}
+                      style={[
+                        styles.plate,
+                        {
+                          height: plateHeight,
+                          width: plateWidth,
+                          backgroundColor: color,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.plateNumber,
+                          { color: rank === 4 ? '#111' : '#FFF' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {plate}
+                      </Text>
+                    </Tappable>
+                  );
+                })}
+                {perSide.length === 0 && (
+                  <Text style={styles.emptyPrompt}>EMPTY BAR · TAP PLATES BELOW</Text>
+                )}
+              </View>
+            </ScrollView>
+            <Text style={styles.hint}>
+              {perSide.length > 0
+                ? 'Tap any plate on the sleeve to remove it'
+                : 'Barbell is symmetrical · plates chosen are added to both sides'}
+            </Text>
+
+            {/* Bar Weight Selection */}
+            <View style={styles.bars}>
+              {(['standard', 'light'] as const).map((choice) => {
+                const on = bar === choice;
+                return (
+                  <Tappable key={choice} onPress={() => onBarChange(choice)} scaleTo={0.95} style={{ flex: 1 }}>
+                    <SlashPanel color={on ? loud.loud : loud.panel} style={styles.barChoice}>
+                      <Text style={[styles.barLabel, { color: on ? loud.onLoud : loud.figureMuted }]}>
+                        {BAR_WEIGHT[units][choice]} {unit.toUpperCase()} {choice === 'standard' ? 'STANDARD' : 'LIGHT'}
+                      </Text>
+                    </SlashPanel>
+                  </Tappable>
+                );
+              })}
+            </View>
+
+            {/* Plate Rack: Add Plates */}
+            <View style={styles.rackSection}>
+              <Text style={styles.rackHeader}>ADD PLATES (EACH SIDE)</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.rackStrip}
+                contentContainerStyle={styles.rackContent}
+              >
+                {plates.map((plate) => {
+                  const rank = plates.indexOf(plate);
+                  const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
+                  return (
+                    <Tappable
+                      key={plate}
+                      onPress={() => addPlate(plate)}
+                      scaleTo={0.94}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${plate} ${unit} to each side`}
+                      style={[styles.rackBtn, { borderColor: color }]}
+                    >
+                      <View style={[styles.rackPip, { backgroundColor: color }]} />
+                      <Text style={styles.rackBtnText}>+{plate}</Text>
+                    </Tappable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </>
+        ) : (
+          /* Warm-up Ladder View */
+          <View style={styles.warmupContainer}>
+            <ScrollView style={styles.warmupScroll} contentContainerStyle={styles.warmupContent}>
+              {warmups.length === 0 ? (
+                <View style={styles.emptyWarmupBox}>
+                  <Text style={styles.emptyWarmupTitle}>EMPTY BAR LOAD</Text>
+                  <Text style={styles.emptyWarmupHint}>
+                    Working weight is {total} {unit}. Add plates or choose a higher weight to generate a warm-up ramp.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.warmupSectionTitle}>
+                    PROGRESSION TO {total} {unit.toUpperCase()} WORK SET
+                  </Text>
+                  {warmups.map((ws) => (
+                    <Tappable
+                      key={ws.stage}
+                      onPress={() => {
+                        thud('light');
+                        setPerSide(ws.perSide);
+                        setMode('plates');
+                      }}
+                      scaleTo={0.98}
+                      style={styles.warmupCard}
+                      accessibilityLabel={`Warmup ${ws.stage}: ${ws.weight} ${unit} for ${ws.reps} reps`}
+                    >
+                      <View style={styles.warmupCardTop}>
+                        <View style={styles.warmupBadgeTab}>
+                          <Text style={styles.warmupBadgeStage}>W{ws.stage}</Text>
+                        </View>
+                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: space.xs }}>
+                          <Text style={styles.warmupWeight}>{ws.weight}</Text>
+                          <Text style={styles.warmupUnit}>{unit.toUpperCase()}</Text>
+                          <Text style={styles.warmupReps}>× {ws.reps} reps</Text>
+                        </View>
+                        <Text style={styles.warmupPct}>{ws.percent}%</Text>
+                      </View>
+
+                      <View style={styles.warmupCardBottom}>
+                        <Text style={styles.warmupPlatesLabel}>
+                          {ws.perSide.length === 0 ? 'Empty bar' : `${ws.platesLabel} / side`}
+                        </Text>
+                        <View style={styles.warmupPillsRow}>
+                          {ws.perSide.map((plate, pIdx) => {
+                            const rank = plates.indexOf(plate);
+                            const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
+                            return (
+                              <View key={pIdx} style={[styles.warmupPlatePill, { borderColor: color }]}>
+                                <View style={[styles.platePip, { backgroundColor: color }]} />
+                                <Text style={styles.warmupPlateText}>{plate}</Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    </Tappable>
+                  ))}
+                  <Text style={styles.warmupTapHint}>
+                    Tap any stage to preview its plate loading on the bar sleeve.
+                  </Text>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Bottom Actions */}
+        <View style={styles.actionsRow}>
+          {mode === 'warmup' ? (
+            <>
+              <Tappable
+                onPress={() => {
+                  thud('light');
+                  setMode('plates');
+                }}
+                scaleTo={0.95}
+                style={styles.clearBtn}
+              >
+                <Text style={styles.clearText}>BACK</Text>
+              </Tappable>
+              <Tappable
+                onPress={onInsertWarmups && warmups.length > 0 ? handleInsertWarmups : onClose}
+                scaleTo={0.97}
+                style={styles.mainActionBtn}
+              >
+                <SlashPanel
+                  color={onInsertWarmups && warmups.length > 0 ? loud.loud : loud.panel}
+                  style={styles.actionSlab}
+                >
+                  <Text
+                    style={[
+                      styles.actionLabel,
+                      { color: onInsertWarmups && warmups.length > 0 ? loud.onLoud : loud.figure },
+                    ]}
+                  >
+                    {onInsertWarmups && warmups.length > 0 ? `INSERT ${warmups.length} WARM-UPS` : 'DONE'}
+                  </Text>
+                </SlashPanel>
+              </Tappable>
+            </>
+          ) : (
+            <>
+              {perSide.length > 0 && (
+                <Tappable onPress={clearPlates} scaleTo={0.95} style={styles.clearBtn}>
+                  <Text style={styles.clearText}>CLEAR</Text>
+                </Tappable>
+              )}
+              <Tappable
+                onPress={onApplyWeight ? handleApply : onClose}
+                scaleTo={0.97}
+                style={styles.mainActionBtn}
+              >
+                <SlashPanel color={onApplyWeight ? loud.loud : loud.panel} style={styles.actionSlab}>
+                  <Text style={[styles.actionLabel, { color: onApplyWeight ? loud.onLoud : loud.figure }]}>
+                    {onApplyWeight ? `APPLY ${total} ${unit.toUpperCase()}` : 'DONE'}
+                  </Text>
+                </SlashPanel>
+              </Tappable>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -450,6 +610,167 @@ const styles = StyleSheet.create({
     fontFamily: font.display,
     fontSize: 14,
     letterSpacing: 1.4,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: space.xs,
+    marginVertical: space.sm,
+  },
+  tabBtn: {
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+  },
+  tabLabel: {
+    fontFamily: font.display,
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
+  tabBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  warmupBadge: {
+    backgroundColor: loud.loud,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+  },
+  warmupBadgeText: {
+    fontFamily: font.figure,
+    fontSize: 10,
+    fontWeight: '700',
+    color: loud.onLoud,
+  },
+  warmupContainer: {
+    marginVertical: space.xs,
+  },
+  warmupScroll: {
+    maxHeight: 280,
+  },
+  warmupContent: {
+    gap: space.xs,
+    paddingVertical: 4,
+  },
+  warmupSectionTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: loud.figureFaint,
+    marginBottom: space.xs,
+  },
+  warmupCard: {
+    backgroundColor: loud.panel,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    padding: space.sm,
+    gap: 6,
+  },
+  warmupCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  warmupBadgeTab: {
+    backgroundColor: 'rgba(232, 183, 48, 0.15)',
+    borderColor: loud.warn,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+  },
+  warmupBadgeStage: {
+    fontFamily: font.display,
+    fontSize: 11,
+    color: loud.warn,
+    letterSpacing: 0.5,
+  },
+  warmupWeight: {
+    fontFamily: font.figure,
+    fontSize: 16,
+    color: loud.figure,
+    fontWeight: '700',
+  },
+  warmupUnit: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    color: loud.loud,
+  },
+  warmupReps: {
+    fontFamily: font.figure,
+    fontSize: 13,
+    color: loud.figureMuted,
+  },
+  warmupPct: {
+    fontFamily: font.figure,
+    fontSize: 12,
+    color: loud.figureFaint,
+  },
+  warmupCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  warmupPlatesLabel: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: loud.figureMuted,
+  },
+  warmupPillsRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  warmupPlatePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  platePip: {
+    width: 6,
+    height: 6,
+    borderRadius: radius.pill,
+  },
+  warmupPlateText: {
+    fontFamily: font.figure,
+    fontSize: 10,
+    color: loud.figure,
+  },
+  warmupTapHint: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: loud.figureFaint,
+    textAlign: 'center',
+    marginTop: space.xs,
+  },
+  emptyWarmupBox: {
+    padding: space.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.xs,
+  },
+  emptyWarmupTitle: {
+    fontFamily: font.display,
+    fontSize: 13,
+    letterSpacing: 1.2,
+    color: loud.figureMuted,
+  },
+  emptyWarmupHint: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: loud.figureFaint,
+    textAlign: 'center',
+    lineHeight: 16,
   },
 });
 
