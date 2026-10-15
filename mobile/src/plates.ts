@@ -69,3 +69,28 @@ export const usesBarbell = (exerciseName: string): boolean =>
 
 /** "25 + 10 + 2.5", with any decimals the plates themselves have. */
 export const describePlates = (perSide: number[]): string => perSide.join(' + ');
+
+/**
+ * The total weight of a barbell loaded symmetrically with the given plates on each side.
+ *
+ * Formula: bar + 2 * sum(perSide)
+ */
+export const totalFromPlates = (perSide: number[], units: UnitSystem, bar: BarChoice): number => {
+  const barWeight = BAR_WEIGHT[units][bar];
+  const sideSum = perSide.reduce((sum, plate) => sum + plate, 0);
+  const total = barWeight + 2 * sideSum;
+  return Math.round(total * 100) / 100;
+};
+
+/**
+ * A one-line explanation of the calculation:
+ * e.g. "45 lb bar + 2 × (45 + 25) lb = 185 lb" or "20 kg bar only"
+ */
+export const describeFormula = (perSide: number[], units: UnitSystem, bar: BarChoice): string => {
+  const barWeight = BAR_WEIGHT[units][bar];
+  const unit = units === 'metric' ? 'kg' : 'lb';
+  if (perSide.length === 0) return `${barWeight} ${unit} bar only`;
+  const sideStr = describePlates(perSide);
+  return `${barWeight} ${unit} bar + 2 × (${sideStr}) ${unit}`;
+};
+

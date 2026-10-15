@@ -81,6 +81,7 @@ import {
   parseSpeed,
 } from '../src/cardio';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space } from '../src/theme';
 import type { UnitSystem } from '../src/state/settings';
 // Aliased: `session` is already the active-workout state in this component.
@@ -163,6 +164,7 @@ const elapsed = (startedAt: string, now: number): string => {
  */
 export default function SessionScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { series, settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
   const params = useLocalSearchParams<{ start?: string; routine?: string; cardio?: string }>();
@@ -187,8 +189,13 @@ export default function SessionScreen() {
   const clearLanded = useCallback(() => setLanded(null), []);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
-  /** The weight the plate sheet is showing, in the display unit; null when closed. */
-  const [plating, setPlating] = useState<number | null>(null);
+  /** Active target for the barbell plate calculator; null when closed. */
+  const [calcTarget, setCalcTarget] = useState<{
+    blockIndex: number | null;
+    rowIndex: number | null;
+    exerciseName: string | null;
+    initialWeight: number | null;
+  } | null>(null);
 
   /**
    * The running rest, as the wall-clock time it ends at.
@@ -811,22 +818,106 @@ export default function SessionScreen() {
     }
   };
 
+  const weightOfRow = (row: Row): number => {
+    const val = Number.parseFloat(row.weight.replace(',', '.'));
+    return Number.isFinite(val) ? val : 0;
+  };
+
   /**
    * The plates for the set about to be done: the first one not yet ticked that
    * has a weight in it, or failing that the last weight entered.
    */
   const plateWeightFor = (block: Block): number | null => {
-    const weightOf = (row: Row) => Number.parseFloat(row.weight.replace(',', '.'));
-    const next = block.rows.find((row) => !row.done && weightOf(row) > 0);
-    const last = [...block.rows].reverse().find((row) => weightOf(row) > 0);
+    const next = block.rows.find((row) => !row.done && weightOfRow(row) > 0);
+    const last = [...block.rows].reverse().find((row) => weightOfRow(row) > 0);
     const chosen = next ?? last;
-    return chosen ? weightOf(chosen) : null;
+    return chosen ? weightOfRow(chosen) : null;
   };
 
-  const openPlates = (block: Block) => {
-    const weight = plateWeightFor(block);
-    if (weight === null) return notify('No weight yet', 'Enter a weight in a set to see its plates.');
-    setPlating(weight);
+  const openPlates = (block: Block, blockIndex: number) => {
+    const nextIndex = block.rows.findIndex((row) => !row.done);
+    const targetIndex = nextIndex !== -1 ? nextIndex : (block.rows.length > 0 ? block.rows.length - 1 : null);
+    const initialWeight = plateWeightFor(block);
+
+    setCalcTarget({
+      blockIndex,
+      rowIndex: targetIndex,
+      exerciseName: block.name,
+      initialWeight,
+    });
+  };
+
+  /**
+   * Opens the floating barbell calculator. Pre-targets the first incomplete
+   * barbell set, or acts as a general scratchpad calculator if no barbell set
+   * is pending.
+   */
+  const openGeneralCalculator = () => {
+    for (let bi = 0; bi < blocks.length; bi++) {
+      const b = blocks[bi];
+      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
+        const ri = b.rows.findIndex((r) => !r.done);
+        if (ri !== -1) {
+          const row = b.rows[ri];
+          const w = weightOfRow(row);
+          setCalcTarget({
+            blockIndex: bi,
+            rowIndex: ri,
+            exerciseName: b.name,
+            initialWeight: w > 0 ? w : null,
+          });
+          return;
+        }
+      }
+    }
+
+    for (let bi = blocks.length - 1; bi >= 0; bi--) {
+      const b = blocks[bi];
+      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
+        const ri = b.rows.length > 0 ? b.rows.length - 1 : null;
+        const row = ri !== null ? b.rows[ri] : null;
+        const w = row ? weightOfRow(row) : 0;
+        setCalcTarget({
+          blockIndex: bi,
+          rowIndex: ri,
+          exerciseName: b.name,
+          initialWeight: w > 0 ? w : null,
+        });
+        return;
+      }
+    }
+
+    setCalcTarget({
+      blockIndex: null,
+      rowIndex: null,
+      exerciseName: null,
+      initialWeight: null,
+    });
+  };
+
+  /**
+   * Writes the calculated plate total back into the targeted set row.
+   * If the row was already marked done, updates the logged set in the database.
+   */
+  const applyCalculatedWeight = async (w: number) => {
+    if (calcTarget?.blockIndex != null && calcTarget.rowIndex != null) {
+      const bi = calcTarget.blockIndex;
+      const ri = calcTarget.rowIndex;
+      const block = blocks[bi];
+      const row = block?.rows[ri];
+      if (row) {
+        editRow(bi, ri, { weight: String(w) });
+        if (row.done && row.id) {
+          const reps = Number(row.reps);
+          if (Number.isFinite(reps) && reps > 0) {
+            const kg = parseWeight(String(w), settings.units);
+            await updateSetValues(row.id, kg, reps);
+            setSession(await activeSession());
+          }
+        }
+      }
+    }
+    setCalcTarget(null);
   };
 
   /** Ticking writes the set; unticking removes it. */
@@ -1172,8 +1263,9 @@ export default function SessionScreen() {
   const cardioCount = blocks.filter((b) => b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
   return (
-    <Screen tone="loud">
-      <View style={styles.headerRow}>
+    <View style={styles.sessionRoot}>
+      <Screen tone="loud">
+        <View style={styles.headerRow}>
         <Text style={styles.screenTitle} numberOfLines={1}>
           {session.name.toUpperCase()}
         </Text>
@@ -1341,7 +1433,7 @@ export default function SessionScreen() {
                 weight={plateWeightFor(block)}
                 units={settings.units}
                 bar={settings.barbell}
-                onPress={() => openPlates(block)}
+                onPress={() => openPlates(block, blockIndex)}
               />
             )}
 
@@ -1716,14 +1808,6 @@ export default function SessionScreen() {
         }}
       />
 
-      <PlateSheet
-        weight={plating}
-        units={settings.units}
-        bar={settings.barbell}
-        onBarChange={(barbell) => void updateSettings({ barbell })}
-        onClose={() => setPlating(null)}
-      />
-
       <RpeSheet
         open={rating !== null}
         current={rating ? (blocks[rating.blockIndex]?.rows[rating.rowIndex]?.rpe ?? null) : null}
@@ -1733,12 +1817,45 @@ export default function SessionScreen() {
         onClose={() => setRating(null)}
       />
 
-      <Text style={styles.note}>
+      <Text style={[styles.note, { marginBottom: space.xxl }]}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
       </Text>
     </Screen>
-  );
+
+    <Tappable
+      onPress={openGeneralCalculator}
+      style={[styles.fabContainer, { bottom: insets.bottom + space.lg }]}
+      accessibilityRole="button"
+      accessibilityLabel="Barbell plate calculator"
+      scaleTo={0.93}
+    >
+      <View style={styles.fabRow}>
+        <SlashPanel color={loud.loud} style={styles.fabGlyphTab}>
+          <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
+        </SlashPanel>
+        <SlashPanel color={loud.panel} style={styles.fabTextSlab}>
+          <Text style={styles.fabLabel}>PLATES</Text>
+        </SlashPanel>
+      </View>
+    </Tappable>
+
+    <PlateSheet
+      open={calcTarget !== null}
+      weight={calcTarget?.initialWeight ?? null}
+      exerciseName={calcTarget?.exerciseName ?? null}
+      units={settings.units}
+      bar={settings.barbell}
+      onBarChange={(barbell) => void updateSettings({ barbell })}
+      onApplyWeight={
+        calcTarget?.blockIndex !== null && calcTarget?.rowIndex !== null
+          ? (w) => void applyCalculatedWeight(w)
+          : undefined
+      }
+      onClose={() => setCalcTarget(null)}
+    />
+  </View>
+);
 }
 
 /**
@@ -2028,5 +2145,42 @@ const styles = StyleSheet.create({
     minWidth: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sessionRoot: {
+    flex: 1,
+    backgroundColor: loud.ground,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: space.lg,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  fabRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 3,
+    minHeight: TOUCH_TARGET,
+  },
+  fabGlyphTab: {
+    width: TOUCH_TARGET,
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabTextSlab: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+  },
+  fabLabel: {
+    fontFamily: font.display,
+    fontSize: 13,
+    letterSpacing: 1.2,
+    color: loud.figure,
   },
 });
