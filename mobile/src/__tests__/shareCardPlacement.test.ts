@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_BLOCKS,
   CARD_BLOCKS,
-  CENTRED,
   clampPlacement,
   MAX_SCALE,
   MIN_SCALE,
   placementOrigin,
+  RESTING,
 } from '../shareCardPlacement';
 
 const frame = { width: 1080, height: 1920 };
+/** The middle of the frame, at the size it was drawn: what the rules bend away from. */
+const CENTRED = { x: 0.5, y: 0.5, scale: 1 };
 /** A sticker about a third of the frame across and a fifth of it down. */
 const overlay = { width: 360, height: 400 };
 
@@ -54,6 +56,15 @@ describe('clampPlacement', () => {
     expect(clampPlacement({ ...CENTRED, x: 0.1 }, huge, frame).x).toBe(0.5);
     // The other axis still fits, and is still free.
     expect(clampPlacement({ ...CENTRED, y: 0.2 }, huge, frame).y).toBeCloseTo(0.2);
+  });
+});
+
+describe('RESTING', () => {
+  it('sits below the middle, and survives a full-height sticker unmoved', () => {
+    // The sticker is 760 wide and, with everything on, about twelve hundred tall.
+    const whole = { width: 760, height: 1200 };
+    expect(RESTING.y).toBeGreaterThan(CENTRED.y);
+    expect(clampPlacement(RESTING, whole, frame)).toEqual(RESTING);
   });
 });
 

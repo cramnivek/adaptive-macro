@@ -25,10 +25,10 @@ import type { ShareCard } from '../shareCard';
 import {
   CARD_BLOCKS,
   type CardBlock,
-  CENTRED,
   clampPlacement,
   type Placement,
   placementOrigin,
+  RESTING,
 } from '../shareCardPlacement';
 import { subjectOf } from '../platform/depth';
 import { useApp } from '../state/AppStore';
@@ -86,7 +86,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   // Over a photo the card becomes a block you put where you like, so where it
   // was put is state, and the picture under it is drawn once rather than on
   // every frame of a drag.
-  const [place, setPlace] = useState<Placement>(CENTRED);
+  const [place, setPlace] = useState<Placement>(RESTING);
   const [dragging, setDragging] = useState(false);
   const [ground, setGround] = useState<string | null>(null);
   const [sticker, setSticker] = useState<{ uri: string; width: number; height: number } | null>(null);
@@ -163,11 +163,11 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   useEffect(() => {
     if (photo === null) {
       setGround(null);
-      setPlace(CENTRED);
+      setPlace(RESTING);
       return;
     }
     setGround(drawBackdrop(photo).toDataURL('image/jpeg', 0.8));
-    setPlace(CENTRED);
+    setPlace(RESTING);
   }, [photo]);
 
   // The block itself, redrawn only when what it says changes — never while it
@@ -286,6 +286,18 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   frameRef.current = frame;
   const start = useRef<{ place: Placement; spread: number } | null>(null);
 
+  // A browser owns pinch and drag inside a page unless something says
+  // otherwise, and a responder is not that: the first pinch over the preview
+  // zoomed the whole sheet to four times its size instead of resizing the
+  // block, and a drag scrolled the sheet. `touch-action: none` on the frame is
+  // what hands the gesture over, and react-native-web will not take it as a
+  // style, so it goes on the node itself.
+  const frameNode = useRef<View | null>(null);
+  useEffect(() => {
+    const node = frameNode.current as unknown as HTMLElement | null;
+    if (node?.style !== undefined) node.style.touchAction = 'none';
+  }, [ground]);
+
   const spreadOf = (touches: { pageX: number; pageY: number }[]): number =>
     Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
 
@@ -317,7 +329,14 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                   x: from.place.x + gesture.dx / frameRef.current.width,
                   y: from.place.y + gesture.dy / frameRef.current.height,
                 };
-          setPlace(clampPlacement(next, block, frameRef.current));
+          // The finger moved in the preview's points, which is why the deltas
+          // are taken against the frame; the block's own size is in the card's,
+          // so the clamp is against the card. Measuring the 760-wide block
+          // against the 200-wide preview made it wider than the frame on both
+          // axes, and the rule for a block too big to move is to centre it — so
+          // every drag snapped it back to the middle and nothing could be put
+          // anywhere.
+          setPlace(clampPlacement(next, block, CARD));
         },
         onPanResponderEnd: () => {
           start.current = null;
@@ -378,6 +397,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                 same photo, the same block, the same placement.
               */
               <View
+                ref={frameNode}
                 style={[styles.frame, { width: frame.width, height: frame.height }]}
                 {...pan.panHandlers}
                 accessibilityLabel="The card that will be shared. Drag to move it, pinch to resize."
@@ -413,42 +433,48 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             ) : null}
           </View>
 
-          {/* The blocks, and a way back to the middle. Only over a photo: without
-              one the card is the poster, which has nowhere to be put. */}
+          {/* The blocks, and a way back to where it started. Only over a photo:
+              without one the card is the poster, which has nowhere to be put.
+              The line above says what the row is for — a row of unexplained
+              pills reads as decoration, and the first person to see it asked
+              where the customising was while looking straight at it. */}
           {ground !== null && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.blocks}
-              contentContainerStyle={styles.blocksRow}
-            >
-              {CARD_BLOCKS.map((block) => (
+            <>
+              <Text style={styles.blocksLabel}>WHAT SHOWS · DRAG TO MOVE · PINCH TO SIZE</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.blocks}
+                contentContainerStyle={styles.blocksRow}
+              >
+                {CARD_BLOCKS.map((block) => (
+                  <Tappable
+                    key={block}
+                    onPress={() => toggleBlock(block)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: blocks[block] }}
+                    style={[styles.chip, blocks[block] && styles.chipOn]}
+                  >
+                    <Text style={[styles.chipLabel, { color: blocks[block] ? loud.ground : loud.figureMuted }]}>
+                      {block.toUpperCase()}
+                    </Text>
+                  </Tappable>
+                ))}
                 <Tappable
-                  key={block}
-                  onPress={() => toggleBlock(block)}
+                  onPress={() => void updateSettings({ cardDepth: !depth })}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: blocks[block] }}
-                  style={[styles.chip, blocks[block] && styles.chipOn]}
+                  accessibilityState={{ selected: depth, busy: cutting }}
+                  style={[styles.chip, depth && styles.chipOn]}
                 >
-                  <Text style={[styles.chipLabel, { color: blocks[block] ? loud.ground : loud.figureMuted }]}>
-                    {block.toUpperCase()}
+                  <Text style={[styles.chipLabel, { color: depth ? loud.ground : loud.figureMuted }]}>
+                    {cutting ? 'CUTTING…' : 'DEPTH'}
                   </Text>
                 </Tappable>
-              ))}
-              <Tappable
-                onPress={() => void updateSettings({ cardDepth: !depth })}
-                accessibilityRole="button"
-                accessibilityState={{ selected: depth, busy: cutting }}
-                style={[styles.chip, depth && styles.chipOn]}
-              >
-                <Text style={[styles.chipLabel, { color: depth ? loud.ground : loud.figureMuted }]}>
-                  {cutting ? 'CUTTING…' : 'DEPTH'}
-                </Text>
-              </Tappable>
-              <Tappable onPress={() => setPlace(CENTRED)} accessibilityRole="button" style={styles.chip}>
-                <Text style={[styles.chipLabel, { color: loud.figureMuted }]}>RESET</Text>
-              </Tappable>
-            </ScrollView>
+                <Tappable onPress={() => setPlace(RESTING)} accessibilityRole="button" style={styles.chip}>
+                  <Text style={[styles.chipLabel, { color: loud.figureMuted }]}>RESET</Text>
+                </Tappable>
+              </ScrollView>
+            </>
           )}
 
           {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
@@ -542,8 +568,16 @@ const styles = StyleSheet.create({
   // that silently loses its last one is worse than one that slides.
   blocks: { flexGrow: 0, marginBottom: space.xs },
   blocksRow: { flexDirection: 'row', gap: space.xs, paddingHorizontal: space.xs },
+  blocksLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: loud.figureFaint,
+    marginBottom: space.xs,
+  },
   chip: {
-    minHeight: 34,
+    // A chip is a control, not a caption: 44 points, like everything else here.
+    minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: space.sm,
     borderRadius: radius.pill,
@@ -551,7 +585,7 @@ const styles = StyleSheet.create({
     borderColor: loud.rule,
   },
   chipOn: { backgroundColor: loud.figure, borderColor: loud.figure },
-  chipLabel: { fontFamily: font.uiStrong, fontSize: 10, letterSpacing: 0.4 },
+  chipLabel: { fontFamily: font.uiStrong, fontSize: 12, letterSpacing: 0.6 },
   photoRow: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginBottom: space.xs },
   // Small type, but a full touch target: hitSlop is ignored on the web.
   photoAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md },

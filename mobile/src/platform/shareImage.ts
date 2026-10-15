@@ -96,6 +96,14 @@ const wordmark = (ctx: CanvasRenderingContext2D, x: number, y: number, px: numbe
   track(ctx, 0);
 };
 
+/**
+ * A lift's name without the equipment it carries in brackets.
+ *
+ * ARNOLD PRESS (DUMBBELL) is what the line runs out of room for, and a best is
+ * a best whichever dumbbell it was on: "ARNOLD PRESS (DUMBBE…" tells nobody
+ * anything. Every place the card names a lift drops it, so they agree.
+ */
+const liftName = (name: string): string => name.replace(/\s*\([^)]*\)\s*$/, '');
 
 /**
  * The one figure the card leads with, and what it was: a new best if the day
@@ -106,12 +114,7 @@ const wordmark = (ctx: CanvasRenderingContext2D, x: number, y: number, px: numbe
  */
 const heroOf = (summary: ShareCard): { figure: string; label: string; red: boolean } => {
   if (summary.highlight) {
-    // An exercise carries its equipment in brackets — ARNOLD PRESS (DUMBBELL) —
-    // and that is the part the line runs out of room for, so it goes first. A
-    // best is a best whichever dumbbell it was on, and "ARNOLD PRESS (DUMBBE…"
-    // tells nobody anything.
-    const lift = summary.highlight.label.replace(/\s*\([^)]*\)\s*$/, '');
-    return { figure: summary.highlight.figure, label: `NEW BEST · ${lift}`, red: true };
+    return { figure: summary.highlight.figure, label: `NEW BEST · ${liftName(summary.highlight.label)}`, red: true };
   }
   if (summary.volume) {
     const cut = summary.volume.lastIndexOf(' ');
@@ -413,7 +416,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     const best = ctx.measureText(exercise.best).width;
     ctx.textAlign = 'left';
     ctx.font = `600 42px ${font.uiStrong}`;
-    ctx.fillText(fit(ctx, exercise.name.toUpperCase(), panelInner - best - 40), left, y);
+    ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), panelInner - best - 40), left, y);
     ctx.font = `400 28px ${font.ui}`;
     ctx.fillStyle = faint;
     // Cardio is not counted in sets, so it says what it was instead: outside, or
@@ -718,10 +721,20 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
   if (blocks.stats) {
     const lifting = summary.sets > 0;
     const lifts = summary.exercises.length + summary.more;
+    // The same rule the poster keeps — no figure twice — except that here the
+    // hero may have been turned off, and then there is nothing above to repeat
+    // and every figure comes back. Without this a sticker said "2,732" and
+    // "2,732 lb LIFTED" one under the other.
+    const hero = blocks.hero ? heroOf(summary) : null;
     const stats: [string, string][] = [['TIME', summary.duration]];
-    if (lifting) stats.push(['SETS', String(summary.sets)]);
-    if (summary.volume) stats.push(['LIFTED', summary.volume]);
-    if (summary.cardioDistanceKm) stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
+    if (lifting && hero?.label !== 'SETS DONE') stats.push(['SETS', String(summary.sets)]);
+    if (summary.volume && (hero === null || hero.red)) stats.push(['LIFTED', summary.volume]);
+    if (summary.cardioDistanceKm && hero?.label !== 'KM COVERED') {
+      stats.push(['DIST', `${summary.cardioDistanceKm.toFixed(1)} km`]);
+    }
+    if (summary.steps && hero?.label !== 'STEPS') {
+      stats.push(['STEPS', `~${summary.steps.toLocaleString('en-US')}`]);
+    }
     if (lifting) stats.push([lifts === 1 ? 'LIFT' : 'LIFTS', String(lifts)]);
 
     const gap = 34;
@@ -765,7 +778,7 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
       const best = ctx.measureText(exercise.best).width;
       ctx.textAlign = 'left';
       ctx.font = `600 30px ${font.uiStrong}`;
-      ctx.fillText(fit(ctx, exercise.name.toUpperCase(), STICKER_INNER - best - 24), left, y);
+      ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), STICKER_INNER - best - 24), left, y);
       const under = exercise.isCardio
         ? (exercise.detail ?? '').toUpperCase()
         : `${exercise.sets} ${exercise.sets === 1 ? 'SET' : 'SETS'}`;
@@ -801,8 +814,10 @@ export const drawOverlay = (summary: ShareCard, blocks: CardBlocks = ALL_BLOCKS)
   sticker.width = STICKER_W;
   sticker.height = height;
   const out = sticker.getContext('2d') as CanvasRenderingContext2D;
-  // The panel first, then everything that was drawn, over it.
-  out.fillStyle = 'rgba(12,12,15,0.78)';
+  // The panel first, then everything that was drawn, over it. Nearly opaque:
+  // a gym is a busy photograph, and at three-quarters the plates and the
+  // lighting behind the block came through the type and muddied it.
+  out.fillStyle = 'rgba(12,12,15,0.9)';
   roundRect(out, 0, 0, STICKER_W, height, 36);
   out.fill();
   out.strokeStyle = 'rgba(247,245,239,0.1)';
