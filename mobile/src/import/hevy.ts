@@ -141,12 +141,27 @@ const splitCsvLine = (line: string): string[] => {
 };
 
 const MONTHS: Record<string, string> = {
-  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+};
+
+const to24Hour = (rawHour: string, ampm?: string): string | null => {
+  let h = Number(rawHour);
+  if (!Number.isInteger(h) || h < 0 || h > 23) return null;
+  if (ampm) {
+    const upper = ampm.toUpperCase();
+    if (h < 1 || h > 12) return null;
+    if (upper === 'AM') {
+      if (h === 12) h = 0;
+    } else if (upper === 'PM') {
+      if (h !== 12) h += 12;
+    }
+  }
+  return String(h).padStart(2, '0');
 };
 
 /**
- * `29 Dec 2025, 15:37` → `2025-12-29T15:37`.
+ * `29 Dec 2025, 15:37` (or `29 Dec 2025, 3:37 PM`) → `2025-12-29T15:37`.
  *
  * Built from the parts rather than via `Date`, deliberately. Hevy writes no
  * timezone, so the value is a local wall-clock time; passing it through `Date`
@@ -154,14 +169,43 @@ const MONTHS: Record<string, string> = {
  * depending on where the import happened to run.
  */
 export const toIsoLocal = (value: string): string | null => {
-  const match = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4}), (\d{2}):(\d{2})$/.exec(value.trim());
-  if (!match) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
 
-  const [, day, month, year, hour, minute] = match;
-  const mm = MONTHS[month];
-  if (!mm) return null;
+  // 1. Standard Hevy day-first: "29 Dec 2025, 15:37" or "29 Dec 2025, 3:37 PM"
+  const dmy = /^(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp][Mm]))?$/.exec(
+    trimmed,
+  );
+  if (dmy) {
+    const [, day, month, year, hour, minute, ampm] = dmy;
+    const mm = MONTHS[month.slice(0, 3).toLowerCase()];
+    const hh = to24Hour(hour, ampm);
+    if (!mm || !hh) return null;
+    return `${year}-${mm}-${day.padStart(2, '0')}T${hh}:${minute}`;
+  }
 
-  return `${year}-${mm}-${day.padStart(2, '0')}T${hour}:${minute}`;
+  // 2. US month-first: "Dec 29, 2025, 15:37" or "Dec 29, 2025, 3:37 PM"
+  const mdy = /^([A-Za-z]{3})[a-z]*\s+(\d{1,2}),?\s+(\d{4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp][Mm]))?$/.exec(
+    trimmed,
+  );
+  if (mdy) {
+    const [, month, day, year, hour, minute, ampm] = mdy;
+    const mm = MONTHS[month.slice(0, 3).toLowerCase()];
+    const hh = to24Hour(hour, ampm);
+    if (!mm || !hh) return null;
+    return `${year}-${mm}-${day.padStart(2, '0')}T${hh}:${minute}`;
+  }
+
+  // 3. ISO-like local timestamp: "2025-12-29 15:37" or "2025-12-29T15:37:00"
+  const iso = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::\d{2})?/.exec(trimmed);
+  if (iso) {
+    const [, year, mm, dd, hour, minute] = iso;
+    const hh = to24Hour(hour);
+    if (!hh) return null;
+    return `${year}-${mm}-${dd}T${hh}:${minute}`;
+  }
+
+  return null;
 };
 
 const SET_TYPES = new Set<string>(['normal', 'warmup', 'dropset', 'failure']);
@@ -216,19 +260,26 @@ const splitCsvRecords = (text: string): string[] => {
   return records;
 };
 
+const WEIGHT_COLUMNS = new Set(['weight_lbs', 'weight_kg']);
+const DISTANCE_COLUMNS = new Set(['distance_miles', 'distance_km', 'distance_meters']);
+
 export const parseHevyCsv = (text: string): HevyParseResult => {
-  const lines = splitCsvRecords(text);
+  const cleanText = text.replace(/^\uFEFF/, '');
+  const lines = splitCsvRecords(cleanText);
   if (lines.length === 0) throw new Error('Hevy import: the file is empty');
 
-  const header = splitCsvLine(lines[0]).map((h) => h.trim());
+  const header = splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
 
-  // Fails loudly and prints what arrived. If Hevy changes the format, this
-  // says so immediately instead of importing zeros over real history. The
-  // columns are known, so this is an equality check rather than a detector:
-  // detecting them at runtime would swallow the very change it exists to catch.
+  // Fails loudly and prints what arrived. Hevy exports either imperial
+  // (weight_lbs, distance_miles) or metric (weight_kg, distance_km/distance_meters)
+  // depending on the user's unit preference in the Hevy app.
   const matches =
     header.length === HEVY_COLUMNS.length &&
-    HEVY_COLUMNS.every((name, i) => header[i] === name);
+    HEVY_COLUMNS.every((name, i) => {
+      if (name === 'weight_lbs') return WEIGHT_COLUMNS.has(header[i]);
+      if (name === 'distance_miles') return DISTANCE_COLUMNS.has(header[i]);
+      return header[i] === name;
+    });
 
   if (!matches) {
     throw new Error(
@@ -238,6 +289,7 @@ export const parseHevyCsv = (text: string): HevyParseResult => {
     );
   }
 
+  const isMetricWeight = header[9] === 'weight_kg';
   const index = (name: string) => HEVY_COLUMNS.indexOf(name as (typeof HEVY_COLUMNS)[number]);
   const iTitle = index('title');
   const iStart = index('start_time');
@@ -275,8 +327,9 @@ export const parseHevyCsv = (text: string): HevyParseResult => {
       continue;
     }
 
-    const lbs = numberOrNull(row[iWeight] ?? '');
-    const weightKg = lbs === null ? null : lbToKg(lbs);
+    const rawWeight = numberOrNull(row[iWeight] ?? '');
+    const weightKg =
+      rawWeight === null ? null : isMetricWeight ? rawWeight : lbToKg(rawWeight);
 
     sawWeight.set(name, (sawWeight.get(name) ?? false) || weightKg !== null);
     setCounts.set(name, (setCounts.get(name) ?? 0) + 1);

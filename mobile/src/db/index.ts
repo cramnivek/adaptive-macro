@@ -27,6 +27,11 @@ import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
 import { LAST_MEALS_BEFORE } from './mealQueries';
 import { DELETE_ROUTINE_STEPS } from './routineQueries';
 import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
+import {
+  BUILTIN_CATALOGUE,
+  RAW_BUILTIN_CATALOGUE,
+  findBuiltinCatalogueEntry,
+} from '../builtinCatalogue';
 
 /**
  * The open in flight, not the opened database.
@@ -1132,7 +1137,23 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(SEARCH_CATALOGUE, `%${term}%`, limit);
-  return rows.map(toCatalogueEntry);
+  const fromDb = rows.map(toCatalogueEntry);
+  const seen = new Set(fromDb.map((e) => e.canonicalName.toLowerCase()));
+  const q = term.trim().toLowerCase();
+  for (const builtin of BUILTIN_CATALOGUE) {
+    if (fromDb.length >= limit) break;
+    if (seen.has(builtin.canonicalName.toLowerCase())) continue;
+    if (
+      !q ||
+      builtin.canonicalName.toLowerCase().includes(q) ||
+      builtin.primaryMuscle.toLowerCase().includes(q) ||
+      builtin.equipment.toLowerCase().includes(q)
+    ) {
+      fromDb.push(builtin);
+      seen.add(builtin.canonicalName.toLowerCase());
+    }
+  }
+  return fromDb;
 };
 
 /**
@@ -1141,7 +1162,30 @@ export const searchCatalogue = async (term: string, limit = 30): Promise<Catalog
 export const loadAllCatalogueEntries = async (): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(ALL_CATALOGUE_ENTRIES);
-  return rows.map(toCatalogueEntry);
+  const fromDb = rows.map(toCatalogueEntry);
+  const seen = new Set(fromDb.map((e) => e.canonicalName.toLowerCase()));
+  for (const builtin of BUILTIN_CATALOGUE) {
+    if (!seen.has(builtin.canonicalName.toLowerCase())) {
+      fromDb.push(builtin);
+      seen.add(builtin.canonicalName.toLowerCase());
+    }
+  }
+  return fromDb;
+};
+
+const enrichWithBuiltinFallback = (entry: CatalogueEntry, queryName: string): CatalogueEntry => {
+  if (entry.primaryRegion !== null && entry.steps.length > 0) return entry;
+  const builtin =
+    findBuiltinCatalogueEntry(queryName) ?? findBuiltinCatalogueEntry(entry.canonicalName);
+  if (!builtin) return entry;
+  return {
+    ...entry,
+    primaryRegion: entry.primaryRegion ?? builtin.primaryRegion,
+    secondaryRegions:
+      entry.secondaryRegions.length > 0 ? entry.secondaryRegions : builtin.secondaryRegions,
+    steps: entry.steps.length > 0 ? entry.steps : builtin.steps,
+    instructions: entry.instructions ?? builtin.instructions,
+  };
 };
 
 /**
@@ -1157,7 +1201,8 @@ export const loadAllCatalogueEntries = async (): Promise<CatalogueEntry[]> => {
  * So the link is tried first, because a recorded name can differ from the
  * canonical one ("Pull Up" against "Pull-Up") and only the link knows that.
  * Failing that, the name is matched against the catalogue directly, which is
- * what it will be for anything just picked out of the picker.
+ * what it will be for anything just picked out of the picker, and finally falls
+ * back to the built-in exercise encyclopedia so core lifts always have details.
  */
 export const catalogueEntryForExercise = async (
   exerciseName: string,
@@ -1167,13 +1212,15 @@ export const catalogueEntryForExercise = async (
     CATALOGUE_BY_LINKED_NAME,
     exerciseName,
   );
-  if (linked) return toCatalogueEntry(linked);
+  if (linked) return enrichWithBuiltinFallback(toCatalogueEntry(linked), exerciseName);
 
   const byName = await db.getFirstAsync<CatalogueRow>(
     CATALOGUE_BY_CANONICAL_NAME,
     exerciseName,
   );
-  return byName ? toCatalogueEntry(byName) : null;
+  if (byName) return enrichWithBuiltinFallback(toCatalogueEntry(byName), exerciseName);
+
+  return findBuiltinCatalogueEntry(exerciseName);
 };
 
 /**
@@ -1201,9 +1248,22 @@ export const cataloguePatternsByExerciseName = async (): Promise<
     ),
   ]);
 
-  return Object.fromEntries(
-    [...catalogue, ...linked].map((row) => [row.name, normalisePattern(row.movement_pattern)]),
-  );
+  const builtinPairs: [string, MovementPattern][] = [];
+  for (const spec of RAW_BUILTIN_CATALOGUE) {
+    builtinPairs.push([spec.canonicalName, spec.movementPattern]);
+    if (spec.aliases) {
+      for (const alias of spec.aliases) {
+        builtinPairs.push([alias, spec.movementPattern]);
+      }
+    }
+  }
+
+  return Object.fromEntries([
+    ...builtinPairs,
+    ...[...catalogue, ...linked].map(
+      (row): [string, MovementPattern] => [row.name, normalisePattern(row.movement_pattern)],
+    ),
+  ]);
 };
 
 // --- logging a session ----------------------------------------------------
@@ -2148,6 +2208,19 @@ export const catalogueRegionsByExerciseName = async (): Promise<
   );
 
   const byName: Record<string, { primary: MuscleRegion; secondary: MuscleRegion[] }> = {};
+  for (const spec of RAW_BUILTIN_CATALOGUE) {
+    if (!spec.primaryRegion) continue;
+    const regionValue = {
+      primary: spec.primaryRegion,
+      secondary: spec.secondaryRegions,
+    };
+    byName[spec.canonicalName] = regionValue;
+    if (spec.aliases) {
+      for (const alias of spec.aliases) {
+        byName[alias] = regionValue;
+      }
+    }
+  }
   for (const row of rows) {
     if (row.primary_region === null) continue;
     byName[row.name] = {

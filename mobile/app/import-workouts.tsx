@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
@@ -8,7 +8,7 @@ import { notify } from '../src/dialog';
 import { commitImport, planImport } from '../src/import/runImport';
 import { pickTextFile } from '../src/platform/files';
 import type { ImportPlan } from '../src/import/importWorkouts';
-import { font, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 /**
  * Imports lifting history from a Hevy CSV export.
@@ -25,26 +25,12 @@ export default function ImportWorkoutsScreen() {
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pastedCsv, setPastedCsv] = useState('');
 
-  const pick = async () => {
+  const prepareFromCsv = async (csv: string) => {
     setBusy(true);
     try {
-      // Reading the file and reading the database fail for unrelated reasons,
-      // and reporting both as "could not read that file" sent a database error
-      // -- `Invalid VFS state` -- to someone who then went looking at their
-      // CSV. Each step says what actually failed.
-      let csv: string;
-      try {
-        const picked = await pickTextFile();
-        if (!picked) return;
-        csv = picked.text;
-      } catch (error) {
-        notify('Could not read that file', (error as Error).message);
-        return;
-      }
-
-      // The parser throws with the header it received when the format does not
-      // match, which is the message worth showing verbatim.
       setPlan(await planImport(csv));
       setOverrides({});
     } catch (error) {
@@ -52,6 +38,23 @@ export default function ImportWorkoutsScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const pick = async () => {
+    // Do NOT set busy before pickTextFile(): on iOS Safari, re-rendering the
+    // button as disabled during the click handler or dismissing the native
+    // Files sheet without a `cancel` event can block or freeze the picker.
+    let csv: string;
+    try {
+      const picked = await pickTextFile();
+      if (!picked) return;
+      csv = picked.text;
+    } catch (error) {
+      notify('Could not read that file', (error as Error).message);
+      return;
+    }
+
+    await prepareFromCsv(csv);
   };
 
   const commit = async () => {
@@ -78,10 +81,40 @@ export default function ImportWorkoutsScreen() {
       {!plan && (
         <Card title="Hevy export">
           <Text style={[styles.note, { color: colors.textFaint }]}>
-            In Hevy, go to Settings, then Export Data, and send yourself the CSV. Pick that
-            file here. Nothing is saved until you have seen what it found.
+            In Hevy, go to Settings → Export Data (`workouts.csv`). Pick that file here
+            (supports both lbs and kg exports), or paste the CSV text directly. Nothing is
+            saved until you review the preview.
           </Text>
           <Button label={busy ? 'Reading…' : 'Choose a CSV file'} onPress={pick} disabled={busy} />
+          <Button
+            label={showPaste ? 'Hide paste box' : 'Or paste CSV text'}
+            onPress={() => setShowPaste((v) => !v)}
+            variant="subtle"
+          />
+          {showPaste && (
+            <View style={{ marginTop: space.xs, gap: space.xs }}>
+              <TextInput
+                value={pastedCsv}
+                onChangeText={setPastedCsv}
+                placeholder="Paste the contents of workouts.csv here…"
+                placeholderTextColor={colors.textFaint}
+                multiline
+                style={[
+                  styles.pasteInput,
+                  {
+                    color: colors.text,
+                    borderColor: colors.border,
+                    backgroundColor: colors.bg,
+                  },
+                ]}
+              />
+              <Button
+                label={busy ? 'Reading…' : 'Preview pasted CSV'}
+                onPress={() => prepareFromCsv(pastedCsv)}
+                disabled={busy || !pastedCsv.trim()}
+              />
+            </View>
+          )}
         </Card>
       )}
 
@@ -182,4 +215,14 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
   },
   rowText: { flex: 1, paddingRight: space.sm },
+  pasteInput: {
+    fontFamily: font.figure,
+    fontSize: 12,
+    minHeight: 110,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: space.sm,
+    textAlignVertical: 'top',
+  },
 });

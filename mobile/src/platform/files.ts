@@ -15,8 +15,78 @@ import { Platform } from 'react-native';
  * a phone browser, which is exactly where this app is used.
  */
 
+const pickWebTextFile = (): Promise<{ name: string; text: string } | null> =>
+  new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    // Include .csv and text/csv alongside */* so iOS Safari enables CSV files in
+    // the Files app sheet as well as iCloud Drive and local storage.
+    input.accept = '.csv,text/csv,text/plain,application/json,*/*';
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '0';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+
+    let settled = false;
+    const cleanup = () => {
+      window.removeEventListener('focus', onWindowFocus);
+      if (input.parentNode) input.parentNode.removeChild(input);
+    };
+
+    const finish = (val: { name: string; text: string } | null, err?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err) reject(err);
+      else resolve(val);
+    };
+
+    // iOS Safari does not reliably fire `cancel` when the user swipes down the
+    // file picker sheet. When the window regains focus without a `change` event,
+    // resolve(null) after a brief grace window.
+    const onWindowFocus = () => {
+      setTimeout(() => {
+        if (!settled && (!input.files || input.files.length === 0)) {
+          finish(null);
+        }
+      }, 600);
+    };
+
+    input.addEventListener('cancel', () => finish(null));
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) {
+        finish(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        finish({ name: file.name || 'file.csv', text: String(reader.result ?? '') });
+      };
+      reader.onerror = () => {
+        if (typeof file.text === 'function') {
+          file
+            .text()
+            .then((t) => finish({ name: file.name || 'file.csv', text: t }))
+            .catch((e) => finish(null, e instanceof Error ? e : new Error(String(e))));
+        } else {
+          finish(null, reader.error ?? new Error('Could not read file'));
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+
+    window.addEventListener('focus', onWindowFocus);
+    input.click();
+  });
+
 /** Text of a file the user picked, or null when they cancelled. */
 export const pickTextFile = async (): Promise<{ name: string; text: string } | null> => {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    return pickWebTextFile();
+  }
+
   const result = await DocumentPicker.getDocumentAsync({
     // Unfiltered on purpose: a list of media types leaves iOS Safari offering
     // only Photo Library and Take Photo, with no way to reach the Files app.

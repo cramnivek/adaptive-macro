@@ -63,12 +63,13 @@ import {
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
 import { warmCatalogueCache } from '../src/exerciseSearch';
+import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
-import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
+import { PlateSheet } from '../src/components/PlateSheet';
 import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
 import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
@@ -221,6 +222,8 @@ export default function SessionScreen() {
     rowIndex: number | null;
     exerciseName: string | null;
     initialWeight: number | null;
+    mode: 'plates' | 'warmup';
+    isBarbell: boolean;
   } | null>(null);
   /** Which exercise is currently opening the superset management sheet; null when closed. */
   const [supersetTargetIndex, setSupersetTargetIndex] = useState<number | null>(null);
@@ -436,7 +439,10 @@ export default function SessionScreen() {
   };
 
   const showWeightSwitcher = settings.weightUnitSetting !== 'kg' && settings.weightUnitSetting !== 'lbs';
-  const showSpeedSwitcher = settings.speedUnitSetting !== 'kph' && settings.speedUnitSetting !== 'mph';
+  const showSpeedSwitcher =
+    settings.speedUnitSetting !== 'kph' &&
+    settings.speedUnitSetting !== 'mph' &&
+    blocks.some((b) => b.isCardio);
 
   const renderControls = () => (
     <View style={styles.headerControls}>
@@ -876,9 +882,17 @@ export default function SessionScreen() {
     return chosen ? weightOfRow(chosen) : null;
   };
 
-  const openPlates = (block: Block, blockIndex: number) => {
-    const nextIndex = block.rows.findIndex((row) => !row.done);
-    const targetIndex = nextIndex !== -1 ? nextIndex : (block.rows.length > 0 ? block.rows.length - 1 : null);
+  const openPlates = (block: Block, blockIndex: number, mode: 'plates' | 'warmup' = 'plates') => {
+    const nextIndex = block.rows.findIndex((row) => !row.done && row.setType !== 'warmup');
+    const fallbackIndex = block.rows.findIndex((row) => !row.done);
+    const targetIndex =
+      nextIndex !== -1
+        ? nextIndex
+        : fallbackIndex !== -1
+          ? fallbackIndex
+          : block.rows.length > 0
+            ? block.rows.length - 1
+            : null;
     const initialWeight = plateWeightFor(block);
 
     setCalcTarget({
@@ -886,54 +900,8 @@ export default function SessionScreen() {
       rowIndex: targetIndex,
       exerciseName: block.name,
       initialWeight,
-    });
-  };
-
-  /**
-   * Opens the floating barbell calculator. Pre-targets the first incomplete
-   * barbell set, or acts as a general scratchpad calculator if no barbell set
-   * is pending.
-   */
-  const openGeneralCalculator = () => {
-    for (let bi = 0; bi < blocks.length; bi++) {
-      const b = blocks[bi];
-      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
-        const ri = b.rows.findIndex((r) => !r.done);
-        if (ri !== -1) {
-          const row = b.rows[ri];
-          const w = weightOfRow(row);
-          setCalcTarget({
-            blockIndex: bi,
-            rowIndex: ri,
-            exerciseName: b.name,
-            initialWeight: w > 0 ? w : null,
-          });
-          return;
-        }
-      }
-    }
-
-    for (let bi = blocks.length - 1; bi >= 0; bi--) {
-      const b = blocks[bi];
-      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
-        const ri = b.rows.length > 0 ? b.rows.length - 1 : null;
-        const row = ri !== null ? b.rows[ri] : null;
-        const w = row ? weightOfRow(row) : 0;
-        setCalcTarget({
-          blockIndex: bi,
-          rowIndex: ri,
-          exerciseName: b.name,
-          initialWeight: w > 0 ? w : null,
-        });
-        return;
-      }
-    }
-
-    setCalcTarget({
-      blockIndex: null,
-      rowIndex: null,
-      exerciseName: null,
-      initialWeight: null,
+      mode,
+      isBarbell: usesBarbell(block.name),
     });
   };
 
@@ -1392,8 +1360,15 @@ export default function SessionScreen() {
    * broken control rather than as an absence.
    */
   const showInfoFor = async (name: string) => {
-    const entry = await catalogueEntryForExercise(name);
-    if (entry) return setInfo(entry);
+    const entry = await exerciseInfoFor(name, settings.foodLookup.geminiApiKey);
+    if (entry) {
+      void loadAllCatalogueEntries().then((entries) => {
+        setCatalogue(entries);
+        warmCatalogueCache(entries);
+      });
+      void cataloguePatternsByExerciseName().then(setPatterns);
+      return setInfo(entry);
+    }
     notify(
       'No how-to yet',
       `Nothing is catalogued for ${name}. Settings can build the catalogue from your history.`,
@@ -1786,6 +1761,7 @@ export default function SessionScreen() {
                   onPress={() => void showInfoFor(block.name)}
                   style={styles.blockTitle}
                   scaleTo={0.985}
+                  accessibilityRole="button"
                   accessibilityLabel={`How to do ${block.name}`}
                 >
                   <SlashPanel color={loud.loud} style={styles.glyphTab}>
@@ -1797,30 +1773,89 @@ export default function SessionScreen() {
                     />
                   </SlashPanel>
                   <SlashPanel color={loud.panel} style={styles.nameSlab}>
-                    <Text style={styles.blockName} numberOfLines={1}>
-                      {block.name.toUpperCase()}
-                    </Text>
+                    <View style={styles.nameSlabRow}>
+                      <Text style={styles.blockName} numberOfLines={1}>
+                        {block.name.toUpperCase()}
+                      </Text>
+                      <Ionicons name="information-circle-outline" size={15} color={loud.figureMuted} />
+                    </View>
                   </SlashPanel>
                 </Tappable>
 
                 <Tappable
+                  onPress={() => void removeExercise(blockIndex)}
+                  style={styles.iconBtn}
+                  scaleTo={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${block.name}`}
+                >
+                  <Text style={styles.remove}>✕</Text>
+                </Tappable>
+              </View>
+
+              {/* Compact exercise action bar: How-To, Warm-up, Plates, Swap, Superset */}
+              <View style={styles.blockActionsRow}>
+                <Tappable
+                  onPress={() => void showInfoFor(block.name)}
+                  style={styles.actionPillBtn}
+                  scaleTo={0.92}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Exercise details and form guide for ${block.name}`}
+                >
+                  <View style={styles.actionPill}>
+                    <Ionicons name="body-outline" size={12} color={loud.figureMuted} />
+                    <Text style={styles.actionPillText}>FORM</Text>
+                  </View>
+                </Tappable>
+
+                {!block.isCardio && !block.bodyweightBased && (
+                  <Tappable
+                    onPress={() => openPlates(block, blockIndex, 'warmup')}
+                    style={styles.actionPillBtn}
+                    scaleTo={0.92}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Generate warm-up sets for ${block.name}`}
+                  >
+                    <View style={styles.actionPill}>
+                      <Ionicons name="flame-outline" size={12} color={loud.warn} />
+                      <Text style={styles.actionPillText}>WARM-UP</Text>
+                    </View>
+                  </Tappable>
+                )}
+
+                {!block.isCardio && !block.bodyweightBased && usesBarbell(block.name) && (
+                  <Tappable
+                    onPress={() => openPlates(block, blockIndex, 'plates')}
+                    style={styles.actionPillBtn}
+                    scaleTo={0.92}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Barbell plate calculator for ${block.name}`}
+                  >
+                    <View style={styles.actionPill}>
+                      <Ionicons name="barbell-outline" size={12} color={loud.figureMuted} />
+                      <Text style={styles.actionPillText}>PLATES</Text>
+                    </View>
+                  </Tappable>
+                )}
+
+                <Tappable
                   onPress={() => setSwapTargetIndex(blockIndex)}
-                  style={styles.swapBtn}
-                  scaleTo={0.9}
+                  style={styles.actionPillBtn}
+                  scaleTo={0.92}
                   accessibilityRole="button"
                   accessibilityLabel={`Swap ${block.name} with an alternative`}
                 >
-                  <View style={styles.swapBadge}>
+                  <View style={styles.actionPill}>
                     <Ionicons name="swap-horizontal" size={12} color={loud.figureMuted} />
-                    <Text style={styles.swapText}>SWAP</Text>
+                    <Text style={styles.actionPillText}>SWAP</Text>
                   </View>
                 </Tappable>
 
                 {block.supersetGroup ? (
                   <Tappable
                     onPress={() => setSupersetTargetIndex(blockIndex)}
-                    style={styles.supersetBadgeBtn}
-                    scaleTo={0.9}
+                    style={styles.actionPillBtn}
+                    scaleTo={0.92}
                     accessibilityRole="button"
                     accessibilityLabel={`${isGiantSet ? 'Giant Set' : 'Superset'} ${block.supersetGroup}. Tap to manage.`}
                   >
@@ -1851,25 +1886,17 @@ export default function SessionScreen() {
                 ) : (
                   <Tappable
                     onPress={() => setSupersetTargetIndex(blockIndex)}
-                    style={styles.linkSupersetBtn}
-                    scaleTo={0.9}
+                    style={styles.actionPillBtn}
+                    scaleTo={0.92}
                     accessibilityRole="button"
                     accessibilityLabel={`Link ${block.name} into a superset`}
                   >
-                    <View style={styles.linkSupersetBadge}>
+                    <View style={styles.actionPill}>
                       <Ionicons name="link-outline" size={12} color={loud.figureMuted} />
-                      <Text style={styles.linkSupersetText}>LINK</Text>
+                      <Text style={styles.actionPillText}>LINK</Text>
                     </View>
                   </Tappable>
                 )}
-
-                <Tappable
-                  onPress={() => void removeExercise(blockIndex)}
-                  style={styles.iconBtn}
-                  scaleTo={0.85}
-                >
-                  <Text style={styles.remove}>✕</Text>
-                </Tappable>
               </View>
 
             {block.isCardio && (
@@ -1913,35 +1940,22 @@ export default function SessionScreen() {
 
             {!block.isCardio && (() => {
               const best = effectiveBestPRFor(block);
-              if (!best) return null;
-              const bestLoad = displayWeight(best.weight, settings.units).toFixed(1);
-              const bestE1rm = displayWeight(best.e1rm, settings.units).toFixed(1);
+              const targetText = block.target ? targetLabel(block.target.sets, block.target.reps) : null;
+              if (!best && !targetText) return null;
               return (
-                <View style={styles.prHeaderBadge}>
-                  <Text style={styles.prHeaderLabel}>ALL-TIME PR</Text>
-                  <Text style={styles.prHeaderValue}>
-                    {bestLoad} {unit.toUpperCase()} × {best.reps}{' '}
-                    <Text style={styles.prHeaderE1rm}>({bestE1rm} {unit.toUpperCase()} 1RM)</Text>
-                  </Text>
+                <View style={styles.blockMetaRow}>
+                  {targetText && <Text style={styles.target}>{targetText}</Text>}
+                  {best && (
+                    <View style={styles.prHeaderBadge}>
+                      <Text style={styles.prHeaderLabel}>PR</Text>
+                      <Text style={styles.prHeaderValue}>
+                        {displayWeight(best.weight, settings.units).toFixed(1)} {unit.toUpperCase()} × {best.reps}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               );
             })()}
-            {!block.isCardio && (() => {
-              const pattern = patterns[block.name];
-              const isCompound = pattern === 'squat' || pattern === 'hinge' || pattern === 'push' || pattern === 'pull';
-              const hint = nextLoadHint(
-                block.previous,
-                settings.units,
-                block.target?.reps,
-                isCompound,
-                block.bodyweightBased,
-                currentBodyweightKg,
-              );
-              return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
-            })()}
-            {!block.isCardio && block.target && (
-              <Text style={styles.target}>{targetLabel(block.target.sets, block.target.reps)}</Text>
-            )}
             {block.isCardio && block.target && (
               <Text style={styles.target}>
                 {block.target.targetTime ? `Target: ${block.target.targetTime}` : ''}
@@ -1953,15 +1967,6 @@ export default function SessionScreen() {
                   : ''}
                 {block.target.targetIncline != null ? ` · ${block.target.targetIncline}%` : ''}
               </Text>
-            )}
-            {!block.isCardio && !block.bodyweightBased && usesBarbell(block.name) && (
-              <PlatePreview
-                weight={plateWeightFor(block)}
-                units={settings.units}
-                bar={settings.barbell}
-                customPlates={settings.customPlates?.[settings.units] ?? []}
-                onPress={() => openPlates(block, blockIndex)}
-              />
             )}
 
             {!block.isCardio && (
@@ -1994,12 +1999,7 @@ export default function SessionScreen() {
               </View>
             )}
 
-            {(() => {
-              const firstUncompletedWorkingIndex = block.rows.findIndex(
-                (r) => !r.done && r.setType !== 'warmup',
-              );
-              return block.rows.map((row, rowIndex) => {
-                const isActiveRow = rowIndex === firstUncompletedWorkingIndex;
+            {block.rows.map((row, rowIndex) => {
                 const previous = block.previous[rowIndex];
                 const previousLabel = previous
                   ? block.isCardio
@@ -2235,7 +2235,7 @@ export default function SessionScreen() {
                       </View>
                     ) : null}
 
-                    {!block.isCardio && row.setType !== 'warmup' && (() => {
+                    {!block.isCardio && row.done && row.setType !== 'warmup' && (() => {
                       const currentBest = effectiveBestPRFor(block);
                       let parsedWeight: number | null = null;
                       if (block.bodyweightBased) {
@@ -2249,7 +2249,7 @@ export default function SessionScreen() {
                       const parsedReps = Number(row.reps);
                       const validReps = Number.isFinite(parsedReps) && parsedReps > 0 ? parsedReps : 0;
 
-                      if (parsedWeight === null || parsedWeight <= 0) return null;
+                      if (parsedWeight === null || parsedWeight <= 0 || validReps <= 0) return null;
 
                       const evalResult = evaluatePRTarget({
                         weight: parsedWeight,
@@ -2258,55 +2258,21 @@ export default function SessionScreen() {
                         stepKg: settings.units === 'metric' ? 2.5 : lbToKg(5),
                       });
 
-                      if (evalResult.status === 'none') return null;
-
-                      // If set is done, only celebrate if it's an all-time PR:
-                      if (row.done && evalResult.status !== 'pr') return null;
-
-                      // If set is not done, show for active row or if user has entered custom inputs:
-                      if (!row.done && !isActiveRow && validReps === 0) return null;
+                      if (evalResult.status !== 'pr') return null;
 
                       return (
-                        <View
-                          style={[
-                            styles.prRowBadge,
-                            evalResult.status === 'pr'
-                              ? styles.prRowBadgePR
-                              : evalResult.status === 'close'
-                                ? styles.prRowBadgeClose
-                                : styles.prRowBadgeTarget,
-                          ]}
-                        >
-                          {evalResult.status === 'pr' ? (
-                            <Text style={styles.prRowTextPR}>
-                              {evalResult.isFirstLog
-                                ? `⭐ BASELINE PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM`
-                                : `🔥 ALL-TIME PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM (+${displayWeight(evalResult.delta, settings.units).toFixed(1)} ${unit.toUpperCase()})`}
-                            </Text>
-                          ) : evalResult.status === 'close' ? (
-                            <Text style={styles.prRowTextClose}>
-                              ⚡ 1 REP TO PR · HIT {evalResult.repsToBeat} REPS FOR ALL-TIME RECORD
-                            </Text>
-                          ) : evalResult.status === 'too-light' ? (
-                            <Text style={styles.prRowTextTarget}>
-                              {block.bodyweightBased && currentBodyweightKg !== null
-                                ? `🎯 ADD ≥ ${displayWeight(Math.max(0, evalResult.minWeightForPR - currentBodyweightKg), settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`
-                                : `🎯 LOAD ≥ ${displayWeight(evalResult.minWeightForPR, settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`}
-                            </Text>
-                          ) : (
-                            <Text style={styles.prRowTextTarget}>
-                              {evalResult.targetE1rm > 0
-                                ? `🎯 BEAT PR: ${evalResult.repsToBeat} REPS (${displayWeight(evalResult.targetE1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} 1RM)`
-                                : `🎯 1 REP TO ESTABLISH BASELINE 1RM`}
-                            </Text>
-                          )}
+                        <View style={[styles.prRowBadge, styles.prRowBadgePR]}>
+                          <Text style={styles.prRowTextPR}>
+                            {evalResult.isFirstLog
+                              ? `⭐ BASELINE PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM`
+                              : `🔥 ALL-TIME PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM (+${displayWeight(evalResult.delta, settings.units).toFixed(1)} ${unit.toUpperCase()})`}
+                          </Text>
                         </View>
                       );
                     })()}
                   </View>
                 );
-              });
-            })()}
+              })}
 
             <Tappable onPress={() => addRow(blockIndex)} style={styles.addSet} scaleTo={0.98}>
               <Text style={styles.addSetLabel}>{block.isCardio ? '+ ADD INTERVAL' : '+ ADD SET'}</Text>
@@ -2426,25 +2392,10 @@ export default function SessionScreen() {
       </Text>
     </Screen>
 
-    <Tappable
-      onPress={openGeneralCalculator}
-      style={[styles.fabContainer, { bottom: insets.bottom + space.lg }]}
-      accessibilityRole="button"
-      accessibilityLabel="Barbell plate calculator"
-      scaleTo={0.93}
-    >
-      <View style={styles.fabRow}>
-        <SlashPanel color={loud.loud} style={styles.fabGlyphTab}>
-          <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
-        </SlashPanel>
-        <SlashPanel color={loud.panel} style={styles.fabTextSlab}>
-          <Text style={styles.fabLabel}>PLATES</Text>
-        </SlashPanel>
-      </View>
-    </Tappable>
-
     <PlateSheet
       open={calcTarget !== null}
+      initialMode={calcTarget?.mode ?? 'plates'}
+      isBarbell={calcTarget?.isBarbell ?? true}
       weight={calcTarget?.initialWeight ?? null}
       exerciseName={calcTarget?.exerciseName ?? null}
       units={settings.units}
@@ -2641,75 +2592,68 @@ const styles = StyleSheet.create({
   finishLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6, color: loud.onLoud },
 
   block: { marginBottom: space.xl },
-  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.sm },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   blockTitle: { flex: 1, flexDirection: 'row', alignItems: 'stretch', gap: 3, minHeight: 38 },
   glyphTab: { width: 38, alignItems: 'center', justifyContent: 'center' },
   nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
-  blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
+  nameSlabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.xs,
+  },
+  blockName: { flex: 1, fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
-  supersetBadgeBtn: {
-    minHeight: TOUCH_TARGET,
+  blockActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: space.xs,
+  },
+  actionPillBtn: {
+    minHeight: 32,
     justifyContent: 'center',
-    paddingHorizontal: 2,
+  },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    backgroundColor: loud.panel,
+  },
+  actionPillText: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
+  blockMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    marginBottom: space.xs,
   },
   supersetBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: radius.sm,
     borderWidth: 1,
   },
   supersetBadgeText: {
     fontFamily: font.display,
-    fontSize: 10,
+    fontSize: 9.5,
     letterSpacing: 0.9,
     fontWeight: '700',
-  },
-  linkSupersetBtn: {
-    minHeight: TOUCH_TARGET,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  linkSupersetBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: loud.rule,
-    backgroundColor: loud.panel,
-  },
-  linkSupersetText: {
-    fontFamily: font.display,
-    fontSize: 9.5,
-    letterSpacing: 0.8,
-    color: loud.figureMuted,
-  },
-  swapBtn: {
-    minHeight: TOUCH_TARGET,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  swapBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: loud.rule,
-    backgroundColor: loud.panel,
-  },
-  swapText: {
-    fontFamily: font.display,
-    fontSize: 9.5,
-    letterSpacing: 0.8,
-    color: loud.figureMuted,
   },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
@@ -2718,7 +2662,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1,
     color: loud.figureMuted,
-    marginBottom: space.sm,
   },
   columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 5 },
   col: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.4, color: loud.figureFaint },

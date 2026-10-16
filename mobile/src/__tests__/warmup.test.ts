@@ -98,4 +98,33 @@ describe('generateWarmupRamp', () => {
       }
     }
   });
+
+  describe('non-barbell exercises (Lat Pulldown, cables, machines, dumbbells)', () => {
+    it('generates a progressive warm-up ramp for Lat Pulldown below 45 lb without a barbell floor', () => {
+      const ramp = generateWarmupRamp(40, 'imperial', 'standard', undefined, false);
+      expect(ramp.length).toBeGreaterThanOrEqual(1);
+      expect(ramp[0].weight).toBeLessThan(40);
+      expect(ramp[0].perSide).toEqual([]);
+    });
+
+    it('generates a 3-stage pin/stack warm-up ramp for 120 lb Lat Pulldown', () => {
+      const ramp = generateWarmupRamp(120, 'imperial', 'standard', undefined, false);
+      expect(ramp).toHaveLength(3);
+      expect(ramp[0].weight).toBe(60); // 50% × 10
+      expect(ramp[0].reps).toBe(10);
+      expect(ramp[1].weight).toBe(85); // ~70% × 6
+      expect(ramp[1].reps).toBe(6);
+      expect(ramp[2].weight).toBe(100); // ~85% × 3
+      expect(ramp[2].reps).toBe(3);
+      expect(ramp.every((s) => s.perSide.length === 0)).toBe(true);
+    });
+
+    it('generates a metric pin/stack warm-up ramp for 60 kg Lat Pulldown', () => {
+      const ramp = generateWarmupRamp(60, 'metric', 'standard', undefined, false);
+      expect(ramp).toHaveLength(3);
+      expect(ramp[0].weight).toBe(30);
+      expect(ramp[1].weight).toBe(42.5);
+      expect(ramp[2].weight).toBe(50);
+    });
+  });
 });

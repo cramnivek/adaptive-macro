@@ -31,27 +31,79 @@ export const roundToBarbell = (
   return Math.round(rounded * 100) / 100;
 };
 
+export const roundToIncrement = (rawWeight: number, step: number, minWeight: number): number => {
+  if (rawWeight <= minWeight) return minWeight;
+  const rounded = Math.round(rawWeight / step) * step;
+  return Math.max(minWeight, Math.round(rounded * 100) / 100);
+};
+
 /**
  * Generates an ascending warm-up ladder leading up to a target working weight.
  *
  * Follows standard strength training warm-up protocols:
- * 1. Base stage: Empty bar × 10 reps (warm the joints and groove the movement).
- * 2. Progressive stages at ~50%, ~70%, ~85% (or adapted to the working load).
- *
- * Invariants:
- * - Returns [] if targetWeight <= barWeight.
- * - Every stage is strictly heavier than the preceding stage.
- * - Every stage is strictly lighter than targetWeight.
- * - Every stage weight is cleanly loadable with available gym plates.
+ * - For barbell lifts (`isBarbell === true`):
+ *   1. Base stage: Empty bar × 10 reps (warm the joints and groove the movement).
+ *   2. Progressive stages at ~50%, ~70%, ~85% (or adapted to the working load).
+ * - For cable, machine, or dumbbell lifts (`isBarbell === false`, e.g. Lat Pulldown):
+ *   Progressive stages at ~50% × 10, ~70% × 6, ~85% × 3 rounded to standard stack/dumbbell
+ *   increments (5 lb / 2.5 kg), with no 45 lb / 20 kg empty-bar floor.
  */
 export const generateWarmupRamp = (
   targetWeight: number,
   units: UnitSystem,
   bar: BarChoice,
   customPlates?: number[],
+  isBarbell = true,
 ): WarmupSet[] => {
-  const barWeight = BAR_WEIGHT[units][bar];
   const step = units === 'metric' ? 2.5 : 5;
+
+  if (!isBarbell) {
+    const minWeight = units === 'metric' ? 5 : 10;
+    if (!Number.isFinite(targetWeight) || targetWeight <= minWeight) return [];
+
+    let candidates: [number, number][];
+    if (targetWeight <= minWeight * 2.5) {
+      candidates = [[0.6, 10]];
+    } else if (targetWeight <= minWeight * 5) {
+      candidates = [
+        [0.5, 10],
+        [0.75, 6],
+      ];
+    } else {
+      candidates = [
+        [0.5, 10],
+        [0.7, 6],
+        [0.85, 3],
+      ];
+    }
+
+    const result: WarmupSet[] = [];
+    let prevWeight = 0;
+
+    for (const [fraction, reps] of candidates) {
+      let weight = roundToIncrement(targetWeight * fraction, step, minWeight);
+      if (weight <= prevWeight) {
+        weight = prevWeight + step;
+      }
+      if (weight >= targetWeight) {
+        break;
+      }
+      const percent = Math.round((weight / targetWeight) * 100);
+      result.push({
+        stage: result.length + 1,
+        weight,
+        reps,
+        percent,
+        perSide: [],
+        platesLabel: 'Warm-up load',
+      });
+      prevWeight = weight;
+    }
+
+    return result;
+  }
+
+  const barWeight = BAR_WEIGHT[units][bar];
 
   if (targetWeight <= barWeight) return [];
 

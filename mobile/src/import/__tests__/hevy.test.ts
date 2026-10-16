@@ -213,4 +213,22 @@ describe('records spanning more than one line', () => {
 
     expect(parseHevyCsv(csv).sessions[0].exercises[0].name).toBe('Bench "Press"');
   });
+
+  it('accepts metric Hevy exports (weight_kg and distance_km), UTF-8 BOM, and 12-hour iPhone timestamps', () => {
+    const metricHeader = HEVY_COLUMNS.map((c) =>
+      c === 'weight_lbs' ? 'weight_kg' : c === 'distance_miles' ? 'distance_km' : c,
+    ).join(',');
+    const csv =
+      '\uFEFF' +
+      metricHeader +
+      '\n' +
+      '"Pull","29 Dec 2025, 3:37 PM","29 Dec 2025, 4:45 PM","","Lat Pulldown (Cable)",,' +
+      '"",0,"normal",65,10,,,8.5\n';
+
+    const result = parseHevyCsv(csv);
+    expect(result.counts.sessions).toBe(1);
+    expect(result.sessions[0].startedAt).toBe('2025-12-29T15:37');
+    expect(result.sessions[0].finishedAt).toBe('2025-12-29T16:45');
+    expect(result.sessions[0].exercises[0].sets[0].weightKg).toBe(65);
+  });
 });

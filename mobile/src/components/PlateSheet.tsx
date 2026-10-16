@@ -23,6 +23,10 @@ interface PlateSheetProps {
   weight: number | null;
   /** Whether the sheet is open. If omitted, derives from weight !== null. */
   open?: boolean;
+  /** Which tab to open first ('plates' or 'warmup'). */
+  initialMode?: 'plates' | 'warmup';
+  /** Whether the exercise uses a barbell (true) or pin/cable/dumbbell (false). */
+  isBarbell?: boolean;
   units: UnitSystem;
   bar: BarChoice;
   /** Name of the exercise this calculation targets, e.g. "Bench Press". */
@@ -49,19 +53,13 @@ interface PlateSheetProps {
 const PLATE_COLOURS = ['#D62828', '#1D5FD1', '#E8B730', '#2E9E4F', '#ECEAE4', '#8A8D93', '#8A8D93'];
 
 /**
- * The barbell plate calculator and visual loader.
- *
- * Works in both directions:
- * 1. Target weight -> Plates: pre-loads the sleeve with the optimal plate mix.
- * 2. Plates -> Target weight: tap plates to load one side of the bar; symmetrical
- *    loading automatically doubles each plate and adds the bar weight.
- *
- * Tapping a loaded plate on the sleeve removes it. Tapping "Apply" writes the
- * total directly into the active set, eliminating mid-set mental math.
+ * The barbell plate calculator and warm-up ramp generator.
  */
 export const PlateSheet = ({
   weight,
   open,
+  initialMode = 'plates',
+  isBarbell = true,
   units,
   bar,
   exerciseName,
@@ -76,27 +74,63 @@ export const PlateSheet = ({
   const isVisible = open ?? weight !== null;
   const insets = useSafeAreaInsets();
   const unit = units === 'metric' ? 'kg' : 'lb';
+  const stepSize = units === 'metric' ? 5 : 10;
   const plates = PLATE_SETS[units];
   const largest = plates[0];
 
   const [perSide, setPerSide] = useState<number[]>([]);
-  const [mode, setMode] = useState<'plates' | 'warmup'>('plates');
+  const [nonBarbellTarget, setNonBarbellTarget] = useState<number>(units === 'metric' ? 50 : 100);
+  const [mode, setMode] = useState<'plates' | 'warmup'>(isBarbell ? initialMode : 'warmup');
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customInputVal, setCustomInputVal] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isVisible) return;
-    if (weight !== null && weight > 0) {
-      setPerSide(platesFor(weight, units, bar, customPlates).perSide);
+    const startMode = isBarbell ? initialMode : 'warmup';
+    setMode(startMode);
+
+    if (!isBarbell) {
+      const fallback = units === 'metric' ? 50 : 100;
+      setNonBarbellTarget(
+        weight !== null && weight > 0 ? Math.round(weight * 10) / 10 : fallback,
+      );
+      return;
+    }
+
+    const barW = BAR_WEIGHT[units][bar];
+    const effectiveWeight =
+      weight !== null && weight > 0
+        ? weight
+        : startMode === 'warmup'
+          ? units === 'metric'
+            ? 60
+            : 135
+          : 0;
+    if (effectiveWeight > barW) {
+      setPerSide(platesFor(effectiveWeight, units, bar, customPlates).perSide);
     } else {
       setPerSide([]);
     }
-  }, [isVisible, weight, units, bar, customPlates]);
+  }, [isVisible, weight, units, bar, customPlates, isBarbell, initialMode]);
 
-  const total = totalFromPlates(perSide, units, bar);
-  const formula = describeFormula(perSide, units, bar);
-  const warmups = generateWarmupRamp(total, units, bar, customPlates);
+  const total = isBarbell ? totalFromPlates(perSide, units, bar) : nonBarbellTarget;
+  const formula = isBarbell
+    ? describeFormula(perSide, units, bar)
+    : `Target working weight · step ±${stepSize} ${unit}`;
+  const warmups = generateWarmupRamp(total, units, bar, customPlates, isBarbell);
+
+  const adjustTargetWeight = (delta: number) => {
+    thud('light');
+    if (!isBarbell) {
+      const minW = units === 'metric' ? 5 : 10;
+      setNonBarbellTarget((prev) => Math.max(minW, Math.round((prev + delta) * 10) / 10));
+    } else {
+      const barW = BAR_WEIGHT[units][bar];
+      const next = Math.max(barW, total + delta);
+      setPerSide(platesFor(next, units, bar, customPlates).perSide);
+    }
+  };
 
   const addPlate = (plate: number) => {
     thud('light');
@@ -151,7 +185,9 @@ export const PlateSheet = ({
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sheetTitle}>BARBELL CALCULATOR</Text>
+            <Text style={styles.sheetTitle}>
+              {isBarbell ? 'BARBELL & WARM-UP CALCULATOR' : 'WARM-UP RAMP GENERATOR'}
+            </Text>
             {exerciseName && (
               <Text style={styles.sheetSubtitle}>FOR {exerciseName.toUpperCase()}</Text>
             )}
@@ -163,55 +199,79 @@ export const PlateSheet = ({
 
         {/* Hero Total & Breakdown */}
         <View style={styles.hero}>
-          <Text style={styles.totalNumber}>
-            {total} <Text style={styles.totalUnit}>{unit.toUpperCase()}</Text>
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={styles.totalNumber}>
+              {total} <Text style={styles.totalUnit}>{unit.toUpperCase()}</Text>
+            </Text>
+            {(mode === 'warmup' || !isBarbell) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+                <Tappable
+                  onPress={() => adjustTargetWeight(-stepSize)}
+                  scaleTo={0.92}
+                  style={styles.rackBtn}
+                  accessibilityLabel={`Decrease target weight by ${stepSize} ${unit}`}
+                >
+                  <Text style={styles.rackBtnText}>−{stepSize}</Text>
+                </Tappable>
+                <Tappable
+                  onPress={() => adjustTargetWeight(stepSize)}
+                  scaleTo={0.92}
+                  style={styles.rackBtn}
+                  accessibilityLabel={`Increase target weight by ${stepSize} ${unit}`}
+                >
+                  <Text style={styles.rackBtnText}>+{stepSize}</Text>
+                </Tappable>
+              </View>
+            )}
+          </View>
           <Text style={styles.formulaText}>{formula}</Text>
         </View>
 
-        {/* Mode Selector Tabs: Load Plates vs Warm-up Ramp */}
-        <View style={styles.tabRow}>
-          <Tappable
-            onPress={() => {
-              thud('light');
-              setMode('plates');
-            }}
-            scaleTo={0.96}
-            style={{ flex: 1 }}
-          >
-            <SlashPanel color={mode === 'plates' ? loud.loud : loud.panel} style={styles.tabBtn}>
-              <Text style={[styles.tabLabel, { color: mode === 'plates' ? loud.onLoud : loud.figureMuted }]}>
-                LOAD PLATES
-              </Text>
-            </SlashPanel>
-          </Tappable>
-
-          <Tappable
-            onPress={() => {
-              thud('light');
-              setMode('warmup');
-            }}
-            scaleTo={0.96}
-            style={{ flex: 1 }}
-          >
-            <SlashPanel color={mode === 'warmup' ? loud.loud : loud.panel} style={styles.tabBtn}>
-              <View style={styles.tabBadgeRow}>
-                <Text style={[styles.tabLabel, { color: mode === 'warmup' ? loud.onLoud : loud.figureMuted }]}>
-                  WARM-UP RAMP
+        {/* Mode Selector Tabs: Load Plates vs Warm-up Ramp (only on barbell exercises) */}
+        {isBarbell && (
+          <View style={styles.tabRow}>
+            <Tappable
+              onPress={() => {
+                thud('light');
+                setMode('plates');
+              }}
+              scaleTo={0.96}
+              style={{ flex: 1 }}
+            >
+              <SlashPanel color={mode === 'plates' ? loud.loud : loud.panel} style={styles.tabBtn}>
+                <Text style={[styles.tabLabel, { color: mode === 'plates' ? loud.onLoud : loud.figureMuted }]}>
+                  LOAD PLATES
                 </Text>
-                {warmups.length > 0 && (
-                  <View style={[styles.warmupBadge, mode === 'warmup' && { backgroundColor: loud.onLoud }]}>
-                    <Text style={[styles.warmupBadgeText, mode === 'warmup' && { color: loud.loud }]}>
-                      {warmups.length}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </SlashPanel>
-          </Tappable>
-        </View>
+              </SlashPanel>
+            </Tappable>
 
-        {mode === 'plates' ? (
+            <Tappable
+              onPress={() => {
+                thud('light');
+                setMode('warmup');
+              }}
+              scaleTo={0.96}
+              style={{ flex: 1 }}
+            >
+              <SlashPanel color={mode === 'warmup' ? loud.loud : loud.panel} style={styles.tabBtn}>
+                <View style={styles.tabBadgeRow}>
+                  <Text style={[styles.tabLabel, { color: mode === 'warmup' ? loud.onLoud : loud.figureMuted }]}>
+                    WARM-UP RAMP
+                  </Text>
+                  {warmups.length > 0 && (
+                    <View style={[styles.warmupBadge, mode === 'warmup' && { backgroundColor: loud.onLoud }]}>
+                      <Text style={[styles.warmupBadgeText, mode === 'warmup' && { color: loud.loud }]}>
+                        {warmups.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </SlashPanel>
+            </Tappable>
+          </View>
+        )}
+
+        {isBarbell && mode === 'plates' ? (
           <>
             {/* Interactive Barbell Sleeve */}
             <ScrollView
@@ -415,9 +475,11 @@ export const PlateSheet = ({
             <ScrollView style={styles.warmupScroll} contentContainerStyle={styles.warmupContent}>
               {warmups.length === 0 ? (
                 <View style={styles.emptyWarmupBox}>
-                  <Text style={styles.emptyWarmupTitle}>EMPTY BAR LOAD</Text>
+                  <Text style={styles.emptyWarmupTitle}>
+                    {isBarbell ? 'EMPTY BAR LOAD' : 'LIGHT WORKING LOAD'}
+                  </Text>
                   <Text style={styles.emptyWarmupHint}>
-                    Working weight is {total} {unit}. Add plates or choose a higher weight to generate a warm-up ramp.
+                    Working weight is {total} {unit}. Increase the target weight above (+{stepSize}) to generate a warm-up ramp.
                   </Text>
                 </View>
               ) : (
@@ -430,8 +492,13 @@ export const PlateSheet = ({
                       key={ws.stage}
                       onPress={() => {
                         thud('light');
-                        setPerSide(ws.perSide);
-                        setMode('plates');
+                        if (isBarbell) {
+                          setPerSide(ws.perSide);
+                          setMode('plates');
+                        } else if (onApplyWeight) {
+                          onApplyWeight(ws.weight);
+                          onClose();
+                        }
                       }}
                       scaleTo={0.98}
                       style={styles.warmupCard}
@@ -449,30 +516,40 @@ export const PlateSheet = ({
                         <Text style={styles.warmupPct}>{ws.percent}%</Text>
                       </View>
 
-                      <View style={styles.warmupCardBottom}>
-                        <Text style={styles.warmupPlatesLabel}>
-                          {ws.perSide.length === 0 ? 'Empty bar' : `${ws.platesLabel} / side`}
-                        </Text>
-                        <View style={styles.warmupPillsRow}>
-                          {ws.perSide.map((plate, pIdx) => {
-                            const rank = plates.indexOf(plate);
-                            const color =
-                              rank >= 0
-                                ? PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]
-                                : '#8E44AD';
-                            return (
-                              <View key={pIdx} style={[styles.warmupPlatePill, { borderColor: color }]}>
-                                <View style={[styles.platePip, { backgroundColor: color }]} />
-                                <Text style={styles.warmupPlateText}>{plate}</Text>
-                              </View>
-                            );
-                          })}
+                      {isBarbell ? (
+                        <View style={styles.warmupCardBottom}>
+                          <Text style={styles.warmupPlatesLabel}>
+                            {ws.perSide.length === 0 ? 'Empty bar' : `${ws.platesLabel} / side`}
+                          </Text>
+                          <View style={styles.warmupPillsRow}>
+                            {ws.perSide.map((plate, pIdx) => {
+                              const rank = plates.indexOf(plate);
+                              const color =
+                                rank >= 0
+                                  ? PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]
+                                  : '#8E44AD';
+                              return (
+                                <View key={pIdx} style={[styles.warmupPlatePill, { borderColor: color }]}>
+                                  <View style={[styles.platePip, { backgroundColor: color }]} />
+                                  <Text style={styles.warmupPlateText}>{plate}</Text>
+                                </View>
+                              );
+                            })}
+                          </View>
                         </View>
-                      </View>
+                      ) : (
+                        <View style={styles.warmupCardBottom}>
+                          <Text style={styles.warmupPlatesLabel}>
+                            {ws.percent}% of working weight · Pin / stack / dumbbell load
+                          </Text>
+                        </View>
+                      )}
                     </Tappable>
                   ))}
                   <Text style={styles.warmupTapHint}>
-                    Tap any stage to preview its plate loading on the bar sleeve.
+                    {isBarbell
+                      ? 'Tap any stage to preview its plate loading on the bar sleeve.'
+                      : 'Use − / + above to adjust target working weight before inserting warm-up sets.'}
                   </Text>
                 </>
               )}
@@ -482,17 +559,21 @@ export const PlateSheet = ({
 
         {/* Bottom Actions */}
         <View style={styles.actionsRow}>
-          {mode === 'warmup' ? (
+          {mode === 'warmup' || !isBarbell ? (
             <>
               <Tappable
                 onPress={() => {
                   thud('light');
-                  setMode('plates');
+                  if (isBarbell) {
+                    setMode('plates');
+                  } else {
+                    onClose();
+                  }
                 }}
                 scaleTo={0.95}
                 style={styles.clearBtn}
               >
-                <Text style={styles.clearText}>BACK</Text>
+                <Text style={styles.clearText}>{isBarbell ? 'PLATES' : 'CLOSE'}</Text>
               </Tappable>
               <Tappable
                 onPress={onInsertWarmups && warmups.length > 0 ? handleInsertWarmups : onClose}
