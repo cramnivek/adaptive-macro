@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -24,11 +24,12 @@ import {
 import { postViewToShareCard } from '../shareCard';
 import { TEMPLATES } from '../shareCardTemplate';
 import { getLocalCustomCard, getPublicCardUrl, persistCustomCard } from '../social/customCard';
-import type { PostView } from '../social/postPayload';
+import type { PostExercise, PostView } from '../social/postPayload';
 import { useApp } from '../state/AppStore';
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
+import { CopyWorkoutSheet } from './CopyWorkoutSheet';
 import { Tappable } from './Tappable';
 
 const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
@@ -85,6 +86,24 @@ export const PostCard = ({
   const [drawing, setDrawing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [expandedExercises, setExpandedExercises] = useState(false);
+
+  const exerciseList: PostExercise[] = useMemo(() => {
+    if (view.rawExercises && view.rawExercises.length > 0) {
+      return view.rawExercises;
+    }
+    if (view.exercises && view.exercises.length > 0) {
+      return view.exercises.map((e) => ({
+        name: e.name,
+        sets: e.sets,
+        best_kg: null,
+        best_reps: 0,
+      }));
+    }
+    return [];
+  }, [view.rawExercises, view.exercises]);
+  const hasExercises = exerciseList.length > 0;
 
   const displayTime = createdAt
     ? formatTimeAgo(createdAt)
@@ -365,12 +384,26 @@ export const PostCard = ({
 
           {/* Formatted Exercise List */}
           <View style={styles.exerciseList}>
-            {view.exercises.map((lift, index) => (
+            {(expandedExercises && view.rawExercises && view.rawExercises.length > 0
+              ? view.rawExercises.map((rx) => {
+                  const isCardio = rx.best_kg === null && rx.sets === 0 && rx.best_reps === 0;
+                  return {
+                    name: rx.name,
+                    sets: rx.sets,
+                    best: isCardio
+                      ? 'Cardio'
+                      : rx.best_kg === null
+                        ? `${rx.best_reps} reps`
+                        : `${rx.best_kg} kg × ${rx.best_reps}`,
+                  };
+                })
+              : view.exercises
+            ).map((lift, index, arr) => (
               <View
                 key={`${lift.name}-${index}`}
                 style={[
                   styles.exerciseRow,
-                  index < view.exercises.length - 1 ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
+                  index < arr.length - 1 ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
                 ]}
               >
                 <View style={[styles.setsPill, { backgroundColor: colors.surfaceRaised }]}>
@@ -387,9 +420,36 @@ export const PostCard = ({
           </View>
 
           {view.more > 0 && (
-            <Text style={[styles.more, { color: colors.textFaint }]}>
-              + {view.more} more {view.more === 1 ? 'exercise' : 'exercises'}
-            </Text>
+            <Tappable
+              onPress={() => setExpandedExercises((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel={expandedExercises ? 'Show fewer exercises' : `Show all ${exerciseList.length} exercises`}
+              style={styles.moreTarget}
+            >
+              <Text style={[styles.more, { color: colors.accent }]}>
+                {expandedExercises
+                  ? 'Show fewer exercises ↑'
+                  : `+ ${view.more} more ${view.more === 1 ? 'exercise' : 'exercises'} (tap to view all)`}
+              </Text>
+            </Tappable>
+          )}
+
+          {/* Copy Workout CTA Button */}
+          {hasExercises && (
+            <Tappable
+              onPress={() => setCopyOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Copy workout to routines"
+              style={[
+                styles.copyRoutineBtn,
+                { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="copy-outline" size={15} color={colors.accent} />
+              <Text style={[styles.copyRoutineBtnText, { color: colors.text }]}>
+                Copy Workout to Routines
+              </Text>
+            </Tappable>
           )}
         </>
       ) : (
@@ -480,6 +540,20 @@ export const PostCard = ({
               {cheered ? 'Fired up!' : 'Cheer'}
             </Text>
           </Tappable>
+
+          {/* Copy Workout Quick Action */}
+          {hasExercises && (
+            <Tappable
+              onPress={() => setCopyOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Copy workout"
+              hitSlop={8}
+              style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+            >
+              <Ionicons name="copy-outline" size={15} color={colors.textMuted} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Copy</Text>
+            </Tappable>
+          )}
 
           {/* Story Card Quick Button */}
           <Tappable
@@ -619,6 +693,24 @@ export const PostCard = ({
                 </Tappable>
               </View>
 
+              {/* Copy Workout Routine */}
+              {hasExercises && (
+                <Tappable
+                  onPress={() => {
+                    setModalOpen(false);
+                    setCopyOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy workout routine"
+                  style={[styles.secondaryActionBtn, styles.routineActionBtn, { borderColor: colors.accent }]}
+                >
+                  <Ionicons name="copy-outline" size={16} color={colors.accent} />
+                  <Text style={[styles.secondaryActionText, { color: colors.accent }]}>
+                    COPY WORKOUT ROUTINE
+                  </Text>
+                </Tappable>
+              )}
+
               {/* Add or Change Custom Photo (only for author's own posts) */}
               {canEditPhoto && (
                 <Tappable
@@ -637,6 +729,15 @@ export const PostCard = ({
           </View>
         </View>
       </Modal>
+
+      {/* Copy Workout Modal Sheet */}
+      <CopyWorkoutSheet
+        visible={copyOpen}
+        workoutTitle={view.title}
+        authorName={author?.displayName || author?.username}
+        exercises={exerciseList}
+        onClose={() => setCopyOpen(false)}
+      />
     </View>
   );
 };
@@ -1012,6 +1113,27 @@ const styles = StyleSheet.create({
   photoActionBtn: {
     flex: undefined,
     width: '100%',
+  },
+  routineActionBtn: {
+    flex: undefined,
+    width: '100%',
+  },
+  moreTarget: {
+    paddingVertical: space.xs,
+  },
+  copyRoutineBtn: {
+    marginTop: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  copyRoutineBtnText: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
   },
   secondaryActionText: {
     fontFamily: font.uiStrong,

@@ -113,7 +113,34 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
   };
 };
 
-export type PostView = ShareSummary & { caption: string | null; sessionId?: string };
+export interface RoutineExerciseFromPost {
+  name: string;
+  bodyweightBased: boolean;
+  targetSets: number;
+  targetReps: string | null;
+  isCardio?: boolean;
+}
+
+export type PostView = ShareSummary & {
+  caption: string | null;
+  sessionId?: string;
+  rawExercises?: PostExercise[];
+};
+
+/**
+ * Transforms stored post exercises into routine exercise drafts ready for `createRoutine`.
+ */
+export const routineExercisesFromPost = (exercises: PostExercise[]): RoutineExerciseFromPost[] =>
+  exercises.map((lift) => {
+    const isCardio = wasCardio(lift);
+    return {
+      name: lift.name,
+      bodyweightBased: lift.best_kg === null && !isCardio,
+      targetSets: lift.sets > 0 ? lift.sets : 3,
+      targetReps: lift.best_reps > 0 ? String(lift.best_reps) : null,
+      isCardio,
+    };
+  });
 
 export const formatDuration = (minutes: number): string => {
   if (minutes < 60) return `${minutes} min`;
@@ -201,5 +228,6 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
     more: Math.max(0, lifts.length - maxExercises),
     highlight: copy ? { label: copy.label, figure: copy.figure } : null,
     caption: row.caption,
+    rawExercises: lifts,
   };
 };

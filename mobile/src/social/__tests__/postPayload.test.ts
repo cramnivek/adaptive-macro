@@ -143,3 +143,30 @@ describe('cardio a name cannot give away', () => {
     expect(view.exercises[0].best).toBe('12 reps');
   });
 });
+
+describe('routineExercisesFromPost', () => {
+  it('converts post exercises into routine exercise drafts', async () => {
+    const { routineExercisesFromPost } = await import('../postPayload');
+    const lifts = [
+      { name: 'Bench Press (Barbell)', sets: 4, best_kg: 100, best_reps: 8 },
+      { name: 'Pull Up', sets: 3, best_kg: null, best_reps: 10 },
+      { name: 'Treadmill', sets: 0, best_kg: null, best_reps: 0 },
+    ];
+    const drafts = routineExercisesFromPost(lifts);
+    expect(drafts).toEqual([
+      { name: 'Bench Press (Barbell)', bodyweightBased: false, targetSets: 4, targetReps: '8', isCardio: false },
+      { name: 'Pull Up', bodyweightBased: true, targetSets: 3, targetReps: '10', isCardio: false },
+      { name: 'Treadmill', bodyweightBased: false, targetSets: 3, targetReps: null, isCardio: true },
+    ]);
+  });
+
+  it('preserves full rawExercises list in postView', () => {
+    const row = postPayload(workout(), null);
+    const view = postView(row, 'metric');
+    expect(view.rawExercises).toBeDefined();
+    expect(view.rawExercises).toHaveLength(2);
+    expect(view.rawExercises?.[0].name).toBe('Bench Press (Barbell)');
+    expect(view.rawExercises?.[1].name).toBe('Pull Up');
+  });
+});
+
