@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LoggedSet } from '../db';
-import { shareSummary } from '../shareCard';
+import { shareSummary, titleLines } from '../shareCard';
 
 let id = 0;
 const set = (exerciseName: string, weightKg: number | null, reps: number, setType: LoggedSet['setType'] = 'normal'): LoggedSet => {
@@ -62,7 +62,9 @@ describe('shareSummary', () => {
     expect(shareSummary({ ...base, sets: [set('Push-Up', null, 20)] }).volume).toBeNull();
   });
 
-  it('fits six lifts and counts the rest', () => {
+  // The summary carries six, which is what the text version lists; the picture
+  // names the first three of them and counts the rest itself.
+  it('carries six lifts and counts the rest', () => {
     const many = Array.from({ length: 8 }, (_, i) => set(`Lift ${i}`, 50, 10));
     const summary = shareSummary({ ...base, sets: many });
     expect(summary.exercises).toHaveLength(6);
@@ -129,5 +131,104 @@ describe('shareSummary', () => {
       best: expect.stringContaining('2.5 km'),
       detail: expect.stringContaining('Outside'),
     });
+  });
+});
+
+describe('the climb', () => {
+  it('stands every working set against the biggest, in the order they were done', () => {
+    const summary = shareSummary({
+      ...base,
+      sets: [set('Squat', 50, 10, 'warmup'), set('Squat', 100, 5), set('Squat', 50, 5)],
+    });
+    // The warm-up is no part of the day's shape, and the lighter set is half the taller one.
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('marks the lift that moved the most, so the day’s real work is the red block', () => {
+    const summary = shareSummary({
+      ...base,
+      sets: [set('Squat', 100, 5), set('Squat', 100, 5), set('Curl', 20, 10)],
+    });
+    expect(summary.climb.map((bar) => bar.top)).toEqual([true, true, false]);
+  });
+
+  it('draws a day with no weight on anything by its reps rather than flat', () => {
+    const summary = shareSummary({ ...base, sets: [set('Pull Up', null, 10), set('Pull Up', null, 5)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('has nothing to draw for a day with no working sets', () => {
+    expect(shareSummary({ ...base, sets: [set('Squat', 60, 10, 'warmup')] }).climb).toEqual([]);
+  });
+});
+
+describe('the climb on a day that was not lifting', () => {
+  const cardio = (exerciseName: string, durationSeconds: number): LoggedSet => ({
+    id: `c${durationSeconds}`,
+    exerciseName,
+    bodyweightBased: false,
+    setIndex: 1,
+    weightKg: null,
+    reps: 0,
+    setType: 'normal',
+    rpe: null,
+    isCardio: true,
+    cardioMode: 'treadmill',
+    speedKph: 8,
+    inclinePct: 0,
+    durationSeconds,
+    distanceKm: null,
+  });
+
+  it('stands cardio by its minutes, since it has neither weight nor reps', () => {
+    const summary = shareSummary({ ...base, title: 'Treadmill', sets: [cardio('Treadmill', 1200), cardio('Treadmill', 600)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0.5]);
+  });
+
+  it('stands cardio at nothing on a day that also lifted, because the climb is about load', () => {
+    const summary = shareSummary({ ...base, sets: [set('Squat', 100, 5), cardio('Treadmill', 1200)] });
+    expect(summary.climb.map((bar) => bar.height)).toEqual([1, 0]);
+    expect(summary.climb.map((bar) => bar.top)).toEqual([true, false]);
+  });
+});
+
+describe('titleLines', () => {
+  const said = (title: string) => titleLines(title).map((line) => line.map((part) => part.text).join(''));
+
+  it('breaks where the two lines come out most alike, not before the last word', () => {
+    // The real case this was written for: breaking before the last word left a
+    // second line reading "1.", which looks like a mistake rather than a title.
+    expect(said('Pull #1 Phase 1')).toEqual(['PULL #1', 'PHASE 1.']);
+    expect(said('Upper Body Strength')).toEqual(['UPPER BODY', 'STRENGTH.']);
+  });
+
+  it('still gives the two-word title its one word a line', () => {
+    expect(said('Push Day')).toEqual(['PUSH', 'DAY.']);
+  });
+
+  it('keeps a one-word title on its line and puts the full stop on the end', () => {
+    expect(said('Pull')).toEqual(['PULL.']);
+    expect(titleLines('Pull')[0].map((part) => part.red)).toEqual([false, true]);
+  });
+
+  it('makes the second line the red one', () => {
+    expect(titleLines('Push Day').map((line) => line.every((part) => part.red))).toEqual([false, true]);
+  });
+
+  it('has something to say about a workout with no name at all', () => {
+    expect(said('   ')).toEqual(['WORKOUT.']);
+  });
+});
+
+describe('a new best on a lift with its equipment in the name', () => {
+  it('keeps the lift and drops the brackets, which is the part that would be cut', () => {
+    const summary = shareSummary({
+      ...base,
+      units: 'imperial',
+      sets: [set('Arnold Press (Dumbbell)', 43, 8)],
+      milestone: { kind: 'load', value: 43, exercise: 'Arnold Press (Dumbbell)' },
+    });
+    // The summary keeps the whole name; the card is what shortens it.
+    expect(summary.highlight).toEqual({ label: 'ARNOLD PRESS (DUMBBELL)', figure: '95 lb' });
   });
 });

@@ -63,6 +63,20 @@ export const SEARCH_CATALOGUE = `
    ORDER BY c.canonical_name
    LIMIT ?`;
 
+/**
+ * All catalogue entries with their most-logged recorded name, for in-memory indexing.
+ */
+export const ALL_CATALOGUE_ENTRIES = `
+  SELECT ${CATALOGUE_COLUMNS},
+         (SELECT e.name
+            FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
+           WHERE e.catalogue_id = c.id
+           GROUP BY e.id
+           ORDER BY COUNT(s.id) DESC, e.name
+           LIMIT 1) AS recorded_name
+    FROM exercise_catalogue c
+   ORDER BY c.canonical_name`;
+
 /** Movement patterns for everything in the catalogue, by canonical name. */
 export const PATTERNS_BY_CANONICAL_NAME = `
   SELECT c.canonical_name AS name, c.movement_pattern FROM exercise_catalogue c`;

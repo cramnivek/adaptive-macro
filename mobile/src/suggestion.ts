@@ -20,16 +20,36 @@ interface PreviousSet {
  * rating would describe a different effort and suggest from it as if it were
  * the same one.
  */
-export const nextLoadHint = (previous: PreviousSet[], units: UnitSystem): string | null => {
+export const nextLoadHint = (
+  previous: PreviousSet[],
+  units: UnitSystem,
+  targetReps?: string | null,
+  isCompound?: boolean,
+  bodyweightBased = false,
+  bodyweightKg?: number | null,
+): string | null => {
   const working = previous.filter(
-    (set) => set.setType !== 'warmup' && set.weightKg !== null && set.weightKg > 0,
+    (set) =>
+      set.setType !== 'warmup' &&
+      (bodyweightBased ? true : set.weightKg !== null && set.weightKg > 0),
   );
   if (working.length === 0) return null;
 
   const top = working.reduce((best, set) => ((set.weightKg ?? 0) > (best.weightKg ?? 0) ? set : best));
+  if (top.rpe === null) return null;
+
+  const effectiveWeight = bodyweightBased
+    ? (bodyweightKg ?? 0) + (top.weightKg ?? 0)
+    : top.weightKg;
+  if (effectiveWeight === null || effectiveWeight <= 0) return null;
+
   const step = units === 'metric' ? 2.5 : lbToKg(5);
-  const suggestion = suggestNextLoad(top.weightKg, top.rpe, step);
-  if (suggestion === null || top.rpe === null) return null;
+  const suggestion = suggestNextLoad(effectiveWeight, top.rpe, step, {
+    lastReps: top.reps,
+    targetReps,
+    isCompound,
+  });
+  if (suggestion === null) return null;
 
   const unit = units === 'metric' ? 'kg' : 'lb';
   const show = (kg: number) => {
@@ -39,9 +59,30 @@ export const nextLoadHint = (previous: PreviousSet[], units: UnitSystem): string
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   };
 
-  const last = `${show(top.weightKg ?? 0)} × ${top.reps ?? '?'} @${formatRpe(top.rpe)}`;
-  const next = `${show(suggestion.weightKg)} ${unit}`;
+  const isPureBW = bodyweightBased && (top.weightKg === null || top.weightKg === 0);
+  const lastLoad = isPureBW ? 'BW' : show(top.weightKg ?? 0);
+  const last = `${lastLoad} × ${top.reps ?? '?'} @${formatRpe(top.rpe)}`;
 
+  if (suggestion.reason === 'rep-target') {
+    return `Last top set ${last} — aim for ${suggestion.suggestedReps} reps before adding weight.`;
+  }
+
+  if (bodyweightBased) {
+    const addedKg = Math.max(0, suggestion.weightKg - (bodyweightKg ?? 0));
+    const nextAdded = addedKg > 0 ? `+${show(addedKg)} ${unit}` : `${show(step)} ${unit}`;
+    if (suggestion.suggestedReps && suggestion.reason !== 'hold') {
+      return `Last top set ${last} — top of range hit! Try adding ${nextAdded} for ${suggestion.suggestedReps} reps.`;
+    }
+    if (suggestion.reason === 'hold') {
+      return `Last top set ${last} — near the limit. Hold ${isPureBW ? 'BW' : nextAdded}.`;
+    }
+    return `Last top set ${last} — try adding ${nextAdded}.`;
+  }
+
+  const next = `${show(suggestion.weightKg)} ${unit}`;
+  if (suggestion.suggestedReps && suggestion.reason !== 'hold') {
+    return `Last top set ${last} — top of range hit! Try ${next} for ${suggestion.suggestedReps} reps.`;
+  }
   if (suggestion.reason === 'hold') return `Last top set ${last} — near the limit. Hold ${next}.`;
   return `Last top set ${last} — try ${next}.`;
 };

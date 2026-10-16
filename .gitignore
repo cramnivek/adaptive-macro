@@ -19,3 +19,6 @@ coverage/
 evals/**/results*.jsonl
 evals/**/errors.jsonl
 glyphs.html
+
+# The subagent workspace: briefs, reports, review packages and the ledger.
+.superpowers/

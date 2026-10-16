@@ -197,4 +197,21 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sets ADD COLUMN duration_seconds INTEGER;
   ALTER TABLE sets ADD COLUMN distance_km REAL;
   `,
+  // v9 — supersets and giant sets in routines and sessions
+  //
+  // superset_group links two or more exercises performed back-to-back:
+  // e.g. 'A', 'B'. Null means an independent exercise block.
+  `
+  ALTER TABLE routine_exercises ADD COLUMN superset_group TEXT;
+  ALTER TABLE sets ADD COLUMN superset_group TEXT;
+  `,
+  // v10 — index exercises.catalogue_id and sets.exercise_id for instant search
+  //
+  // The catalogue search subquery joins exercises e to sets s on catalogue_id and
+  // exercise_id. Indexing both columns turns the search from an unindexed table
+  // scan into an instant index seek.
+  `
+  CREATE INDEX IF NOT EXISTS idx_exercises_catalogue ON exercises (catalogue_id);
+  CREATE INDEX IF NOT EXISTS idx_sets_exercise_id    ON sets (exercise_id);
+  `,
 ];

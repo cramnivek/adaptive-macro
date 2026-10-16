@@ -32,4 +32,11 @@ describe('impactContent', () => {
       expect(impactContent(80, 6, setType).verdict).not.toBe('');
     }
   });
+
+  it('proclaims NEW PR! when a working set is an all-time PR', () => {
+    expect(impactContent(100, 8, 'normal', true).verdict).toBe('NEW PR!');
+    expect(impactContent(100, 8, 'failure', true).verdict).toBe('NEW PR!');
+    // Warmups cannot be PRs:
+    expect(impactContent(100, 8, 'warmup', true).verdict).toBe('WARM-UP');
+  });
 });

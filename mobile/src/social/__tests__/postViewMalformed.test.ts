@@ -44,9 +44,19 @@ describe('postView on a malformed row', () => {
     expect(view.more).toBe(0);
   });
 
-  it('gives 0 for a set count or rep count that is not a number', () => {
+  // A row with no sets, no weight and no reps is how cardio is written, and a
+  // row whose numbers are all unreadable comes out looking exactly the same.
+  // The tie falls to cardio: a treadmill with a name the app does not recognise
+  // is an ordinary thing, and a row of garbage that still passed the database's
+  // own checks is not. Either way the reader is told something rather than "0 reps".
+  it('reads a row whose numbers are all unreadable as cardio', () => {
     const view = postView(row({ exercises: [{ name: 'Bench', sets: '3', best_kg: null, best_reps: 'six' }] }), 'metric');
-    expect(view.exercises).toEqual([{ name: 'Bench', sets: 0, best: '0 reps' }]);
+    expect(view.exercises).toEqual([{ name: 'Bench', sets: 0, best: 'Cardio', isCardio: true, detail: 'Completed' }]);
+  });
+
+  it('still gives 0 sets for a count that is not a number, when the reps are readable', () => {
+    const view = postView(row({ exercises: [{ name: 'Bench', sets: '3', best_kg: null, best_reps: 6 }] }), 'metric');
+    expect(view.exercises).toEqual([{ name: 'Bench', sets: 0, best: '6 reps' }]);
   });
 
   it('gives no weight for one that is not a number, and quotes the reps', () => {

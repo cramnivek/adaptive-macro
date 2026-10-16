@@ -1,3 +1,5 @@
+import { ALL_BLOCKS, type CardBlocks } from '../shareCardPlacement';
+import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
 import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { defaultOllamaHost } from '../ai/ollama';
@@ -79,6 +81,8 @@ export interface AppSettings {
   checkInSeenWeek: ISODate | null;
   /** The bar the plate calculator assumes: 20 kg / 45 lb, or the 15 kg / 35 lb one. */
   barbell: BarChoice;
+  /** Custom plate sizes available in the gym, per unit system. */
+  customPlates: Record<UnitSystem, number[]>;
   /** What routine building may use, and who it is for. Remembered so the next build starts there. */
   routineEquipment: EquipmentItem[];
   trainingLevel: TrainingLevel;
@@ -92,6 +96,20 @@ export interface AppSettings {
    * and someone who never posts is not nagged.
    */
   postWorkouts: boolean;
+  /**
+   * Which parts of the share card are on when it is laid over a photo. Someone
+   * who wants only the figure wants only the figure every time, so the sheet
+   * starts where they left it rather than back at everything.
+   */
+  cardBlocks: CardBlocks;
+  /** Which shape the card takes over a photo: the panel, a bar, a corner stamp, bare type. */
+  cardTemplate: TemplateId;
+  /**
+   * Whether the card cuts the person out of the photograph so the type passes
+   * behind them. Off by default: the first use fetches about nine megabytes of
+   * runtime, which is not something to spend on someone who never asked for it.
+   */
+  cardDepth: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -119,11 +137,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   checkInSeenWeek: null,
   barbell: 'standard',
+  customPlates: {
+    metric: [],
+    imperial: [],
+  },
   routineEquipment: [...EQUIPMENT_ITEMS],
   trainingLevel: 'intermediate',
   restSound: true,
   restChimeChoice: 'chime',
   postWorkouts: false,
+  cardBlocks: ALL_BLOCKS,
+  cardTemplate: DEFAULT_TEMPLATE,
+  cardDepth: false,
 };
 
 export const SETTINGS_KEY = 'app.settings';
@@ -142,4 +167,8 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
   profile: { ...DEFAULT_SETTINGS.profile, ...stored?.profile },
   goal: { ...DEFAULT_SETTINGS.goal, ...stored?.goal },
   foodLookup: { ...DEFAULT_SETTINGS.foodLookup, ...stored?.foodLookup },
+  customPlates: {
+    metric: stored?.customPlates?.metric ?? DEFAULT_SETTINGS.customPlates.metric,
+    imperial: stored?.customPlates?.imperial ?? DEFAULT_SETTINGS.customPlates.imperial,
+  },
 });

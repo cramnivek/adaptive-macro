@@ -17,6 +17,8 @@ interface ScreenProps {
    * invisible on a near-black page.
    */
   tone?: 'loud';
+  /** Drawn at the right of the title, e.g. a settings gear. */
+  action?: React.ReactNode;
 }
 
 /**
@@ -26,7 +28,7 @@ interface ScreenProps {
  * card clears the home indicator on a notched phone and is not left under the
  * tab bar on a flat one — measured, not a fixed guess.
  */
-export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone }: ScreenProps) => {
+export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action }: ScreenProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -44,9 +46,19 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone 
         ) : undefined
       }
     >
-      {title && (
+      {/* An action alone still draws the header: a modal whose stack header already
+          shows its title would otherwise have to pass one here only to get the
+          slot, and the heading would appear twice. */}
+      {(title || action) && (
         <View style={styles.header}>
-          <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+          <View style={styles.titleRow}>
+            {title ? (
+              <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+            ) : (
+              <View />
+            )}
+            {action}
+          </View>
           {subtitle && (
             <Text
               style={[styles.subtitle, { color: tone === 'loud' ? loud.figureMuted : colors.textMuted }]}
@@ -64,6 +76,7 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg },
   header: { marginBottom: space.lg },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Display weight: the quiet screens keep their palette but not their timid
   // headings — this is the typographic half of the logger's identity, which
   // carries everywhere without bringing the red with it.

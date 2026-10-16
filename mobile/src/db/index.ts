@@ -1,6 +1,7 @@
 import type {
   DailyObservation,
   DatedSet,
+  ExercisePR,
   Food,
   FoodPortion,
   ISODate,
@@ -9,16 +10,18 @@ import type {
   Nutrients,
   SetType,
 } from '@adaptive-macros/engine';
-import { addDays } from '@adaptive-macros/engine';
+import { addDays, estimate1RM } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 import {
+  ALL_CATALOGUE_ENTRIES,
   CATALOGUE_BY_CANONICAL_NAME,
   CATALOGUE_BY_LINKED_NAME,
   PATTERNS_BY_CANONICAL_NAME,
   PATTERNS_BY_LINKED_NAME,
+  SEARCH_CATALOGUE,
 } from './catalogueQueries';
 import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
 import { LAST_MEALS_BEFORE } from './mealQueries';
@@ -1128,23 +1131,16 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
  */
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
-  const rows = await db.getAllAsync<CatalogueRow>(
-    `SELECT c.id, c.canonical_name, c.movement_pattern, c.primary_muscle, c.equipment,
-            c.bodyweight_based, c.instructions, c.primary_region, c.secondary_regions,
-            c.instruction_steps,
-            (SELECT e.name
-               FROM exercises e LEFT JOIN sets s ON s.exercise_id = e.id
-              WHERE e.catalogue_id = c.id
-              GROUP BY e.id
-              ORDER BY COUNT(s.id) DESC, e.name
-              LIMIT 1) AS recorded_name
-       FROM exercise_catalogue c
-      WHERE c.canonical_name LIKE ?
-      ORDER BY c.canonical_name
-      LIMIT ?`,
-    `%${term}%`,
-    limit,
-  );
+  const rows = await db.getAllAsync<CatalogueRow>(SEARCH_CATALOGUE, `%${term}%`, limit);
+  return rows.map(toCatalogueEntry);
+};
+
+/**
+ * Loads all catalogue entries with their most-logged recorded names for in-memory indexing.
+ */
+export const loadAllCatalogueEntries = async (): Promise<CatalogueEntry[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<CatalogueRow>(ALL_CATALOGUE_ENTRIES);
   return rows.map(toCatalogueEntry);
 };
 
@@ -1241,6 +1237,7 @@ export interface LoggedSet {
   inclinePct?: number | null;
   durationSeconds?: number | null;
   distanceKm?: number | null;
+  supersetGroup?: string | null;
 }
 
 /**
@@ -1291,10 +1288,11 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     incline_pct: number | null;
     duration_seconds: number | null;
     distance_km: number | null;
+    superset_group: string | null;
   }>(
     `SELECT s.id, s.exercise_name, e.bodyweight_based, s.set_index, s.weight_kg,
             s.reps, s.set_type, s.rpe, s.is_cardio, s.cardio_mode, s.speed_kph,
-            s.incline_pct, s.duration_seconds, s.distance_km
+            s.incline_pct, s.duration_seconds, s.distance_km, s.superset_group
        FROM sets s JOIN exercises e ON e.id = s.exercise_id
       WHERE s.session_id = ?
       ORDER BY s.created_at, s.set_index`,
@@ -1316,6 +1314,7 @@ export const sessionSets = async (sessionId: string): Promise<LoggedSet[]> => {
     inclinePct: row.incline_pct,
     durationSeconds: row.duration_seconds,
     distanceKm: row.distance_km,
+    supersetGroup: row.superset_group ?? null,
   }));
 };
 
@@ -1401,6 +1400,7 @@ export const addSetToSession = async (
     inclinePct?: number | null;
     durationSeconds?: number | null;
     distanceKm?: number | null;
+    supersetGroup?: string | null;
   },
 ): Promise<void> => {
   const db = await getDb();
@@ -1414,8 +1414,8 @@ export const addSetToSession = async (
 
   await db.runAsync(
     `INSERT INTO sets (id, session_id, exercise_id, exercise_name, set_index, weight_kg, reps, set_type, rpe,
-                       is_cardio, cardio_mode, speed_kph, incline_pct, duration_seconds, distance_km, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                       is_cardio, cardio_mode, speed_kph, incline_pct, duration_seconds, distance_km, superset_group, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     newId(),
     sessionId,
     exerciseId,
@@ -1431,6 +1431,7 @@ export const addSetToSession = async (
     set.inclinePct ?? null,
     set.durationSeconds ?? null,
     set.distanceKm ?? null,
+    set.supersetGroup ?? null,
     new Date().toISOString(),
   );
 };
@@ -1521,6 +1522,7 @@ export interface RoutineExerciseItem {
   targetDistance?: number | null;
   targetSpeed?: number | null;
   targetIncline?: number | null;
+  supersetGroup?: string | null;
 }
 
 export interface Routine {
@@ -1550,9 +1552,11 @@ export const listRoutines = async (): Promise<Routine[]> => {
       target_distance: number | null;
       target_speed: number | null;
       target_incline: number | null;
+      superset_group: string | null;
     }>(
       `SELECT e.name, e.bodyweight_based, re.target_sets, re.target_reps, re.position,
-              re.is_cardio, re.cardio_mode, re.target_time, re.target_distance, re.target_speed, re.target_incline
+              re.is_cardio, re.cardio_mode, re.target_time, re.target_distance, re.target_speed, re.target_incline,
+              re.superset_group
          FROM routine_exercises re JOIN exercises e ON e.id = re.exercise_id
         WHERE re.routine_id = ? ORDER BY re.position`,
       row.id,
@@ -1573,6 +1577,7 @@ export const listRoutines = async (): Promise<Routine[]> => {
         targetDistance: e.target_distance,
         targetSpeed: e.target_speed,
         targetIncline: e.target_incline,
+        supersetGroup: e.superset_group ?? null,
       })),
     });
   }
@@ -1592,6 +1597,7 @@ export const createRoutine = async (
     targetDistance?: number | null;
     targetSpeed?: number | null;
     targetIncline?: number | null;
+    supersetGroup?: string | null;
   }[],
 ): Promise<string> => {
   const db = await getDb();
@@ -1620,13 +1626,13 @@ export const createRoutine = async (
       );
       await db.runAsync(
         `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
-                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline, superset_group)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (routine_id, exercise_id) DO UPDATE
            SET position = excluded.position, target_sets = excluded.target_sets,
                target_reps = excluded.target_reps, is_cardio = excluded.is_cardio,
                cardio_mode = excluded.cardio_mode, target_time = excluded.target_time,
                target_distance = excluded.target_distance, target_speed = excluded.target_speed,
-               target_incline = excluded.target_incline`,
+               target_incline = excluded.target_incline, superset_group = excluded.superset_group`,
         id,
         exerciseId,
         index,
@@ -1638,6 +1644,7 @@ export const createRoutine = async (
         exercise.targetDistance ?? null,
         exercise.targetSpeed ?? null,
         exercise.targetIncline ?? null,
+        exercise.supersetGroup ?? null,
       );
     }
   });
@@ -1664,6 +1671,7 @@ export const setRoutineExercises = async (
     targetDistance?: number | null;
     targetSpeed?: number | null;
     targetIncline?: number | null;
+    supersetGroup?: string | null;
   }[],
 ): Promise<void> => {
   const db = await getDb();
@@ -1679,8 +1687,8 @@ export const setRoutineExercises = async (
       );
       await db.runAsync(
         `INSERT INTO routine_exercises (routine_id, exercise_id, position, target_sets, target_reps,
-                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                        is_cardio, cardio_mode, target_time, target_distance, target_speed, target_incline, superset_group)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         exerciseId,
         index,
@@ -1692,6 +1700,7 @@ export const setRoutineExercises = async (
         exercise.targetDistance ?? null,
         exercise.targetSpeed ?? null,
         exercise.targetIncline ?? null,
+        exercise.supersetGroup ?? null,
       );
     }
   });
@@ -1952,6 +1961,66 @@ export const lastSessionSets = async (exerciseName: string): Promise<LoggedSet[]
   }));
 };
 
+/**
+ * The highest estimated 1RM logged for this exercise across all finished sessions.
+ */
+export const exerciseBestPR = async (
+  exerciseName: string,
+  bodyweightBased = false,
+  series: readonly { date: ISODate; trendWeightKg: number }[] = [],
+  fallbackBodyweightKg?: number | null,
+): Promise<ExercisePR | null> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    weight_kg: number | null;
+    reps: number;
+    date: ISODate;
+  }>(
+    `SELECT s.weight_kg, s.reps, w.date
+       FROM sets s JOIN sessions w ON w.id = s.session_id
+      WHERE s.exercise_name = ?
+        AND s.set_type != 'warmup'
+        AND s.reps > 0
+        AND w.finished_at IS NOT NULL`,
+    exerciseName,
+  );
+  if (rows.length === 0) return null;
+
+  const lookupBw = (date: ISODate): number | null => {
+    if (!series || series.length === 0) return fallbackBodyweightKg ?? null;
+    const exact = series.find((s) => s.date === date);
+    if (exact) return exact.trendWeightKg;
+    if (date < series[0].date) return series[0].trendWeightKg;
+    if (date > series[series.length - 1].date) return series[series.length - 1].trendWeightKg;
+    return fallbackBodyweightKg ?? series[series.length - 1].trendWeightKg;
+  };
+
+  let best: ExercisePR | null = null;
+  for (const row of rows) {
+    let load: number | null = null;
+    if (bodyweightBased) {
+      const bw = lookupBw(row.date);
+      if (bw === null) continue;
+      load = bw + (row.weight_kg ?? 0);
+    } else {
+      if (row.weight_kg === null || row.weight_kg <= 0) continue;
+      load = row.weight_kg;
+    }
+    if (load === null || load <= 0) continue;
+
+    const e1rm = estimate1RM(load, row.reps);
+    if (!best || e1rm > best.e1rm) {
+      best = {
+        e1rm,
+        weight: load,
+        reps: row.reps,
+        date: row.date,
+      };
+    }
+  }
+  return best;
+};
+
 /** Corrects a set already written, for editing a row after ticking it. */
 export const updateSetValues = async (
   id: string,
@@ -2012,6 +2081,48 @@ export const updateSetValues = async (
 export const setSetRpe = async (id: string, rpe: number | null): Promise<void> => {
   const db = await getDb();
   await db.runAsync('UPDATE sets SET rpe = ? WHERE id = ?', rpe, id);
+};
+
+/**
+ * Updates the superset group for all sets of an exercise in an active session.
+ */
+export const updateExerciseSupersetGroup = async (
+  sessionId: string,
+  exerciseName: string,
+  supersetGroup: string | null,
+): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE sets SET superset_group = ? WHERE session_id = ? AND exercise_name = ?',
+    supersetGroup,
+    sessionId,
+    exerciseName,
+  );
+};
+
+/**
+ * Updates the exercise name and exercise ID for a list of set IDs in an active session,
+ * creating the exercise entry in catalogue/exercises table if necessary.
+ */
+export const updateSetsExercise = async (
+  setIds: string[],
+  exerciseName: string,
+  bodyweightBased: boolean,
+  isCardio = false,
+  cardioMode: 'treadmill' | 'outside' | null = null,
+): Promise<void> => {
+  if (setIds.length === 0) return;
+  const db = await getDb();
+  const exerciseId = await exerciseIdFor(db, exerciseName, bodyweightBased, isCardio, cardioMode);
+  const placeholders = setIds.map(() => '?').join(',');
+  await db.runAsync(
+    `UPDATE sets SET exercise_id = ?, exercise_name = ?, is_cardio = ?, cardio_mode = ? WHERE id IN (${placeholders})`,
+    exerciseId,
+    exerciseName,
+    isCardio ? 1 : 0,
+    cardioMode ?? null,
+    ...setIds,
+  );
 };
 
 /**

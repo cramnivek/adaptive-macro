@@ -1,5 +1,12 @@
-import { bodyweightForDates, milestonesOn, todayISO } from '@adaptive-macros/engine';
-import type { Milestone, SetType } from '@adaptive-macros/engine';
+import {
+  bodyweightForDates,
+  estimate1RM,
+  evaluatePRTarget,
+  lbToKg,
+  milestonesOn,
+  todayISO,
+} from '@adaptive-macros/engine';
+import type { ExercisePR, Milestone, SetType } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -15,7 +22,7 @@ import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { ExerciseInfoSheet } from '../src/components/ExerciseInfoSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
-import { type ShareSummary, shareSummary } from '../src/shareCard';
+import { type ShareCard, shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
 import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
@@ -24,11 +31,13 @@ import { FadeIn } from '../src/components/FadeIn';
 import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
+import { PRCelebration, type PRCelebrationData } from '../src/components/PRCelebration';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { SessionOptionsSheet } from '../src/components/SessionOptionsSheet';
 import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
+import { SwapExerciseSheet, type SwapMode } from '../src/components/SwapExerciseSheet';
 import { Tappable } from '../src/components/Tappable';
 import { impactContent } from '../src/components/setImpact';
 import type { ImpactContent } from '../src/components/setImpact';
@@ -37,19 +46,24 @@ import {
   addSetToSession,
   deleteSet,
   discardSession,
+  exerciseBestPR,
   finishSession,
   lastSessionSets,
   listAllSets,
   listExerciseNames,
+  loadAllCatalogueEntries,
   catalogueEntryForExercise,
   cataloguePatternsByExerciseName,
   listRoutines,
   sessionSets,
   startSession,
   setSetRpe,
+  updateExerciseSupersetGroup,
+  updateSetsExercise,
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
+import { warmCatalogueCache } from '../src/exerciseSearch';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
@@ -57,6 +71,8 @@ import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
 import { PlatePreview, PlateSheet } from '../src/components/PlateSheet';
+import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
+import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
@@ -83,6 +99,7 @@ import {
   parseSpeed,
 } from '../src/cardio';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space } from '../src/theme';
 import type { UnitSystem } from '../src/state/settings';
 // Aliased: `session` is already the active-workout state in this component.
@@ -115,6 +132,8 @@ interface Block {
   rows: Row[];
   /** The same exercise's sets from the last finished session, by index. */
   previous: LoggedSet[];
+  /** Historical best estimated 1RM for this exercise. */
+  bestPR?: ExercisePR | null;
   /** What the routine asks for, when the exercise came from one. */
   target: {
     sets: number;
@@ -124,6 +143,8 @@ interface Block {
     targetSpeed?: number | null;
     targetIncline?: number | null;
   } | null;
+  /** Superset group letter, e.g. 'A', 'B', 'C' */
+  supersetGroup?: string | null;
 }
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
@@ -165,8 +186,13 @@ const elapsed = (startedAt: string, now: number): string => {
  */
 export default function SessionScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { series, settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
+  const currentBodyweightKg = useMemo(
+    () => series[series.length - 1]?.trendWeightKg ?? settings.goalWeightKg ?? null,
+    [series, settings.goalWeightKg],
+  );
   const params = useLocalSearchParams<{ start?: string; routine?: string; cardio?: string }>();
 
   const [session, setSession] = useState<ActiveSession | null>(null);
@@ -187,12 +213,25 @@ export default function SessionScreen() {
   const [landed, setLanded] = useState<{ rowKey: string; content: ImpactContent } | null>(null);
   // Stable, so the once-a-second clock re-render cannot restart a frame mid-flight.
   const clearLanded = useCallback(() => setLanded(null), []);
+  /** Active all-time PR celebration data; null when dismissed. */
+  const [celebrationPR, setCelebrationPR] = useState<PRCelebrationData | null>(null);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
-  /** The weight the plate sheet is showing, in the display unit; null when closed. */
-  const [plating, setPlating] = useState<number | null>(null);
   /** Whether the session options (units, alert chime) sheet is open. */
   const [optionsOpen, setOptionsOpen] = useState(false);
+  /** Active target for the barbell plate calculator; null when closed. */
+  const [calcTarget, setCalcTarget] = useState<{
+    blockIndex: number | null;
+    rowIndex: number | null;
+    exerciseName: string | null;
+    initialWeight: number | null;
+  } | null>(null);
+  /** Which exercise is currently opening the superset management sheet; null when closed. */
+  const [supersetTargetIndex, setSupersetTargetIndex] = useState<number | null>(null);
+  /** Which exercise is currently opening the swap sheet; null when closed. */
+  const [swapTargetIndex, setSwapTargetIndex] = useState<number | null>(null);
+  /** Full catalogue cache for swap recommendations and search. */
+  const [catalogue, setCatalogue] = useState<CatalogueEntry[]>([]);
 
   /**
    * The running rest, as the wall-clock time it ends at.
@@ -218,7 +257,7 @@ export default function SessionScreen() {
   /** Shown once the workout is saved, when the day was worth marking. */
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   /** The finished workout and its card, for the sheet that offers to share and post it. */
-  const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareSummary } | null>(null);
+  const [finished, setFinished] = useState<{ workout: FinishedWorkout; summary: ShareCard } | null>(null);
   /** Sign-in is open over the finish sheet. */
   const [signingIn, setSigningIn] = useState(false);
   /** The save-as-routine sheet is open over the finish sheet, and whether it has been saved. */
@@ -257,9 +296,10 @@ export default function SessionScreen() {
     // at the top of the workout, often off screen while the next set is set up.
     const nextBlock = blocks.find((block) => block.rows.some((row) => !row.done));
     const nextRow = nextBlock ? nextBlock.rows.findIndex((row) => !row.done) : -1;
+    const supersetNotice = nextBlock?.supersetGroup ? ` (Superset ${nextBlock.supersetGroup})` : '';
     notify(
       'Rest is up',
-      nextBlock ? `Next: ${nextBlock.name}, set ${nextRow + 1}.` : 'On to the next one.',
+      nextBlock ? `Next: ${nextBlock.name}${supersetNotice}, set ${nextRow + 1}.` : 'On to the next one.',
     );
 
     // Left on screen for a moment rather than cleared at once. On the iOS PWA
@@ -439,6 +479,7 @@ export default function SessionScreen() {
       target: Block['target'] = null,
       isCardio = false,
       cardioMode: CardioMode = 'treadmill',
+      supersetGroup: string | null = null,
     ): Promise<Block> => ({
       name,
       bodyweightBased,
@@ -446,9 +487,11 @@ export default function SessionScreen() {
       cardioMode,
       rows,
       previous: await lastSessionSets(name),
+      bestPR: await exerciseBestPR(name, bodyweightBased, series, currentBodyweightKg),
       target,
+      supersetGroup,
     }),
-    [],
+    [series, currentBodyweightKg],
   );
 
   /**
@@ -538,6 +581,7 @@ export default function SessionScreen() {
           const planned = plan.find((e) => e.name === name);
           const isCardio = mine[0]?.isCardio ?? planned?.isCardio ?? detectCardio(name);
           const cardioMode = (mine[0]?.cardioMode ?? planned?.cardioMode ?? detectCardioMode(name)) as CardioMode;
+          const supersetGroup = mine[0]?.supersetGroup ?? planned?.supersetGroup ?? null;
           const block = await blockFor(
             name,
             mine[0]?.bodyweightBased ?? planned?.bodyweightBased ?? false,
@@ -571,6 +615,7 @@ export default function SessionScreen() {
               : null,
             isCardio,
             cardioMode,
+            supersetGroup,
           );
           return withTargetRows(block);
         }),
@@ -592,13 +637,16 @@ export default function SessionScreen() {
     if (loadedFor.current === key) return;
     loadedFor.current = key;
     void (async () => {
-      const [existing, loadedRoutines, names] = await Promise.all([
+      const [existing, loadedRoutines, names, allCatalogue] = await Promise.all([
         activeSession(),
         listRoutines(),
         listExerciseNames(),
+        loadAllCatalogueEntries(),
       ]);
       setRoutines(loadedRoutines);
       setKnown(names);
+      setCatalogue(allCatalogue);
+      void warmCatalogueCache(loadAllCatalogueEntries);
 
       if (existing) {
         // The routine's exercises come back too, not only those with a set
@@ -630,6 +678,7 @@ export default function SessionScreen() {
                   },
                   e.isCardio ?? false,
                   (e.cardioMode as CardioMode) ?? 'treadmill',
+                  e.supersetGroup ?? null,
                 ),
               ),
             ),
@@ -729,23 +778,266 @@ export default function SessionScreen() {
     }
   };
 
+  const weightOfRow = (row: Row): number => {
+    const val = Number.parseFloat(row.weight.replace(',', '.'));
+    return Number.isFinite(val) ? val : 0;
+  };
+
   /**
    * The plates for the set about to be done: the first one not yet ticked that
    * has a weight in it, or failing that the last weight entered.
    */
   const plateWeightFor = (block: Block): number | null => {
-    const weightOf = (row: Row) => Number.parseFloat(row.weight.replace(',', '.'));
-    const next = block.rows.find((row) => !row.done && weightOf(row) > 0);
-    const last = [...block.rows].reverse().find((row) => weightOf(row) > 0);
+    const next = block.rows.find((row) => !row.done && weightOfRow(row) > 0);
+    const last = [...block.rows].reverse().find((row) => weightOfRow(row) > 0);
     const chosen = next ?? last;
-    return chosen ? weightOf(chosen) : null;
+    return chosen ? weightOfRow(chosen) : null;
   };
 
-  const openPlates = (block: Block) => {
-    const weight = plateWeightFor(block);
-    if (weight === null) return notify('No weight yet', 'Enter a weight in a set to see its plates.');
-    setPlating(weight);
+  const openPlates = (block: Block, blockIndex: number) => {
+    const nextIndex = block.rows.findIndex((row) => !row.done);
+    const targetIndex = nextIndex !== -1 ? nextIndex : (block.rows.length > 0 ? block.rows.length - 1 : null);
+    const initialWeight = plateWeightFor(block);
+
+    setCalcTarget({
+      blockIndex,
+      rowIndex: targetIndex,
+      exerciseName: block.name,
+      initialWeight,
+    });
   };
+
+  /**
+   * Opens the floating barbell calculator. Pre-targets the first incomplete
+   * barbell set, or acts as a general scratchpad calculator if no barbell set
+   * is pending.
+   */
+  const openGeneralCalculator = () => {
+    for (let bi = 0; bi < blocks.length; bi++) {
+      const b = blocks[bi];
+      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
+        const ri = b.rows.findIndex((r) => !r.done);
+        if (ri !== -1) {
+          const row = b.rows[ri];
+          const w = weightOfRow(row);
+          setCalcTarget({
+            blockIndex: bi,
+            rowIndex: ri,
+            exerciseName: b.name,
+            initialWeight: w > 0 ? w : null,
+          });
+          return;
+        }
+      }
+    }
+
+    for (let bi = blocks.length - 1; bi >= 0; bi--) {
+      const b = blocks[bi];
+      if (!b.isCardio && !b.bodyweightBased && usesBarbell(b.name)) {
+        const ri = b.rows.length > 0 ? b.rows.length - 1 : null;
+        const row = ri !== null ? b.rows[ri] : null;
+        const w = row ? weightOfRow(row) : 0;
+        setCalcTarget({
+          blockIndex: bi,
+          rowIndex: ri,
+          exerciseName: b.name,
+          initialWeight: w > 0 ? w : null,
+        });
+        return;
+      }
+    }
+
+    setCalcTarget({
+      blockIndex: null,
+      rowIndex: null,
+      exerciseName: null,
+      initialWeight: null,
+    });
+  };
+
+  /**
+   * Writes the calculated plate total back into the targeted set row.
+   * If the row was already marked done, updates the logged set in the database.
+   */
+  const applyCalculatedWeight = async (w: number) => {
+    if (calcTarget?.blockIndex != null && calcTarget.rowIndex != null) {
+      const bi = calcTarget.blockIndex;
+      const ri = calcTarget.rowIndex;
+      const block = blocks[bi];
+      const row = block?.rows[ri];
+      if (row) {
+        editRow(bi, ri, { weight: String(w) });
+        if (row.done && row.id) {
+          const reps = Number(row.reps);
+          if (Number.isFinite(reps) && reps > 0) {
+            const kg = parseWeight(String(w), settings.units);
+            await updateSetValues(row.id, kg, reps);
+            setSession(await activeSession());
+          }
+        }
+      }
+    }
+    setCalcTarget(null);
+  };
+
+  /**
+   * Inserts the generated warm-up sets into the active exercise block.
+   * Prepends the warm-up rows before any existing working sets.
+   */
+  const insertWarmups = (warmupSets: WarmupSet[]) => {
+    if (calcTarget?.blockIndex == null) return;
+    const bi = calcTarget.blockIndex;
+    const block = blocks[bi];
+    if (!block) return;
+
+    const warmupRows: Row[] = warmupSets.map((ws) => ({
+      key: newKey(),
+      id: null,
+      weight: String(ws.weight),
+      reps: String(ws.reps),
+      setType: 'warmup',
+      done: false,
+      rpe: null,
+    }));
+
+    setBlocks((current) =>
+      current.map((b, index) => {
+        if (index !== bi) return b;
+        const firstWorkingIndex = b.rows.findIndex((r) => r.setType !== 'warmup');
+        const insertAt = firstWorkingIndex !== -1 ? firstWorkingIndex : 0;
+        const newRows = [...b.rows];
+        newRows.splice(insertAt, 0, ...warmupRows);
+        return { ...b, rows: newRows };
+      }),
+    );
+
+    thud('heavy');
+    notify('Warm-ups added', `Added ${warmupSets.length} warm-up sets for ${block.name}.`);
+    setCalcTarget(null);
+  };
+
+  const addCustomPlate = async (plate: number) => {
+    const current = settings.customPlates?.[settings.units] ?? [];
+    if (current.includes(plate)) return;
+    const updated = [...current, plate].sort((a, b) => b - a);
+    await updateSettings({
+      customPlates: { ...settings.customPlates, [settings.units]: updated },
+    });
+  };
+
+  const removeCustomPlate = async (plate: number) => {
+    const current = settings.customPlates?.[settings.units] ?? [];
+    const updated = current.filter((p) => p !== plate);
+    await updateSettings({
+      customPlates: { ...settings.customPlates, [settings.units]: updated },
+    });
+  };
+
+  /** Links multiple exercise blocks into a superset group. */
+  const assignSupersetGroup = async (exerciseIndices: number[], group: string) => {
+    setBlocks((current) =>
+      current.map((b, idx) => {
+        if (exerciseIndices.includes(idx)) {
+          return { ...b, supersetGroup: group };
+        }
+        return b;
+      }),
+    );
+
+    if (session) {
+      for (const idx of exerciseIndices) {
+        const b = blocks[idx];
+        if (b) {
+          await updateExerciseSupersetGroup(session.id, b.name, group);
+        }
+      }
+      setSession(await activeSession());
+    }
+    thud('heavy');
+    notify(
+      `Superset ${group} linked`,
+      `${exerciseIndices.map((i) => blocks[i]?.name).filter(Boolean).join(' & ')} are now paired.`,
+    );
+  };
+
+  /** Unlinks a single exercise from its superset group. Disbands if only 1 remains. */
+  const unlinkExerciseFromSuperset = async (exerciseIndex: number) => {
+    const block = blocks[exerciseIndex];
+    if (!block || !block.supersetGroup) return;
+    const group = block.supersetGroup;
+    const othersInGroup = blocks.filter((b, idx) => idx !== exerciseIndex && b.supersetGroup === group);
+
+    const shouldDisband = othersInGroup.length <= 1;
+
+    setBlocks((current) =>
+      current.map((b, idx) => {
+        if (idx === exerciseIndex || (shouldDisband && b.supersetGroup === group)) {
+          return { ...b, supersetGroup: null };
+        }
+        return b;
+      }),
+    );
+
+    if (session) {
+      await updateExerciseSupersetGroup(session.id, block.name, null);
+      if (shouldDisband) {
+        for (const other of othersInGroup) {
+          await updateExerciseSupersetGroup(session.id, other.name, null);
+        }
+      }
+      setSession(await activeSession());
+    }
+    thud('light');
+    notify('Unlinked', `${block.name} unlinked from Superset ${group}.`);
+  };
+
+  /** Disbands an entire superset group, unlinking all exercises in it. */
+  const disbandSupersetGroup = async (group: string) => {
+    const affectedBlocks = blocks.filter((b) => b.supersetGroup === group);
+    setBlocks((current) =>
+      current.map((b) => (b.supersetGroup === group ? { ...b, supersetGroup: null } : b)),
+    );
+
+    if (session) {
+      for (const b of affectedBlocks) {
+        await updateExerciseSupersetGroup(session.id, b.name, null);
+      }
+      setSession(await activeSession());
+    }
+    thud('light');
+    notify('Disbanded', `Superset ${group} removed.`);
+  };
+
+  /**
+   * Evaluates the best e1RM for an exercise, checking both history and any
+   * working sets completed in the current workout session.
+   */
+  const effectiveBestPRFor = useCallback(
+    (block: Block): ExercisePR | null => {
+      let best = block.bestPR ? { ...block.bestPR } : null;
+      for (const row of block.rows) {
+        if (!row.done || row.setType === 'warmup') continue;
+        const reps = Number(row.reps);
+        if (!Number.isFinite(reps) || reps <= 0) continue;
+        let kg: number | null = null;
+        if (block.bodyweightBased) {
+          const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+          if (currentBodyweightKg !== null) {
+            kg = currentBodyweightKg + (added ?? 0);
+          }
+        } else {
+          kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+        }
+        if (kg === null || kg <= 0) continue;
+        const e1rm = estimate1RM(kg, reps);
+        if (!best || e1rm > best.e1rm) {
+          best = { e1rm, weight: kg, reps, date: todayISO() };
+        }
+      }
+      return best;
+    },
+    [currentBodyweightKg, settings.units],
+  );
 
   /** Ticking writes the set; unticking removes it. */
   const toggleRow = async (blockIndex: number, rowIndex: number) => {
@@ -794,6 +1086,7 @@ export default function SessionScreen() {
         inclinePct: parsedIncline,
         durationSeconds: parsedTime,
         distanceKm: parsedDistance,
+        supersetGroup: block.supersetGroup ?? null,
       });
 
       const refreshed = await activeSession();
@@ -824,6 +1117,23 @@ export default function SessionScreen() {
           verdict: 'CARDIO DONE',
         },
       });
+
+      if (block.supersetGroup) {
+        const groupBlocks = blocks.filter((b) => b.supersetGroup === block.supersetGroup);
+        const myIndexInGroup = groupBlocks.findIndex((b) => b.name === block.name);
+        const isLastInGroup = myIndexInGroup === groupBlocks.length - 1;
+
+        if (!isLastInGroup) {
+          const nextBlock = groupBlocks[myIndexInGroup + 1];
+          setRest(null);
+          notify(`Next Up · Superset ${block.supersetGroup}`, `Move straight to ${nextBlock.name}!`);
+        } else {
+          const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
+          if (settings.restSound) primeChime();
+          setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+          notify(`Round ${completedRounds} Done!`, `Rest now before the next round of Superset ${block.supersetGroup}.`);
+        }
+      }
       return;
     }
 
@@ -846,12 +1156,41 @@ export default function SessionScreen() {
       reps,
       setType: row.setType,
       rpe: null,
+      supersetGroup: block.supersetGroup ?? null,
     });
 
     const refreshed = await activeSession();
     setSession(refreshed);
     const written = refreshed?.sets.filter((s) => s.exerciseName === block.name) ?? [];
     editRow(blockIndex, rowIndex, { done: true, id: written[written.length - 1]?.id ?? null });
+
+    const currentBestPR = effectiveBestPRFor(block);
+    const effectiveKg = block.bodyweightBased
+      ? (currentBodyweightKg !== null ? currentBodyweightKg + (kg ?? 0) : null)
+      : kg;
+    const isNewPR =
+      row.setType !== 'warmup' &&
+      effectiveKg !== null &&
+      effectiveKg > 0 &&
+      (!currentBestPR || estimate1RM(effectiveKg, reps) > currentBestPR.e1rm);
+
+    if (isNewPR) {
+      thud('heavy');
+      const e1rm = estimate1RM(effectiveKg, reps);
+      const targetE1rm = currentBestPR?.e1rm ?? 0;
+      const delta = targetE1rm > 0 ? Math.max(0, e1rm - targetE1rm) : 0;
+      const isFirstLog = !currentBestPR;
+      const loadText = block.bodyweightBased
+        ? (kg !== null && kg > 0 ? `+${displayWeight(kg, settings.units).toFixed(1)} ${unit}` : 'BW')
+        : `${displayWeight(kg ?? 0, settings.units).toFixed(1)} ${unit}`;
+      setCelebrationPR({
+        exerciseName: block.name,
+        figure: `${loadText} × ${reps}`,
+        e1rm,
+        delta,
+        isFirstLog,
+      });
+    }
 
     // Written, so now say so. The frame draws itself over the row and takes no
     // touches, so ticking the next set during it behaves as normal.
@@ -861,14 +1200,40 @@ export default function SessionScreen() {
         kg === null ? null : displayWeight(kg, settings.units),
         reps,
         row.setType,
+        isNewPR,
       ),
     });
 
-    // Rest starts itself. The alternative is tapping "start rest" after every
-    // set, which nobody does twice. The tick is a tap, which is what a browser
-    // needs before it will let the chime play when the rest runs out.
-    if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
-    setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+    if (block.supersetGroup) {
+      const groupBlocks = blocks.filter((b) => b.supersetGroup === block.supersetGroup);
+      const myIndexInGroup = groupBlocks.findIndex((b) => b.name === block.name);
+      const isLastInGroup = myIndexInGroup === groupBlocks.length - 1;
+
+      if (!isLastInGroup) {
+        // Not the last in round: prompt next exercise immediately with zero rest delay
+        const nextBlock = groupBlocks[myIndexInGroup + 1];
+        setRest(null);
+        notify(
+          `Next Up · Superset ${block.supersetGroup}`,
+          `Move straight to ${nextBlock.name}!`,
+        );
+      } else {
+        // Last exercise in the superset round completed: trigger full rest timer!
+        const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
+        if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
+        setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+        notify(
+          `Round ${completedRounds} Done!`,
+          `Rest now before the next round of Superset ${block.supersetGroup}.`,
+        );
+      }
+    } else {
+      // Rest starts itself. The alternative is tapping "start rest" after every
+      // set, which nobody does twice. The tick is a tap, which is what a browser
+      // needs before it will let the chime play when the rest runs out.
+      if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
+      setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+    }
   };
 
   /** Keeps an already-written set in step with an edited row. */
@@ -983,6 +1348,154 @@ export default function SessionScreen() {
     for (const row of block.rows) if (row.id) await deleteSet(row.id);
     setBlocks((current) => current.filter((_, i) => i !== blockIndex));
     setSession(await activeSession());
+  };
+
+  /**
+   * Replaces an exercise block with an alternative mid-workout.
+   *
+   * If 'swap-all' (or if no sets are logged yet), converts the block and any
+   * logged sets to the new exercise.
+   * If 'swap-remaining', keeps completed sets on the original exercise block,
+   * and splits the remaining planned sets into a new block for the replacement.
+   */
+  const swapExercise = async (
+    blockIndex: number,
+    newExercise: {
+      name: string;
+      bodyweightBased: boolean;
+      isCardio: boolean;
+      cardioMode?: CardioMode | null;
+    },
+    mode: SwapMode,
+  ) => {
+    const targetBlock = blocks[blockIndex];
+    if (!targetBlock) return;
+    const trimmed = newExercise.name.trim();
+    if (!trimmed || trimmed.toLowerCase() === targetBlock.name.toLowerCase()) return;
+
+    const isDetectedCardio = detectCardio(trimmed);
+    const isCardio =
+      newExercise.isCardio ||
+      (known.find((k) => k.name === trimmed)?.isCardio ?? false) ||
+      isDetectedCardio;
+    const cardioMode = (newExercise.cardioMode ??
+      known.find((k) => k.name === trimmed)?.cardioMode ??
+      detectCardioMode(trimmed)) as CardioMode;
+    const bodyweightBased =
+      known.find((k) => k.name === trimmed)?.bodyweightBased ?? newExercise.bodyweightBased;
+
+    const [newPrevious, newBestPR] = await Promise.all([
+      lastSessionSets(trimmed),
+      exerciseBestPR(trimmed, bodyweightBased, series, currentBodyweightKg),
+    ]);
+
+    const completedRows = targetBlock.rows.filter((r) => r.done && r.id != null);
+    const hasLoggedSets = completedRows.length > 0;
+
+    if (mode === 'swap-all' || !hasLoggedSets) {
+      if (hasLoggedSets) {
+        const setIds = completedRows.map((r) => r.id!).filter(Boolean);
+        await updateSetsExercise(setIds, trimmed, bodyweightBased, isCardio, cardioMode);
+        setSession(await activeSession());
+      }
+
+      const updatedRows: Row[] = targetBlock.rows.map((row, idx) => {
+        if (row.done) {
+          return {
+            ...row,
+            isCardio,
+            cardioMode,
+          };
+        }
+        const prev = newPrevious[idx];
+        return {
+          ...row,
+          weight:
+            prev?.weightKg != null
+              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              : row.weight,
+          reps: prev?.reps != null ? String(prev.reps) : row.reps || targetBlock.target?.reps || '8',
+          isCardio,
+          cardioMode,
+        };
+      });
+
+      setBlocks((current) =>
+        current.map((b, bi) =>
+          bi !== blockIndex
+            ? b
+            : {
+                ...b,
+                name: trimmed,
+                bodyweightBased,
+                isCardio,
+                cardioMode,
+                previous: newPrevious,
+                bestPR: newBestPR,
+                rows: updatedRows,
+              },
+        ),
+      );
+
+      void cataloguePatternsByExerciseName().then(setPatterns);
+      void listExerciseNames().then(setKnown);
+      notify('Movement swapped', `Replaced ${targetBlock.name} with ${trimmed}.`);
+    } else {
+      // mode === 'swap-remaining'
+      const completedList = targetBlock.rows.filter((r) => r.done);
+      const remainingDrafts = targetBlock.rows.filter((r) => !r.done);
+      const remainingCount = Math.max(1, remainingDrafts.length);
+
+      const newDraftRows: Row[] = Array.from({ length: remainingCount }, (_, offset) => {
+        const prev = newPrevious[offset];
+        return {
+          key: newKey(),
+          id: null,
+          weight:
+            prev?.weightKg != null
+              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              : '',
+          reps: repsPrefill(prev?.reps, targetBlock.target?.reps ?? null),
+          setType: 'normal',
+          rpe: null,
+          done: false,
+          isCardio,
+          cardioMode,
+        };
+      });
+
+      const newBlock: Block = {
+        name: trimmed,
+        bodyweightBased,
+        isCardio,
+        cardioMode,
+        rows: newDraftRows,
+        previous: newPrevious,
+        bestPR: newBestPR,
+        target: targetBlock.target
+          ? { ...targetBlock.target, sets: remainingCount }
+          : null,
+        supersetGroup: targetBlock.supersetGroup ?? null,
+      };
+
+      setBlocks((current) => {
+        const next = [...current];
+        const updatedTargetBlock: Block = {
+          ...targetBlock,
+          rows: completedList,
+          target: targetBlock.target ? { ...targetBlock.target, sets: completedList.length } : null,
+        };
+        next.splice(blockIndex, 1, updatedTargetBlock, newBlock);
+        return next;
+      });
+
+      void cataloguePatternsByExerciseName().then(setPatterns);
+      void listExerciseNames().then(setKnown);
+      notify(
+        'Swapped remaining sets',
+        `${trimmed} added for remaining ${remainingCount} set${remainingCount > 1 ? 's' : ''}.`,
+      );
+    }
   };
 
   const finish = async () => {
@@ -1107,8 +1620,9 @@ export default function SessionScreen() {
   const cardioCount = blocks.filter((b) => b.isCardio).reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
   return (
-    <Screen tone="loud">
-      <View style={styles.headerRow}>
+    <View style={styles.sessionRoot}>
+      <Screen tone="loud">
+        <View style={styles.headerRow}>
         <Text style={styles.screenTitle} numberOfLines={1}>
           {session.name.toUpperCase()}
         </Text>
@@ -1174,44 +1688,124 @@ export default function SessionScreen() {
         />
       )}
 
-      {blocks.map((block, blockIndex) => (
-        <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
-          <View style={styles.block}>
-            {/*
-              A red tab holding the movement glyph, then the name on its own
-              leaning slab. The name was 16px semibold beside a muted glyph,
-              which is most of why this screen read as a spreadsheet with a
-              title on it.
-            */}
-            <View style={styles.blockHeader}>
-              <Tappable
-                onPress={() => void showInfoFor(block.name)}
-                style={styles.blockTitle}
-                scaleTo={0.985}
-                accessibilityLabel={`How to do ${block.name}`}
-              >
-                <SlashPanel color={loud.loud} style={styles.glyphTab}>
-                  <ExerciseIcon
-                    pattern={patterns[block.name]}
-                    isCardio={block.isCardio}
-                    size={18}
-                    color={loud.onLoud}
-                  />
-                </SlashPanel>
-                <SlashPanel color={loud.panel} style={styles.nameSlab}>
-                  <Text style={styles.blockName} numberOfLines={1}>
-                    {block.name.toUpperCase()}
-                  </Text>
-                </SlashPanel>
-              </Tappable>
-              <Tappable
-                onPress={() => void removeExercise(blockIndex)}
-                style={styles.iconBtn}
-                scaleTo={0.85}
-              >
-                <Text style={styles.remove}>✕</Text>
-              </Tappable>
-            </View>
+      {blocks.map((block, blockIndex) => {
+        const group = block.supersetGroup;
+        const supersetStyle = group ? getSupersetStyle(group) : null;
+        const countInGroup = group ? blocks.filter((b) => b.supersetGroup === group).length : 0;
+        const isGiantSet = countInGroup >= 3;
+        const isLastInGroup = group
+          ? blockIndex === blocks.length - 1 || blocks[blockIndex + 1]?.supersetGroup !== group
+          : true;
+
+        return (
+          <FadeIn key={block.name} delay={Math.min(blockIndex, 4) * 40}>
+            <View
+              style={[
+                styles.block,
+                supersetStyle && {
+                  borderLeftWidth: 3,
+                  borderLeftColor: supersetStyle.border,
+                  paddingLeft: space.sm + 2,
+                  marginBottom: isLastInGroup ? space.xl : space.md,
+                },
+              ]}
+            >
+              {/*
+                A red tab holding the movement glyph, then the name on its own
+                leaning slab. The name was 16px semibold beside a muted glyph,
+                which is most of why this screen read as a spreadsheet with a
+                title on it.
+              */}
+              <View style={styles.blockHeader}>
+                <Tappable
+                  onPress={() => void showInfoFor(block.name)}
+                  style={styles.blockTitle}
+                  scaleTo={0.985}
+                  accessibilityLabel={`How to do ${block.name}`}
+                >
+                  <SlashPanel color={loud.loud} style={styles.glyphTab}>
+                    <ExerciseIcon
+                      pattern={patterns[block.name]}
+                      isCardio={block.isCardio}
+                      size={18}
+                      color={loud.onLoud}
+                    />
+                  </SlashPanel>
+                  <SlashPanel color={loud.panel} style={styles.nameSlab}>
+                    <Text style={styles.blockName} numberOfLines={1}>
+                      {block.name.toUpperCase()}
+                    </Text>
+                  </SlashPanel>
+                </Tappable>
+
+                <Tappable
+                  onPress={() => setSwapTargetIndex(blockIndex)}
+                  style={styles.swapBtn}
+                  scaleTo={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Swap ${block.name} with an alternative`}
+                >
+                  <View style={styles.swapBadge}>
+                    <Ionicons name="swap-horizontal" size={12} color={loud.figureMuted} />
+                    <Text style={styles.swapText}>SWAP</Text>
+                  </View>
+                </Tappable>
+
+                {block.supersetGroup ? (
+                  <Tappable
+                    onPress={() => setSupersetTargetIndex(blockIndex)}
+                    style={styles.supersetBadgeBtn}
+                    scaleTo={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isGiantSet ? 'Giant Set' : 'Superset'} ${block.supersetGroup}. Tap to manage.`}
+                  >
+                    <View
+                      style={[
+                        styles.supersetBadge,
+                        {
+                          borderColor: supersetStyle?.border ?? loud.rule,
+                          backgroundColor: supersetStyle?.bg ?? loud.panel,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isGiantSet ? 'flash' : 'link'}
+                        size={11}
+                        color={supersetStyle?.text ?? loud.figure}
+                      />
+                      <Text
+                        style={[
+                          styles.supersetBadgeText,
+                          { color: supersetStyle?.text ?? loud.figure },
+                        ]}
+                      >
+                        {isGiantSet ? 'GIANT' : 'SUPER'} {block.supersetGroup}
+                      </Text>
+                    </View>
+                  </Tappable>
+                ) : (
+                  <Tappable
+                    onPress={() => setSupersetTargetIndex(blockIndex)}
+                    style={styles.linkSupersetBtn}
+                    scaleTo={0.9}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Link ${block.name} into a superset`}
+                  >
+                    <View style={styles.linkSupersetBadge}>
+                      <Ionicons name="link-outline" size={12} color={loud.figureMuted} />
+                      <Text style={styles.linkSupersetText}>LINK</Text>
+                    </View>
+                  </Tappable>
+                )}
+
+                <Tappable
+                  onPress={() => void removeExercise(blockIndex)}
+                  style={styles.iconBtn}
+                  scaleTo={0.85}
+                >
+                  <Text style={styles.remove}>✕</Text>
+                </Tappable>
+              </View>
 
             {block.isCardio && (
               <View style={styles.cardioModeRow}>
@@ -1253,7 +1847,31 @@ export default function SessionScreen() {
             )}
 
             {!block.isCardio && (() => {
-              const hint = nextLoadHint(block.previous, settings.units);
+              const best = effectiveBestPRFor(block);
+              if (!best) return null;
+              const bestLoad = displayWeight(best.weight, settings.units).toFixed(1);
+              const bestE1rm = displayWeight(best.e1rm, settings.units).toFixed(1);
+              return (
+                <View style={styles.prHeaderBadge}>
+                  <Text style={styles.prHeaderLabel}>ALL-TIME PR</Text>
+                  <Text style={styles.prHeaderValue}>
+                    {bestLoad} {unit.toUpperCase()} × {best.reps}{' '}
+                    <Text style={styles.prHeaderE1rm}>({bestE1rm} {unit.toUpperCase()} 1RM)</Text>
+                  </Text>
+                </View>
+              );
+            })()}
+            {!block.isCardio && (() => {
+              const pattern = patterns[block.name];
+              const isCompound = pattern === 'squat' || pattern === 'hinge' || pattern === 'push' || pattern === 'pull';
+              const hint = nextLoadHint(
+                block.previous,
+                settings.units,
+                block.target?.reps,
+                isCompound,
+                block.bodyweightBased,
+                currentBodyweightKg,
+              );
               return hint === null ? null : <Text style={styles.hint}>{hint}</Text>;
             })()}
             {!block.isCardio && block.target && (
@@ -1276,7 +1894,8 @@ export default function SessionScreen() {
                 weight={plateWeightFor(block)}
                 units={settings.units}
                 bar={settings.barbell}
-                onPress={() => openPlates(block)}
+                customPlates={settings.customPlates?.[settings.units] ?? []}
+                onPress={() => openPlates(block, blockIndex)}
               />
             )}
 
@@ -1310,251 +1929,327 @@ export default function SessionScreen() {
               </View>
             )}
 
-            {block.rows.map((row, rowIndex) => {
-              const previous = block.previous[rowIndex];
-              const previousLabel = previous
-                ? block.isCardio
-                  ? formatCardioEffort(previous, speedUnit)
-                  : `${
-                      previous.weightKg === null
-                        ? 'BW'
-                        : displayWeight(previous.weightKg, settings.units).toFixed(1)
-                    } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
-                : '—';
-              const on = row.done ? loud.onLoud : loud.figure;
+            {(() => {
+              const firstUncompletedWorkingIndex = block.rows.findIndex(
+                (r) => !r.done && r.setType !== 'warmup',
+              );
+              return block.rows.map((row, rowIndex) => {
+                const isActiveRow = rowIndex === firstUncompletedWorkingIndex;
+                const previous = block.previous[rowIndex];
+                const previousLabel = previous
+                  ? block.isCardio
+                    ? formatCardioEffort(previous, speedUnit)
+                    : `${
+                        previous.weightKg === null
+                          ? 'BW'
+                          : displayWeight(previous.weightKg, settings.units).toFixed(1)
+                      } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
+                  : '—';
+                const on = row.done ? loud.onLoud : loud.figure;
 
-              const liveEstimate = block.isCardio
-                ? formatLiveCardioEstimate(
-                    {
-                      mode: block.cardioMode ?? 'treadmill',
-                      speedKph: row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null,
-                      inclinePct: row.incline?.trim() ? parseIncline(row.incline) : null,
-                      durationSeconds: row.time?.trim() ? parseDurationSeconds(row.time) : null,
-                      distanceKm: row.distance?.trim() ? parseDistance(row.distance) : null,
-                    },
-                    speedUnit,
-                  )
-                : null;
+                const liveEstimate = block.isCardio
+                  ? formatLiveCardioEstimate(
+                      {
+                        mode: block.cardioMode ?? 'treadmill',
+                        speedKph: row.speed?.trim() ? parseSpeed(row.speed, speedUnit) : null,
+                        inclinePct: row.incline?.trim() ? parseIncline(row.incline) : null,
+                        durationSeconds: row.time?.trim() ? parseDurationSeconds(row.time) : null,
+                        distanceKm: row.distance?.trim() ? parseDistance(row.distance) : null,
+                      },
+                      speedUnit,
+                    )
+                  : null;
 
-              return (
-                <View key={row.key}>
-                  <View
-                    style={[
-                      styles.row,
-                      row.done
-                        ? { backgroundColor: loud.loud, borderColor: loud.loud }
-                        : { backgroundColor: 'transparent', borderColor: loud.rule },
-                    ]}
-                  >
-                    <Tappable
-                      onPress={() =>
-                        !block.isCardio &&
-                        editRow(blockIndex, rowIndex, {
-                          setType: row.setType === 'normal' ? 'warmup' : 'normal',
-                        })
-                      }
-                      scaleTo={block.isCardio ? 1 : 0.8}
-                      style={styles.colSet}
+                return (
+                  <View key={row.key}>
+                    <View
+                      style={[
+                        styles.row,
+                        row.done
+                          ? { backgroundColor: loud.loud, borderColor: loud.loud }
+                          : { backgroundColor: 'transparent', borderColor: loud.rule },
+                      ]}
                     >
+                      <Tappable
+                        onPress={() =>
+                          !block.isCardio &&
+                          editRow(blockIndex, rowIndex, {
+                            setType: row.setType === 'normal' ? 'warmup' : 'normal',
+                          })
+                        }
+                        scaleTo={block.isCardio ? 1 : 0.8}
+                        style={styles.colSet}
+                      >
+                        <Text
+                          style={[
+                            styles.setFigure,
+                            { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
+                          ]}
+                        >
+                          {/* Working sets are numbered among themselves, so a warm-up first
+                              gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
+                          {row.setType === 'warmup'
+                            ? 'W'
+                            : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
+                        </Text>
+                      </Tappable>
+
                       <Text
                         style={[
-                          styles.setFigure,
-                          { color: row.setType === 'warmup' && !row.done ? loud.warn : on },
+                          styles.previous,
+                          styles.colPrev,
+                          { color: row.done ? loud.onLoud : loud.figureFaint },
                         ]}
+                        numberOfLines={1}
                       >
-                        {/* Working sets are numbered among themselves, so a warm-up first
-                            gives "W, 1, 2" rather than "W, 2, 3" — as the past workout reads. */}
-                        {row.setType === 'warmup'
-                          ? 'W'
-                          : block.rows.slice(0, rowIndex + 1).filter((r) => r.setType !== 'warmup').length}
+                        {previousLabel}
                       </Text>
-                    </Tappable>
 
-                    <Text
-                      style={[
-                        styles.previous,
-                        styles.colPrev,
-                        { color: row.done ? loud.onLoud : loud.figureFaint },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {previousLabel}
-                    </Text>
-
-                    {block.isCardio ? (
-                      block.cardioMode === 'outside' ? (
-                        <>
-                          <TextInput
-                            value={row.distance ?? ''}
-                            onChangeText={(distance) => editRow(blockIndex, rowIndex, { distance })}
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                            {...NOT_A_LOGIN}
-                            keyboardType="decimal-pad"
-                            placeholder="—"
-                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                            style={[
-                              styles.input,
-                              styles.colCardioDist,
-                              row.done ? styles.inputOnLoud : styles.inputOnGround,
-                              { color: on },
-                            ]}
-                          />
-                          <TextInput
-                            value={row.time ?? ''}
-                            onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                            {...NOT_A_LOGIN}
-                            keyboardType="decimal-pad"
-                            placeholder="30"
-                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                            style={[
-                              styles.input,
-                              styles.colCardioTimeWide,
-                              row.done ? styles.inputOnLoud : styles.inputOnGround,
-                              { color: on },
-                            ]}
-                          />
-                        </>
+                      {block.isCardio ? (
+                        block.cardioMode === 'outside' ? (
+                          <>
+                            <TextInput
+                              value={row.distance ?? ''}
+                              onChangeText={(distance) => editRow(blockIndex, rowIndex, { distance })}
+                              onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                              {...NOT_A_LOGIN}
+                              keyboardType="decimal-pad"
+                              placeholder="—"
+                              placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                              style={[
+                                styles.input,
+                                styles.colCardioDist,
+                                row.done ? styles.inputOnLoud : styles.inputOnGround,
+                                { color: on },
+                              ]}
+                            />
+                            <TextInput
+                              value={row.time ?? ''}
+                              onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                              onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                              {...NOT_A_LOGIN}
+                              keyboardType="decimal-pad"
+                              placeholder="30"
+                              placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                              style={[
+                                styles.input,
+                                styles.colCardioTimeWide,
+                                row.done ? styles.inputOnLoud : styles.inputOnGround,
+                                { color: on },
+                              ]}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <TextInput
+                              value={row.speed ?? ''}
+                              onChangeText={(speed) => editRow(blockIndex, rowIndex, { speed })}
+                              onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                              {...NOT_A_LOGIN}
+                              keyboardType="decimal-pad"
+                              placeholder="—"
+                              placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                              style={[
+                                styles.input,
+                                styles.colCardioSpd,
+                                row.done ? styles.inputOnLoud : styles.inputOnGround,
+                                { color: on },
+                              ]}
+                            />
+                            <TextInput
+                              value={row.incline ?? ''}
+                              onChangeText={(incline) => editRow(blockIndex, rowIndex, { incline })}
+                              onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                              {...NOT_A_LOGIN}
+                              keyboardType="decimal-pad"
+                              placeholder="0"
+                              placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                              style={[
+                                styles.input,
+                                styles.colCardioInc,
+                                row.done ? styles.inputOnLoud : styles.inputOnGround,
+                                { color: on },
+                              ]}
+                            />
+                            <TextInput
+                              value={row.time ?? ''}
+                              onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                              onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                              {...NOT_A_LOGIN}
+                              keyboardType="decimal-pad"
+                              placeholder="30"
+                              placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                              style={[
+                                styles.input,
+                                styles.colCardioTime,
+                                row.done ? styles.inputOnLoud : styles.inputOnGround,
+                                { color: on },
+                              ]}
+                            />
+                          </>
+                        )
                       ) : (
                         <>
                           <TextInput
-                            value={row.speed ?? ''}
-                            onChangeText={(speed) => editRow(blockIndex, rowIndex, { speed })}
+                            value={row.weight}
+                            onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
                             onBlur={() => void commitEdit(blockIndex, rowIndex)}
                             {...NOT_A_LOGIN}
                             keyboardType="decimal-pad"
+                            placeholder={block.bodyweightBased ? 'BW' : '—'}
+                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
+                            style={[
+                              styles.input,
+                              styles.colNum,
+                              row.done ? styles.inputOnLoud : styles.inputOnGround,
+                              { color: on },
+                            ]}
+                          />
+                          <TextInput
+                            value={row.reps}
+                            onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
+                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            {...NOT_A_LOGIN}
+                            keyboardType="number-pad"
                             placeholder="—"
                             placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
                             style={[
                               styles.input,
-                              styles.colCardioSpd,
+                              styles.colNum,
                               row.done ? styles.inputOnLoud : styles.inputOnGround,
                               { color: on },
                             ]}
                           />
-                          <TextInput
-                            value={row.incline ?? ''}
-                            onChangeText={(incline) => editRow(blockIndex, rowIndex, { incline })}
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                            {...NOT_A_LOGIN}
-                            keyboardType="decimal-pad"
-                            placeholder="0"
-                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                            style={[
-                              styles.input,
-                              styles.colCardioInc,
-                              row.done ? styles.inputOnLoud : styles.inputOnGround,
-                              { color: on },
-                            ]}
-                          />
-                          <TextInput
-                            value={row.time ?? ''}
-                            onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                            {...NOT_A_LOGIN}
-                            keyboardType="decimal-pad"
-                            placeholder="30"
-                            placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                            style={[
-                              styles.input,
-                              styles.colCardioTime,
-                              row.done ? styles.inputOnLoud : styles.inputOnGround,
-                              { color: on },
-                            ]}
-                          />
-                        </>
-                      )
-                    ) : (
-                      <>
-                        <TextInput
-                          value={row.weight}
-                          onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="decimal-pad"
-                          placeholder={block.bodyweightBased ? 'BW' : '—'}
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colNum,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                        <TextInput
-                          value={row.reps}
-                          onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
-                          onBlur={() => void commitEdit(blockIndex, rowIndex)}
-                          {...NOT_A_LOGIN}
-                          keyboardType="number-pad"
-                          placeholder="—"
-                          placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
-                          style={[
-                            styles.input,
-                            styles.colNum,
-                            row.done ? styles.inputOnLoud : styles.inputOnGround,
-                            { color: on },
-                          ]}
-                        />
-                        {row.done ? (
-                          <Tappable
-                            onPress={() => setRating({ blockIndex, rowIndex })}
-                            scaleTo={0.82}
-                            style={styles.colRpe}
-                            accessibilityLabel={
-                              row.rpe === null
-                                ? 'Rate how hard this set felt'
-                                : `Rated ${formatRpe(row.rpe)}. Change it.`
-                            }
-                          >
-                            <View
-                              style={[
-                                styles.rpeChip,
-                                row.rpe === null ? styles.rpeChipEmpty : styles.rpeChipSet,
-                              ]}
+                          {row.done ? (
+                            <Tappable
+                              onPress={() => setRating({ blockIndex, rowIndex })}
+                              scaleTo={0.82}
+                              style={styles.colRpe}
+                              accessibilityLabel={
+                                row.rpe === null
+                                  ? 'Rate how hard this set felt'
+                                  : `Rated ${formatRpe(row.rpe)}. Change it.`
+                              }
                             >
-                              <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
-                                {row.rpe === null ? '+' : formatRpe(row.rpe)}
-                              </Text>
-                            </View>
-                          </Tappable>
-                        ) : (
-                          <View style={styles.colRpe} />
-                        )}
-                      </>
-                    )}
+                              <View
+                                style={[
+                                  styles.rpeChip,
+                                  row.rpe === null ? styles.rpeChipEmpty : styles.rpeChipSet,
+                                ]}
+                              >
+                                <Text style={[styles.rpeValue, { color: loud.onLoud }]}>
+                                  {row.rpe === null ? '+' : formatRpe(row.rpe)}
+                                </Text>
+                              </View>
+                            </Tappable>
+                          ) : (
+                            <View style={styles.colRpe} />
+                          )}
+                        </>
+                      )}
 
-                    <Tappable
-                      onPress={() => void toggleRow(blockIndex, rowIndex)}
-                      scaleTo={0.78}
-                      style={styles.colTick}
-                      accessibilityLabel={row.done ? 'Undo this set' : 'Record this set'}
-                    >
-                      <Text style={[styles.tick, { color: row.done ? loud.onLoud : loud.figureFaint }]}>
-                        ✓
-                      </Text>
-                    </Tappable>
+                      <Tappable
+                        onPress={() => void toggleRow(blockIndex, rowIndex)}
+                        scaleTo={0.78}
+                        style={styles.colTick}
+                        accessibilityLabel={row.done ? 'Undo this set' : 'Record this set'}
+                      >
+                        <Text style={[styles.tick, { color: row.done ? loud.onLoud : loud.figureFaint }]}>
+                          ✓
+                        </Text>
+                      </Tappable>
 
-                    {landed?.rowKey === row.key && (
-                      <ImpactFrame content={landed.content} onDone={clearLanded} />
-                    )}
-                  </View>
-
-                  {block.isCardio && liveEstimate ? (
-                    <View style={styles.cardioLiveBadge}>
-                      <Text style={styles.cardioLiveText}>{liveEstimate}</Text>
+                      {landed?.rowKey === row.key && (
+                        <ImpactFrame content={landed.content} onDone={clearLanded} />
+                      )}
                     </View>
-                  ) : null}
-                </View>
-              );
-            })}
+
+                    {block.isCardio && liveEstimate ? (
+                      <View style={styles.cardioLiveBadge}>
+                        <Text style={styles.cardioLiveText}>{liveEstimate}</Text>
+                      </View>
+                    ) : null}
+
+                    {!block.isCardio && row.setType !== 'warmup' && (() => {
+                      const currentBest = effectiveBestPRFor(block);
+                      let parsedWeight: number | null = null;
+                      if (block.bodyweightBased) {
+                        const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+                        if (currentBodyweightKg !== null) {
+                          parsedWeight = currentBodyweightKg + (added ?? 0);
+                        }
+                      } else {
+                        parsedWeight = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+                      }
+                      const parsedReps = Number(row.reps);
+                      const validReps = Number.isFinite(parsedReps) && parsedReps > 0 ? parsedReps : 0;
+
+                      if (parsedWeight === null || parsedWeight <= 0) return null;
+
+                      const evalResult = evaluatePRTarget({
+                        weight: parsedWeight,
+                        reps: validReps,
+                        bestPR: currentBest,
+                        stepKg: settings.units === 'metric' ? 2.5 : lbToKg(5),
+                      });
+
+                      if (evalResult.status === 'none') return null;
+
+                      // If set is done, only celebrate if it's an all-time PR:
+                      if (row.done && evalResult.status !== 'pr') return null;
+
+                      // If set is not done, show for active row or if user has entered custom inputs:
+                      if (!row.done && !isActiveRow && validReps === 0) return null;
+
+                      return (
+                        <View
+                          style={[
+                            styles.prRowBadge,
+                            evalResult.status === 'pr'
+                              ? styles.prRowBadgePR
+                              : evalResult.status === 'close'
+                                ? styles.prRowBadgeClose
+                                : styles.prRowBadgeTarget,
+                          ]}
+                        >
+                          {evalResult.status === 'pr' ? (
+                            <Text style={styles.prRowTextPR}>
+                              {evalResult.isFirstLog
+                                ? `⭐ BASELINE PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM`
+                                : `🔥 ALL-TIME PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM (+${displayWeight(evalResult.delta, settings.units).toFixed(1)} ${unit.toUpperCase()})`}
+                            </Text>
+                          ) : evalResult.status === 'close' ? (
+                            <Text style={styles.prRowTextClose}>
+                              ⚡ 1 REP TO PR · HIT {evalResult.repsToBeat} REPS FOR ALL-TIME RECORD
+                            </Text>
+                          ) : evalResult.status === 'too-light' ? (
+                            <Text style={styles.prRowTextTarget}>
+                              {block.bodyweightBased && currentBodyweightKg !== null
+                                ? `🎯 ADD ≥ ${displayWeight(Math.max(0, evalResult.minWeightForPR - currentBodyweightKg), settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`
+                                : `🎯 LOAD ≥ ${displayWeight(evalResult.minWeightForPR, settings.units).toFixed(1)} ${unit.toUpperCase()} TO TEST 1RM`}
+                            </Text>
+                          ) : (
+                            <Text style={styles.prRowTextTarget}>
+                              {evalResult.targetE1rm > 0
+                                ? `🎯 BEAT PR: ${evalResult.repsToBeat} REPS (${displayWeight(evalResult.targetE1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} 1RM)`
+                                : `🎯 1 REP TO ESTABLISH BASELINE 1RM`}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })()}
+                  </View>
+                );
+              });
+            })()}
 
             <Tappable onPress={() => addRow(blockIndex)} style={styles.addSet} scaleTo={0.98}>
               <Text style={styles.addSetLabel}>{block.isCardio ? '+ ADD INTERVAL' : '+ ADD SET'}</Text>
             </Tappable>
           </View>
         </FadeIn>
-      ))}
+      );
+    })}
 
       {picking ? (
         <ExercisePicker
@@ -1651,14 +2346,6 @@ export default function SessionScreen() {
         }}
       />
 
-      <PlateSheet
-        weight={plating}
-        units={settings.units}
-        bar={settings.barbell}
-        onBarChange={(barbell) => void updateSettings({ barbell })}
-        onClose={() => setPlating(null)}
-      />
-
       <RpeSheet
         open={rating !== null}
         current={rating ? (blocks[rating.blockIndex]?.rows[rating.rowIndex]?.rpe ?? null) : null}
@@ -1686,12 +2373,87 @@ export default function SessionScreen() {
         onStepRestSeconds={stepRestSeconds}
       />
 
-      <Text style={styles.note}>
+      <Text style={[styles.note, { marginBottom: space.xxl }]}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
       </Text>
     </Screen>
-  );
+
+    <Tappable
+      onPress={openGeneralCalculator}
+      style={[styles.fabContainer, { bottom: insets.bottom + space.lg }]}
+      accessibilityRole="button"
+      accessibilityLabel="Barbell plate calculator"
+      scaleTo={0.93}
+    >
+      <View style={styles.fabRow}>
+        <SlashPanel color={loud.loud} style={styles.fabGlyphTab}>
+          <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
+        </SlashPanel>
+        <SlashPanel color={loud.panel} style={styles.fabTextSlab}>
+          <Text style={styles.fabLabel}>PLATES</Text>
+        </SlashPanel>
+      </View>
+    </Tappable>
+
+    <PlateSheet
+      open={calcTarget !== null}
+      weight={calcTarget?.initialWeight ?? null}
+      exerciseName={calcTarget?.exerciseName ?? null}
+      units={settings.units}
+      bar={settings.barbell}
+      customPlates={settings.customPlates?.[settings.units] ?? []}
+      onAddCustomPlate={addCustomPlate}
+      onRemoveCustomPlate={removeCustomPlate}
+      onBarChange={(barbell) => void updateSettings({ barbell })}
+      onApplyWeight={
+        calcTarget?.blockIndex !== null && calcTarget?.rowIndex !== null
+          ? (w) => void applyCalculatedWeight(w)
+          : undefined
+      }
+      onInsertWarmups={
+        calcTarget?.blockIndex !== null
+          ? insertWarmups
+          : undefined
+      }
+      onClose={() => setCalcTarget(null)}
+    />
+
+    <SupersetSheet
+      open={supersetTargetIndex !== null}
+      exerciseIndex={supersetTargetIndex}
+      blocks={blocks}
+      onAssignGroup={assignSupersetGroup}
+      onUnlink={unlinkExerciseFromSuperset}
+      onDisband={disbandSupersetGroup}
+      onClose={() => setSupersetTargetIndex(null)}
+    />
+
+    {swapTargetIndex !== null && blocks[swapTargetIndex] && (
+      <SwapExerciseSheet
+        open={swapTargetIndex !== null}
+        currentExerciseName={blocks[swapTargetIndex].name}
+        hasLoggedSets={blocks[swapTargetIndex].rows.some((r) => r.done && r.id != null)}
+        loggedSetsCount={blocks[swapTargetIndex].rows.filter((r) => r.done && r.id != null).length}
+        catalogue={catalogue}
+        known={known}
+        patterns={patterns}
+        onSelectSwap={(opt, mode) => {
+          void swapExercise(swapTargetIndex, opt, mode);
+        }}
+        onClose={() => setSwapTargetIndex(null)}
+      />
+    )}
+
+    {celebrationPR && (
+      <PRCelebration
+        data={celebrationPR}
+        units={settings.units}
+        onDone={() => setCelebrationPR(null)}
+      />
+    )}
+  </View>
+);
 }
 
 /**
@@ -1794,6 +2556,70 @@ const styles = StyleSheet.create({
   nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
   blockName: { fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
+  supersetBadgeBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  supersetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  supersetBadgeText: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.9,
+    fontWeight: '700',
+  },
+  linkSupersetBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  linkSupersetBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    backgroundColor: loud.panel,
+  },
+  linkSupersetText: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
+  swapBtn: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  swapBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    backgroundColor: loud.panel,
+  },
+  swapText: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
 
   hint: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.loud, marginBottom: space.sm },
   target: {
@@ -1868,6 +2694,71 @@ const styles = StyleSheet.create({
     color: loud.figureMuted,
     fontVariant: ['tabular-nums'],
   },
+  prHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: space.xs,
+    paddingHorizontal: 2,
+  },
+  prHeaderLabel: {
+    fontFamily: font.display,
+    fontSize: 9.5,
+    letterSpacing: 1.1,
+    color: loud.warn,
+  },
+  prHeaderValue: {
+    fontFamily: font.figure,
+    fontSize: 12,
+    color: loud.figure,
+    fontWeight: '700',
+  },
+  prHeaderE1rm: {
+    fontFamily: font.figure,
+    fontSize: 11,
+    color: loud.figureMuted,
+    fontWeight: '400',
+  },
+  prRowBadge: {
+    alignSelf: 'flex-end',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: -2,
+    marginBottom: 6,
+    marginRight: 42,
+  },
+  prRowBadgePR: {
+    backgroundColor: 'rgba(232, 183, 48, 0.14)',
+    borderColor: 'rgba(232, 183, 48, 0.5)',
+  },
+  prRowBadgeClose: {
+    backgroundColor: 'rgba(235, 87, 87, 0.14)',
+    borderColor: 'rgba(235, 87, 87, 0.5)',
+  },
+  prRowBadgeTarget: {
+    backgroundColor: loud.panel,
+    borderColor: loud.rule,
+  },
+  prRowTextPR: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: loud.warn,
+  },
+  prRowTextClose: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: loud.loud,
+  },
+  prRowTextTarget: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
+  },
 
   row: {
     flexDirection: 'row',
@@ -1937,5 +2828,42 @@ const styles = StyleSheet.create({
     minWidth: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sessionRoot: {
+    flex: 1,
+    backgroundColor: loud.ground,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: space.lg,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  fabRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 3,
+    minHeight: TOUCH_TARGET,
+  },
+  fabGlyphTab: {
+    width: TOUCH_TARGET,
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabTextSlab: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: space.md,
+  },
+  fabLabel: {
+    fontFamily: font.display,
+    fontSize: 13,
+    letterSpacing: 1.2,
+    color: loud.figure,
   },
 });

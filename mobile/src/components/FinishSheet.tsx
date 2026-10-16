@@ -1,17 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { shareCardFile, shareWorkout } from '../platform/shareImage';
-import type { ShareSummary } from '../shareCard';
+import {
+  cardFileFrom,
+  cardFontsReady,
+  composeCard,
+  drawBackdrop,
+  drawOverlay,
+  pickCardPhoto,
+  shareCardFile,
+  shareWorkout,
+} from '../platform/shareImage';
+import type { ShareCard } from '../shareCard';
+import { type CardBlock, type Placement, placementOrigin } from '../shareCardPlacement';
+import { blocksFor, TEMPLATES, type TemplateId } from '../shareCardTemplate';
+import { subjectOf } from '../platform/depth';
+import { useApp } from '../state/AppStore';
+
+/** The card's own size. The preview is a fraction of it, and the sticker's place is kept as a fraction of both. */
+const CARD = { width: 1080, height: 1920 };
 import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+import { CardEditor } from './CardEditor';
 import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
+import { useBlockGesture } from './useBlockGesture';
 
 interface FinishSheetProps {
   /** The finished workout, or null when the sheet is closed. */
-  summary: ShareSummary | null;
+  summary: ShareCard | null;
   /** Out of the way while sign-in is open over it, keeping the caption typed so far. */
   hidden: boolean;
   /** Whether posting is possible, and if not, what stands in the way. */
@@ -44,24 +62,173 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [writing, setWriting] = useState(postFirst);
   const [posting, setPosting] = useState(false);
   const [posted, setPosted] = useState(false);
+  // The picked picture, held against the workout it was picked for, so the next
+  // workout starts on the dark card rather than on someone else's photo.
+  const [picked, setPicked] = useState<{ workout: ShareCard; image: HTMLImageElement } | null>(null);
+  const photo = picked !== null && picked.workout === summary ? picked.image : null;
+
+  const { settings, updateSettings } = useApp();
+  const template = settings.cardTemplate;
+  // The shape decides what it can hold, so a block left on by one template is
+  // simply not drawn by a shape that has nowhere for it. Held still between
+  // renders: the drawing effects watch this object, and a fresh one each render
+  // would redraw the card for ever.
+  const blocks = useMemo(() => blocksFor(template, settings.cardBlocks), [template, settings.cardBlocks]);
+  // Over a photo the card becomes a block you put where you like, so where it
+  // was put is state, and the picture under it is drawn once rather than on
+  // every frame of a drag.
+  const [place, setPlace] = useState<Placement>(TEMPLATES[template].place);
+  const [dragging, setDragging] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [ground, setGround] = useState<string | null>(null);
+  const [sticker, setSticker] = useState<{ uri: string; width: number; height: number } | null>(null);
+  // The person, cut out of the photograph, so the type can pass behind them.
+  const [subject, setSubject] = useState<{ canvas: HTMLCanvasElement; uri: string } | null>(null);
+  const [cutting, setCutting] = useState(false);
+  const depth = settings.cardDepth;
 
   useEffect(() => {
     if (summary === null) return;
-    let live = true;
-    setDrawing(true);
     setNote(null);
     setCaption('');
     setPosted(false);
     setWriting(postFirst);
-    void shareCardFile(summary)
-      .then((drawn) => live && setCard(drawn))
+  // `postFirst` is read once per finished workout: posting flips the setting while the sheet is
+  // still open, and that must not snap the caption shut.
+  }, [summary]);
+
+  useEffect(() => {
+    if (summary === null) return;
+    // A card over a photograph is composed from its two layers, and the layers
+    // are what the preview shows, so the file is made from exactly what was on
+    // screen. It waits for the drag to end: nobody needs a megabyte of JPEG
+    // made sixty times a second.
+    if (photo !== null) {
+      if (sticker === null || dragging) return;
+      let alive = true;
+      setDrawing(true);
+      void (async () => {
+        await cardFontsReady();
+        const overlay = drawOverlay(summary, blocks, template);
+        return cardFileFrom(composeCard(photo, overlay, place, subject?.canvas ?? null), summary.title, true);
+      })()
+        .then((drawn) => {
+          if (!alive) return;
+          if (drawn !== null) setCard(drawn);
+          else setNote('The card could not be made with that picture.');
+        })
+        .catch((error) => alive && setNote(`The card could not be drawn: ${(error as Error).message}`))
+        .finally(() => alive && setDrawing(false));
+      return () => {
+        alive = false;
+      };
+    }
+    let live = true;
+    setDrawing(true);
+    void shareCardFile(summary, null)
+      .then((drawn) => {
+        if (!live) return;
+        if (drawn !== null) {
+          setCard(drawn);
+        } else if (photo !== null) {
+          // Only a browser that cannot make the file at all gets here, and the
+          // old card is still on screen, so without a word it reads as the
+          // picture simply having been ignored.
+          setNote('The card could not be made with that picture.');
+        }
+      })
+      // Drawing threw rather than failed. It used to be swallowed, which left
+      // the card that was already there and nothing to say why — the picture
+      // looked as though it had been dropped on the floor. The browser's own
+      // words are worth more than mine here, because this is the one failure
+      // nobody can reproduce on anybody else's phone.
+      .catch((error) => live && setNote(`The card could not be drawn: ${(error as Error).message}`))
       .finally(() => live && setDrawing(false));
     return () => {
       live = false;
     };
-  // `postFirst` is read once per finished workout: posting flips the setting while the sheet is
-  // still open, and that must not snap the caption shut.
-  }, [summary]);
+  }, [summary, photo, blocks, template, place, dragging, sticker, subject]);
+
+  // The picture, graded once. The preview shows this rather than the raw
+  // photograph so that what is on screen while you place the block is what the
+  // file will look like.
+  useEffect(() => {
+    if (photo === null) {
+      setGround(null);
+      return;
+    }
+    setGround(drawBackdrop(photo).toDataURL('image/jpeg', 0.8));
+    setPlace(TEMPLATES[template].place);
+  // A new picture starts the block where its shape starts; changing the shape
+  // is handled where that choice is made, so it is not a dependency here.
+  }, [photo]);
+
+  // The block itself, redrawn only when what it says changes — never while it
+  // is being moved, which is what keeps dragging free.
+  useEffect(() => {
+    if (summary === null || photo === null) {
+      setSticker(null);
+      return;
+    }
+    let live = true;
+    void cardFontsReady().then(() => {
+      if (!live) return;
+      const drawn = drawOverlay(summary, blocks, template);
+      setSticker({ uri: drawn.toDataURL(), width: drawn.width, height: drawn.height });
+    });
+    return () => {
+      live = false;
+    };
+  }, [summary, photo, blocks, template]);
+
+  // The cut-out: asked for once per photograph, and only when depth is on,
+  // because the first one fetches the runtime that does it.
+  useEffect(() => {
+    if (photo === null || !depth) {
+      setSubject(null);
+      return;
+    }
+    let live = true;
+    setCutting(true);
+    void subjectOf(photo, CARD)
+      .then((cut) => {
+        if (!live) return;
+        if (cut === null) {
+          // Either there is no one in the picture or the model could not find
+          // them. Cutting nothing out would leave the card exactly as it was,
+          // so saying so beats a toggle that appears to do nothing.
+          setNote('No one to cut out of that picture, so the type stays in front.');
+          setSubject(null);
+          return;
+        }
+        setSubject({ canvas: cut, uri: cut.toDataURL() });
+      })
+      .catch(() => {
+        if (!live) return;
+        setNote('Depth needs a download that could not be had just now.');
+        void updateSettings({ cardDepth: false });
+      })
+      .finally(() => live && setCutting(false));
+    return () => {
+      live = false;
+    };
+  }, [photo, depth]);
+
+  const choosePhoto = async () => {
+    if (summary === null) return;
+    const picked = await pickCardPhoto();
+    if (picked.ok) {
+      setNote(null);
+      setPicked({ workout: summary, image: picked.image });
+      return;
+    }
+    // Changing your mind is silent. A picture the browser cannot open is not:
+    // many phone photographs are HEIC, which plenty of browsers refuse, and
+    // without this the tap simply appears to do nothing at all.
+    if (picked.why === 'unreadable') {
+      setNote('That picture could not be opened. A screenshot of it will work.');
+    }
+  };
 
   const share = async () => {
     if (summary === null) return;
@@ -99,6 +266,38 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   const postLeads = account !== 'unavailable' && writing;
   const height = writing ? 240 : 360;
+  /** The preview is the card's own 9:16, so a fraction here means the same there. */
+  const frame = { width: (height * 9) / 16, height };
+
+  const { handlers, claim } = useBlockGesture({
+    frame,
+    card: CARD,
+    place,
+    sticker,
+    onPlace: setPlace,
+    onDragging: setDragging,
+  });
+
+  const toggleBlock = (block: CardBlock) =>
+    void updateSettings({ cardBlocks: { ...settings.cardBlocks, [block]: !blocks[block] } });
+
+  /**
+   * A different shape, starting where that shape starts.
+   *
+   * It keeps whatever you had turned on that the new shape can hold, and falls
+   * back to what the shape is for when that would leave it empty — switching to
+   * a corner stamp with only the climb on would otherwise draw nothing at all.
+   */
+  const chooseTemplate = (next: TemplateId) => {
+    const shape = TEMPLATES[next];
+    const kept = blocksFor(next, settings.cardBlocks);
+    const wanted = { ...settings.cardBlocks };
+    if (shape.holds.every((block) => !kept[block])) {
+      for (const block of shape.holds) wanted[block] = shape.blocks[block];
+    }
+    setPlace(shape.place);
+    void updateSettings({ cardTemplate: next, cardBlocks: wanted });
+  };
 
   const postButton = account === 'unavailable' ? null : (
     <Tappable
@@ -140,12 +339,72 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           )}
 
           <View style={[styles.preview, { height }]}>
-            {card ? (
+            {ground !== null ? (
+              /*
+                Over a photograph the preview is the two layers themselves
+                rather than a picture of them, so moving the block is a
+                transform instead of a redraw. What is composed on share is the
+                same photo, the same block, the same placement.
+              */
+              <View
+                ref={claim}
+                style={[styles.frame, { width: frame.width, height: frame.height }]}
+                {...handlers}
+                accessibilityLabel="The card that will be shared. Drag to move it, pinch to resize."
+              >
+                <Image source={{ uri: ground }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                {sticker !== null && (
+                  /*
+                    Everything here is in the preview's own points. The block is
+                    drawn at the card's size, so its place and its size are both
+                    taken down by the same fraction — a transform would have
+                    scaled the block and left its corner where it was.
+                  */
+                  <Image
+                    source={{ uri: sticker.uri }}
+                    style={{
+                      position: 'absolute',
+                      left: placementOrigin(place, sticker, CARD).left * (frame.width / CARD.width),
+                      top: placementOrigin(place, sticker, CARD).top * (frame.height / CARD.height),
+                      width: sticker.width * place.scale * (frame.width / CARD.width),
+                      height: sticker.height * place.scale * (frame.height / CARD.height),
+                    }}
+                  />
+                )}
+                {subject !== null && (
+                  /* The person, over the type, exactly as the file will have it. */
+                  <Image source={{ uri: subject.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                )}
+              </View>
+            ) : card ? (
               <Image source={{ uri: card.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
             ) : drawing ? (
               <ActivityIndicator color={loud.loud} />
             ) : null}
           </View>
+
+          {/* Composing happens on its own screen. Here there is room for a
+              preview and one way in, and the preview still takes a drag for
+              anyone who only wants to nudge it. */}
+          {ground !== null && (
+            <Tappable onPress={() => setEditing(true)} accessibilityRole="button" style={styles.editAction}>
+              <Text style={styles.editLabel}>EDIT CARD · SHAPE, WHAT SHOWS, DEPTH</Text>
+            </Tappable>
+          )}
+
+          {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
+          {card !== null && (
+            <View style={styles.photoRow}>
+              <Tappable onPress={() => void choosePhoto()} accessibilityRole="button" style={styles.photoAction}>
+                <Text style={styles.photoLabel}>{photo ? 'CHANGE PHOTO' : 'ADD A PHOTO'}</Text>
+              </Tappable>
+              {photo !== null && (
+                <Tappable onPress={() => setPicked(null)} accessibilityRole="button" style={styles.photoAction}>
+                  <Text style={styles.photoLabel}>REMOVE</Text>
+                </Tappable>
+              )}
+            </View>
+          )}
 
           {account !== 'unavailable' && writing && !posted && (
             <TextInput
@@ -160,9 +419,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           )}
 
           {postLeads && postButton}
-          <Tappable onPress={() => void share()} scaleTo={0.97} style={styles.action}>
+          {/* While the card is being made again — which is what happens the
+              moment a drag ends — the file in hand is the one from before the
+              move, so sharing waits the half second rather than sending it. */}
+          <Tappable
+            onPress={() => { if (!drawing) void share(); }}
+            scaleTo={0.97}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: drawing }}
+            style={[styles.action, drawing && styles.spent]}
+          >
             <SlashPanel color={postLeads ? loud.panel : loud.loud} style={styles.button}>
-              <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>SHARE</Text>
+              <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>
+                {drawing ? 'DRAWING…' : 'SHARE'}
+              </Text>
             </SlashPanel>
           </Tappable>
           {!postLeads && postButton}
@@ -189,6 +459,28 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           </Tappable>
         </View>
       </View>
+      {/* Over the sheet, on its own screen, sharing every piece of state with
+          it: what you leave the editor with is what gets drawn and posted. */}
+      {ground !== null && (
+        <CardEditor
+          open={editing}
+          ground={ground}
+          sticker={sticker}
+          subject={subject?.uri ?? null}
+          place={place}
+          onPlace={setPlace}
+          onDragging={setDragging}
+          template={template}
+          onTemplate={chooseTemplate}
+          blocks={blocks}
+          onBlock={toggleBlock}
+          depth={depth}
+          cutting={cutting}
+          onDepth={() => void updateSettings({ cardDepth: !depth })}
+          onReset={() => setPlace(TEMPLATES[template].place)}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </Modal>
   );
 };
@@ -208,6 +500,16 @@ const styles = StyleSheet.create({
   // A story is 9:16; the preview keeps that shape at a size that leaves the buttons on screen.
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
   image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.md },
+  frame: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: loud.ground },
+  // The way into the editor. A full touch target, centred, and it says what is
+  // behind it: the first person to use the composer asked where the customising
+  // was while looking straight at the controls.
+  editAction: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginBottom: space.xs },
+  editLabel: { fontFamily: font.uiStrong, fontSize: 12, letterSpacing: 1.2, color: loud.loud },
+  photoRow: { flexDirection: 'row', justifyContent: 'center', gap: space.md, marginBottom: space.xs },
+  // Small type, but a full touch target: hitSlop is ignored on the web.
+  photoAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md },
+  photoLabel: { fontFamily: font.uiStrong, fontSize: 12, letterSpacing: 1.2, color: loud.figureMuted },
   caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
   spent: { opacity: 0.6 },

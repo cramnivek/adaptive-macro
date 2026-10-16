@@ -1,6 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { as, freshDatabase, USER_A, USER_B, USER_C } from './postgres';
+import { as, freshDatabase, USER_A, USER_B, USER_C, USER_D } from './postgres';
 
 const addProfile = (db: PGlite, user: string, username: string, id = user) =>
   as(db, user, `insert into profiles (id, username, display_name) values ($1, $2, $3)`, [id, username, username]);
@@ -101,7 +101,7 @@ describe('delete_account', () => {
     await addPost(db, USER_B);
     await as(db, USER_A, `select delete_account()`);
 
-    expect((await db.query(`select id from auth.users order by id`)).rows).toEqual([{ id: USER_B }, { id: USER_C }]);
+    expect((await db.query(`select id from auth.users order by id`)).rows).toEqual([{ id: USER_B }, { id: USER_C }, { id: USER_D }]);
     expect((await db.query(`select username from profiles`)).rows).toEqual([{ username: 'bob' }]);
     expect((await db.query(`select author_id from posts`)).rows).toEqual([{ author_id: USER_B }]);
   });

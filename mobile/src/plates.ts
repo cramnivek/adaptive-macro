@@ -41,13 +41,22 @@ const EPSILON = 1e-6;
  * comes out 45 + 10 + 5 where 35 + 25 is one plate fewer — but it is what
  * people actually reach for, and the sheet should match the rack.
  */
-export const platesFor = (total: number, units: UnitSystem, bar: BarChoice): PlateLoad => {
+export const platesFor = (
+  total: number,
+  units: UnitSystem,
+  bar: BarChoice,
+  customPlates?: number[],
+): PlateLoad => {
   const barWeight = BAR_WEIGHT[units][bar];
   if (total < barWeight - EPSILON) return { bar: barWeight, perSide: [], loaded: barWeight, belowBar: true };
 
+  const allPlates = customPlates && customPlates.length > 0
+    ? [...new Set([...PLATE_SETS[units], ...customPlates])].sort((a, b) => b - a)
+    : PLATE_SETS[units];
+
   let side = (total - barWeight) / 2;
   const perSide: number[] = [];
-  for (const plate of PLATE_SETS[units]) {
+  for (const plate of allPlates) {
     while (side >= plate - EPSILON) {
       perSide.push(plate);
       side -= plate;
@@ -69,3 +78,28 @@ export const usesBarbell = (exerciseName: string): boolean =>
 
 /** "25 + 10 + 2.5", with any decimals the plates themselves have. */
 export const describePlates = (perSide: number[]): string => perSide.join(' + ');
+
+/**
+ * The total weight of a barbell loaded symmetrically with the given plates on each side.
+ *
+ * Formula: bar + 2 * sum(perSide)
+ */
+export const totalFromPlates = (perSide: number[], units: UnitSystem, bar: BarChoice): number => {
+  const barWeight = BAR_WEIGHT[units][bar];
+  const sideSum = perSide.reduce((sum, plate) => sum + plate, 0);
+  const total = barWeight + 2 * sideSum;
+  return Math.round(total * 100) / 100;
+};
+
+/**
+ * A one-line explanation of the calculation:
+ * e.g. "45 lb bar + 2 × (45 + 25) lb = 185 lb" or "20 kg bar only"
+ */
+export const describeFormula = (perSide: number[], units: UnitSystem, bar: BarChoice): string => {
+  const barWeight = BAR_WEIGHT[units][bar];
+  const unit = units === 'metric' ? 'kg' : 'lb';
+  if (perSide.length === 0) return `${barWeight} ${unit} bar only`;
+  const sideStr = describePlates(perSide);
+  return `${barWeight} ${unit} bar + 2 × (${sideStr}) ${unit}`;
+};
+

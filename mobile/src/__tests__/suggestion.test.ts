@@ -45,4 +45,28 @@ describe('nextLoadHint', () => {
     expect(hint).toContain('lb');
     expect(hint).toMatch(/try 230 lb/);
   });
+
+  it('suggests adding reps when within a rep range (double progression)', () => {
+    expect(nextLoadHint([set(20, 9, 8)], 'metric', '8-12', false)).toBe(
+      'Last top set 20 × 9 @8 — aim for 10 reps before adding weight.',
+    );
+  });
+
+  it('suggests advancing weight when rep ceiling is reached', () => {
+    expect(nextLoadHint([set(20, 12, 8)], 'metric', '8-12', false)).toBe(
+      'Last top set 20 × 12 @8 — top of range hit! Try 22.5 kg for 8 reps.',
+    );
+  });
+
+  it('supports bodyweight movements with double progression', () => {
+    // 85 kg lifter doing 9 pull-ups in 8-12 rep range
+    expect(nextLoadHint([set(null, 9, 8)], 'metric', '8-12', true, true, 85)).toBe(
+      'Last top set BW × 9 @8 — aim for 10 reps before adding weight.',
+    );
+
+    // 85 kg lifter hits 12 reps at BW
+    expect(nextLoadHint([set(null, 12, 8)], 'metric', '8-12', true, true, 85)).toBe(
+      'Last top set BW × 12 @8 — top of range hit! Try adding +2.5 kg for 8 reps.',
+    );
+  });
 });

@@ -113,7 +113,12 @@ export const ImpactFrame = ({ content, onDone }: ImpactFrameProps) => {
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { backgroundColor: session.loud, transform: [{ translateX }, { skewX: SKEW }] },
+          {
+            backgroundColor: content.isPR ? '#D97706' : session.loud,
+            borderWidth: content.isPR ? 1.5 : 0,
+            borderColor: '#FFD700',
+            transform: [{ translateX }, { skewX: SKEW }],
+          },
         ]}
       />
       <Animated.View
@@ -128,8 +133,8 @@ export const ImpactFrame = ({ content, onDone }: ImpactFrameProps) => {
           },
         ]}
       >
-        <Text style={styles.figure}>{content.figure}</Text>
-        <Text style={styles.verdict}>{content.verdict}</Text>
+        <Text style={[styles.figure, content.isPR && styles.figurePR]}>{content.figure}</Text>
+        <Text style={[styles.verdict, content.isPR && styles.verdictPR]}>{content.verdict}</Text>
       </Animated.View>
     </Animated.View>
   );
@@ -147,6 +152,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
+  figurePR: {
+    color: '#FFFBEB',
+  },
   verdict: {
     fontFamily: font.display,
     fontSize: 10,
@@ -154,5 +162,10 @@ const styles = StyleSheet.create({
     letterSpacing: 2.4,
     marginTop: -1,
     opacity: 0.85,
+  },
+  verdictPR: {
+    color: '#FEF08A',
+    fontWeight: '800',
+    letterSpacing: 2.8,
   },
 });

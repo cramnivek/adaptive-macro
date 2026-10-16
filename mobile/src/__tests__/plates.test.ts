@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describePlates, platesFor, usesBarbell } from '../plates';
+import { describeFormula, describePlates, platesFor, totalFromPlates, usesBarbell } from '../plates';
 
 describe('platesFor', () => {
   it('loads a round kilo weight with the fewest plates', () => {
@@ -78,3 +78,62 @@ describe('loading order', () => {
     expect(platesFor(165, 'imperial', 'standard').perSide).toEqual([45, 10, 5]);
   });
 });
+
+describe('totalFromPlates', () => {
+  it('calculates standard barbell with symmetrical plates', () => {
+    // 45 bar + 2 * (45 + 25 + 10) = 45 + 160 = 205 lb
+    expect(totalFromPlates([45, 25, 10], 'imperial', 'standard')).toBe(205);
+    // 20 kg bar + 2 * (25 + 15) = 20 + 80 = 100 kg
+    expect(totalFromPlates([25, 15], 'metric', 'standard')).toBe(100);
+  });
+
+  it('accounts for light bar', () => {
+    // 35 bar + 2 * (25 + 5) = 35 + 60 = 95 lb
+    expect(totalFromPlates([25, 5], 'imperial', 'light')).toBe(95);
+    // 15 bar + 2 * (20) = 55 kg
+    expect(totalFromPlates([20], 'metric', 'light')).toBe(55);
+  });
+
+  it('returns empty bar weight when no plates are on the bar', () => {
+    expect(totalFromPlates([], 'imperial', 'standard')).toBe(45);
+    expect(totalFromPlates([], 'metric', 'standard')).toBe(20);
+    expect(totalFromPlates([], 'imperial', 'light')).toBe(35);
+    expect(totalFromPlates([], 'metric', 'light')).toBe(15);
+  });
+
+  it('handles small change plates and avoids float dust', () => {
+    // 20 + 2 * (20 + 1.25) = 62.5 kg
+    expect(totalFromPlates([20, 1.25], 'metric', 'standard')).toBe(62.5);
+  });
+});
+
+describe('describeFormula', () => {
+  it('explains the empty bar', () => {
+    expect(describeFormula([], 'imperial', 'standard')).toBe('45 lb bar only');
+    expect(describeFormula([], 'metric', 'standard')).toBe('20 kg bar only');
+  });
+
+  it('formats the symmetrical formula with 1 side multiplied by 2', () => {
+    expect(describeFormula([45, 25, 10], 'imperial', 'standard')).toBe(
+      '45 lb bar + 2 × (45 + 25 + 10) lb',
+    );
+    expect(describeFormula([25, 15], 'metric', 'standard')).toBe(
+      '20 kg bar + 2 × (25 + 15) kg',
+    );
+  });
+});
+
+describe('custom plates', () => {
+  it('incorporates custom plate sizes into the loading breakdown', () => {
+    // 75 lb on 45 lb bar = 30 lb total plates = 15 lb per side.
+    // Standard plates would use 10 + 5.
+    // With custom 15 lb plate, it uses 15.
+    expect(platesFor(75, 'imperial', 'standard', [15]).perSide).toEqual([15]);
+  });
+
+  it('supports fractional microplates in metric', () => {
+    // 21 kg on 20 kg bar = 1 kg total plates = 0.5 kg per side.
+    expect(platesFor(21, 'metric', 'standard', [0.5]).perSide).toEqual([0.5]);
+  });
+});
+

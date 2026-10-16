@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { EnrichmentParseError } from '../ai/exercises';
 import type { MovementPattern } from '../ai/exercises';
@@ -8,13 +8,24 @@ import {
   detectCardio,
   detectCardioMode,
 } from '../cardio';
-import { linkExerciseToCatalogue, searchCatalogue, upsertCatalogueEntry } from '../db';
+import {
+  linkExerciseToCatalogue,
+  loadAllCatalogueEntries,
+  upsertCatalogueEntry,
+} from '../db';
 import type { CatalogueEntry } from '../db';
+import {
+  getCachedCatalogue,
+  searchExercisesFast,
+  updateCatalogueCache,
+  warmCatalogueCache,
+  type ExerciseSearchResult,
+  type KnownExercise,
+} from '../exerciseSearch';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { TOUCH_TARGET } from './Controls';
 import { ExerciseIcon } from './ExerciseIcon';
-import { FadeIn } from './FadeIn';
 import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
@@ -35,12 +46,7 @@ const CARDIO_SUGGESTIONS = [
 
 interface ExercisePickerProps {
   /** Exercises already on record, for the history list and the bodyweight flag. */
-  known: {
-    name: string;
-    bodyweightBased: boolean;
-    isCardio?: boolean;
-    cardioMode?: 'treadmill' | 'outside' | null;
-  }[];
+  known: KnownExercise[];
   /** Movement glyph per name, shared with the block headers. */
   patterns: Record<string, MovementPattern>;
   geminiApiKey: string;
@@ -62,8 +68,8 @@ interface ExercisePickerProps {
 /**
  * Finding or naming the next exercise or cardiovascular activity.
  *
- * Supports auto-detecting cardio inputs (walking, jogging, running, biking, etc.)
- * with explicit selection for treadmill vs outside.
+ * Ultra-fast tokenized, abbreviation-aware search over in-memory catalogue
+ * and user workout history with zero SQLite round-trip lag.
  */
 export const ExercisePicker = ({
   known,
@@ -74,7 +80,11 @@ export const ExercisePicker = ({
   initialMode = 'exercise',
 }: ExercisePickerProps) => {
   const [search, setSearch] = useState('');
-  const [matches, setMatches] = useState<CatalogueEntry[]>([]);
+  const deferredSearch = useDeferredValue(search);
+
+  const [catalogue, setCatalogue] = useState<CatalogueEntry[]>(
+    () => getCachedCatalogue() ?? [],
+  );
   const [enriching, setEnriching] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [isCardio, setIsCardio] = useState(initialMode === 'cardio');
@@ -83,6 +93,15 @@ export const ExercisePicker = ({
 
   const autoEnriched = useRef<Set<string>>(new Set());
   const latestTerm = useRef('');
+
+  // Warm in-memory catalogue cache if not already resident
+  useEffect(() => {
+    if (catalogue.length === 0) {
+      void warmCatalogueCache(loadAllCatalogueEntries)
+        .then(setCatalogue)
+        .catch((err) => console.warn('failed warming catalogue cache', err));
+    }
+  }, [catalogue.length]);
 
   // Auto-detect cardio based on search input
   const handleSearchChange = (text: string) => {
@@ -102,30 +121,25 @@ export const ExercisePicker = ({
     }
   };
 
+  // Instant in-memory search results
+  const searchResults = useMemo<ExerciseSearchResult[]>(() => {
+    return searchExercisesFast({
+      query: deferredSearch,
+      catalogue,
+      known,
+      isCardio,
+      limit: 30,
+    });
+  }, [deferredSearch, catalogue, known, isCardio]);
+
+  // Only enrich strength training exercises with Gemini if not in cardio mode and no results
   useEffect(() => {
-    const term = search.trim();
+    const term = deferredSearch.trim();
     latestTerm.current = term;
     setEnrichNote(null);
-    if (term.length < 2) {
-      setMatches([]);
-      return;
-    }
-    let current = true;
-    void searchCatalogue(term)
-      .then((found) => {
-        if (current) setMatches(found);
-      })
-      .catch((error) => console.warn('catalogue search failed', error));
-    return () => {
-      current = false;
-    };
-  }, [search]);
 
-  // Only enrich strength training exercises with Gemini if not in cardio mode
-  useEffect(() => {
-    const term = search.trim();
     if (isCardio || enriching || term.length < 2) return;
-    if (matches.length > 0 || autoEnriched.current.has(term)) return;
+    if (searchResults.length > 0 || autoEnriched.current.has(term)) return;
     if (known.some((k) => k.name.toLowerCase().includes(term.toLowerCase()))) return;
 
     const timer = setTimeout(() => {
@@ -140,8 +154,23 @@ export const ExercisePicker = ({
           }
           const id = await upsertCatalogueEntry(entries[0]);
           await linkExerciseToCatalogue(entries[0].requestedName, id);
-          const found = await searchCatalogue(entries[0].canonicalName);
-          if (latestTerm.current === term) setMatches(found);
+
+          const newEntry: CatalogueEntry = {
+            id,
+            canonicalName: entries[0].canonicalName,
+            recordedName: entries[0].requestedName,
+            movementPattern: entries[0].movementPattern,
+            primaryMuscle: entries[0].primaryMuscle,
+            equipment: entries[0].equipment,
+            bodyweightBased: entries[0].bodyweightBased,
+            instructions: entries[0].instructions,
+            primaryRegion: entries[0].primaryRegion,
+            secondaryRegions: entries[0].secondaryRegions,
+            steps: entries[0].steps,
+          };
+
+          updateCatalogueCache(newEntry);
+          setCatalogue((prev) => [...prev.filter((p) => p.id !== id), newEntry]);
         })
         .catch((error) => {
           if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
@@ -152,18 +181,10 @@ export const ExercisePicker = ({
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [search, enriching, matches.length, known, geminiApiKey, isCardio]);
+  }, [deferredSearch, enriching, searchResults.length, known, geminiApiKey, isCardio]);
 
-  const term = search.trim().toLowerCase();
-  const knownMatches = known.filter(
-    (k) =>
-      k.name.toLowerCase().includes(term) &&
-      !matches.some(
-        (m) =>
-          m.recordedName?.toLowerCase() === k.name.toLowerCase() ||
-          m.canonicalName.toLowerCase() === k.name.toLowerCase(),
-      ),
-  );
+  const rawTerm = search.trim();
+  const lowerTerm = rawTerm.toLowerCase();
 
   return (
     <View style={styles.picker}>
@@ -193,7 +214,7 @@ export const ExercisePicker = ({
       <TextInput
         value={search}
         onChangeText={handleSearchChange}
-        placeholder={isCardio ? 'Search or type cardio (e.g. Walking, Running)' : 'Search or type a new exercise'}
+        placeholder={isCardio ? 'Search or type cardio (e.g. Walking, Running)' : 'Search (e.g. Bench, Squat, DB, OHP)'}
         placeholderTextColor={loud.figureFaint}
         autoFocus
         style={styles.input}
@@ -223,8 +244,8 @@ export const ExercisePicker = ({
         </View>
       )}
 
-      {/* Quick suggestions when in cardio mode with empty or short search */}
-      {isCardio && search.trim().length === 0 && (
+      {/* Quick suggestions when in cardio mode with empty search */}
+      {isCardio && rawTerm.length === 0 && (
         <View style={styles.suggestionsContainer}>
           <Text style={styles.group}>POPULAR CARDIO ACTIVITIES</Text>
           <View style={styles.suggestionChips}>
@@ -242,44 +263,22 @@ export const ExercisePicker = ({
       )}
 
       <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
-        {matches.map((item, index) => (
-          <FadeIn key={item.id} delay={Math.min(index, 6) * 25}>
-            <Tappable
-              onPress={() =>
-                onPick(item.recordedName ?? item.canonicalName, item.bodyweightBased, {
-                  isCardio: isCardio || detectCardio(item.canonicalName),
-                  mode: cardioMode,
-                })
-              }
-              scaleTo={0.985}
-              style={styles.row}
-            >
-              <ExerciseIcon
-                pattern={item.movementPattern}
-                isCardio={isCardio}
-                size={20}
-                color={loud.loud}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.canonicalName}</Text>
-                <Text style={styles.meta}>
-                  {item.primaryMuscle} · {item.equipment}
-                  {item.bodyweightBased ? ' · bodyweight' : ''}
-                </Text>
-              </View>
-            </Tappable>
-          </FadeIn>
-        ))}
-        {knownMatches.length > 0 && <Text style={styles.group}>FROM YOUR HISTORY</Text>}
-        {knownMatches.map((item) => {
-          const itemIsCardio = item.isCardio ?? isCardio;
+        {rawTerm.length === 0 && searchResults.length > 0 && (
+          <Text style={styles.group}>
+            {isCardio ? 'RECENT CARDIO ACTIVITIES' : 'RECENT & FREQUENT EXERCISES'}
+          </Text>
+        )}
+
+        {searchResults.map((item) => {
+          const itemPattern = (item.movementPattern as MovementPattern) ?? patterns[item.name];
           const itemMode = item.cardioMode ?? cardioMode;
+
           return (
             <Tappable
-              key={`known:${item.name}`}
+              key={item.id}
               onPress={() =>
                 onPick(item.name, item.bodyweightBased, {
-                  isCardio: itemIsCardio,
+                  isCardio: isCardio || item.isCardio,
                   mode: itemMode,
                 })
               }
@@ -287,31 +286,38 @@ export const ExercisePicker = ({
               style={styles.row}
             >
               <ExerciseIcon
-                pattern={patterns[item.name]}
-                isCardio={itemIsCardio}
+                pattern={itemPattern}
+                isCardio={item.isCardio}
                 size={20}
                 color={loud.loud}
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{item.name}</Text>
-                {itemIsCardio && (
-                  <Text style={styles.meta}>
-                    Cardio · {itemMode === 'outside' ? 'Outside' : 'Machine'}
-                  </Text>
-                )}
+                <Text style={styles.meta}>
+                  {item.isCardio
+                    ? `Cardio · ${itemMode === 'outside' ? 'Outside' : 'Machine'}`
+                    : `${item.primaryMuscle ?? 'General'} · ${item.equipment ?? 'Custom'}${
+                        item.bodyweightBased ? ' · bodyweight' : ''
+                      }`}
+                </Text>
               </View>
             </Tappable>
           );
         })}
+
         {enriching && <Text style={styles.note}>Looking that exercise up…</Text>}
         {enrichNote !== null && !enriching && <Text style={styles.note}>{enrichNote}</Text>}
       </ScrollView>
 
-      {search.trim() !== '' && (
+      {rawTerm !== '' && (
         <Tappable
           onPress={() => {
-            const exact = matches.find((m) => m.canonicalName.toLowerCase() === term);
-            const pickedName = exact?.recordedName ?? search.trim();
+            const exact = searchResults.find(
+              (m) =>
+                m.canonicalName.toLowerCase() === lowerTerm ||
+                m.name.toLowerCase() === lowerTerm,
+            );
+            const pickedName = exact?.name ?? rawTerm;
             onPick(pickedName, exact?.bodyweightBased, {
               isCardio: isCardio || detectCardio(pickedName),
               mode: cardioMode,
@@ -321,12 +327,13 @@ export const ExercisePicker = ({
         >
           <SlashPanel color={loud.loud} style={styles.slab}>
             <Text style={[styles.slabLabel, { color: loud.onLoud }]} numberOfLines={1}>
-              ADD {search.trim().toUpperCase()}
+              ADD {rawTerm.toUpperCase()}
               {isCardio ? ` (${cardioMode === 'outside' ? 'OUTSIDE' : 'MACHINE'})` : ''}
             </Text>
           </SlashPanel>
         </Tappable>
       )}
+
       <Tappable onPress={onCancel} scaleTo={0.97}>
         <SlashPanel color={loud.panel} style={styles.slab}>
           <Text style={[styles.slabLabel, { color: loud.figureMuted }]}>CANCEL</Text>
@@ -441,7 +448,6 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontFamily: font.ui,
     fontSize: 12,
-    color: loud.figure,
   },
   group: {
     fontFamily: font.display,

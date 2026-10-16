@@ -161,11 +161,11 @@ export const PRESCRIPTION: Record<TrainingLevel, Record<SlotRole, Prescription>>
  */
 export const LEVEL_COACHING: Record<TrainingLevel, string> = {
   beginner:
-    'Stop each set with 2 or 3 reps left in you. When every set reaches the top of its range, add the smallest weight step next time.',
+    'Stop each set with 2 or 3 reps left in you (RPE 7–8). Use double progression: add repetitions first, then add the smallest weight step once every set reaches the top of its range.',
   intermediate:
-    'Take sets to within 1 or 2 reps of failure. Add weight once every set reaches the top of its range.',
+    'Take sets within 1 to 2 reps of failure (RPE 8–9). Use double progression: push reps to the top of the range before advancing weight.',
   advanced:
-    'Take most sets within 0 to 2 reps of failure, the main lift included. Rotate exercises every few weeks to keep progressing.',
+    'Take most sets within 0 to 2 reps of failure (RPE 8–10), leaving 1 RIR on heavy compounds. Advance load when rep ceilings are met, and deload when recovery lags.',
 };
 
 /** What the level changes about which exercises suit, as told to the model. */

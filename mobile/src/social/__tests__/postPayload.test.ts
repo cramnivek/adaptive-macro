@@ -117,3 +117,29 @@ describe('postView', () => {
     expect(view.exercises[0].best).toBe('Cardio');
   });
 });
+
+describe('cardio a name cannot give away', () => {
+  // The Cardio tab takes any name, so detectCardio does not know "Ski erg". What
+  // the writer knew is in the row: no sets, no weight, no reps.
+  const row = {
+    session_id: 's1',
+    title: 'Conditioning',
+    performed_on: '2026-10-12',
+    duration_min: 30,
+    sets: 0,
+    volume_kg: null,
+    exercises: [{ name: 'Ski erg', sets: 0, best_kg: null, best_reps: 0 }],
+    highlight: null,
+    caption: null,
+  };
+
+  it('is read back as cardio rather than as nothing', () => {
+    const view = postView(row, 'metric');
+    expect(view.exercises[0]).toEqual({ name: 'Ski erg', sets: 0, best: 'Cardio', isCardio: true, detail: 'Completed' });
+  });
+
+  it('still says the reps of a bodyweight lift, which always has its set', () => {
+    const view = postView({ ...row, sets: 2, exercises: [{ name: 'Pull Up', sets: 2, best_kg: null, best_reps: 12 }] }, 'metric');
+    expect(view.exercises[0].best).toBe('12 reps');
+  });
+});

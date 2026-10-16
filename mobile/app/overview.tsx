@@ -1,5 +1,11 @@
-import { addDays, bodyweightForDates, summarisePeriod, todayISO } from '@adaptive-macros/engine';
-import type { DatedSet, PeriodSummary } from '@adaptive-macros/engine';
+import {
+  addDays,
+  bodyweightForDates,
+  computeVolumeDiagnostics,
+  summarisePeriod,
+  todayISO,
+} from '@adaptive-macros/engine';
+import type { DatedSet, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -12,6 +18,7 @@ import type { MuscleRegion } from '../src/components/muscleMap';
 import { Screen } from '../src/components/Screen';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { Tappable } from '../src/components/Tappable';
+import { VolumeLandmarksCard } from '../src/components/VolumeLandmarksCard';
 import { WeeklyBars } from '../src/components/WeeklyBars';
 import {
   catalogueRegionsByExerciseName,
@@ -120,6 +127,18 @@ export default function OverviewScreen() {
     const ranked = [...counts.entries()].sort(([, a], [, b]) => b - a).map(([region]) => region);
     return { primary: ranked[0] ?? null, secondary: ranked.slice(1) };
   }, [summary.exercises, regions]);
+
+  const diagnostics: VolumeDiagnostics = useMemo(
+    () =>
+      computeVolumeDiagnostics({
+        sets,
+        exerciseRegions: regions,
+        from,
+        to,
+        periodDays: period.days,
+      }),
+    [sets, regions, from, to, period.days],
+  );
 
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, to), [sessionTimes, sets, to]);
   // Older weeks can have training in them when this window is empty, and that
@@ -256,6 +275,15 @@ export default function OverviewScreen() {
               </Text>
             </Card>
           </FadeIn>
+
+          {diagnostics.totalWorkingSets > 0 && (
+            <FadeIn delay={150}>
+              <VolumeLandmarksCard
+                diagnostics={diagnostics}
+                periodDays={period.days}
+              />
+            </FadeIn>
+          )}
         </>
       )}
 

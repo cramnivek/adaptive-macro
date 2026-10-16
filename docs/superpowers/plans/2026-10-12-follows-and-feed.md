@@ -37,7 +37,7 @@
 | File | Responsibility |
 | --- | --- |
 | `supabase/migrations/20261012130000_follows_blocks_likes.sql` | `follows`, `blocks`, `likes`, triggers, `can_see`, the new read policies, `follow_counts` |
-| `supabase/migrations/20261012140000_feed.sql` | the `feed_posts` view and the `feed_page(before, size)` RPC |
+| `supabase/migrations/20261012140000_feed.sql` | the `feed_posts` view and the `feed_page(before, before_id, size)` RPC |
 | `supabase/migrations/20261012150000_reports_and_filter.sql` | `reports`, `posts.hidden` and auto-hide, the `blocked_words` filter |
 | `mobile/src/social/__tests__/social-rls.test.ts` | PGlite tests for every rule above |
 | `mobile/src/social/feed.ts` | the app's calls: search, follow, requests, feed, profile, like, report, block |
@@ -449,7 +449,7 @@ create policy "posts are readable by those allowed to see them" on public.posts
 -- answers only "may I see this profile", which its absence would say anyway.
 create function public.visible_profile(profile uuid) returns boolean
   language sql stable security definer set search_path = ''
-  as $ select not public.blocked_between(profile, auth.uid()) $;
+  as $$ select not public.blocked_between(profile, auth.uid()) $$;
 revoke execute on function public.visible_profile(uuid) from public, anon;
 grant execute on function public.visible_profile(uuid) to authenticated;
 
@@ -490,7 +490,7 @@ git commit -m "feat(social): follows, blocks and likes, and who can see a post" 
 - Consumes: Task 1's tables and `can_see`.
 - Produces:
   - view `public.feed_posts`, with every `posts` column plus `username`, `display_name`, `like_count bigint` and `liked boolean`;
-  - RPC `public.feed_page(before timestamptz default null, size integer default 20) returns setof public.feed_posts`.
+  - RPC `public.feed_page(before timestamptz default null, before_id uuid default null, size integer default 20) returns setof public.feed_posts`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -502,7 +502,7 @@ describe('feed', () => {
     as<{ title: string; username: string; like_count: number; liked: boolean; created_at: string }>(
       db,
       user,
-      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, 20)`,
+      `select title, username, like_count::int as like_count, liked, created_at::text from feed_page($1, $2, 20)`,
       [before],
     );
 
@@ -643,8 +643,8 @@ git commit -m "feat(social): a feed of the people you follow, newest first" -m "
     - `pendingRequests(): Promise<PublicProfile[]>`
     - `acceptRequest(from: string): Promise<void>`
     - `declineRequest(from: string): Promise<void>`
-    - `feedPage(before: string | null): Promise<FeedPost[]>`
-    - `postsBy(author: string, before: string | null): Promise<FeedPost[]>`
+    - `feedPage(before: FeedCursor | null): Promise<FeedPost[]>`
+    - `postsBy(author: string, before: FeedCursor | null): Promise<FeedPost[]>`, with `type FeedCursor = { at: string; id: string }` (the last post's `created_at` and `id`: Task 2 pages by both so posts at the same moment are never skipped)
     - `like(postId: string): Promise<void>`
     - `unlike(postId: string): Promise<void>`
     - `block(them: string): Promise<void>`
@@ -887,15 +887,28 @@ export const declineRequest = async (from: string): Promise<void> => {
   if (error) fail(error);
 };
 
-export const feedPage = async (before: string | null): Promise<FeedPost[]> => {
-  const { data, error } = await client().rpc('feed_page', { before, size: PAGE });
+export type FeedCursor = { at: string; id: string };
+
+/** The cursor that asks for the page after this one. */
+export const cursorAfter = (posts: FeedPost[]): FeedCursor | null =>
+  posts.length === 0 ? null : { at: posts[posts.length - 1].created_at, id: posts[posts.length - 1].id };
+
+export const feedPage = async (before: FeedCursor | null): Promise<FeedPost[]> => {
+  const { data, error } = await client().rpc('feed_page', { before: before?.at ?? null, before_id: before?.id ?? null, size: PAGE });
   if (error) fail(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
 };
 
-export const postsBy = async (author: string, before: string | null): Promise<FeedPost[]> => {
-  let query = client().from('feed_posts').select('*').eq('author_id', author).order('created_at', { ascending: false }).limit(PAGE);
-  if (before !== null) query = query.lt('created_at', before);
+export const postsBy = async (author: string, before: FeedCursor | null): Promise<FeedPost[]> => {
+  let query = client()
+    .from('feed_posts')
+    .select('*')
+    .eq('author_id', author)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(PAGE);
+  // (created_at, id) < (at, id), spelled for PostgREST: earlier, or the same moment with a smaller id.
+  if (before !== null) query = query.or(`created_at.lt.${before.at},and(created_at.eq.${before.at},id.lt.${before.id})`);
   const { data, error } = await query;
   if (error) fail(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
@@ -1100,7 +1113,7 @@ create trigger reports_hide after insert on public.reports
 drop policy "posts are readable by those allowed to see them" on public.posts;
 create policy "posts are readable by those allowed to see them" on public.posts
   for select to authenticated
-  using (public.can_see(author_id) and (not hidden or author_id = (select auth.uid())));
+  using (private.can_see(author_id) and (not hidden or author_id = (select auth.uid())));
 
 -- The word filter. The list lives in a table so it grows without an app release;
 -- the owner edits it in the dashboard. Matching is case-insensitive and by
@@ -1264,7 +1277,7 @@ import { PostCard } from '../../src/components/PostCard';
 import { Screen } from '../../src/components/Screen';
 import { Tappable } from '../../src/components/Tappable';
 import { notify } from '../../src/dialog';
-import { feedPage, like, pendingRequests, unlike } from '../../src/social/feed';
+import { cursorAfter, feedPage, like, pendingRequests, unlike } from '../../src/social/feed';
 import { postView } from '../../src/social/postPayload';
 import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
@@ -1310,7 +1323,7 @@ export default function SocialScreen() {
     if (!posts || posts.length === 0 || loadingMore) return;
     setLoadingMore(true);
     try {
-      const page = await feedPage(posts[posts.length - 1].created_at);
+      const page = await feedPage(cursorAfter(posts));
       setPosts([...posts, ...page]);
       setMore(page.length === 20);
     } catch (error) {
