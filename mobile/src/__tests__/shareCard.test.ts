@@ -232,3 +232,34 @@ describe('a new best on a lift with its equipment in the name', () => {
     expect(summary.highlight).toEqual({ label: 'ARNOLD PRESS (DUMBBELL)', figure: '95 lb' });
   });
 });
+
+describe('postViewToShareCard', () => {
+  it('converts a post view to a complete share card with synthesized climb bars', async () => {
+    const { postViewToShareCard } = await import('../shareCard');
+    const view = {
+      title: 'Leg Day',
+      date: '16 Oct 2026',
+      duration: '54 min',
+      sets: 12,
+      volume: '8,400 kg',
+      exercises: [
+        { name: 'Barbell Squat', sets: 4, best: '140 kg × 6' },
+        { name: 'Romanian Deadlift', sets: 4, best: '120 kg × 8' },
+        { name: 'Leg Extension', sets: 4, best: '80 kg × 12' },
+      ],
+      more: 0,
+      highlight: { label: 'Barbell Squat', figure: '140 kg' },
+      caption: 'Felt strong today',
+    };
+
+    const card = postViewToShareCard(view);
+    expect(card.title).toBe('Leg Day');
+    expect(card.sets).toBe(12);
+    expect(card.climb.length).toBe(12);
+    // The top lift gets red bars
+    expect(card.climb.slice(0, 4).every((b) => b.top)).toBe(true);
+    // Secondary lifts get non-top bars
+    expect(card.climb.slice(4).every((b) => !b.top)).toBe(true);
+    expect(card.climb[0].height).toBeGreaterThan(0);
+  });
+});

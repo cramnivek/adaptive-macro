@@ -286,3 +286,49 @@ export const titleLines = (title: string): TitlePart[][] => {
     [{ text: `${words.slice(at).join(' ')}.`, red: true }],
   ];
 };
+
+/**
+ * Converts a post summary into a full ShareCard, synthesizing climb bars
+ * from the exercise list and sets so that the rendered card carries the
+ * signature ascending red and grey climb bars.
+ */
+export const postViewToShareCard = (view: ShareSummary): ShareCard => {
+  const bars: ClimbBar[] = [];
+  if (view.exercises && view.exercises.length > 0) {
+    view.exercises.forEach((ex, exIdx) => {
+      const setCount = Math.max(1, Math.min(ex.sets || 3, 6));
+      const isTop = exIdx === 0;
+      const baseScale = isTop ? 1.0 : Math.max(0.4, 0.85 - exIdx * 0.15);
+      for (let s = 0; s < setCount; s++) {
+        const progress = setCount > 1 ? s / (setCount - 1) : 1;
+        const h = (0.55 + 0.45 * progress) * baseScale;
+        bars.push({
+          height: Math.min(1, Math.max(0.15, h)),
+          top: isTop,
+        });
+      }
+    });
+  } else {
+    const count = Math.max(1, Math.min(view.sets || 6, 18));
+    for (let i = 0; i < count; i++) {
+      bars.push({
+        height: 0.5 + 0.5 * Math.sin((i / (count - 1 || 1)) * Math.PI),
+        top: i === Math.floor(count / 2),
+      });
+    }
+  }
+
+  return {
+    title: view.title,
+    date: view.date,
+    duration: view.duration,
+    sets: view.sets,
+    volume: view.volume,
+    exercises: view.exercises,
+    more: view.more,
+    highlight: view.highlight,
+    steps: view.steps,
+    cardioDistanceKm: view.cardioDistanceKm,
+    climb: bars,
+  };
+};

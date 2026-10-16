@@ -1,9 +1,22 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
-import { Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { formatTimeAgo } from '../format';
+import { cardFontsReady, shareCardFile, shareWorkout } from '../platform/shareImage';
+import { postViewToShareCard } from '../shareCard';
 import type { PostView } from '../social/postPayload';
 import { font, radius, space, useTheme } from '../theme';
+import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
 
@@ -23,8 +36,12 @@ const getInitials = (name?: string): string => {
 };
 
 /**
- * Rich, engaging workout post card: user avatar, relative time, visual stat chips,
- * celebratory PR badges, clean exercise rows, cheer reactions, and share options.
+ * Rich, engaging workout post card:
+ * - User avatar, relative time, and handle
+ * - Visual stat chips (Duration, Sets, Volume, Steps)
+ * - Segmented view: Structured Breakdown vs Visual Story Card
+ * - Full-fidelity 9:16 Share Card preview with high-res modal
+ * - Interactive like counter, cheer fist-bump, and share image/text
  */
 export const PostCard = ({
   view,
@@ -46,6 +63,11 @@ export const PostCard = ({
 }) => {
   const { colors } = useTheme();
   const [cheered, setCheered] = useState(false);
+  const [viewMode, setViewMode] = useState<'breakdown' | 'card'>('breakdown');
+  const [card, setCard] = useState<{ file: File; url: string } | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const displayTime = createdAt
     ? formatTimeAgo(createdAt)
@@ -53,23 +75,60 @@ export const PostCard = ({
       ? formatTimeAgo(view.date)
       : '';
 
-  const shareWorkout = async () => {
+  const generateCard = useCallback(async (): Promise<{ file: File; url: string } | null> => {
+    if (card) return card;
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return null;
+    setDrawing(true);
     try {
-      const parts = [
-        `🏋️ ${view.title}`,
-        `${view.duration} · ${view.sets} sets${view.volume ? ` · ${view.volume}` : ''}`,
-      ];
-      if (view.highlight) {
-        parts.push(`🏆 PR: ${view.highlight.label}: ${view.highlight.figure}`);
+      await cardFontsReady();
+      const summary = postViewToShareCard(view);
+      const drawn = await shareCardFile(summary, null);
+      if (drawn) {
+        setCard(drawn);
       }
-      if (view.caption) {
-        parts.push(`"${view.caption}"`);
-      }
-      parts.push('\nLogged on Adaptive Macro');
-      await Share.share({ message: parts.join('\n') });
+      return drawn;
     } catch {
-      // User cancelled share dialog
+      return null;
+    } finally {
+      setDrawing(false);
     }
+  }, [card, view]);
+
+  useEffect(() => {
+    if (viewMode === 'card' && card === null && !drawing) {
+      void generateCard();
+    }
+  }, [viewMode, card, drawing, generateCard]);
+
+  const buildShareText = (): string => {
+    const parts = [
+      `🏋️ ${view.title}`,
+      `${view.duration} · ${view.sets} sets${view.volume ? ` · ${view.volume}` : ''}`,
+    ];
+    if (view.highlight) {
+      parts.push(`🏆 PR: ${view.highlight.label}: ${view.highlight.figure}`);
+    }
+    if (view.caption) {
+      parts.push(`"${view.caption}"`);
+    }
+    if (view.exercises && view.exercises.length > 0) {
+      parts.push('\nExercises:');
+      view.exercises.forEach((ex) => {
+        parts.push(`• ${ex.name}: ${ex.sets > 0 ? `${ex.sets}s` : '—'} (${ex.best})`);
+      });
+      if (view.more > 0) parts.push(`+ ${view.more} more`);
+    }
+    parts.push('\nLogged on Adaptive Macro');
+    return parts.join('\n');
+  };
+
+  const handleOpenModal = () => {
+    setModalOpen(true);
+    if (!card) void generateCard();
+  };
+
+  const handleShareWorkout = async () => {
+    handleOpenModal();
   };
 
   return (
@@ -151,46 +210,138 @@ export const PostCard = ({
         ) : null}
       </View>
 
-      {/* Celebratory PR Milestone Card */}
-      {view.highlight && (
-        <View style={[styles.highlightCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent }]}>
-          <Ionicons name="trophy" size={17} color={colors.accent} />
-          <View style={styles.highlightContent}>
-            <Text style={[styles.highlightTag, { color: colors.accent }]}>NEW PERSONAL BEST</Text>
-            <Text style={[styles.highlightDetail, { color: colors.text }]}>
-              {view.highlight.label}: {view.highlight.figure}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Formatted Exercise List */}
-      <View style={styles.exerciseList}>
-        {view.exercises.map((lift, index) => (
-          <View
-            key={`${lift.name}-${index}`}
+      {/* Segmented View Toggle: Breakdown vs Story Card */}
+      <View style={[styles.viewToggleRow, { borderColor: colors.border }]}>
+        <Pressable
+          onPress={() => setViewMode('breakdown')}
+          style={[
+            styles.viewToggleBtn,
+            viewMode === 'breakdown' && [styles.viewToggleBtnActive, { backgroundColor: colors.surfaceRaised, borderColor: colors.accent }],
+          ]}
+        >
+          <Ionicons
+            name="list-outline"
+            size={14}
+            color={viewMode === 'breakdown' ? colors.accent : colors.textMuted}
+          />
+          <Text
             style={[
-              styles.exerciseRow,
-              index < view.exercises.length - 1 ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
+              styles.viewToggleText,
+              { color: viewMode === 'breakdown' ? colors.text : colors.textMuted },
+              viewMode === 'breakdown' && styles.viewToggleTextActive,
             ]}
           >
-            <View style={[styles.setsPill, { backgroundColor: colors.surfaceRaised }]}>
-              <Text style={[styles.setsPillText, { color: colors.textMuted }]}>
-                {lift.sets > 0 ? `${lift.sets}s` : '—'}
-              </Text>
-            </View>
-            <Text style={[styles.exerciseName, { color: colors.text }]} numberOfLines={1}>
-              {lift.name}
-            </Text>
-            <Text style={[styles.exerciseBest, { color: colors.accent }]}>{lift.best}</Text>
-          </View>
-        ))}
+            Breakdown
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            setViewMode('card');
+            if (!card) void generateCard();
+          }}
+          style={[
+            styles.viewToggleBtn,
+            viewMode === 'card' && [styles.viewToggleBtnActive, { backgroundColor: colors.surfaceRaised, borderColor: colors.accent }],
+          ]}
+        >
+          <Ionicons
+            name="image-outline"
+            size={14}
+            color={viewMode === 'card' ? colors.accent : colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.viewToggleText,
+              { color: viewMode === 'card' ? colors.text : colors.textMuted },
+              viewMode === 'card' && styles.viewToggleTextActive,
+            ]}
+          >
+            Story Card
+          </Text>
+        </Pressable>
       </View>
 
-      {view.more > 0 && (
-        <Text style={[styles.more, { color: colors.textFaint }]}>
-          + {view.more} more {view.more === 1 ? 'exercise' : 'exercises'}
-        </Text>
+      {/* Content depending on selected tab */}
+      {viewMode === 'breakdown' ? (
+        <>
+          {/* Celebratory PR Milestone Card */}
+          {view.highlight && (
+            <View style={[styles.highlightCard, { backgroundColor: colors.accent + '15', borderColor: colors.accent }]}>
+              <Ionicons name="trophy" size={17} color={colors.accent} />
+              <View style={styles.highlightContent}>
+                <Text style={[styles.highlightTag, { color: colors.accent }]}>NEW PERSONAL BEST</Text>
+                <Text style={[styles.highlightDetail, { color: colors.text }]}>
+                  {view.highlight.label}: {view.highlight.figure}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Formatted Exercise List */}
+          <View style={styles.exerciseList}>
+            {view.exercises.map((lift, index) => (
+              <View
+                key={`${lift.name}-${index}`}
+                style={[
+                  styles.exerciseRow,
+                  index < view.exercises.length - 1 ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth } : null,
+                ]}
+              >
+                <View style={[styles.setsPill, { backgroundColor: colors.surfaceRaised }]}>
+                  <Text style={[styles.setsPillText, { color: colors.textMuted }]}>
+                    {lift.sets > 0 ? `${lift.sets}s` : '—'}
+                  </Text>
+                </View>
+                <Text style={[styles.exerciseName, { color: colors.text }]} numberOfLines={1}>
+                  {lift.name}
+                </Text>
+                <Text style={[styles.exerciseBest, { color: colors.accent }]}>{lift.best}</Text>
+              </View>
+            ))}
+          </View>
+
+          {view.more > 0 && (
+            <Text style={[styles.more, { color: colors.textFaint }]}>
+              + {view.more} more {view.more === 1 ? 'exercise' : 'exercises'}
+            </Text>
+          )}
+        </>
+      ) : (
+        /* Visual Story Card Mode */
+        <View style={styles.cardPreviewContainer}>
+          {card ? (
+            <Tappable
+              onPress={handleOpenModal}
+              accessibilityRole="button"
+              accessibilityLabel="Open high-resolution story card"
+              style={styles.cardPreviewTouch}
+            >
+              <View style={styles.cardPreviewFrame}>
+                <Image
+                  source={{ uri: card.url }}
+                  style={styles.cardPreviewImage}
+                  resizeMode="contain"
+                />
+                <View style={styles.expandPill}>
+                  <Ionicons name="expand-outline" size={13} color="#ffffff" />
+                  <Text style={styles.expandPillText}>Tap to open full card & share</Text>
+                </View>
+              </View>
+            </Tappable>
+          ) : drawing ? (
+            <View style={[styles.cardLoadingFrame, { backgroundColor: loud.panel, borderColor: loud.rule }]}>
+              <ActivityIndicator color={colors.accent} size="small" />
+              <Text style={[styles.cardLoadingText, { color: colors.textMuted }]}>
+                Rendering poster card…
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.cardLoadingFrame, { backgroundColor: loud.panel, borderColor: loud.rule }]}>
+              <Button label="Render Story Card" onPress={() => void generateCard()} />
+            </View>
+          )}
+        </View>
       )}
 
       {/* Social Actions Footer */}
@@ -239,12 +390,24 @@ export const PostCard = ({
               {cheered ? 'Fired up!' : 'Cheer'}
             </Text>
           </Tappable>
+
+          {/* Story Card Quick Button */}
+          <Tappable
+            onPress={handleOpenModal}
+            accessibilityRole="button"
+            accessibilityLabel="View story card"
+            hitSlop={8}
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+          >
+            <Ionicons name="image-outline" size={15} color={colors.accent} />
+            <Text style={[styles.actionText, { color: colors.text }]}>Story Card</Text>
+          </Tappable>
         </View>
 
         <Tappable
-          onPress={() => void shareWorkout()}
+          onPress={() => void handleShareWorkout()}
           accessibilityRole="button"
-          accessibilityLabel="Share workout"
+          accessibilityLabel="Share workout options"
           hitSlop={8}
           style={styles.shareBtn}
         >
@@ -257,6 +420,112 @@ export const PostCard = ({
           <Button label="Delete post" variant="subtle" onPress={onDelete} />
         </View>
       )}
+
+      {/* High-Resolution Share Card Modal */}
+      <Modal
+        visible={modalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalContent, { backgroundColor: loud.ground, borderColor: loud.rule }]}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitle}>
+                <Text style={styles.modalTitle}>STORY CARD</Text>
+                <Text style={styles.modalSubtitle} numberOfLines={1}>
+                  {view.title}
+                </Text>
+              </View>
+              <Tappable onPress={() => setModalOpen(false)} accessibilityRole="button" style={styles.closeBtn}>
+                <Ionicons name="close" size={24} color={loud.figure} />
+              </Tappable>
+            </View>
+
+            {/* High-Res Preview */}
+            <View style={styles.modalPreview}>
+              {card ? (
+                <Image
+                  source={{ uri: card.url }}
+                  style={styles.modalCardImage}
+                  resizeMode="contain"
+                  accessibilityLabel="High-resolution story card"
+                />
+              ) : (
+                <View style={styles.modalLoading}>
+                  <ActivityIndicator color={loud.loud} size="large" />
+                  <Text style={styles.modalLoadingText}>Generating crisp 1080×1920 poster…</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Modal Action Controls */}
+            <View style={styles.modalActions}>
+              <Tappable
+                onPress={() => {
+                  if (card) {
+                    void shareWorkout(postViewToShareCard(view), card);
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Share image"
+                style={[styles.primaryActionBtn, !card && styles.disabledBtn]}
+              >
+                <Ionicons name="share-social-outline" size={18} color={loud.onLoud} />
+                <Text style={styles.primaryActionText}>SHARE IMAGE</Text>
+              </Tappable>
+
+              <View style={styles.secondaryActionRow}>
+                <Tappable
+                  onPress={() => {
+                    if (card && typeof document !== 'undefined') {
+                      const link = document.createElement('a');
+                      link.href = card.url;
+                      link.download = `${view.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_card.png`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save image to device"
+                  style={[styles.secondaryActionBtn, !card && styles.disabledBtn]}
+                >
+                  <Ionicons name="download-outline" size={16} color={loud.figure} />
+                  <Text style={styles.secondaryActionText}>SAVE IMAGE</Text>
+                </Tappable>
+
+                <Tappable
+                  onPress={async () => {
+                    try {
+                      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                        await navigator.clipboard.writeText(buildShareText());
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } else {
+                        await Share.share({ message: buildShareText() });
+                      }
+                    } catch {}
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy workout text"
+                  style={styles.secondaryActionBtn}
+                >
+                  <Ionicons
+                    name={copied ? 'checkmark-circle' : 'copy-outline'}
+                    size={16}
+                    color={copied ? colors.accent : loud.figure}
+                  />
+                  <Text style={[styles.secondaryActionText, copied && { color: colors.accent }]}>
+                    {copied ? 'COPIED!' : 'COPY TEXT'}
+                  </Text>
+                </Tappable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -331,7 +600,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space.xs,
     marginTop: space.xs,
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
   statChip: {
     flexDirection: 'row',
@@ -345,6 +614,37 @@ const styles = StyleSheet.create({
   statChipText: {
     fontFamily: font.figure,
     fontSize: 12,
+  },
+  viewToggleRow: {
+    flexDirection: 'row',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: 3,
+    marginBottom: space.md,
+    gap: 4,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  viewToggleBtnActive: {
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  viewToggleText: {
+    fontFamily: font.ui,
+    fontSize: 13,
+  },
+  viewToggleTextActive: {
+    fontFamily: font.uiStrong,
   },
   highlightCard: {
     flexDirection: 'row',
@@ -401,6 +701,61 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
     marginBottom: space.sm,
   },
+  cardPreviewContainer: {
+    marginVertical: space.xs,
+    marginBottom: space.sm,
+    alignItems: 'center',
+  },
+  cardPreviewTouch: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  cardPreviewFrame: {
+    height: 340,
+    aspectRatio: 9 / 16,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: loud.ground,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: loud.rule,
+  },
+  cardPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  expandPill: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  expandPillText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: '#ffffff',
+  },
+  cardLoadingFrame: {
+    height: 220,
+    width: '100%',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+  },
+  cardLoadingText: {
+    fontFamily: font.ui,
+    fontSize: 13,
+  },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -412,14 +767,14 @@ const styles = StyleSheet.create({
   interactions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: space.sm,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     borderRadius: radius.pill,
   },
   actionBtnActive: {
@@ -442,5 +797,114 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: space.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 10, 11, 0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.md,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '94%',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: space.lg,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.md,
+  },
+  modalHeaderTitle: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontFamily: font.display,
+    fontSize: 18,
+    color: loud.figure,
+    letterSpacing: 1.2,
+  },
+  modalSubtitle: {
+    fontFamily: font.figure,
+    fontSize: 13,
+    color: loud.figureMuted,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 6,
+    minHeight: TOUCH_TARGET,
+    minWidth: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPreview: {
+    height: 380,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: space.xs,
+  },
+  modalCardImage: {
+    height: '100%',
+    aspectRatio: 9 / 16,
+    borderRadius: radius.md,
+  },
+  modalLoading: {
+    alignItems: 'center',
+    gap: space.md,
+  },
+  modalLoadingText: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    color: loud.figureMuted,
+  },
+  modalActions: {
+    marginTop: space.md,
+    gap: space.sm,
+  },
+  primaryActionBtn: {
+    backgroundColor: loud.loud,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: radius.md,
+  },
+  primaryActionText: {
+    fontFamily: font.display,
+    fontSize: 14,
+    color: loud.onLoud,
+    letterSpacing: 1.4,
+  },
+  secondaryActionRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    backgroundColor: loud.panel,
+    borderWidth: 1,
+    borderColor: loud.rule,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+  },
+  secondaryActionText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    color: loud.figure,
+    letterSpacing: 0.8,
+  },
+  disabledBtn: {
+    opacity: 0.5,
   },
 });
