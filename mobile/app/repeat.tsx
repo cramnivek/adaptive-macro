@@ -52,7 +52,8 @@ export default function RepeatScreen() {
     setBusy(true);
     try {
       await copyDay(chosenDate, chosenMeals);
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     } finally {
       setBusy(false);
     }
@@ -144,7 +145,11 @@ export default function RepeatScreen() {
         </Card>
       )}
 
-      <Button label="Cancel" variant="subtle" onPress={() => router.back()} />
+      <Button
+        label="Cancel"
+        variant="subtle"
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      />
     </ScrollView>
   );
 }

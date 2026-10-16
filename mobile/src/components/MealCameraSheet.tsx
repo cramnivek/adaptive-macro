@@ -23,6 +23,7 @@ interface MealCameraSheetProps {
   /** The shot being judged, or null while the camera is live. */
   photo: MealPhoto | null;
   estimate: MealEstimate | null;
+  error?: string | null;
   busy: boolean;
   elapsed: number;
   onCapture: (uri: string) => void;
@@ -53,6 +54,7 @@ export const MealCameraSheet = ({
   visible,
   photo,
   estimate,
+  error,
   busy,
   elapsed,
   onCapture,
@@ -266,8 +268,8 @@ export const MealCameraSheet = ({
                 )}
 
                 {photo && !busy && items.length === 0 && (
-                  <Text style={[styles.hint, { color: colors.textMuted }]}>
-                    Nothing it could read as food. Try again with the plate filling the frame.
+                  <Text style={[styles.hint, { color: error ? colors.danger : colors.textMuted }]}>
+                    {error ?? 'Nothing it could read as food. Try again with the plate filling the frame.'}
                   </Text>
                 )}
 
@@ -277,7 +279,7 @@ export const MealCameraSheet = ({
                       <Button label="Shoot again" variant="subtle" onPress={onRetake} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Button label="Use this" onPress={onClose} />
+                      <Button label={error ? 'Cancel' : 'Use this'} onPress={onClose} />
                     </View>
                   </View>
                 )}

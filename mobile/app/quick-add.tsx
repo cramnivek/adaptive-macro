@@ -87,7 +87,8 @@ export default function QuickAddScreen() {
     };
 
     await logFood(food, 100, meal);
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
   };
 
   return (
@@ -144,7 +145,11 @@ export default function QuickAddScreen() {
         <View style={{ height: space.md }} />
         <Button label="Add to diary" onPress={() => void save()} />
         <View style={{ height: space.sm }} />
-        <Button label="Cancel" variant="subtle" onPress={() => router.back()} />
+        <Button
+          label="Cancel"
+          variant="subtle"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        />
       </Card>
 
       <Text style={[styles.note, { color: colors.textFaint, paddingHorizontal: space.xs }]}>

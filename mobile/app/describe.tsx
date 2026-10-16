@@ -1,7 +1,7 @@
 import type { Food, Meal, Nutrients } from '@adaptive-macros/engine';
 import { roundTo } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   type EstimatedItem,
@@ -23,6 +23,25 @@ import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const DRAFT_TEXT_KEY = 'ascend.describeDraftText';
+
+const readDraftText = (): string => {
+  try {
+    return typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem(DRAFT_TEXT_KEY) ?? '') : '';
+  } catch {
+    return '';
+  }
+};
+
+const writeDraftText = (value: string): void => {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (value) sessionStorage.setItem(DRAFT_TEXT_KEY, value);
+    else sessionStorage.removeItem(DRAFT_TEXT_KEY);
+  } catch {
+    // Storage unavailable (native or private mode).
+  }
+};
 
 /** An estimated item plus the portion the user settled on. */
 interface DraftItem {
@@ -60,8 +79,9 @@ export default function DescribeScreen() {
 
   const { settings, selectedDate, refreshAll } = useApp();
   const [meal, setMeal] = useState<Meal>((params.meal as Meal) ?? 'snack');
-  // Prefilled when arriving from a search that the databases could not answer.
-  const [text, setText] = useState(params.text ?? '');
+  // Prefilled when arriving from a search that the databases could not answer,
+  // or restored from sessionStorage if staleBuild reloaded the page mid-entry.
+  const [text, setText] = useState(() => params.text ?? readDraftText());
   const [photo, setPhoto] = useState<MealPhoto | null>(null);
   const [camera, setCamera] = useState(false);
   /**
@@ -83,6 +103,23 @@ export default function DescribeScreen() {
   const [costUsd, setCostUsd] = useState<number | null>(null);
   const [ranOn, setRanOn] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    writeDraftText(text);
+  }, [text]);
+
+  const closeDescribe = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+    writeDraftText('');
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
 
   // A local 32B model takes 10-45 seconds. Without a visible clock that reads
   // as a hang, and the user taps again or gives up on the feature.
@@ -174,6 +211,9 @@ export default function DescribeScreen() {
     // it sets the photo, and the state update has not committed by then.
     const image = withPhoto ?? photo ?? undefined;
     if (!text.trim() && !image) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setError(null);
     setEstimate(null);
@@ -190,7 +230,9 @@ export default function DescribeScreen() {
           ollamaModel: settings.ollamaModel,
         },
         image,
+        controller.signal,
       );
+      if (controller.signal.aborted) return;
       setEstimate(result.estimate);
       setRanOn(result.model);
       // A local model has no per-request price, so there is no cost to show —
@@ -202,9 +244,13 @@ export default function DescribeScreen() {
         result.estimate.items.map((item) => ({ item, grams: item.grams, included: true })),
       );
     } catch (caught) {
+      if (controller.signal.aborted) return;
       setError(describeErrorMessage(caught));
     } finally {
-      setBusy(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setBusy(false);
+      }
     }
   };
 
@@ -251,7 +297,7 @@ export default function DescribeScreen() {
       }
 
       await refreshAll();
-      router.back();
+      closeDescribe();
     } catch (caught) {
       setError(describeErrorMessage(caught));
     } finally {
@@ -307,12 +353,18 @@ export default function DescribeScreen() {
         visible={camera}
         photo={photo}
         estimate={estimate}
+        error={error}
         busy={busy}
         elapsed={elapsed}
         onCapture={(uri) => void captureFromCamera(uri)}
         onSystemCapture={() => void systemCapture()}
         onRetake={retake}
-        onClose={() => setCamera(false)}
+        onClose={() => {
+          abortRef.current?.abort();
+          abortRef.current = null;
+          setBusy(false);
+          setCamera(false);
+        }}
       />
 
       <Card title="What did you eat?" subtitle="Photograph it, write it, or both.">
@@ -517,7 +569,7 @@ export default function DescribeScreen() {
         </>
       )}
 
-      <Button label="Cancel" variant="subtle" onPress={() => router.back()} />
+      <Button label="Cancel" variant="subtle" onPress={closeDescribe} />
     </ScrollView>
   );
 }

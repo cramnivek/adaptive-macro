@@ -241,6 +241,7 @@ export const estimateMeal = async (
     ollamaModel: string;
   },
   photo?: MealPhoto,
+  signal?: AbortSignal,
 ): Promise<DescribeResult> => {
   if (config.provider === 'ollama') {
     // Refused here rather than inside the Ollama path, so the message names the
@@ -255,7 +256,7 @@ export const estimateMeal = async (
   // Through loadFresh: these load on first use, and a page open since before a deploy
   // would otherwise fail asking for a file the deploy replaced.
   const { describeMealWithGemini } = await loadFresh(() => import('./geminiDescribe'));
-  return describeMealWithGemini(description, config.geminiApiKey, photo);
+  return describeMealWithGemini(description, config.geminiApiKey, photo, signal);
 };
 
 /** Maps a friendly message onto the SDK's typed errors. */

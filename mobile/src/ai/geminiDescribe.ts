@@ -82,9 +82,13 @@ export const describeMealWithGemini = async (
   description: string,
   apiKey: string,
   photo?: MealPhoto,
+  signal?: AbortSignal,
 ): Promise<DescribeResult> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), photo ? PHOTO_TIMEOUT_MS : TIMEOUT_MS);
+  const abandon = () => controller.abort();
+  signal?.addEventListener('abort', abandon);
+  if (signal?.aborted) controller.abort();
 
   let payload: any;
   try {
@@ -100,7 +104,12 @@ export const describeMealWithGemini = async (
       }),
     });
 
-    if (rejectedSession) throw new DescribeResponseError(SIGN_IN_AGAIN_MESSAGE);
+    if (
+      rejectedSession ||
+      (route.viaProxy && response.status === 401 && response.headers.get('x-auth') === 'expired')
+    ) {
+      throw new DescribeResponseError(SIGN_IN_AGAIN_MESSAGE);
+    }
     if (isPersonalLimit(response, route)) throw new DescribeResponseError(ALLOWANCE_USED_MESSAGE);
     if (!response.ok) {
       throw new DescribeResponseError(`The estimate service returned ${response.status}.`);
@@ -116,6 +125,7 @@ export const describeMealWithGemini = async (
     throw new Error('Could not reach the estimate service. Check your connection.');
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', abandon);
   }
 
   const text = textOf(payload);

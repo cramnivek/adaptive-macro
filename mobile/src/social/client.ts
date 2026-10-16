@@ -14,8 +14,13 @@ import { withTimeout } from './timeoutFetch';
 /** Long enough for a slow phone network, short enough that a hung post lets the sheet close. */
 const REQUEST_TIMEOUT_MS = 20_000;
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const isTest = process.env.NODE_ENV === 'test';
+const url =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  (!isTest ? 'https://eigtmrtavtpzzjzfcskc.supabase.co' : undefined);
+const key =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  (!isTest ? 'sb_publishable_xarT6wsIQODZNugSUcneuw_0dP9GghP' : undefined);
 
 export const supabase: SupabaseClient | null =
   url && key
@@ -33,7 +38,7 @@ export const supabase: SupabaseClient | null =
 
 // A backgrounded app's timers do not run, so a native build refreshes its
 // token only while in front — Supabase's own advice for React Native.
-if (supabase !== null && Platform.OS !== 'web') {
+if (supabase !== null && Platform.OS !== 'web' && typeof AppState?.addEventListener === 'function') {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') void supabase.auth.startAutoRefresh();
     else void supabase.auth.stopAutoRefresh();

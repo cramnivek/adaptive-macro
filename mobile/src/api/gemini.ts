@@ -50,7 +50,8 @@ const CLOUD_RUN_BASE = 'https://gemini-proxy-297164004726.asia-southeast1.run.ap
  */
 export const proxyBase = (): string =>
   PROXY_BASE_OVERRIDE || (typeof document === 'undefined' ? CLOUD_RUN_BASE : '');
-export const PROXY_TOKEN = process.env.EXPO_PUBLIC_PROXY_TOKEN ?? '';
+export const PROXY_TOKEN =
+  process.env.EXPO_PUBLIC_PROXY_TOKEN || 'j8JWPQG_6lNgKe93bPyoH-pg1ocK0rMS';
 
 export interface GeminiRoute {
   url: string;

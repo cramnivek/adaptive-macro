@@ -230,7 +230,11 @@ export default function NewFoodScreen() {
 
       <Button label="Save food" onPress={() => void save()} />
       <View style={{ height: space.sm }} />
-      <Button label="Cancel" variant="subtle" onPress={() => router.back()} />
+      <Button
+        label="Cancel"
+        variant="subtle"
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      />
     </ScrollView>
   );
 }

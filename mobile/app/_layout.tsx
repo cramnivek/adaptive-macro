@@ -17,6 +17,10 @@ import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
+
 export default function RootLayout() {
   const { colors, isDark } = useTheme();
   const [fontsLoaded, fontError] = useFonts({
