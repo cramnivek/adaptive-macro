@@ -61,7 +61,7 @@ export default function MyPostsScreen() {
         say('Nothing posted yet. Finish a workout and tap POST.')
       ) : (
         posts.map((post) => (
-          <PostCard key={post.id} view={postView(post, settings.units)} onDelete={() => void remove(post)} />
+          <PostCard key={post.id} view={postView(post, settings.units)} isOwnPost onDelete={() => void remove(post)} />
         ))
       )}
     </Screen>

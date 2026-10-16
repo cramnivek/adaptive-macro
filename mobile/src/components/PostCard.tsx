@@ -61,6 +61,7 @@ export const PostCard = ({
   likes,
   onMore,
   createdAt,
+  isOwnPost,
 }: {
   view: PostView;
   onDelete?: () => void;
@@ -71,11 +72,14 @@ export const PostCard = ({
   onMore?: () => void;
   /** ISO date string or timestamp for relative time formatting. */
   createdAt?: string;
+  /** Only true if this post was created by the viewing user. */
+  isOwnPost?: boolean;
 }) => {
   const { colors } = useTheme();
   const { settings } = useApp();
+  const canEditPhoto = isOwnPost ?? (onDelete !== undefined);
   const [cheered, setCheered] = useState(false);
-  const [viewMode, setViewMode] = useState<'breakdown' | 'card'>('breakdown');
+  const [viewMode, setViewMode] = useState<'card' | 'breakdown'>('card');
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
   const [customCardUrl, setCustomCardUrl] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
@@ -291,31 +295,8 @@ export const PostCard = ({
         ) : null}
       </View>
 
-      {/* Segmented View Toggle: Breakdown vs Story Card */}
+      {/* Segmented View Toggle: Story Card vs Breakdown */}
       <View style={[styles.viewToggleRow, { borderColor: colors.border }]}>
-        <Pressable
-          onPress={() => setViewMode('breakdown')}
-          style={[
-            styles.viewToggleBtn,
-            viewMode === 'breakdown' && [styles.viewToggleBtnActive, { backgroundColor: colors.surfaceRaised, borderColor: colors.accent }],
-          ]}
-        >
-          <Ionicons
-            name="list-outline"
-            size={14}
-            color={viewMode === 'breakdown' ? colors.accent : colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.viewToggleText,
-              { color: viewMode === 'breakdown' ? colors.text : colors.textMuted },
-              viewMode === 'breakdown' && styles.viewToggleTextActive,
-            ]}
-          >
-            Breakdown
-          </Text>
-        </Pressable>
-
         <Pressable
           onPress={() => {
             setViewMode('card');
@@ -339,6 +320,29 @@ export const PostCard = ({
             ]}
           >
             Story Card
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setViewMode('breakdown')}
+          style={[
+            styles.viewToggleBtn,
+            viewMode === 'breakdown' && [styles.viewToggleBtnActive, { backgroundColor: colors.surfaceRaised, borderColor: colors.accent }],
+          ]}
+        >
+          <Ionicons
+            name="list-outline"
+            size={14}
+            color={viewMode === 'breakdown' ? colors.accent : colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.viewToggleText,
+              { color: viewMode === 'breakdown' ? colors.text : colors.textMuted },
+              viewMode === 'breakdown' && styles.viewToggleTextActive,
+            ]}
+          >
+            Breakdown
           </Text>
         </Pressable>
       </View>
@@ -615,18 +619,20 @@ export const PostCard = ({
                 </Tappable>
               </View>
 
-              {/* Add or Change Custom Photo */}
-              <Tappable
-                onPress={handlePickPhoto}
-                accessibilityRole="button"
-                accessibilityLabel="Add or customize photo on card"
-                style={[styles.secondaryActionBtn, styles.photoActionBtn]}
-              >
-                <Ionicons name="camera-outline" size={16} color={loud.figure} />
-                <Text style={styles.secondaryActionText}>
-                  {customCardUrl ? 'CHANGE PHOTO' : 'ADD PHOTO'}
-                </Text>
-              </Tappable>
+              {/* Add or Change Custom Photo (only for author's own posts) */}
+              {canEditPhoto && (
+                <Tappable
+                  onPress={handlePickPhoto}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add or customize photo on card"
+                  style={[styles.secondaryActionBtn, styles.photoActionBtn]}
+                >
+                  <Ionicons name="camera-outline" size={16} color={loud.figure} />
+                  <Text style={styles.secondaryActionText}>
+                    {customCardUrl ? 'CHANGE PHOTO' : 'ADD PHOTO'}
+                  </Text>
+                </Tappable>
+              )}
             </View>
           </View>
         </View>

@@ -401,6 +401,7 @@ export default function SocialScreen() {
               key={post.id}
               view={postView(post, settings.units)}
               createdAt={post.created_at}
+              isOwnPost={post.author_id === profile?.id}
               author={{
                 username: post.username,
                 displayName: post.display_name,

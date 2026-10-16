@@ -212,6 +212,7 @@ export default function ProfileScreen() {
             <PostCard
               key={post.id}
               view={postView(post, settings.units)}
+              isOwnPost={own}
               author={{
                 username: post.username,
                 displayName: post.display_name,
