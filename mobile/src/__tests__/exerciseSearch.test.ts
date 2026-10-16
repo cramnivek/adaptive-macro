@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogueEntry } from '../db';
+import { BUILTIN_CATALOGUE } from '../builtinCatalogue';
 import {
   clearCatalogueCache,
   expandQueryTokens,
   getCachedCatalogue,
+  matchesMuscleFilter,
   scoreCandidate,
   searchExercisesFast,
   tokenize,
@@ -309,3 +311,90 @@ describe('exerciseSearch - catalogue cache management', () => {
     expect(getCachedCatalogue()?.[0].recordedName).toBe('Custom Bench');
   });
 });
+
+describe('exerciseSearch - new users without existing workout history', () => {
+  it('returns curated starter exercises when query and known history are both empty', () => {
+    const results = searchExercisesFast({
+      query: '',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+    });
+
+    expect(results.length).toBeGreaterThanOrEqual(20);
+    // Foundational compound lifts appear first
+    expect(results[0].canonicalName).toBe('Bench Press (Barbell)');
+    expect(results[1].canonicalName).toBe('Squat (Barbell)');
+    expect(results[2].canonicalName).toBe('Lat Pulldown (Cable)');
+    expect(results[3].canonicalName).toBe('Overhead Press (Barbell)');
+    expect(results.every((r) => !r.isCardio)).toBe(true);
+  });
+
+  it('filters exercises by muscle group when muscleFilter is set on empty query', () => {
+    const chestResults = searchExercisesFast({
+      query: '',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+      muscleFilter: 'chest',
+    });
+    expect(chestResults.length).toBeGreaterThanOrEqual(7);
+    expect(chestResults.every((r) => matchesMuscleFilter(r, 'chest'))).toBe(true);
+
+    const backResults = searchExercisesFast({
+      query: '',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+      muscleFilter: 'back',
+    });
+    expect(backResults.length).toBeGreaterThanOrEqual(7);
+    expect(backResults.every((r) => matchesMuscleFilter(r, 'back'))).toBe(true);
+
+    const armsResults = searchExercisesFast({
+      query: '',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+      muscleFilter: 'arms',
+    });
+    expect(armsResults.length).toBeGreaterThanOrEqual(8);
+    expect(armsResults.every((r) => matchesMuscleFilter(r, 'arms'))).toBe(true);
+  });
+
+  it('filters active search queries by muscleFilter', () => {
+    const pressShoulders = searchExercisesFast({
+      query: 'press',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+      muscleFilter: 'shoulders',
+    });
+    expect(pressShoulders.length).toBeGreaterThanOrEqual(2);
+    expect(pressShoulders.some((r) => r.canonicalName === 'Overhead Press (Barbell)')).toBe(true);
+    expect(pressShoulders.some((r) => r.canonicalName === 'Bench Press (Barbell)')).toBe(false);
+  });
+
+  it('matches built-in aliases for common gym names', () => {
+    const pecDeck = searchExercisesFast({
+      query: 'butterfly',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+    });
+    expect(pecDeck.length).toBeGreaterThanOrEqual(1);
+    expect(pecDeck[0].canonicalName).toBe('Pec Deck (Machine)');
+
+    const lyingTri = searchExercisesFast({
+      query: 'lying tricep extension',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+    });
+    expect(lyingTri.length).toBeGreaterThanOrEqual(1);
+    expect(lyingTri[0].canonicalName).toBe('Skullcrusher (Barbell)');
+
+    const tBar = searchExercisesFast({
+      query: 't bar row',
+      catalogue: BUILTIN_CATALOGUE,
+      known: [],
+    });
+    expect(tBar.length).toBeGreaterThanOrEqual(1);
+    expect(tBar[0].canonicalName).toBe('Chest-Supported Row (Dumbbell)');
+  });
+});
+
+

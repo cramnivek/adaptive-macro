@@ -62,7 +62,7 @@ import {
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
-import { warmCatalogueCache } from '../src/exerciseSearch';
+import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch';
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
@@ -1276,9 +1276,9 @@ export default function SessionScreen() {
   const showInfoFor = async (name: string) => {
     const entry = await exerciseInfoFor(name, settings.foodLookup.geminiApiKey);
     if (entry) {
+      updateCatalogueCache(entry);
       void loadAllCatalogueEntries().then((entries) => {
         setCatalogue(entries);
-        warmCatalogueCache(entries);
       });
       void cataloguePatternsByExerciseName().then(setPatterns);
       return setInfo(entry);
