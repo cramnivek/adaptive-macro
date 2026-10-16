@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { EnrichmentParseError } from '../ai/exercises';
 import type { MovementPattern } from '../ai/exercises';
 import { GroundedLookupError, enrichExercises } from '../api/gemini';
+import { BUILTIN_CATALOGUE } from '../builtinCatalogue';
 import {
   type CardioMode,
   detectCardio,
@@ -21,6 +22,7 @@ import {
   warmCatalogueCache,
   type ExerciseSearchResult,
   type KnownExercise,
+  type MuscleFilter,
 } from '../exerciseSearch';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -42,6 +44,16 @@ const CARDIO_SUGGESTIONS = [
   'Rowing',
   'Stair Climber',
   'Hiking',
+];
+
+const MUSCLE_FILTERS: { key: MuscleFilter; label: string }[] = [
+  { key: 'all', label: 'ALL' },
+  { key: 'chest', label: 'CHEST' },
+  { key: 'back', label: 'BACK' },
+  { key: 'legs', label: 'LEGS' },
+  { key: 'shoulders', label: 'SHOULDERS' },
+  { key: 'arms', label: 'ARMS' },
+  { key: 'core', label: 'CORE' },
 ];
 
 interface ExercisePickerProps {
@@ -83,8 +95,9 @@ export const ExercisePicker = ({
   const deferredSearch = useDeferredValue(search);
 
   const [catalogue, setCatalogue] = useState<CatalogueEntry[]>(
-    () => getCachedCatalogue() ?? [],
+    () => getCachedCatalogue() ?? BUILTIN_CATALOGUE,
   );
+  const [muscleFilter, setMuscleFilter] = useState<MuscleFilter>('all');
   const [enriching, setEnriching] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [isCardio, setIsCardio] = useState(initialMode === 'cardio');
@@ -94,14 +107,14 @@ export const ExercisePicker = ({
   const autoEnriched = useRef<Set<string>>(new Set());
   const latestTerm = useRef('');
 
-  // Warm in-memory catalogue cache if not already resident
+  // Warm in-memory catalogue cache from SQLite (which merges built-in + custom entries)
   useEffect(() => {
-    if (catalogue.length === 0) {
+    if (!getCachedCatalogue()) {
       void warmCatalogueCache(loadAllCatalogueEntries)
         .then(setCatalogue)
         .catch((err) => console.warn('failed warming catalogue cache', err));
     }
-  }, [catalogue.length]);
+  }, []);
 
   // Auto-detect cardio based on search input
   const handleSearchChange = (text: string) => {
@@ -128,9 +141,10 @@ export const ExercisePicker = ({
       catalogue,
       known,
       isCardio,
+      muscleFilter,
       limit: 30,
     });
-  }, [deferredSearch, catalogue, known, isCardio]);
+  }, [deferredSearch, catalogue, known, isCardio, muscleFilter]);
 
   // Only enrich strength training exercises with Gemini if not in cardio mode and no results
   useEffect(() => {
@@ -185,6 +199,13 @@ export const ExercisePicker = ({
 
   const rawTerm = search.trim();
   const lowerTerm = rawTerm.toLowerCase();
+  const hasStrengthHistory = useMemo(() => known.some((k) => !k.isCardio), [known]);
+
+  const emptyQueryGroupLabel = useMemo(() => {
+    if (isCardio) return 'RECENT CARDIO ACTIVITIES';
+    if (muscleFilter !== 'all') return `${muscleFilter.toUpperCase()} EXERCISES`;
+    return hasStrengthHistory ? 'RECENT & FREQUENT EXERCISES' : 'POPULAR STARTER EXERCISES';
+  }, [isCardio, muscleFilter, hasStrengthHistory]);
 
   return (
     <View style={styles.picker}>
@@ -219,6 +240,31 @@ export const ExercisePicker = ({
         autoFocus
         style={styles.input}
       />
+
+      {/* Muscle group filter chips for strength exercises */}
+      {!isCardio && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.filterBar}
+        >
+          {MUSCLE_FILTERS.map((f) => {
+            const active = muscleFilter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setMuscleFilter(f.key)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Treadmill vs Outside selection for cardio */}
       {isCardio && (
@@ -264,9 +310,7 @@ export const ExercisePicker = ({
 
       <ScrollView style={{ maxHeight: 260 }} keyboardShouldPersistTaps="handled">
         {rawTerm.length === 0 && searchResults.length > 0 && (
-          <Text style={styles.group}>
-            {isCardio ? 'RECENT CARDIO ACTIVITIES' : 'RECENT & FREQUENT EXERCISES'}
-          </Text>
+          <Text style={styles.group}>{emptyQueryGroupLabel}</Text>
         )}
 
         {searchResults.map((item) => {
@@ -386,12 +430,39 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
-    marginBottom: space.sm,
+    marginBottom: space.xs,
     textAlign: 'left',
     fontFamily: font.figure,
     color: loud.figure,
     backgroundColor: loud.panel,
     borderColor: loud.rule,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 6,
+    marginBottom: space.xs,
+  },
+  filterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  filterChipActive: {
+    backgroundColor: loud.loud,
+    borderColor: loud.loud,
+  },
+  filterChipText: {
+    fontFamily: font.display,
+    fontSize: 9,
+    letterSpacing: 1.1,
+    color: loud.figureFaint,
+  },
+  filterChipTextActive: {
+    color: loud.onLoud,
   },
   cardioSelection: {
     backgroundColor: loud.panel,

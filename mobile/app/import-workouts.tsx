@@ -104,7 +104,7 @@ export default function ImportWorkoutsScreen() {
                   {
                     color: colors.text,
                     borderColor: colors.border,
-                    backgroundColor: colors.bg,
+                    backgroundColor: colors.surface,
                   },
                 ]}
               />

@@ -52,7 +52,6 @@ import {
   listAllSets,
   listExerciseNames,
   loadAllCatalogueEntries,
-  catalogueEntryForExercise,
   cataloguePatternsByExerciseName,
   listRoutines,
   sessionSets,
@@ -63,7 +62,7 @@ import {
   updateSetValues,
 } from '../src/db';
 import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/db';
-import { warmCatalogueCache } from '../src/exerciseSearch';
+import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch';
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
@@ -77,7 +76,6 @@ import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
-import { nextLoadHint } from '../src/suggestion';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import {
@@ -100,7 +98,6 @@ import {
   parseSpeed,
 } from '../src/cardio';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space } from '../src/theme';
 import type { UnitSystem } from '../src/state/settings';
 // Aliased: `session` is already the active-workout state in this component.
@@ -187,7 +184,6 @@ const elapsed = (startedAt: string, now: number): string => {
  */
 export default function SessionScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { series, settings, updateSettings } = useApp();
   const unit = weightUnit(settings.units);
   const currentBodyweightKg = useMemo(
@@ -1280,9 +1276,9 @@ export default function SessionScreen() {
   const showInfoFor = async (name: string) => {
     const entry = await exerciseInfoFor(name, settings.foodLookup.geminiApiKey);
     if (entry) {
+      updateCatalogueCache(entry);
       void loadAllCatalogueEntries().then((entries) => {
         setCatalogue(entries);
-        warmCatalogueCache(entries);
       });
       void cataloguePatternsByExerciseName().then(setPatterns);
       return setInfo(entry);

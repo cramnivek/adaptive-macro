@@ -1,6 +1,88 @@
 import type { MovementPattern } from './ai/exercises';
+import { BUILTIN_ALIASES_BY_CANONICAL, findBuiltinCatalogueEntry } from './builtinCatalogue';
 import { type CardioMode, detectCardio, detectCardioMode } from './cardio';
+import type { MuscleRegion } from './components/muscleMap';
 import type { CatalogueEntry } from './db';
+
+export type MuscleFilter = 'all' | 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core';
+
+/**
+ * Curated priority order of foundational gym exercises shown first when a
+ * new user opens the exercise picker with no workout history.
+ */
+const STARTER_PRIORITY_NAMES: string[] = [
+  'bench press (barbell)',
+  'squat (barbell)',
+  'lat pulldown (cable)',
+  'overhead press (barbell)',
+  'romanian deadlift (barbell)',
+  'incline bench press (dumbbell)',
+  'seated cable row',
+  'leg press',
+  'lateral raise (dumbbell)',
+  'deadlift (barbell)',
+  'pull-up',
+  'dumbbell row',
+  'bicep curl (dumbbell)',
+  'triceps pushdown',
+  'bulgarian split squat',
+  'seated leg curl (machine)',
+  'leg extension (machine)',
+  'face pull (cable)',
+  'hip thrust (barbell)',
+  'plank',
+];
+
+const STARTER_PRIORITY_INDEX = new Map<string, number>(
+  STARTER_PRIORITY_NAMES.map((name, idx) => [name, idx]),
+);
+
+export const matchesMuscleFilter = (
+  entry: {
+    primaryMuscle?: string;
+    primaryRegion?: MuscleRegion | null;
+    secondaryRegions?: MuscleRegion[];
+  },
+  filter: MuscleFilter,
+): boolean => {
+  if (filter === 'all') return true;
+  const region = entry.primaryRegion;
+  const muscle = (entry.primaryMuscle ?? '').toLowerCase();
+
+  switch (filter) {
+    case 'chest':
+      return region === 'chest' || /chest|pec/.test(muscle);
+    case 'back':
+      return (
+        region === 'lats' ||
+        region === 'upper_back' ||
+        region === 'lower_back' ||
+        region === 'traps' ||
+        /back|lat|trap/.test(muscle)
+      );
+    case 'legs':
+      return (
+        region === 'quads' ||
+        region === 'hamstrings' ||
+        region === 'glutes' ||
+        region === 'calves' ||
+        /quad|hamstring|glute|calf|calves|leg/.test(muscle)
+      );
+    case 'shoulders':
+      return region === 'shoulders' || /shoulder|delt/.test(muscle);
+    case 'arms':
+      return (
+        region === 'biceps' ||
+        region === 'triceps' ||
+        region === 'forearms' ||
+        /bicep|tricep|forearm|arm/.test(muscle)
+      );
+    case 'core':
+      return region === 'abs' || region === 'obliques' || /core|ab|oblique/.test(muscle);
+    default:
+      return true;
+  }
+};
 
 /**
  * A unified exercise search item, combining catalogue metadata and user history.
@@ -92,13 +174,8 @@ export const expandQueryTokens = (tokens: string[]): string[][] => {
   return groups;
 };
 
-/**
- * Calculates a search score for a candidate against a query.
- * Returns 0 if candidate does not match all query token groups.
- */
-export const scoreCandidate = (
+const scoreSingleTarget = (
   query: string,
-  queryTokens: string[],
   expandedTokenGroups: string[][],
   name: string,
   canonicalName: string,
@@ -190,6 +267,52 @@ export const scoreCandidate = (
 };
 
 /**
+ * Calculates a search score for a candidate against a query, including any
+ * built-in aliases for the canonical exercise.
+ * Returns 0 if candidate does not match all query token groups.
+ */
+export const scoreCandidate = (
+  query: string,
+  _queryTokens: string[],
+  expandedTokenGroups: string[][],
+  name: string,
+  canonicalName: string,
+  primaryMuscle?: string,
+  equipment?: string,
+  isHistory = false,
+): number => {
+  let best = scoreSingleTarget(
+    query,
+    expandedTokenGroups,
+    name,
+    canonicalName,
+    primaryMuscle,
+    equipment,
+    isHistory,
+  );
+
+  const aliases = BUILTIN_ALIASES_BY_CANONICAL[canonicalName.toLowerCase()];
+  if (aliases && best < 1000) {
+    for (const alias of aliases) {
+      const aliasScore = scoreSingleTarget(
+        query,
+        expandedTokenGroups,
+        alias,
+        canonicalName,
+        primaryMuscle,
+        equipment,
+        isHistory,
+      );
+      if (aliasScore > best) {
+        best = aliasScore;
+      }
+    }
+  }
+
+  return best;
+};
+
+/**
  * Searches and ranks exercises from catalogue and history.
  */
 export const searchExercisesFast = ({
@@ -197,12 +320,14 @@ export const searchExercisesFast = ({
   catalogue,
   known,
   isCardio = false,
+  muscleFilter = 'all',
   limit = 30,
 }: {
   query: string;
   catalogue: CatalogueEntry[];
   known: KnownExercise[];
   isCardio?: boolean;
+  muscleFilter?: MuscleFilter;
   limit?: number;
 }): ExerciseSearchResult[] => {
   const trimmed = query.trim();
@@ -211,6 +336,7 @@ export const searchExercisesFast = ({
   if (!trimmed) {
     const results: ExerciseSearchResult[] = [];
     const seenNames = new Set<string>();
+    const seenCanonical = new Set<string>();
 
     if (isCardio) {
       // Cardio mode empty query: user cardio history first
@@ -232,18 +358,38 @@ export const searchExercisesFast = ({
       return results.slice(0, limit);
     }
 
-    // Strength mode empty query: Return top frequent exercises from user history
+    // Strength mode empty query:
+    // 1. Check user history first (filtered by muscleFilter if active)
     for (const item of known) {
       if (item.isCardio) continue;
       const lower = item.name.toLowerCase();
       if (seenNames.has(lower)) continue;
-      seenNames.add(lower);
 
-      const catEntry = catalogue.find(
-        (c) =>
-          c.canonicalName.toLowerCase() === lower ||
-          c.recordedName?.toLowerCase() === lower,
-      );
+      const catEntry =
+        catalogue.find(
+          (c) =>
+            c.canonicalName.toLowerCase() === lower ||
+            c.recordedName?.toLowerCase() === lower,
+        ) ?? findBuiltinCatalogueEntry(item.name);
+
+      if (
+        muscleFilter !== 'all' &&
+        !matchesMuscleFilter(
+          {
+            primaryMuscle: catEntry?.primaryMuscle,
+            primaryRegion: catEntry?.primaryRegion,
+            secondaryRegions: catEntry?.secondaryRegions,
+          },
+          muscleFilter,
+        )
+      ) {
+        continue;
+      }
+
+      seenNames.add(lower);
+      if (catEntry) {
+        seenCanonical.add(catEntry.canonicalName.toLowerCase());
+      }
 
       results.push({
         id: catEntry ? catEntry.id : `known:${item.name}`,
@@ -260,10 +406,64 @@ export const searchExercisesFast = ({
         score: 100,
       });
 
-      if (results.length >= 10) break;
+      if (muscleFilter === 'all' && results.length >= 10) break;
     }
 
-    return results;
+    // If user has history and no specific muscle filter is selected, return their frequent history
+    if (muscleFilter === 'all' && results.length > 0) {
+      return results;
+    }
+
+    // 2. Otherwise (new user with no history, OR browsing a specific muscle filter),
+    // populate from the built-in/cached catalogue.
+    const catalogueCandidates: CatalogueEntry[] = [];
+    for (const entry of catalogue) {
+      const effectiveName = entry.recordedName ?? entry.canonicalName;
+      if (detectCardio(effectiveName)) continue;
+      if (
+        seenNames.has(effectiveName.toLowerCase()) ||
+        seenCanonical.has(entry.canonicalName.toLowerCase())
+      ) {
+        continue;
+      }
+      if (!matchesMuscleFilter(entry, muscleFilter)) {
+        continue;
+      }
+      catalogueCandidates.push(entry);
+    }
+
+    // Sort starter exercises by curated foundational priority first, then alphabetically
+    catalogueCandidates.sort((a, b) => {
+      const idxA = STARTER_PRIORITY_INDEX.get(a.canonicalName.toLowerCase()) ?? 999;
+      const idxB = STARTER_PRIORITY_INDEX.get(b.canonicalName.toLowerCase()) ?? 999;
+      if (idxA !== idxB) return idxA - idxB;
+      return (a.recordedName ?? a.canonicalName).localeCompare(
+        b.recordedName ?? b.canonicalName,
+      );
+    });
+
+    for (const entry of catalogueCandidates) {
+      if (results.length >= limit) break;
+      const effectiveName = entry.recordedName ?? entry.canonicalName;
+      seenNames.add(effectiveName.toLowerCase());
+      seenCanonical.add(entry.canonicalName.toLowerCase());
+      results.push({
+        id: entry.id,
+        name: effectiveName,
+        canonicalName: entry.canonicalName,
+        recordedName: entry.recordedName,
+        movementPattern: entry.movementPattern,
+        primaryMuscle: entry.primaryMuscle,
+        equipment: entry.equipment,
+        bodyweightBased: entry.bodyweightBased,
+        isCardio: false,
+        cardioMode: null,
+        isHistory: false,
+        score: 50,
+      });
+    }
+
+    return results.slice(0, limit);
   }
 
   // --- Active search query ---
@@ -286,6 +486,10 @@ export const searchExercisesFast = ({
     const isEntryCardio = historyItem?.isCardio ?? detectCardio(effectiveName);
     if (isCardio !== isEntryCardio) {
       // If user is searching cardio tab, filter out non-cardio, and vice versa
+      continue;
+    }
+
+    if (!isCardio && muscleFilter !== 'all' && !matchesMuscleFilter(entry, muscleFilter)) {
       continue;
     }
 
@@ -332,14 +536,30 @@ export const searchExercisesFast = ({
       continue;
     }
 
+    const builtin = findBuiltinCatalogueEntry(item.name);
+    if (
+      !isCardio &&
+      muscleFilter !== 'all' &&
+      !matchesMuscleFilter(
+        {
+          primaryMuscle: builtin?.primaryMuscle,
+          primaryRegion: builtin?.primaryRegion,
+          secondaryRegions: builtin?.secondaryRegions,
+        },
+        muscleFilter,
+      )
+    ) {
+      continue;
+    }
+
     const score = scoreCandidate(
       trimmed,
       queryTokens,
       expandedGroups,
       item.name,
-      item.name,
-      undefined,
-      undefined,
+      builtin?.canonicalName ?? item.name,
+      builtin?.primaryMuscle,
+      builtin?.equipment,
       true,
     );
 
@@ -348,8 +568,11 @@ export const searchExercisesFast = ({
       candidates.push({
         id: `known:${item.name}`,
         name: item.name,
-        canonicalName: item.name,
+        canonicalName: builtin?.canonicalName ?? item.name,
         recordedName: item.name,
+        movementPattern: builtin?.movementPattern,
+        primaryMuscle: builtin?.primaryMuscle,
+        equipment: builtin?.equipment,
         bodyweightBased: item.bodyweightBased,
         isCardio: itemIsCardio,
         cardioMode: item.cardioMode ?? detectCardioMode(item.name),
