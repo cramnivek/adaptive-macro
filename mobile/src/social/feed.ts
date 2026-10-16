@@ -114,6 +114,19 @@ export const feedPage = async (before: FeedCursor | null): Promise<FeedPost[]> =
   return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
 };
 
+export const explorePage = async (before: FeedCursor | null): Promise<FeedPost[]> => {
+  let query = client()
+    .from('feed_posts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(PAGE);
+  if (before !== null) query = query.or(`created_at.lt.${before.at},and(created_at.eq.${before.at},id.lt.${before.id})`);
+  const { data, error } = await query;
+  if (error) fail(error);
+  return ((data ?? []) as Record<string, unknown>[]).map(toFeedPost);
+};
+
 export const postsBy = async (author: string, before: FeedCursor | null): Promise<FeedPost[]> => {
   let query = client()
     .from('feed_posts')

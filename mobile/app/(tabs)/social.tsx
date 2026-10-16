@@ -1,79 +1,152 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { Button, TOUCH_TARGET } from '../../src/components/Controls';
 import { PostCard } from '../../src/components/PostCard';
 import { Screen } from '../../src/components/Screen';
 import { Tappable } from '../../src/components/Tappable';
-import { notify } from '../../src/dialog';
-import { cursorAfter, feedPage, like, PAGE, pendingRequests, unlike } from '../../src/social/feed';
+import { confirm, notify } from '../../src/dialog';
+import { deletePost } from '../../src/social/api';
+import {
+  cursorAfter,
+  explorePage,
+  FeedCursor,
+  feedPage,
+  followCounts,
+  like,
+  PAGE,
+  pendingRequests,
+  postsBy,
+  unlike,
+} from '../../src/social/feed';
 import { postView } from '../../src/social/postPayload';
 import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
 import { useApp } from '../../src/state/AppStore';
-import { font, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
+
+type FeedTab = 'following' | 'explore' | 'my-posts';
+
+const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
+
+const getAvatarColor = (seed: string): string => {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+};
+
+const getInitials = (name?: string): string => {
+  if (!name) return '🏋️';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+};
 
 /**
- * Workouts from the people you follow, newest first.
- *
- * A feed of the people you chose rather than of everyone: public accounts you
- * don't follow are found through Find people, never pushed at you.
+ * Lively, engaging fitness community hub:
+ * - Following feed (friends & connections)
+ * - Community Explore feed (public workouts & PRs from all lifters)
+ * - My Workouts (personal shared history & records)
+ * - Profile hero banner with follower stats and quick actions
+ * - Pull-to-refresh
  */
 export default function SocialScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { settings } = useApp();
   const { configured, session, profile, profileFailed, refreshProfile } = useSocial();
-  const [posts, setPosts] = useState<FeedPost[] | null>(null);
+
+  const [activeTab, setActiveTab] = useState<FeedTab>('following');
+  const [postsByTab, setPostsByTab] = useState<Record<FeedTab, FeedPost[] | null>>({
+    following: null,
+    explore: null,
+    'my-posts': null,
+  });
+  const [moreByTab, setMoreByTab] = useState<Record<FeedTab, boolean>>({
+    following: true,
+    explore: true,
+    'my-posts': true,
+  });
+
+  const [counts, setCounts] = useState<{ followers: number; following: number }>({ followers: 0, following: 0 });
   const [requests, setRequests] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
-  const [more, setMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  // Refs rather than state because both are read in the same tick as they are
-  // written: two clicks dispatched before a re-render must not each start a
-  // page, and a second tap on a heart must see that the first is still out.
+
   const loadingMoreRef = useRef(false);
   const likesInFlight = useRef(new Set<string>());
-  const postsRef = useRef<FeedPost[] | null>(null);
-  postsRef.current = posts;
+  const postsByTabRef = useRef(postsByTab);
+  postsByTabRef.current = postsByTab;
 
-  const load = useCallback(async () => {
-    setProblem(null);
-    try {
-      const [page, pending] = await Promise.all([feedPage(null), pendingRequests()]);
-      setPosts(page);
-      setMore(page.length === PAGE);
-      setRequests(pending.length);
-    } catch (error) {
-      setProblem((error as Error).message);
-    }
-  }, []);
+  const fetchPage = useCallback(
+    async (tab: FeedTab, cursor: FeedCursor | null = null) => {
+      if (tab === 'following') return feedPage(cursor);
+      if (tab === 'explore') return explorePage(cursor);
+      return profile ? postsBy(profile.id, cursor) : [];
+    },
+    [profile],
+  );
+
+  const load = useCallback(
+    async (tab: FeedTab = activeTab) => {
+      setProblem(null);
+      try {
+        const [page, pending, theirCounts] = await Promise.all([
+          fetchPage(tab, null),
+          pendingRequests(),
+          profile ? followCounts(profile.id) : Promise.resolve({ followers: 0, following: 0 }),
+        ]);
+
+        setPostsByTab((prev) => ({ ...prev, [tab]: page }));
+        setMoreByTab((prev) => ({ ...prev, [tab]: page.length === PAGE }));
+        setRequests(pending.length);
+        setCounts(theirCounts);
+      } catch (error) {
+        setProblem((error as Error).message);
+      }
+    },
+    [activeTab, fetchPage, profile],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      if (session && profile) void load();
-    }, [session, profile, load]),
+      if (session && profile) void load(activeTab);
+    }, [session, profile, activeTab, load]),
   );
 
+  const handleTabChange = (tab: FeedTab) => {
+    setActiveTab(tab);
+    if (postsByTab[tab] === null) {
+      void load(tab);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load(activeTab);
+    setRefreshing(false);
+  };
+
   const loadMore = async () => {
-    const current = postsRef.current;
-    if (!current || current.length === 0 || loadingMoreRef.current) return;
+    const currentList = postsByTabRef.current[activeTab];
+    if (!currentList || currentList.length === 0 || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const page = await feedPage(cursorAfter(current));
-      // Appended to whatever the list is now, not to what it was when the page
-      // was asked for: a like or a reload that landed meanwhile must survive.
-      // A post already in the list is skipped, so a reload that raced this page
-      // cannot give React two rows with one key.
-      setPosts((latest) => {
-        if (!latest) return latest;
-        const have = new Set(latest.map((p) => p.id));
-        return [...latest, ...page.filter((p) => !have.has(p.id))];
+      const page = await fetchPage(activeTab, cursorAfter(currentList));
+      setPostsByTab((prev) => {
+        const existing = prev[activeTab];
+        if (!existing) return prev;
+        const have = new Set(existing.map((p) => p.id));
+        return {
+          ...prev,
+          [activeTab]: [...existing, ...page.filter((p) => !have.has(p.id))],
+        };
       });
-      setMore(page.length === PAGE);
+      setMoreByTab((prev) => ({ ...prev, [activeTab]: page.length === PAGE }));
     } catch (error) {
       notify('Could not load more', (error as Error).message);
     } finally {
@@ -82,23 +155,50 @@ export default function SocialScreen() {
     }
   };
 
-  // Optimistic: the heart changes at once and is put back if the server says no.
-  // A post with a like or unlike already out ignores further taps: the two
-  // requests could finish in either order, the server would keep whichever came
-  // last, and the heart would stay out of step with it until the next reload.
   const toggleLike = async (post: FeedPost) => {
     if (likesInFlight.current.has(post.id)) return;
     likesInFlight.current.add(post.id);
     const flip = (p: FeedPost): FeedPost =>
       p.id === post.id ? { ...p, liked: !p.liked, like_count: p.like_count + (p.liked ? -1 : 1) } : p;
-    setPosts((current) => current?.map(flip) ?? null);
+
+    setPostsByTab((prev) => ({
+      following: prev.following?.map(flip) ?? null,
+      explore: prev.explore?.map(flip) ?? null,
+      'my-posts': prev['my-posts']?.map(flip) ?? null,
+    }));
+
     try {
       await (post.liked ? unlike(post.id) : like(post.id));
     } catch (error) {
-      setPosts((current) => current?.map(flip) ?? null);
+      setPostsByTab((prev) => ({
+        following: prev.following?.map(flip) ?? null,
+        explore: prev.explore?.map(flip) ?? null,
+        'my-posts': prev['my-posts']?.map(flip) ?? null,
+      }));
       notify('Could not save that', (error as Error).message);
     } finally {
       likesInFlight.current.delete(post.id);
+    }
+  };
+
+  const handleDeletePost = async (post: FeedPost) => {
+    const sure = await confirm({
+      title: 'Delete this post?',
+      message: 'It is removed from your profile. The workout stays in your log.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!sure) return;
+    try {
+      await deletePost(post.id);
+      setPostsByTab((prev) => ({
+        following: prev.following?.filter((p) => p.id !== post.id) ?? null,
+        explore: prev.explore?.filter((p) => p.id !== post.id) ?? null,
+        'my-posts': prev['my-posts']?.filter((p) => p.id !== post.id) ?? null,
+      }));
+      notify('Post deleted');
+    } catch (error) {
+      notify('Could not delete the post', (error as Error).message);
     }
   };
 
@@ -118,7 +218,6 @@ export default function SocialScreen() {
         {profileFailed ? (
           <Card>
             {say('Could not load your profile.')}
-            {/* A failed retry is recorded in profileFailed, so the error is not needed here. */}
             <Button label="Try again" onPress={() => void refreshProfile().catch(() => undefined)} />
           </Card>
         ) : (
@@ -127,23 +226,33 @@ export default function SocialScreen() {
       </Screen>
     );
   }
-  if (session === null || profile === null) {
+  if (!session || !profile) {
     return (
       <Screen title="Social" action={gear}>
         <Card>
           {say('Follow friends and see their workouts. Sign in and choose a username to start.')}
-          <Button label={session === null ? 'Sign in' : 'Choose a username'} onPress={() => router.push(session === null ? '/sign-in' : '/profile-setup')} />
+          <Button label={!session ? 'Sign in' : 'Choose a username'} onPress={() => router.push(!session ? '/sign-in' : '/profile-setup')} />
         </Card>
       </Screen>
     );
   }
 
+  const currentPosts = postsByTab[activeTab];
+  const hasMore = moreByTab[activeTab];
+
   return (
     <Screen
       title="Social"
+      onRefresh={handleRefresh}
+      refreshing={refreshing}
       action={
         <View style={styles.actions}>
-          <Tappable onPress={() => router.push('/requests')} accessibilityRole="button" accessibilityLabel={`Follow requests, ${requests}`} style={styles.icon}>
+          <Tappable
+            onPress={() => router.push('/requests')}
+            accessibilityRole="button"
+            accessibilityLabel={`Follow requests, ${requests}`}
+            style={styles.icon}
+          >
             <Ionicons name="person-add-outline" size={22} color={colors.textMuted} />
             {requests > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.danger }]}>
@@ -158,33 +267,147 @@ export default function SocialScreen() {
         </View>
       }
     >
+      {/* Profile Hero Card */}
+      <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.heroTop}>
+          <View style={[styles.heroAvatar, { backgroundColor: getAvatarColor(profile.username) }]}>
+            <Text style={styles.heroAvatarText}>{getInitials(profile.display_name || profile.username)}</Text>
+          </View>
+          <View style={styles.heroMeta}>
+            <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
+              {profile.display_name}
+            </Text>
+            <Text style={[styles.heroHandle, { color: colors.textMuted }]}>@{profile.username}</Text>
+            <Text style={[styles.heroFollowCounts, { color: colors.textMuted }]}>
+              <Text style={[styles.countBold, { color: colors.text }]}>{counts.followers}</Text> followers ·{' '}
+              <Text style={[styles.countBold, { color: colors.text }]}>{counts.following}</Text> following
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.heroActions}>
+          <Pressable
+            onPress={() => router.push('/people')}
+            style={[styles.heroActionBtn, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+          >
+            <Ionicons name="search-outline" size={14} color={colors.text} />
+            <Text style={[styles.heroActionText, { color: colors.text }]}>Find lifters</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/requests')}
+            style={[
+              styles.heroActionBtn,
+              {
+                backgroundColor: requests > 0 ? colors.accent + '20' : colors.surfaceRaised,
+                borderColor: requests > 0 ? colors.accent : colors.border,
+              },
+            ]}
+          >
+            <Ionicons name="person-add-outline" size={14} color={requests > 0 ? colors.accent : colors.text} />
+            <Text style={[styles.heroActionText, { color: requests > 0 ? colors.accent : colors.text }]}>
+              Requests {requests > 0 ? `(${requests})` : ''}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push({ pathname: '/profile', params: { username: profile.username } })}
+            style={[styles.heroActionBtn, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+          >
+            <Ionicons name="person-outline" size={14} color={colors.text} />
+            <Text style={[styles.heroActionText, { color: colors.text }]}>My Profile</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Segmented Feed Tabs Bar */}
+      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+        {(['following', 'explore', 'my-posts'] as const).map((tab) => {
+          const isSelected = activeTab === tab;
+          const label = tab === 'following' ? 'Friends' : tab === 'explore' ? 'Community' : 'My Posts';
+          const iconName = tab === 'following' ? 'people' : tab === 'explore' ? 'globe-outline' : 'barbell-outline';
+          return (
+            <Pressable
+              key={tab}
+              onPress={() => handleTabChange(tab)}
+              style={[
+                styles.tabItem,
+                isSelected && [styles.tabItemActive, { backgroundColor: colors.accent }],
+              ]}
+            >
+              <Ionicons
+                name={iconName}
+                size={14}
+                color={isSelected ? colors.onFill : colors.textMuted}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.tabItemText,
+                  { color: isSelected ? colors.onFill : colors.textMuted },
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Feed Content */}
       {problem !== null ? (
         <>
           {say(problem)}
-          <Button label="Try again" onPress={() => void load()} />
+          <Button label="Try again" onPress={() => void load(activeTab)} />
         </>
-      ) : posts === null ? (
-        <ActivityIndicator color={colors.text} />
-      ) : posts.length === 0 ? (
+      ) : currentPosts === null ? (
+        <ActivityIndicator color={colors.text} style={styles.spinner} />
+      ) : currentPosts.length === 0 ? (
         <Card>
-          {say('Follow people to see their workouts here. Yours show up too, once you post one.')}
-          <Button label="Find people" onPress={() => router.push('/people')} />
+          {activeTab === 'following' ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No friend workouts yet</Text>
+              <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
+                Follow other lifters to see their workouts here, or check out what the community is lifting right now!
+              </Text>
+              <View style={styles.emptyButtons}>
+                <Button label="Explore Community" onPress={() => handleTabChange('explore')} />
+                <Button label="Find lifters" variant="subtle" onPress={() => router.push('/people')} />
+              </View>
+            </View>
+          ) : activeTab === 'explore' ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="globe-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No public workouts yet</Text>
+              <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
+                Be the first to share your training session with the community! Complete a workout and tap Post.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyCard}>
+              <Ionicons name="barbell-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No posted workouts yet</Text>
+              <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
+                When you finish a workout in the Train tab, tap Post to save and share it here!
+              </Text>
+            </View>
+          )}
         </Card>
       ) : (
         <>
-          {posts.map((post) => (
+          {currentPosts.map((post) => (
             <PostCard
               key={post.id}
               view={postView(post, settings.units)}
+              createdAt={post.created_at}
               author={{
                 username: post.username,
                 displayName: post.display_name,
                 onPress: () => router.push({ pathname: '/profile', params: { username: post.username } }),
               }}
               likes={{ count: post.like_count, liked: post.liked, onToggle: () => void toggleLike(post) }}
-              // Nothing to report or block on your own workout, and the database
-              // refuses to let anyone block themselves, so the menu would only
-              // ever end in a failure.
+              onDelete={activeTab === 'my-posts' || post.author_id === profile?.id ? () => void handleDeletePost(post) : undefined}
               onMore={
                 post.author_id === profile?.id
                   ? undefined
@@ -196,7 +419,15 @@ export default function SocialScreen() {
               }
             />
           ))}
-          {more && <Button label={loadingMore ? 'Loading…' : 'Load more'} variant="subtle" disabled={loadingMore} onPress={() => void loadMore()} />}
+
+          {hasMore && (
+            <Button
+              label={loadingMore ? 'Loading…' : 'Load more'}
+              variant="subtle"
+              disabled={loadingMore}
+              onPress={() => void loadMore()}
+            />
+          )}
         </>
       )}
     </Screen>
@@ -207,6 +438,136 @@ const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 14, marginBottom: space.md },
   actions: { flexDirection: 'row', alignItems: 'center' },
   icon: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
-  badge: { position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
   badgeText: { color: '#fff', fontFamily: font.uiStrong, fontSize: 10 },
+
+  // Hero Card
+  heroCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+    padding: space.md,
+    marginBottom: space.md,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginBottom: space.sm,
+  },
+  heroAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroAvatarText: {
+    fontFamily: font.uiStrong,
+    fontSize: 16,
+    color: '#ffffff',
+  },
+  heroMeta: {
+    flex: 1,
+  },
+  heroName: {
+    fontFamily: font.uiStrong,
+    fontSize: 16,
+  },
+  heroHandle: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  heroFollowCounts: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  countBold: {
+    fontFamily: font.uiStrong,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    gap: space.xs,
+    marginTop: space.xs,
+  },
+  heroActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  heroActionText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+  },
+
+  // Segmented Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 3,
+    marginBottom: space.lg,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+  },
+  tabItemActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  tabItemText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+  },
+
+  spinner: {
+    marginVertical: space.xl,
+  },
+
+  // Empty state card
+  emptyCard: {
+    alignItems: 'center',
+    paddingVertical: space.md,
+    textAlign: 'center',
+  },
+  emptyTitle: {
+    fontFamily: font.display,
+    fontSize: 17,
+    marginBottom: space.xs,
+    textAlign: 'center',
+  },
+  emptyDesc: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: space.md,
+  },
+  emptyButtons: {
+    gap: space.xs,
+    width: '100%',
+  },
 });
