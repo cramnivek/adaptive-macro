@@ -81,9 +81,9 @@ const createBeepsSamples = (): Int16Array => {
 
 /** Two warm, musical chime notes (E5 and B5). */
 const createChimeSamples = (): Int16Array => {
-  const totalSamples = Math.round(0.72 * SAMPLE_RATE);
+  const totalSamples = Math.round(1.25 * SAMPLE_RATE);
   const samples = new Int16Array(totalSamples);
-  const note1Samples = Math.round(0.24 * SAMPLE_RATE);
+  const note1Samples = Math.round(0.35 * SAMPLE_RATE);
   const note2Start = Math.round(0.18 * SAMPLE_RATE);
 
   for (let i = 0; i < totalSamples; i += 1) {
@@ -91,16 +91,16 @@ const createChimeSamples = (): Int16Array => {
     // Note 1: E5
     if (i < note1Samples) {
       const t = i / SAMPLE_RATE;
-      const env = Math.min(1, i / (0.01 * SAMPLE_RATE)) * Math.exp(-9 * t);
+      const env = Math.min(1, i / (0.01 * SAMPLE_RATE)) * Math.exp(-7.5 * t);
       val += (Math.sin(2 * Math.PI * 659.25 * t) + 0.25 * Math.sin(2 * Math.PI * 1318.5 * t)) * env * 0.5;
     }
     // Note 2: B5
     if (i >= note2Start) {
       const t = (i - note2Start) / SAMPLE_RATE;
-      const env = Math.min(1, (i - note2Start) / (0.01 * SAMPLE_RATE)) * Math.exp(-5.5 * t);
+      const env = Math.min(1, (i - note2Start) / (0.01 * SAMPLE_RATE)) * Math.exp(-3.5 * t);
       val += (Math.sin(2 * Math.PI * 987.77 * t) + 0.22 * Math.sin(2 * Math.PI * 1975.54 * t)) * env * 0.55;
     }
-    const endFade = i > totalSamples - 100 ? (totalSamples - 1 - i) / 100 : 1;
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
     samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
   }
   return samples;
@@ -108,12 +108,12 @@ const createChimeSamples = (): Int16Array => {
 
 /** Single metallic boxing/gym round bell strike. */
 const createBellSamples = (): Int16Array => {
-  const totalSamples = Math.round(0.75 * SAMPLE_RATE);
+  const totalSamples = Math.round(1.4 * SAMPLE_RATE);
   const samples = new Int16Array(totalSamples);
   for (let i = 0; i < totalSamples; i += 1) {
     const t = i / SAMPLE_RATE;
     const attack = Math.min(1, i / (0.005 * SAMPLE_RATE));
-    const decay = Math.exp(-4.8 * t);
+    const decay = Math.exp(-3.2 * t);
     const env = attack * decay;
     const val =
       (Math.sin(2 * Math.PI * 880 * t) * 0.45 +
@@ -121,7 +121,7 @@ const createBellSamples = (): Int16Array => {
         Math.sin(2 * Math.PI * 2640 * t) * 0.15 +
         Math.sin(2 * Math.PI * 587.33 * t) * 0.15) *
       env;
-    const endFade = i > totalSamples - 100 ? (totalSamples - 1 - i) / 100 : 1;
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
     samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
   }
   return samples;
@@ -129,7 +129,7 @@ const createBellSamples = (): Int16Array => {
 
 /** Ascending 3-tone triad: C5 (523Hz), E5 (659Hz), G5 (784Hz). */
 const createRisingSamples = (): Int16Array => {
-  const totalSamples = Math.round(0.75 * SAMPLE_RATE);
+  const totalSamples = Math.round(1.3 * SAMPLE_RATE);
   const samples = new Int16Array(totalSamples);
   const notes = [
     { hz: 523.25, start: 0 },
@@ -142,7 +142,7 @@ const createRisingSamples = (): Int16Array => {
       if (i >= note.start) {
         const t = (i - note.start) / SAMPLE_RATE;
         const attack = Math.min(1, (i - note.start) / (0.008 * SAMPLE_RATE));
-        const decay = Math.exp(-6 * t);
+        const decay = Math.exp(-3.6 * t);
         val +=
           (Math.sin(2 * Math.PI * note.hz * t) + 0.18 * Math.sin(2 * Math.PI * note.hz * 2 * t)) *
           attack *
@@ -150,7 +150,7 @@ const createRisingSamples = (): Int16Array => {
           0.48;
       }
     }
-    const endFade = i > totalSamples - 100 ? (totalSamples - 1 - i) / 100 : 1;
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
     samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
   }
   return samples;
@@ -158,12 +158,12 @@ const createRisingSamples = (): Int16Array => {
 
 /** Warm, deep singing bowl / meditation gong. */
 const createGongSamples = (): Int16Array => {
-  const totalSamples = Math.round(0.95 * SAMPLE_RATE);
+  const totalSamples = Math.round(1.9 * SAMPLE_RATE);
   const samples = new Int16Array(totalSamples);
   for (let i = 0; i < totalSamples; i += 1) {
     const t = i / SAMPLE_RATE;
-    const attack = Math.min(1, i / (0.03 * SAMPLE_RATE));
-    const decay = Math.exp(-2.8 * t);
+    const attack = Math.min(1, i / (0.035 * SAMPLE_RATE));
+    const decay = Math.exp(-2.1 * t);
     const env = attack * decay;
     const val =
       (Math.sin(2 * Math.PI * 261.63 * t) * 0.5 +
@@ -171,7 +171,7 @@ const createGongSamples = (): Int16Array => {
         Math.sin(2 * Math.PI * 523.25 * t) * 0.15 +
         Math.sin(2 * Math.PI * 65.41 * t) * 0.07) *
       env;
-    const endFade = i > totalSamples - 100 ? (totalSamples - 1 - i) / 100 : 1;
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
     samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
   }
   return samples;

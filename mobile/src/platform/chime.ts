@@ -16,6 +16,8 @@ import { type ChimeChoice, chimeWav } from './chimeSound';
  */
 
 const audioCache = new Map<ChimeChoice, HTMLAudioElement>();
+let currentPlaying: HTMLAudioElement | null = null;
+let primingToken = 0;
 let audioCtx: any = null;
 
 const getAudioContext = (): any => {
@@ -44,41 +46,45 @@ const playWebAudioFallback = (choice: ChimeChoice): void => {
       osc.frequency.setValueAtTime(880, t);
       gain.gain.setValueAtTime(0.001, t);
       gain.gain.exponentialRampToValueAtTime(0.35, t + 0.005);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(t);
-      osc.stop(t + 0.7);
+      osc.stop(t + 1.4);
     } else if (choice === 'rising') {
-      const notes = [523.25, 659.25, 783.99];
-      notes.forEach((hz, idx) => {
-        const noteT = t + idx * 0.12;
+      const notes = [
+        { hz: 523.25, start: 0, dur: 1.3 },
+        { hz: 659.25, start: 0.12, dur: 1.18 },
+        { hz: 783.99, start: 0.24, dur: 1.06 },
+      ];
+      notes.forEach((note) => {
+        const noteT = t + note.start;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.frequency.setValueAtTime(hz, noteT);
+        osc.frequency.setValueAtTime(note.hz, noteT);
         gain.gain.setValueAtTime(0.001, noteT);
         gain.gain.exponentialRampToValueAtTime(0.28, noteT + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, noteT + 0.4);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteT + note.dur);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(noteT);
-        osc.stop(noteT + 0.4);
+        osc.stop(noteT + note.dur);
       });
     } else if (choice === 'gong') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.setValueAtTime(261.63, t);
       gain.gain.setValueAtTime(0.001, t);
-      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(t);
-      osc.stop(t + 0.9);
+      osc.stop(t + 1.9);
     } else if (choice === 'chime') {
       const notes = [
         { hz: 659.25, start: 0, dur: 0.35 },
-        { hz: 987.77, start: 0.18, dur: 0.5 },
+        { hz: 987.77, start: 0.18, dur: 1.07 },
       ];
       notes.forEach((note) => {
         const noteT = t + note.start;
@@ -141,12 +147,16 @@ const audio = (choice: ChimeChoice): HTMLAudioElement | null => {
 export const primeChime = (choice: ChimeChoice = 'chime'): void => {
   const a = audio(choice);
   if (a !== null) {
+    const token = ++primingToken;
     a.muted = true;
     void a
       .play()
       .then(() => {
-        a.pause();
-        a.currentTime = 0;
+        // If a real play request came in while priming, do not pause!
+        if (primingToken === token) {
+          a.pause();
+          a.currentTime = 0;
+        }
         a.muted = false;
       })
       .catch(() => {
@@ -161,10 +171,32 @@ export const primeChime = (choice: ChimeChoice = 'chime'): void => {
 
 /** Plays the chime, if a tap has primed it. Quietly nothing if the browser still says no. */
 export const playChime = (choice: ChimeChoice = 'chime'): void => {
+  // Invalidate any in-flight prime pause callback
+  primingToken++;
+
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === 'suspended') {
+    void ctx.resume();
+  }
+
   const a = audio(choice);
   if (a !== null) {
+    if (currentPlaying && currentPlaying !== a) {
+      try {
+        currentPlaying.pause();
+        currentPlaying.currentTime = 0;
+      } catch {
+        // Ignore
+      }
+    }
+    currentPlaying = a;
     a.muted = false;
-    a.currentTime = 0;
+    try {
+      a.pause();
+      a.currentTime = 0;
+    } catch {
+      // Ignore
+    }
     const playPromise = a.play();
     if (playPromise !== undefined) {
       playPromise.catch(() => {

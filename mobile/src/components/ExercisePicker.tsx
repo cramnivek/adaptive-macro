@@ -296,13 +296,16 @@ export const ExercisePicker = ({
           <Text style={styles.group}>POPULAR CARDIO ACTIVITIES</Text>
           <View style={styles.suggestionChips}>
             {CARDIO_SUGGESTIONS.map((item) => (
-              <Pressable
+              <Tappable
                 key={item}
                 onPress={() => handleSearchChange(item)}
+                scaleTo={0.94}
                 style={styles.suggestionChip}
+                accessibilityRole="button"
+                accessibilityLabel={`Select cardio activity ${item}`}
               >
                 <Text style={styles.suggestionText}>{item}</Text>
-              </Pressable>
+              </Tappable>
             ))}
           </View>
         </View>
@@ -512,13 +515,15 @@ const styles = StyleSheet.create({
     backgroundColor: loud.panel,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-    paddingHorizontal: space.sm,
-    paddingVertical: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
     borderRadius: radius.pill,
   },
   suggestionText: {
-    fontFamily: font.ui,
+    fontFamily: font.uiStrong,
     fontSize: 12,
+    color: loud.figure,
+    letterSpacing: 0.2,
   },
   group: {
     fontFamily: font.display,

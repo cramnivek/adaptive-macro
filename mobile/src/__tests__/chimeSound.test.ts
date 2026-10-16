@@ -51,7 +51,7 @@ describe('chimeWav', () => {
 
       const duration = samples.length / 22050;
       expect(duration).toBeGreaterThan(0.5);
-      expect(duration).toBeLessThan(1.1);
+      expect(duration).toBeLessThan(2.5);
 
       const peak = samples.reduce((max, s) => Math.max(max, Math.abs(s)), 0);
       expect(peak).toBeGreaterThan(10000);

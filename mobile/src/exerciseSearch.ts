@@ -599,12 +599,16 @@ let warmPromise: Promise<CatalogueEntry[]> | null = null;
  * Pre-warms or retrieves the cached catalogue in memory.
  */
 export const warmCatalogueCache = async (
-  loadFn: () => Promise<CatalogueEntry[]>,
+  loadOrEntries: (() => Promise<CatalogueEntry[]>) | CatalogueEntry[],
 ): Promise<CatalogueEntry[]> => {
+  if (Array.isArray(loadOrEntries)) {
+    inMemoryCatalogue = loadOrEntries;
+    return inMemoryCatalogue;
+  }
   if (inMemoryCatalogue) return inMemoryCatalogue;
   if (warmPromise) return warmPromise;
 
-  warmPromise = loadFn()
+  warmPromise = loadOrEntries()
     .then((entries) => {
       inMemoryCatalogue = entries;
       warmPromise = null;
