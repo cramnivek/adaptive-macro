@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SpeedUnit } from '../cardio';
-import { playChime, primeChime } from '../platform/chime';
+import { playChime } from '../platform/chime';
 import {
   CHIME_OPTIONS,
   type ChimeChoice,
@@ -77,7 +77,6 @@ export const SessionOptionsSheet = ({
 
   const handlePreview = (choice: ChimeChoice) => {
     thud('light');
-    primeChime(choice);
     playChime(choice);
     onChangeChimeChoice(choice);
   };

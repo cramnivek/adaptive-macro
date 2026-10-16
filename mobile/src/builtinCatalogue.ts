@@ -1,5 +1,3 @@
-import type { MovementPattern } from './ai/exercises';
-import type { MuscleRegion } from './components/muscleMap';
 import type { CatalogueEntry } from './db';
 
 export interface BuiltinExerciseSpec extends Omit<CatalogueEntry, 'recordedName'> {
@@ -520,7 +518,7 @@ export const RAW_BUILTIN_CATALOGUE: BuiltinExerciseSpec[] = [
     id: 'builtin:plank',
     canonicalName: 'Plank',
     aliases: ['Ab Wheel Rollout', 'Crunch', 'Cable Crunch', 'Hanging Leg Raise'],
-    movementPattern: 'other',
+    movementPattern: 'core',
     primaryMuscle: 'Core',
     equipment: 'Bodyweight',
     bodyweightBased: true,
