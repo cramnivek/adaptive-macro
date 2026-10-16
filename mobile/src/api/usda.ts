@@ -37,6 +37,23 @@ interface FdcNutrient {
   unitName?: string;
 }
 
+interface FdcMeasure {
+  id?: number;
+  disseminationText?: string;
+  gramWeight?: number;
+  modifier?: string;
+}
+
+interface FdcPortion {
+  id?: number;
+  gramWeight?: number;
+  portionDescription?: string;
+  modifier?: string;
+  measureUnit?: {
+    name?: string;
+  };
+}
+
 interface FdcFood {
   fdcId: number;
   description?: string;
@@ -48,6 +65,8 @@ interface FdcFood {
   servingSizeUnit?: string;
   householdServingFullText?: string;
   foodNutrients?: FdcNutrient[];
+  foodMeasures?: FdcMeasure[];
+  foodPortions?: FdcPortion[];
 }
 
 const nutrientValue = (nutrients: FdcNutrient[], id: number): number => {
@@ -56,24 +75,75 @@ const nutrientValue = (nutrients: FdcNutrient[], id: number): number => {
 };
 
 /**
- * Serving portions from a branded item's declared serving size.
+ * Serving portions from USDA declared food measures, portions, or serving sizes.
  *
- * Only grams and millilitres are accepted: for anything else the unit-to-gram
- * conversion is unknown, and inventing one would put a wrong number straight
- * into the food log. Those items fall back to weighing in grams.
+ * Captures household amounts ("1 large", "1 cup", "1 breast") from Foundation
+ * and SR Legacy data so users aren't restricted to weighing only in grams.
  */
 const portionsFor = (food: FdcFood): FoodPortion[] => {
   const portions: FoodPortion[] = [{ label: '100 g', grams: 100 }];
-  const unit = food.servingSizeUnit?.toLowerCase();
+  const seenGrams = new Set<number>([100]);
 
+  // 1. Check FDC foodMeasures (common in SR Legacy)
+  if (Array.isArray(food.foodMeasures)) {
+    for (const measure of food.foodMeasures) {
+      const grams = measure.gramWeight;
+      if (!isUsableNumber(grams) || grams <= 0 || seenGrams.has(Math.round(grams))) continue;
+      const label = measure.disseminationText?.trim() || measure.modifier?.trim();
+      if (label) {
+        seenGrams.add(Math.round(grams));
+        portions.push({
+          label: `${label} (${Math.round(grams)} g)`,
+          grams: Math.round(grams * 10) / 10,
+        });
+      }
+    }
+  }
+
+  // 2. Check FDC foodPortions (common in Foundation foods)
+  if (Array.isArray(food.foodPortions)) {
+    for (const portion of food.foodPortions) {
+      const grams = portion.gramWeight;
+      if (!isUsableNumber(grams) || grams <= 0 || seenGrams.has(Math.round(grams))) continue;
+      const label =
+        portion.portionDescription?.trim() ||
+        portion.modifier?.trim() ||
+        portion.measureUnit?.name?.trim();
+      if (label) {
+        seenGrams.add(Math.round(grams));
+        portions.push({
+          label: `${label} (${Math.round(grams)} g)`,
+          grams: Math.round(grams * 10) / 10,
+        });
+      }
+    }
+  }
+
+  // 3. Branded item declared serving size
+  const unit = food.servingSizeUnit?.toLowerCase();
   if (isUsableNumber(food.servingSize) && food.servingSize > 0 && (unit === 'g' || unit === 'ml')) {
-    portions.push({
-      label: food.householdServingFullText?.trim() || `1 serving (${food.servingSize} ${unit})`,
-      grams: food.servingSize,
-    });
+    const grams = food.servingSize;
+    if (!seenGrams.has(Math.round(grams))) {
+      portions.push({
+        label: food.householdServingFullText?.trim() || `1 serving (${Math.round(grams)} ${unit})`,
+        grams: Math.round(grams * 10) / 10,
+      });
+    }
   }
 
   return portions;
+};
+
+export const formatUsdaName = (description: string): string => {
+  let cleaned = description
+    .replace(/\s*\([^)]*Food Distribution Program[^)]*\)/gi, '')
+    .replace(/\s*\([^)]*Commodity[^)]*\)/gi, '')
+    .replace(/\bbroilers or fryers,\s*/gi, '')
+    .trim();
+
+  return cleaned
+    .toLowerCase()
+    .replace(/(^|[\s,(/-])([a-z])/g, (_, prefix: string, letter: string) => prefix + letter.toUpperCase());
 };
 
 const toFood = (food: FdcFood): Food | null => {
@@ -88,10 +158,7 @@ const toFood = (food: FdcFood): Food | null => {
 
   return {
     id: `usda:${food.fdcId}`,
-    // Descriptions are shouted in the source data ("CHICKEN, BROILERS ...").
-    name: description
-      .toLowerCase()
-      .replace(/(^|[\s,(])([a-z])/g, (_, prefix: string, letter: string) => prefix + letter.toUpperCase()),
+    name: formatUsdaName(description),
     brand: food.brandName?.trim() || food.brandOwner?.trim() || undefined,
     barcode: food.gtinUpc?.trim() || undefined,
     source: 'usda',

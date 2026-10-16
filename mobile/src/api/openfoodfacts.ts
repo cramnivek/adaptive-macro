@@ -86,6 +86,8 @@ const toFood = (product: OffProduct): Food | null => {
   const nutriments = product.nutriments ?? {};
   const name = product.product_name?.trim();
   if (!name || !product.code) return null;
+  // Ignore entries whose name is just a barcode number
+  if (/^\d+$/.test(name)) return null;
 
   const kcal = isUsableNumber(nutriments['energy-kcal_100g'])
     ? nutriments['energy-kcal_100g']
@@ -93,7 +95,16 @@ const toFood = (product: OffProduct): Food | null => {
       ? kjToKcal(nutriments.energy_100g)
       : null;
 
-  if (kcal === null) return null;
+  if (kcal === null || kcal <= 0) return null;
+
+  const proteinG = isUsableNumber(nutriments.proteins_100g) ? nutriments.proteins_100g : 0;
+  const carbsG = isUsableNumber(nutriments.carbohydrates_100g) ? nutriments.carbohydrates_100g : 0;
+  const fatG = isUsableNumber(nutriments.fat_100g) ? nutriments.fat_100g : 0;
+  const fiberG = isUsableNumber(nutriments.fiber_100g) ? nutriments.fiber_100g : 0;
+
+  // Reject physically impossible crowd-sourced entries (sum > 105 g / 100 g)
+  if (proteinG + carbsG + fatG > 105) return null;
+  if (proteinG > 100 || carbsG > 100 || fatG > 100) return null;
 
   return {
     id: `off:${product.code}`,
@@ -103,12 +114,10 @@ const toFood = (product: OffProduct): Food | null => {
     source: 'openfoodfacts',
     per100g: {
       kcal,
-      proteinG: isUsableNumber(nutriments.proteins_100g) ? nutriments.proteins_100g : 0,
-      carbsG: isUsableNumber(nutriments.carbohydrates_100g)
-        ? nutriments.carbohydrates_100g
-        : 0,
-      fatG: isUsableNumber(nutriments.fat_100g) ? nutriments.fat_100g : 0,
-      fiberG: isUsableNumber(nutriments.fiber_100g) ? nutriments.fiber_100g : 0,
+      proteinG,
+      carbsG,
+      fatG,
+      fiberG,
     },
     portions: portionsFor(product),
     fetchedAt: new Date().toISOString(),

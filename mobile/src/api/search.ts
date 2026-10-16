@@ -1,4 +1,5 @@
 import type { Food } from '@adaptive-macros/engine';
+import { searchBuiltinFoods } from '../builtinFoods';
 import { searchLocalFoods } from '../db';
 import { FoodApiError } from './http';
 import { DEFAULT_FOOD_COUNTRY, searchOpenFoodFacts } from './openfoodfacts';
@@ -13,33 +14,20 @@ export interface SearchResults {
 /**
  * Searches every source at once and merges the results.
  *
- * Ordering is cached-first, then USDA, then Open Food Facts. Foods already in
- * the local cache are ones this user has eaten before, so they are almost
- * always the intended match; USDA outranks OFF because its whole-food data is
- * curated rather than crowd-sourced.
- *
- * Sources are queried in parallel and failures are collected instead of
- * thrown — one API being down should still leave the search usable.
- *
- * They are also *awaited* in two waves. Every source starts at once, but the
- * device cache and USDA answer in about a second where Open Food Facts takes
- * two to three, and a country view of it can take longer still. Waiting for all
- * four means every search runs at the speed of the slowest one. `onPartial`
- * fires when the fast wave lands so the screen can paint it.
- *
- * This is safe only because the wave order matches the ordering rule above:
- * cached and USDA results sort ahead of Open Food Facts anyway, so the late
- * arrivals append and the list never reorders under the user's finger.
+ * Ordering is curated builtin first, then user's local cache, then USDA,
+ * then Open Food Facts.
  */
 export const searchFoods = async (
   query: string,
   usdaApiKey: string = USDA_DEMO_KEY,
   country: string = DEFAULT_FOOD_COUNTRY,
   onPartial?: (partial: SearchResults) => void,
+  category?: string,
 ): Promise<SearchResults> => {
   const trimmed = query.trim();
   if (trimmed.length < 2) return { foods: [], errors: [] };
 
+  const builtin = searchBuiltinFoods(trimmed, category);
   const local = searchLocalFoods(trimmed);
   const usda = searchUsda(trimmed, usdaApiKey);
   // The country view first, then the global one. Both are queried because a
@@ -58,8 +46,8 @@ export const searchFoods = async (
   const [localResult, usdaResult] = await Promise.allSettled([local, usda]);
 
   const errors: string[] = [];
-  const foods: Food[] = [];
-  const seen = new Set<string>();
+  const foods: Food[] = [...builtin];
+  const seen = new Set<string>(builtin.map((f) => f.id));
 
   const collect = (result: PromiseSettledResult<Food[]>) => {
     if (result.status === 'fulfilled') {

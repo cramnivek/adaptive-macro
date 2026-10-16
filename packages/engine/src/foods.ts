@@ -6,6 +6,7 @@ export type FoodSource =
   | 'usda'
   | 'custom'
   | 'recipe'
+  | 'builtin'
   /** Estimated by Claude from a description, then confirmed by the user. */
   | 'ai';
 
@@ -22,6 +23,7 @@ export interface Food {
   /** UPC/EAN, present for scanned packaged items. */
   barcode?: string;
   source: FoodSource;
+  category?: 'protein' | 'carbs' | 'fats' | 'produce' | 'dairy';
   /**
    * Nutrients per 100 g. Both food APIs normalise to 100 g, and storing one
    * canonical basis means portion maths is a single multiply everywhere
@@ -179,9 +181,15 @@ const normalise = (value: string): string =>
  * the direction that withholds a lookup rather than spending one.
  */
 const variantsOf = (token: string): string[] => {
-  if (token.endsWith('es') && token.length > 4) return [token, token.slice(0, -2), token.slice(0, -1)];
-  if (token.endsWith('s') && token.length > 3) return [token, token.slice(0, -1)];
-  return [token];
+  const list = [token];
+  if (token.endsWith('es') && token.length > 4) {
+    list.push(token.slice(0, -2), token.slice(0, -1));
+  } else if (token.endsWith('s') && token.length > 3) {
+    list.push(token.slice(0, -1));
+  } else if (!token.endsWith('s')) {
+    list.push(token + 's');
+  }
+  return list;
 };
 
 /** Words this short carry no signal, and firing a lookup on one spends money on noise. */
@@ -196,25 +204,6 @@ const MIN_TOKEN_LENGTH = 3;
  */
 const STOPWORDS = new Set(['and', 'the', 'with', 'for', 'from']);
 
-/**
- * True when the results plausibly answer the query.
- *
- * Search `crispyking breast` and the databases return twelve kinds of poultry:
- * confident, correctly formatted, and not the thing you asked for. Auto-lookup
- * used to be gated on an empty result list, so the one case where the
- * databases are weakest — branded and restaurant items — was the one case AI
- * could not reach.
- *
- * A model call is not needed to see the problem. `crispyking` appears in none
- * of the twelve names. So: every query word of three or more characters must
- * turn up somewhere in some result's name or brand. One word that does not is
- * the whole signal.
- *
- * Matching is by substring rather than whole word, which covers `breasts` for
- * `breast` and also lets `graham` cover `ham`. That false positive is the
- * direction worth being wrong in — it withholds a charged lookup rather than
- * spending one.
- */
 /** The words of a query that are worth matching on. */
 const queryTokens = (query: string): string[] =>
   normalise(query)
@@ -232,6 +221,110 @@ export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
   return tokens.every((token) =>
     variantsOf(token).some((variant) => haystacks.some((hay) => hay.includes(variant))),
   );
+};
+
+/**
+ * Calculates a multi-factor relevance score for a food given a search query.
+ *
+ * Combines exact-title matches, word-boundary matches, source authority
+ * (builtin > custom > usda > openfoodfacts), title conciseness, and presence
+ * of practical household portions.
+ */
+export const foodRelevanceScore = (query: string, food: Food): number => {
+  const normQuery = normalise(query);
+  const normName = normalise(food.name);
+  const normBrand = food.brand ? normalise(food.brand) : '';
+  const tokens = queryTokens(query);
+  if (tokens.length === 0) return 0;
+
+  let score = 0;
+
+  // 1. Exact title matches
+  if (normName === normQuery) {
+    score += 3000;
+  } else if (normName.startsWith(normQuery + ' ') || normName.startsWith(normQuery + ',')) {
+    score += 1500;
+  } else if (normName.startsWith(normQuery)) {
+    score += 1200;
+  } else if (normName.includes(' ' + normQuery + ' ') || normName.endsWith(' ' + normQuery)) {
+    score += 900;
+  }
+
+  // 2. Token / word matching
+  const nameWords = normName.split(' ');
+  const brandWords = normBrand ? normBrand.split(' ') : [];
+  let nameTokensCovered = 0;
+  let allTokensCovered = 0;
+
+  for (const token of tokens) {
+    const variants = variantsOf(token);
+    let matchedInName = false;
+    let matchedInBrand = false;
+
+    // Word match in name
+    if (nameWords.some((w) => variants.includes(w))) {
+      score += 250;
+      matchedInName = true;
+    } else if (nameWords.some((w) => variants.some((v) => w.startsWith(v)))) {
+      score += 140;
+      matchedInName = true;
+    } else if (brandWords.some((w) => variants.includes(w))) {
+      score += 80;
+      matchedInBrand = true;
+    } else if (brandWords.some((w) => variants.some((v) => w.startsWith(v)))) {
+      score += 40;
+      matchedInBrand = true;
+    } else if (variants.some((v) => normName.includes(v))) {
+      // Substring fallback
+      score += 20;
+      matchedInName = true;
+    }
+
+    if (matchedInName) {
+      nameTokensCovered++;
+      allTokensCovered++;
+    } else if (matchedInBrand) {
+      allTokensCovered++;
+    }
+  }
+
+  // Completeness bonuses
+  if (allTokensCovered === tokens.length) {
+    score += 400;
+  }
+  if (nameTokensCovered === tokens.length) {
+    score += 300;
+  }
+
+  // 3. Source trust weight
+  if (food.source === 'builtin') {
+    score += 350;
+  } else if (food.source === 'custom' || food.source === 'recipe') {
+    score += 220;
+  } else if (food.source === 'usda') {
+    score += 120;
+  }
+
+  // 4. Name brevity / simplicity (clean names beat 100-character keyword spam)
+  if (normName.length <= 25) {
+    score += 70;
+  } else if (normName.length <= 45) {
+    score += 30;
+  } else if (normName.length > 75) {
+    score -= Math.min(80, Math.floor((normName.length - 75) / 2));
+  }
+
+  // 5. Portions quality bonus (having household portions makes logging far more useful)
+  if (food.portions && food.portions.length > 1) {
+    score += 60;
+  }
+
+  // 6. Macro consistency sanity check
+  if (food.per100g && !isNutritionallyConsistent(food.per100g, 0.25)) {
+    score -= 200;
+  }
+
+  return score;
 };
 
 /**
@@ -263,4 +356,21 @@ export const byQueryCoverage = (query: string, foods: Food[]): Food[] =>
   foods
     .map((food, index) => ({ food, index, score: queryCoverage(query, food) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.food);
+
+/**
+ * Multi-signal ranking algorithm for food search.
+ *
+ * Sorts primarily by query coverage and relevance score (exact matches, word
+ * boundaries, verified source authority, title brevity, household portions).
+ */
+export const rankSearchResults = (query: string, foods: Food[]): Food[] =>
+  foods
+    .map((food, index) => ({
+      food,
+      index,
+      coverage: queryCoverage(query, food),
+      score: foodRelevanceScore(query, food),
+    }))
+    .sort((a, b) => b.score - a.score || b.coverage - a.coverage || a.index - b.index)
     .map((entry) => entry.food);

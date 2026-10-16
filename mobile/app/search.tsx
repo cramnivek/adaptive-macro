@@ -1,10 +1,11 @@
 import type { Food, Meal } from '@adaptive-macros/engine';
-import { byQueryCoverage, isNutritionallyConsistent, resultsAnswerQuery } from '@adaptive-macros/engine';
+import { isNutritionallyConsistent, rankSearchResults, resultsAnswerQuery } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PartialFiguresError, UngroundedResponseError, lookupFood } from '../src/api/gemini';
 import { searchFoods } from '../src/api/search';
+import { getPopularBuiltinFoods } from '../src/builtinFoods';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
@@ -13,12 +14,24 @@ import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
 
 const SOURCE_LABELS: Record<Food['source'], string> = {
+  builtin: 'Verified',
   custom: 'Saved',
   recipe: 'Recipe',
   ai: 'Estimate',
   usda: 'USDA',
   openfoodfacts: 'OFF',
 };
+
+type FoodCategory = 'all' | 'protein' | 'carbs' | 'produce' | 'fats' | 'dairy';
+
+const CATEGORIES: { id: FoodCategory; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'protein', label: 'Proteins' },
+  { id: 'carbs', label: 'Carbs' },
+  { id: 'produce', label: 'Fruit & Veg' },
+  { id: 'fats', label: 'Fats' },
+  { id: 'dairy', label: 'Dairy' },
+];
 
 export default function SearchScreen() {
   const { colors } = useTheme();
@@ -28,6 +41,7 @@ export default function SearchScreen() {
 
   const { settings, logFood } = useApp();
   const [query, setQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<FoodCategory>('all');
   const [results, setResults] = useState<Food[]>([]);
   const [frequent, setFrequent] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
@@ -140,6 +154,7 @@ export default function SearchScreen() {
           // is exactly the search this is meant to serve.
           if (partial.foods.length > 0) setLoading(false);
         },
+        selectedCategory === 'all' ? undefined : selectedCategory,
       );
       if (latestQuery.current !== trimmed) return;
       setResults(found.foods);
@@ -151,18 +166,44 @@ export default function SearchScreen() {
     return () => {
       if (debounce.current) clearTimeout(debounce.current);
     };
-  }, [query, settings.usdaApiKey, settings.foodCountry]);
+  }, [query, settings.usdaApiKey, settings.foodCountry, selectedCategory]);
 
   const confirm = useCallback(
     async (food: Food, grams: number, chosenMeal: Meal) => {
       await logFood(food, grams, chosenMeal);
       setSelected(null);
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     },
     [logFood, router],
   );
 
   const showingFrequent = query.trim().length < 2;
+
+  const filteredFrequent = useMemo(() => {
+    if (selectedCategory === 'all') return frequent;
+    return frequent.filter((f) => f.category === selectedCategory);
+  }, [frequent, selectedCategory]);
+
+  const popularBuiltin = useMemo(() => {
+    return getPopularBuiltinFoods(selectedCategory === 'all' ? undefined : selectedCategory, 25);
+  }, [selectedCategory]);
+
+  const emptyStateItems = useMemo(() => {
+    const seen = new Set<string>();
+    const combined: Food[] = [];
+    for (const f of filteredFrequent) {
+      seen.add(f.id);
+      combined.push(f);
+    }
+    for (const f of popularBuiltin) {
+      if (!seen.has(f.id)) {
+        seen.add(f.id);
+        combined.push(f);
+      }
+    }
+    return combined;
+  }, [filteredFrequent, popularBuiltin]);
 
   // One or two results, where the relevance check was satisfied but a thin
   // list might still be the wrong answer. Asking costs a call, so it stays the
@@ -187,14 +228,10 @@ export default function SearchScreen() {
   );
 
   /**
-   * Ranked by how much of the query each result accounts for.
-   *
-   * Worst-first is what made this unusable: `mang inasal pecho` put `Guava
-   * mang` and `Mang Tomas` at the top, because they matched one common word.
-   * Nothing is dropped — a weak match is still a match, and hiding rows on a
-   * guess is how a search stops being trustworthy.
+   * Multi-signal ranked results: exact matches, verified core staples,
+   * household portions, and title brevity sort to the top.
    */
-  const ranked = useMemo(() => byQueryCoverage(query.trim(), results), [query, results]);
+  const ranked = useMemo(() => rankSearchResults(query.trim(), results), [query, results]);
 
   /**
    * Rows step aside while a lookup runs against them.
@@ -224,7 +261,7 @@ export default function SearchScreen() {
       ? ranked.length
       : 0;
 
-  const shown = showingFrequent ? frequent : hiddenWhileLooking > 0 ? [] : ranked;
+  const shown = showingFrequent ? emptyStateItems : hiddenWhileLooking > 0 ? [] : ranked;
 
   const canLookUp =
     !showingFrequent && !loading && settled && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
@@ -327,9 +364,41 @@ export default function SearchScreen() {
           label="Search"
           value={query}
           onChangeText={setQuery}
-          placeholder="Greek yogurt, chicken breast, oats…"
+          placeholder="Eggs, chicken breast, oats, banana…"
         />
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoryChips}
+      >
+        {CATEGORIES.map((cat) => {
+          const isSelected = selectedCategory === cat.id;
+          return (
+            <Pressable
+              key={cat.id}
+              onPress={() => setSelectedCategory(cat.id)}
+              style={[
+                styles.categoryChip,
+                {
+                  backgroundColor: isSelected ? colors.accent : colors.surfaceRaised,
+                  borderColor: isSelected ? colors.accent : colors.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryChipText,
+                  { color: isSelected ? colors.onFill : colors.text },
+                ]}
+              >
+                {cat.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {errors.map((error) => (
         <Text key={error} style={[styles.error, { color: colors.warning }]}>
@@ -346,7 +415,9 @@ export default function SearchScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           shown.length > 0 && showingFrequent ? (
-            <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>Your frequent foods</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>
+              {frequent.length > 0 ? 'Your frequent & core foods' : 'Common staple foods'}
+            </Text>
           ) : (shown.length > 0 || hiddenWhileLooking > 0) && (lookingUp || lookupComing) ? (
             // Only say they look wrong when the check actually said so — after
             // a manual tap on results it judged relevant, that would be a lie.
@@ -433,39 +504,62 @@ export default function SearchScreen() {
             </View>
           )
         }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => setSelected(item)}
-            style={({ pressed }) => [
-              styles.row,
-              { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
-            ]}
-          >
-            <View style={styles.rowText}>
-              <Text style={[styles.rowName, { color: colors.text }]} numberOfLines={2}>
-                {item.name}
-              </Text>
-              <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
-                {item.brand ? `${item.brand} · ` : ''}
-                {Math.round(item.per100g.kcal)} kcal / 100 g · P {Math.round(item.per100g.proteinG)} · C{' '}
-                {Math.round(item.per100g.carbsG)} · F {Math.round(item.per100g.fatG)}
-              </Text>
-              {item.source === 'ai' && (
-                <Text style={[styles.rowWarning, { color: colors.warning }]}>
-                  Estimated by a model, not looked up. Check it before trusting it.
+        renderItem={({ item }) => {
+          const primaryPortion = item.portions.find((p) => p.grams !== 100);
+          const isVerified = item.source === 'builtin';
+
+          return (
+            <Pressable
+              onPress={() => setSelected(item)}
+              style={({ pressed }) => [
+                styles.row,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: isVerified ? colors.accent : colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <View style={styles.rowText}>
+                <Text style={[styles.rowName, { color: colors.text }]} numberOfLines={2}>
+                  {item.name}
                 </Text>
-              )}
-              {!isNutritionallyConsistent(item.per100g) && (
-                <Text style={[styles.rowWarning, { color: colors.warning }]}>
-                  Its macros do not add up to its calories — one of the two is wrong.
+                <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+                  {item.brand ? `${item.brand} · ` : ''}
+                  {Math.round(item.per100g.kcal)} kcal / 100 g · P {Math.round(item.per100g.proteinG)} · C{' '}
+                  {Math.round(item.per100g.carbsG)} · F {Math.round(item.per100g.fatG)}
                 </Text>
-              )}
-            </View>
-            <Text style={[styles.badge, { color: colors.textFaint, borderColor: colors.border }]}>
-              {SOURCE_LABELS[item.source]}
-            </Text>
-          </Pressable>
-        )}
+                {primaryPortion && (
+                  <Text style={[styles.portionBadge, { color: isVerified ? colors.accent : colors.textMuted }]}>
+                    Serving: {primaryPortion.label}
+                  </Text>
+                )}
+                {item.source === 'ai' && (
+                  <Text style={[styles.rowWarning, { color: colors.warning }]}>
+                    Estimated by a model, not looked up. Check it before trusting it.
+                  </Text>
+                )}
+                {!isNutritionallyConsistent(item.per100g) && (
+                  <Text style={[styles.rowWarning, { color: colors.warning }]}>
+                    Its macros do not add up to its calories — one of the two is wrong.
+                  </Text>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.badge,
+                  {
+                    color: isVerified ? colors.onFill : colors.textFaint,
+                    backgroundColor: isVerified ? colors.accent : 'transparent',
+                    borderColor: isVerified ? colors.accent : colors.border,
+                  },
+                ]}
+              >
+                {SOURCE_LABELS[item.source]}
+              </Text>
+            </Pressable>
+          );
+        }}
       />
 
       <LogFoodSheet
@@ -494,6 +588,29 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   searchBar: { paddingHorizontal: space.lg, paddingTop: space.lg },
+  categoryChips: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    gap: space.xs,
+  },
+  categoryChip: {
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoryChipText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+  },
+  portionBadge: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    marginTop: 2,
+  },
   error: { fontFamily: font.ui, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: space.xs },
   spinner: { marginVertical: space.sm },
   list: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
