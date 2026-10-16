@@ -550,8 +550,8 @@ export default function SettingsScreen() {
             onChange={(val) => {
               const on = val === 'on';
               if (on) {
-                primeChime();
-                playChime();
+                primeChime(settings.restChimeChoice ?? 'chime');
+                playChime(settings.restChimeChoice ?? 'chime');
               }
               void updateSettings({ restSound: on });
             }}

@@ -34,6 +34,7 @@ import { ImpactFrame } from '../src/components/ImpactFrame';
 import { PRCelebration, type PRCelebrationData } from '../src/components/PRCelebration';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
+import { SessionOptionsSheet } from '../src/components/SessionOptionsSheet';
 import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
 import { SwapExerciseSheet, type SwapMode } from '../src/components/SwapExerciseSheet';
@@ -67,13 +68,14 @@ import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
+import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
 import { PlateSheet } from '../src/components/PlateSheet';
 import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
 import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
-import { adjustRest } from '../src/rest';
+import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
 import { nextLoadHint } from '../src/suggestion';
 import { formatRpe } from '../src/rpe';
@@ -216,6 +218,8 @@ export default function SessionScreen() {
   const [celebrationPR, setCelebrationPR] = useState<PRCelebrationData | null>(null);
   /** Which row the RPE sheet is rating, if it is open. */
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
+  /** Whether the session options (units, alert chime) sheet is open. */
+  const [optionsOpen, setOptionsOpen] = useState(false);
   /** Active target for the barbell plate calculator; null when closed. */
   const [calcTarget, setCalcTarget] = useState<{
     blockIndex: number | null;
@@ -289,7 +293,7 @@ export default function SessionScreen() {
     if (announced.current === rest.endsAt) return;
     announced.current = rest.endsAt;
     thud('heavy');
-    if (settings.restSound) playChime();
+    if (settings.restSound) playChime(settings.restChimeChoice ?? 'chime');
 
     // Said where it will be seen wherever the screen is scrolled: the bar sits
     // at the top of the workout, often off screen while the next set is set up.
@@ -319,13 +323,22 @@ export default function SessionScreen() {
    * workout. The end time shifts by the difference instead of restarting:
    * "+15" means fifteen more seconds, not back to the top.
    */
-  const nudgeRest = (steps: number) => {
-    const next = adjustRest(settings.restSeconds, steps);
-    const delta = (next - settings.restSeconds) * 1000;
-    void updateSettings({ restSeconds: next });
+  const changeRestSeconds = (next: number) => {
+    const clamped = Math.min(MAX_REST_SECONDS, Math.max(MIN_REST_SECONDS, next));
+    const delta = (clamped - settings.restSeconds) * 1000;
+    void updateSettings({ restSeconds: clamped });
     setRest((current) =>
-      current === null ? null : { endsAt: current.endsAt + delta, total: next },
+      current === null ? null : { endsAt: current.endsAt + delta, total: clamped },
     );
+  };
+
+  const stepRestSeconds = (steps: number) => {
+    const next = adjustRest(settings.restSeconds, steps);
+    changeRestSeconds(next);
+  };
+
+  const nudgeRest = (steps: number) => {
+    stepRestSeconds(steps);
   };
 
     /** Active speed unit: locked setting, or active speed unit if switchable (default kph). */
@@ -428,14 +441,18 @@ export default function SessionScreen() {
   const toggleAlert = () => {
     const next = !settings.restSound;
     if (next) {
-      primeChime();
-      playChime();
+      primeChime(settings.restChimeChoice ?? 'chime');
+      playChime(settings.restChimeChoice ?? 'chime');
     }
     void updateSettings({ restSound: next });
     notify(
       next ? 'Rest alert on' : 'Rest alert off',
       next ? 'Chimes when each rest period finishes.' : 'Rest timer will be silent.',
     );
+  };
+
+  const changeChimeChoice = (choice: ChimeChoice) => {
+    void updateSettings({ restChimeChoice: choice });
   };
 
   const showWeightSwitcher = settings.weightUnitSetting !== 'kg' && settings.weightUnitSetting !== 'lbs';
@@ -446,114 +463,15 @@ export default function SessionScreen() {
 
   const renderControls = () => (
     <View style={styles.headerControls}>
-      {showWeightSwitcher && (
-        <Tappable
-          onPress={toggleWeightUnits}
-          scaleTo={0.92}
-          style={[styles.unitToggle, styles.headerHit]}
-          accessibilityRole="button"
-          accessibilityLabel={`Switch weight units, currently ${settings.units === 'metric' ? 'kilograms' : 'pounds'}`}
-        >
-          <View style={styles.unitToggleTrack}>
-            <View
-              style={[
-                styles.unitToggleThumb,
-                settings.units === 'metric' ? styles.unitThumbActive : styles.unitThumbInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  { color: settings.units === 'metric' ? loud.onLoud : loud.figureFaint },
-                ]}
-              >
-                KG
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.unitToggleThumb,
-                settings.units === 'imperial' ? styles.unitThumbActive : styles.unitThumbInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  { color: settings.units === 'imperial' ? loud.onLoud : loud.figureFaint },
-                ]}
-              >
-                LBS
-              </Text>
-            </View>
-          </View>
-        </Tappable>
-      )}
-
-      {showSpeedSwitcher && (
-        <Tappable
-          onPress={toggleSpeedUnits}
-          scaleTo={0.92}
-          style={[styles.unitToggle, styles.headerHit]}
-          accessibilityRole="button"
-          accessibilityLabel={`Switch speed units, currently ${speedUnit}`}
-        >
-          <View style={styles.unitToggleTrack}>
-            <View
-              style={[
-                styles.unitToggleThumb,
-                speedUnit === 'kph' ? styles.unitThumbActive : styles.unitThumbInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  { color: speedUnit === 'kph' ? loud.onLoud : loud.figureFaint },
-                ]}
-              >
-                KPH
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.unitToggleThumb,
-                speedUnit === 'mph' ? styles.unitThumbActive : styles.unitThumbInactive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  { color: speedUnit === 'mph' ? loud.onLoud : loud.figureFaint },
-                ]}
-              >
-                MPH
-              </Text>
-            </View>
-          </View>
-        </Tappable>
-      )}
-
       <Tappable
-        onPress={toggleAlert}
+        onPress={() => setOptionsOpen(true)}
         scaleTo={0.9}
         style={styles.headerHit}
-        accessibilityRole="switch"
-        accessibilityState={{ checked: settings.restSound }}
-        accessibilityLabel={settings.restSound ? 'Rest alert on' : 'Rest alert off'}
+        accessibilityRole="button"
+        accessibilityLabel="Workout options"
       >
-        <View style={[styles.alertBtn, settings.restSound ? styles.alertBtnActive : styles.alertBtnInactive]}>
-          <Ionicons
-            name={settings.restSound ? 'notifications' : 'notifications-off-outline'}
-            size={15}
-            color={settings.restSound ? loud.onLoud : loud.figureMuted}
-          />
-          <Text
-            style={[
-              styles.alertBtnLabel,
-              { color: settings.restSound ? loud.onLoud : loud.figureMuted },
-            ]}
-          >
-            ALERT
-          </Text>
+        <View style={styles.gearBtn}>
+          <Ionicons name="settings-outline" size={17} color={loud.figureMuted} />
         </View>
       </Tappable>
     </View>
@@ -1270,7 +1188,7 @@ export default function SessionScreen() {
       } else {
         // Last exercise in the superset round completed: trigger full rest timer!
         const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
-        if (settings.restSound) primeChime();
+        if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
         setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
         notify(
           `Round ${completedRounds} Done!`,
@@ -1281,7 +1199,7 @@ export default function SessionScreen() {
       // Rest starts itself. The alternative is tapping "start rest" after every
       // set, which nobody does twice. The tick is a tap, which is what a browser
       // needs before it will let the chime play when the rest runs out.
-      if (settings.restSound) primeChime();
+      if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
       setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
     }
   };
@@ -1652,6 +1570,23 @@ export default function SessionScreen() {
             </Tappable>
           </FadeIn>
         ))}
+        <SessionOptionsSheet
+          open={optionsOpen}
+          onClose={() => setOptionsOpen(false)}
+          units={settings.units}
+          onToggleUnits={toggleWeightUnits}
+          speedUnit={speedUnit}
+          onToggleSpeedUnits={toggleSpeedUnits}
+          showWeightSwitcher={showWeightSwitcher}
+          showSpeedSwitcher={showSpeedSwitcher}
+          restSound={settings.restSound}
+          onToggleAlert={toggleAlert}
+          restChimeChoice={settings.restChimeChoice ?? 'chime'}
+          onChangeChimeChoice={changeChimeChoice}
+          restSeconds={settings.restSeconds}
+          onChangeRestSeconds={changeRestSeconds}
+          onStepRestSeconds={stepRestSeconds}
+        />
       </Screen>
     );
   }
@@ -2386,6 +2321,24 @@ export default function SessionScreen() {
         onClose={() => setRating(null)}
       />
 
+      <SessionOptionsSheet
+        open={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        units={settings.units}
+        onToggleUnits={toggleWeightUnits}
+        speedUnit={speedUnit}
+        onToggleSpeedUnits={toggleSpeedUnits}
+        showWeightSwitcher={showWeightSwitcher}
+        showSpeedSwitcher={showSpeedSwitcher}
+        restSound={settings.restSound}
+        onToggleAlert={toggleAlert}
+        restChimeChoice={settings.restChimeChoice ?? 'chime'}
+        onChangeChimeChoice={changeChimeChoice}
+        restSeconds={settings.restSeconds}
+        onChangeRestSeconds={changeRestSeconds}
+        onStepRestSeconds={stepRestSeconds}
+      />
+
       <Text style={[styles.note, { marginBottom: space.xxl }]}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
@@ -2489,59 +2442,15 @@ const styles = StyleSheet.create({
     color: loud.figure,
     flex: 1,
   },
-  unitToggle: {
+  gearBtn: {
+    width: 34,
+    height: 34,
     borderRadius: radius.sm,
-    overflow: 'hidden',
-  },
-  unitToggleTrack: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: loud.panel,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-    borderRadius: radius.sm,
-    padding: 2,
-  },
-  unitToggleThumb: {
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  unitThumbActive: {
-    backgroundColor: loud.loud,
-  },
-  unitThumbInactive: {
-    backgroundColor: 'transparent',
-  },
-  unitToggleText: {
-    fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 1,
-  },
-  alertBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: space.sm + 1,
-    paddingVertical: 5,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 28,
-  },
-  alertBtnActive: {
-    backgroundColor: loud.loud,
-    borderColor: loud.loud,
-  },
-  alertBtnInactive: {
-    backgroundColor: loud.panel,
-    borderColor: loud.rule,
-  },
-  alertBtnLabel: {
-    fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 1.2,
   },
   note: {
     fontFamily: font.ui,
