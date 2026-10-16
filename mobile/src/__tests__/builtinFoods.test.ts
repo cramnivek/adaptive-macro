@@ -50,6 +50,19 @@ describe('builtinFoods catalogue', () => {
     expect(avocado.some((f) => f.name.toLowerCase().includes('avocado'))).toBe(true);
   });
 
+  it('finds Chicken Inasal and local staple foods', () => {
+    const inasal = searchBuiltinFoods('chicken inasal');
+    expect(inasal.length).toBeGreaterThanOrEqual(2);
+    expect(inasal.some((f) => f.name.includes('Pecho'))).toBe(true);
+    expect(inasal.some((f) => f.name.includes('Paa'))).toBe(true);
+
+    const inasalProtein = searchBuiltinFoods('chicken inasal', 'protein');
+    expect(inasalProtein.length).toBeGreaterThanOrEqual(2);
+
+    const adobo = searchBuiltinFoods('adobo');
+    expect(adobo.length).toBeGreaterThan(0);
+  });
+
   it('getPopularBuiltinFoods returns staples filtered by category', () => {
     const allStaples = getPopularBuiltinFoods('all', 10);
     expect(allStaples).toHaveLength(10);

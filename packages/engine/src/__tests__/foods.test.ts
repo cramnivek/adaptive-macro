@@ -117,4 +117,35 @@ describe('food search and ranking', () => {
     expect(resultsAnswerQuery('egf', [egg])).toBe(true);
     expect(resultsAnswerQuery('chiken', [chickenBreast])).toBe(true);
   });
+
+  it('ranks specific dish queries like Chicken inasal at the top', () => {
+    const inasal: Food = {
+      id: 'builtin:chicken-inasal-pecho',
+      name: 'Chicken Inasal (Grilled Breast / Pecho)',
+      source: 'builtin',
+      category: 'protein',
+      per100g: { kcal: 170, proteinG: 28, carbsG: 1.5, fatG: 5.8, fiberG: 0 },
+      portions: [{ label: '100 g', grams: 100 }, { label: '1 pecho (200 g)', grams: 200 }],
+    };
+
+    const usdaMarinade: Food = {
+      id: 'usda:marinade',
+      name: 'Inasal Lemongrass & Garlic Grilling Marinade',
+      source: 'usda',
+      per100g: { kcal: 50, proteinG: 1, carbsG: 10, fatG: 0.5, fiberG: 0 },
+      portions: [{ label: '100 g', grams: 100 }],
+    };
+
+    const genericChicken: Food = {
+      id: 'usda:chicken',
+      name: 'Chicken, chicken roll, roasted',
+      source: 'usda',
+      per100g: { kcal: 160, proteinG: 19, carbsG: 2, fatG: 8, fiberG: 0 },
+      portions: [{ label: '100 g', grams: 100 }],
+    };
+
+    const ranked = rankSearchResults('Chicken inasal', [genericChicken, usdaMarinade, inasal]);
+    expect(ranked[0].id).toBe('builtin:chicken-inasal-pecho');
+    expect(resultsAnswerQuery('Chicken inasal', ranked)).toBe(true);
+  });
 });

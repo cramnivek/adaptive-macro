@@ -6,7 +6,7 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, V
 import { PartialFiguresError, UngroundedResponseError, lookupFood } from '../src/api/gemini';
 import { searchFoods } from '../src/api/search';
 import { getPopularBuiltinFoods } from '../src/builtinFoods';
-import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
+import { Button, Field } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
 import { getFoodById, listFrequentFoods, saveFood } from '../src/db';
@@ -59,8 +59,6 @@ export default function SearchScreen() {
    * about to answer.
    */
   const [settled, setSettled] = useState(true);
-  /** Set by the user tapping through the collapsed non-matching results. */
-  const [showNonMatching, setShowNonMatching] = useState(false);
   /** A lookup that found the item but not enough of its figures to log. */
   const [partial, setPartial] = useState<PartialFiguresError | null>(null);
 
@@ -135,7 +133,6 @@ export default function SearchScreen() {
 
     setLoading(true);
     setSettled(false);
-    setShowNonMatching(false);
     setPartial(null);
     debounce.current = setTimeout(async () => {
       const found = await searchFoods(
@@ -256,12 +253,7 @@ export default function SearchScreen() {
     query.trim().length >= 2 &&
     (autoAttempts.current.get(query.trim()) ?? 0) < MAX_ATTEMPTS;
 
-  const hiddenWhileLooking =
-    (lookingUp || lookupComing) && !answered && !showNonMatching && !showingFrequent
-      ? ranked.length
-      : 0;
-
-  const shown = showingFrequent ? emptyStateItems : hiddenWhileLooking > 0 ? [] : ranked;
+  const shown = showingFrequent ? emptyStateItems : ranked;
 
   const canLookUp =
     !showingFrequent && !loading && settled && shown.length > 0 && shown.length < THIN_RESULT_COUNT;
@@ -419,26 +411,14 @@ export default function SearchScreen() {
             <Text style={[styles.sectionLabel, { color: colors.textFaint }]}>
               {frequent.length > 0 ? 'Your frequent & core foods' : 'Common staple foods'}
             </Text>
-          ) : (shown.length > 0 || hiddenWhileLooking > 0) && (lookingUp || lookupComing) ? (
-            // Only say they look wrong when the check actually said so — after
-            // a manual tap on results it judged relevant, that would be a lie.
-            <View>
+          ) : (lookingUp || lookupComing) ? (
+            <View style={styles.lookupBar}>
+              <ActivityIndicator size="small" color={colors.accent} style={styles.lookupSpinner} />
               <Text style={[styles.lookupNote, { color: colors.warning }]}>
-                {answered
-                  ? `Looking it up… ${lookupElapsed}s`
-                  : lookingUp
-                    ? `These do not look like what you searched. Looking it up… ${lookupElapsed}s`
-                    : // The settle second, before the call starts. Saying
-                      // "looking it up… 0s" here would be a lie for a moment.
-                      'These do not look like what you searched. Looking it up…'}
+                {lookingUp
+                  ? `Checking web sources for "${query.trim()}"… ${lookupElapsed}s`
+                  : `Checking web sources for "${query.trim()}"…`}
               </Text>
-              {hiddenWhileLooking > 0 && (
-                <Pressable onPress={() => setShowNonMatching(true)} style={styles.reveal}>
-                  <Text style={[styles.revealText, { color: colors.textFaint }]}>
-                    Show the {hiddenWhileLooking} results that do not match
-                  </Text>
-                </Pressable>
-              )}
             </View>
           ) : null
         }
@@ -448,7 +428,7 @@ export default function SearchScreen() {
               {showingFrequent
                 ? 'Search for a food, or scan a barcode from the Today tab.'
                 : lookingUp
-                  ? `Nothing found — looking it up… ${lookupElapsed}s`
+                  ? `No database matches — searching web… ${lookupElapsed}s`
                   : 'Nothing found. Try a shorter or more general term, or add it yourself.'}
             </Text>
           )
@@ -649,9 +629,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  lookupNote: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginBottom: space.sm },
-  reveal: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginBottom: space.sm },
-  revealText: { fontFamily: font.ui, fontSize: 12, textDecorationLine: 'underline' },
+  lookupBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: space.sm,
+  },
+  lookupSpinner: {
+    marginRight: space.xs,
+  },
+  lookupNote: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   empty: { fontFamily: font.ui, fontSize: 13, textAlign: 'center', marginTop: space.xl, lineHeight: 19 },
   footer: { marginTop: space.lg, gap: space.sm },
   footerNote: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },
