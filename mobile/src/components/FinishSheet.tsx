@@ -36,7 +36,7 @@ interface FinishSheetProps {
   account: 'unavailable' | 'signed-out' | 'needs-profile' | 'ready';
   /** Lead with POST and an open caption: what this person did last time. */
   postFirst: boolean;
-  onPost: (caption: string) => Promise<void>;
+  onPost: (caption: string, card?: { file: File; url: string } | null) => Promise<void>;
   onNeedAccount: () => void;
   onDone: (posted: boolean) => void;
   /** Opens the save-as-routine sheet. Omit to hide the button. */
@@ -249,7 +249,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     setPosting(true);
     setNote(null);
     try {
-      await onPost(caption);
+      await onPost(caption, card);
       setPosted(true);
     } catch (error) {
       setNote((error as Error).message);

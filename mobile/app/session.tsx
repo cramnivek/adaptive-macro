@@ -24,6 +24,7 @@ import { FinishSheet } from '../src/components/FinishSheet';
 import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
 import { type ShareCard, shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
+import { persistCustomCard } from '../src/social/customCard';
 import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
 import { ExercisePicker } from '../src/components/ExercisePicker';
@@ -2277,9 +2278,12 @@ export default function SessionScreen() {
                 : 'ready'
         }
         postFirst={settings.postWorkouts}
-        onPost={async (caption) => {
+        onPost={async (caption, customCard) => {
           if (finished === null) return;
           await createPost(postPayload(finished.workout, caption));
+          if (customCard) {
+            void persistCustomCard(finished.workout.sessionId, customCard);
+          }
           if (!settings.postWorkouts) void updateSettings({ postWorkouts: true });
         }}
         onNeedAccount={() => {

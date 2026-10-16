@@ -4,6 +4,7 @@ import { handleUsdaProxy } from './usdaProxy.js';
 import { callerKey, createRateLimiter } from './rateLimit.js';
 import { serveStatic } from './staticFiles.js';
 import { createTokenVerifier } from './userToken.js';
+import { uploadCardToGcs } from './gcsUpload.js';
 
 /*
   Gemini is the expensive one and the slow one: a grounded lookup takes most of
@@ -178,6 +179,30 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       const verdict = lookupLimiter.check(callerKey(request));
       if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
       return handleUsdaProxy(request, opts.env);
+    }
+
+    if (pathname === '/api/upload-card') {
+      if (request.method !== 'POST') {
+        return new Response('Method not allowed', { status: 405 });
+      }
+      const sessionId = request.headers.get('x-session-id') || new URL(request.url).searchParams.get('sessionId');
+      if (!sessionId) {
+        return Response.json({ error: 'sessionId required' }, { status: 400 });
+      }
+      const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `${safeId}.jpg`;
+      const body = await request.arrayBuffer();
+      if (!body || body.byteLength === 0) {
+        return Response.json({ error: 'Empty body' }, { status: 400 });
+      }
+      if (body.byteLength > 10 * 1024 * 1024) {
+        return Response.json({ error: 'Image too large' }, { status: 413 });
+      }
+      const publicUrl = await uploadCardToGcs(filename, body, 'image/jpeg');
+      if (!publicUrl) {
+        return Response.json({ error: 'Failed to upload' }, { status: 500 });
+      }
+      return Response.json({ ok: true, url: publicUrl });
     }
 
     // Nothing else lives under /api/. Falling through would answer a typo

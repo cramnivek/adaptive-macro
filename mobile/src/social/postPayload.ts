@@ -113,7 +113,7 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
   };
 };
 
-export type PostView = ShareSummary & { caption: string | null };
+export type PostView = ShareSummary & { caption: string | null; sessionId?: string };
 
 export const formatDuration = (minutes: number): string => {
   if (minutes < 60) return `${minutes} min`;
@@ -180,6 +180,7 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
   const copy = milestone ? describeMilestone(milestone, units) : null;
 
   return {
+    sessionId: row.session_id,
     title: row.title,
     date: formatDateLong(row.performed_on),
     duration: formatDuration(row.duration_min),

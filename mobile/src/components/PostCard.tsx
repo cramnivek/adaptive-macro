@@ -12,9 +12,20 @@ import {
   View,
 } from 'react-native';
 import { formatTimeAgo } from '../format';
-import { cardFontsReady, shareCardFile, shareWorkout } from '../platform/shareImage';
+import {
+  cardFileFrom,
+  cardFontsReady,
+  composeCard,
+  drawOverlay,
+  pickCardPhoto,
+  shareCardFile,
+  shareWorkout,
+} from '../platform/shareImage';
 import { postViewToShareCard } from '../shareCard';
+import { TEMPLATES } from '../shareCardTemplate';
+import { getLocalCustomCard, getPublicCardUrl, persistCustomCard } from '../social/customCard';
 import type { PostView } from '../social/postPayload';
+import { useApp } from '../state/AppStore';
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
@@ -40,8 +51,8 @@ const getInitials = (name?: string): string => {
  * - User avatar, relative time, and handle
  * - Visual stat chips (Duration, Sets, Volume, Steps)
  * - Segmented view: Structured Breakdown vs Visual Story Card
- * - Full-fidelity 9:16 Share Card preview with high-res modal
- * - Interactive like counter, cheer fist-bump, and share image/text
+ * - Full-fidelity 9:16 Share Card preview with inherited custom photo & templates
+ * - Interactive like counter, cheer fist-bump, and photo customizer
  */
 export const PostCard = ({
   view,
@@ -62,9 +73,11 @@ export const PostCard = ({
   createdAt?: string;
 }) => {
   const { colors } = useTheme();
+  const { settings } = useApp();
   const [cheered, setCheered] = useState(false);
   const [viewMode, setViewMode] = useState<'breakdown' | 'card'>('breakdown');
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
+  const [customCardUrl, setCustomCardUrl] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -74,6 +87,25 @@ export const PostCard = ({
     : view.date
       ? formatTimeAgo(view.date)
       : '';
+
+  // Check for local customized card or cloud GCS card
+  useEffect(() => {
+    let alive = true;
+    if (view.sessionId) {
+      void getLocalCustomCard(view.sessionId).then((local) => {
+        if (!alive) return;
+        if (local) {
+          setCustomCardUrl(local);
+        } else {
+          const publicUrl = getPublicCardUrl(view.sessionId);
+          if (publicUrl) setCustomCardUrl(publicUrl);
+        }
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [view.sessionId]);
 
   const generateCard = useCallback(async (): Promise<{ file: File; url: string } | null> => {
     if (card) return card;
@@ -94,11 +126,13 @@ export const PostCard = ({
     }
   }, [card, view]);
 
+  const displayCardUrl = customCardUrl || card?.url || null;
+
   useEffect(() => {
-    if (viewMode === 'card' && card === null && !drawing) {
+    if (viewMode === 'card' && !displayCardUrl && !drawing) {
       void generateCard();
     }
-  }, [viewMode, card, drawing, generateCard]);
+  }, [viewMode, displayCardUrl, drawing, generateCard]);
 
   const buildShareText = (): string => {
     const parts = [
@@ -122,9 +156,56 @@ export const PostCard = ({
     return parts.join('\n');
   };
 
+  const getShareableCard = async (): Promise<{ file: File; url: string } | null> => {
+    if (card) return card;
+    if (displayCardUrl) {
+      try {
+        const resp = await fetch(displayCardUrl);
+        const blob = await resp.blob();
+        const file = new File(
+          [blob],
+          `${view.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_card.jpg`,
+          { type: 'image/jpeg' },
+        );
+        const obj = { file, url: displayCardUrl };
+        setCard(obj);
+        return obj;
+      } catch {
+        // Fall back to generating
+      }
+    }
+    return generateCard();
+  };
+
+  const handlePickPhoto = async () => {
+    try {
+      const picked = await pickCardPhoto();
+      if (!picked.ok) return;
+      setDrawing(true);
+      await cardFontsReady();
+      const summary = postViewToShareCard(view);
+      const blocks = settings.cardBlocks;
+      const template = settings.cardTemplate;
+      const overlay = drawOverlay(summary, blocks, template);
+      const canvas = composeCard(picked.image, overlay, TEMPLATES[template].place, null);
+      const newCard = await cardFileFrom(canvas, summary.title, true);
+      if (newCard) {
+        setCard(newCard);
+        setCustomCardUrl(newCard.url);
+        if (view.sessionId) {
+          void persistCustomCard(view.sessionId, newCard);
+        }
+      }
+    } catch {
+      // Photo cancelled
+    } finally {
+      setDrawing(false);
+    }
+  };
+
   const handleOpenModal = () => {
     setModalOpen(true);
-    if (!card) void generateCard();
+    if (!displayCardUrl) void generateCard();
   };
 
   const handleShareWorkout = async () => {
@@ -238,7 +319,7 @@ export const PostCard = ({
         <Pressable
           onPress={() => {
             setViewMode('card');
-            if (!card) void generateCard();
+            if (!displayCardUrl) void generateCard();
           }}
           style={[
             styles.viewToggleBtn,
@@ -310,7 +391,7 @@ export const PostCard = ({
       ) : (
         /* Visual Story Card Mode */
         <View style={styles.cardPreviewContainer}>
-          {card ? (
+          {displayCardUrl ? (
             <Tappable
               onPress={handleOpenModal}
               accessibilityRole="button"
@@ -319,9 +400,14 @@ export const PostCard = ({
             >
               <View style={styles.cardPreviewFrame}>
                 <Image
-                  source={{ uri: card.url }}
+                  source={{ uri: displayCardUrl }}
                   style={styles.cardPreviewImage}
                   resizeMode="contain"
+                  onError={() => {
+                    // Fall back to default card if custom card URL fails to load
+                    setCustomCardUrl(null);
+                    void generateCard();
+                  }}
                 />
                 <View style={styles.expandPill}>
                   <Ionicons name="expand-outline" size={13} color="#ffffff" />
@@ -445,12 +531,16 @@ export const PostCard = ({
 
             {/* High-Res Preview */}
             <View style={styles.modalPreview}>
-              {card ? (
+              {displayCardUrl ? (
                 <Image
-                  source={{ uri: card.url }}
+                  source={{ uri: displayCardUrl }}
                   style={styles.modalCardImage}
                   resizeMode="contain"
                   accessibilityLabel="High-resolution story card"
+                  onError={() => {
+                    setCustomCardUrl(null);
+                    void generateCard();
+                  }}
                 />
               ) : (
                 <View style={styles.modalLoading}>
@@ -463,14 +553,15 @@ export const PostCard = ({
             {/* Modal Action Controls */}
             <View style={styles.modalActions}>
               <Tappable
-                onPress={() => {
-                  if (card) {
-                    void shareWorkout(postViewToShareCard(view), card);
+                onPress={async () => {
+                  const toShare = await getShareableCard();
+                  if (toShare) {
+                    void shareWorkout(postViewToShareCard(view), toShare);
                   }
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Share image"
-                style={[styles.primaryActionBtn, !card && styles.disabledBtn]}
+                style={styles.primaryActionBtn}
               >
                 <Ionicons name="share-social-outline" size={18} color={loud.onLoud} />
                 <Text style={styles.primaryActionText}>SHARE IMAGE</Text>
@@ -478,11 +569,12 @@ export const PostCard = ({
 
               <View style={styles.secondaryActionRow}>
                 <Tappable
-                  onPress={() => {
-                    if (card && typeof document !== 'undefined') {
+                  onPress={async () => {
+                    const toShare = await getShareableCard();
+                    if (toShare && typeof document !== 'undefined') {
                       const link = document.createElement('a');
-                      link.href = card.url;
-                      link.download = `${view.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_card.png`;
+                      link.href = toShare.url;
+                      link.download = `${view.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_card.jpg`;
                       document.body.appendChild(link);
                       link.click();
                       document.body.removeChild(link);
@@ -490,7 +582,7 @@ export const PostCard = ({
                   }}
                   accessibilityRole="button"
                   accessibilityLabel="Save image to device"
-                  style={[styles.secondaryActionBtn, !card && styles.disabledBtn]}
+                  style={styles.secondaryActionBtn}
                 >
                   <Ionicons name="download-outline" size={16} color={loud.figure} />
                   <Text style={styles.secondaryActionText}>SAVE IMAGE</Text>
@@ -522,6 +614,19 @@ export const PostCard = ({
                   </Text>
                 </Tappable>
               </View>
+
+              {/* Add or Change Custom Photo */}
+              <Tappable
+                onPress={handlePickPhoto}
+                accessibilityRole="button"
+                accessibilityLabel="Add or customize photo on card"
+                style={[styles.secondaryActionBtn, styles.photoActionBtn]}
+              >
+                <Ionicons name="camera-outline" size={16} color={loud.figure} />
+                <Text style={styles.secondaryActionText}>
+                  {customCardUrl ? 'CHANGE PHOTO' : 'ADD PHOTO'}
+                </Text>
+              </Tappable>
             </View>
           </View>
         </View>
@@ -898,13 +1003,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: radius.md,
   },
+  photoActionBtn: {
+    flex: undefined,
+    width: '100%',
+  },
   secondaryActionText: {
     fontFamily: font.uiStrong,
     fontSize: 12,
     color: loud.figure,
     letterSpacing: 0.8,
-  },
-  disabledBtn: {
-    opacity: 0.5,
   },
 });

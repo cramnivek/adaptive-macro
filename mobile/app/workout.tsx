@@ -16,6 +16,7 @@ import { detectCardio } from '../src/cardio';
 import { groupByExercise, setLine } from '../src/pastWorkout';
 import { shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
+import { persistCustomCard } from '../src/social/customCard';
 import { postPayload } from '../src/social/postPayload';
 import type { FinishedWorkout } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
@@ -286,8 +287,11 @@ export default function WorkoutScreen() {
         // Posting twice is safe: the server holds one post per author and session, so the second
         // is answered as already posted. The finish-time setting is left alone, because it records
         // what was chosen then, not what was done to an old workout.
-        onPost={async (caption) => {
+        onPost={async (caption, customCard) => {
           await createPost(postPayload(workout, caption));
+          if (customCard) {
+            void persistCustomCard(workout.sessionId, customCard);
+          }
         }}
         onNeedAccount={() => {
           setSigningIn(true);
