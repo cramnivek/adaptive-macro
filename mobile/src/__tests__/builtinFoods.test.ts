@@ -36,6 +36,20 @@ describe('builtinFoods catalogue', () => {
     expect(filtered.some((f) => f.name.toLowerCase().includes('rice'))).toBe(true);
   });
 
+  it('searchBuiltinFoods falls back gracefully to typo tolerance (egf, chiken, avocdo)', () => {
+    const eggs = searchBuiltinFoods('egf');
+    expect(eggs.length).toBeGreaterThan(0);
+    expect(eggs.some((f) => f.name.toLowerCase().includes('egg'))).toBe(true);
+
+    const chicken = searchBuiltinFoods('chiken');
+    expect(chicken.length).toBeGreaterThan(0);
+    expect(chicken.some((f) => f.name.toLowerCase().includes('chicken'))).toBe(true);
+
+    const avocado = searchBuiltinFoods('avocdo');
+    expect(avocado.length).toBeGreaterThan(0);
+    expect(avocado.some((f) => f.name.toLowerCase().includes('avocado'))).toBe(true);
+  });
+
   it('getPopularBuiltinFoods returns staples filtered by category', () => {
     const allStaples = getPopularBuiltinFoods('all', 10);
     expect(allStaples).toHaveLength(10);

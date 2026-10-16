@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   foodRelevanceScore,
+  isFuzzyMatch,
   isNutritionallyConsistent,
+  levenshteinDistance,
   rankSearchResults,
+  resultsAnswerQuery,
   type Food,
 } from '../foods.ts';
 
@@ -95,5 +98,23 @@ describe('food search and ranking', () => {
         fiberG: 0,
       }),
     ).toBe(true);
+  });
+
+  it('tolerates common typos and misspellings (egf -> egg, chiken -> chicken)', () => {
+    // 1. Scoring & ranking with typo "egf"
+    const scoreEgg = foodRelevanceScore('egf', egg);
+    const scoreReggiano = foodRelevanceScore('egf', reggiano);
+    expect(scoreEgg).toBeGreaterThan(scoreReggiano);
+
+    const rankedEgg = rankSearchResults('egf', [reggiano, eggplant, egg]);
+    expect(rankedEgg[0].id).toBe('builtin:egg-whole');
+
+    // 2. Scoring & ranking with typo "chiken"
+    const rankedChicken = rankSearchResults('chiken', [reggiano, chickenBreast, eggplant]);
+    expect(rankedChicken[0].id).toBe('builtin:chicken-breast');
+
+    // 3. resultsAnswerQuery returns true for close typo
+    expect(resultsAnswerQuery('egf', [egg])).toBe(true);
+    expect(resultsAnswerQuery('chiken', [chickenBreast])).toBe(true);
   });
 });

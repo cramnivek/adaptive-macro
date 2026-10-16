@@ -371,6 +371,7 @@ export default function SearchScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.categoryChipsScroll}
         contentContainerStyle={styles.categoryChips}
       >
         {CATEGORIES.map((cat) => {
@@ -588,19 +589,25 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   searchBar: { paddingHorizontal: space.lg, paddingTop: space.lg },
+  categoryChipsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   categoryChips: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    paddingBottom: space.sm,
+    paddingVertical: space.sm,
     gap: space.xs,
   },
   categoryChip: {
     paddingHorizontal: space.md,
-    paddingVertical: 6,
+    height: 32,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
   },
   categoryChipText: {
     fontFamily: font.uiStrong,

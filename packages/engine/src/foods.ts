@@ -210,6 +210,54 @@ const queryTokens = (query: string): string[] =>
     .split(' ')
     .filter((token) => token.length >= MIN_TOKEN_LENGTH && !STOPWORDS.has(token));
 
+/**
+ * Computes standard Levenshtein edit distance between two strings.
+ */
+export const levenshteinDistance = (a: string, b: string): number => {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i - 1;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = row[j];
+      if (a[i - 1] === b[j - 1]) {
+        row[j] = prev;
+      } else {
+        row[j] = Math.min(prev + 1, row[j] + 1, row[j - 1] + 1);
+      }
+      prev = temp;
+    }
+  }
+
+  return row[b.length];
+};
+
+/**
+ * Checks if a query token is a close typo match for a candidate word.
+ *
+ * Designed to gracefully catch misspellings like "egf" -> "egg", "chiken" -> "chicken",
+ * "bananna" -> "banana", "avocdo" -> "avocado" while avoiding false positive drift on
+ * short noisy words.
+ */
+export const isFuzzyMatch = (queryToken: string, candidateWord: string): boolean => {
+  if (queryToken === candidateWord) return true;
+  if (candidateWord.includes(queryToken)) return true;
+
+  const qLen = queryToken.length;
+  if (qLen < 3) return false;
+
+  const maxDist = qLen <= 4 ? 1 : 2;
+  if (Math.abs(candidateWord.length - qLen) > maxDist) return false;
+
+  const dist = levenshteinDistance(queryToken, candidateWord);
+  return dist <= maxDist;
+};
+
 export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
   const tokens = queryTokens(query);
 
@@ -218,15 +266,21 @@ export const resultsAnswerQuery = (query: string, foods: Food[]): boolean => {
   if (foods.length === 0) return false;
 
   const haystacks = foods.map((food) => normalise(`${food.name} ${food.brand ?? ''}`));
-  return tokens.every((token) =>
-    variantsOf(token).some((variant) => haystacks.some((hay) => hay.includes(variant))),
-  );
+  const wordsList = haystacks.map((h) => h.split(' ').filter(Boolean));
+
+  return tokens.every((token) => {
+    const variants = variantsOf(token);
+    if (variants.some((variant) => haystacks.some((hay) => hay.includes(variant)))) {
+      return true;
+    }
+    return wordsList.some((words) => words.some((word) => isFuzzyMatch(token, word)));
+  });
 };
 
 /**
  * Calculates a multi-factor relevance score for a food given a search query.
  *
- * Combines exact-title matches, word-boundary matches, source authority
+ * Combines exact-title matches, word-boundary matches, typo tolerance, source authority
  * (builtin > custom > usda > openfoodfacts), title conciseness, and presence
  * of practical household portions.
  */
@@ -278,6 +332,13 @@ export const foodRelevanceScore = (query: string, food: Food): number => {
       // Substring fallback
       score += 20;
       matchedInName = true;
+    } else if (nameWords.some((w) => isFuzzyMatch(token, w))) {
+      // Typo / fuzzy match in food name (e.g. "egf" -> "egg")
+      score += 150;
+      matchedInName = true;
+    } else if (brandWords.some((w) => isFuzzyMatch(token, w))) {
+      score += 50;
+      matchedInBrand = true;
     }
 
     if (matchedInName) {

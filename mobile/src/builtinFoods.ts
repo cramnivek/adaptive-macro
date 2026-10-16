@@ -1,4 +1,4 @@
-import type { Food } from '@adaptive-macros/engine';
+import { isFuzzyMatch, type Food } from '@adaptive-macros/engine';
 
 /**
  * Curated offline catalogue of verified core foods.
@@ -1035,9 +1035,24 @@ export const searchBuiltinFoods = (query: string, category?: string): Food[] => 
   }
 
   const tokens = trimmed.split(/\s+/).filter(Boolean);
-  return list.filter((food) => {
+  const exact = list.filter((food) => {
     const hay = `${food.name} ${food.category ?? ''}`.toLowerCase();
     return tokens.every((token) => hay.includes(token));
+  });
+
+  if (exact.length > 0) {
+    return exact;
+  }
+
+  // Graceful typo tolerance fallback (e.g. "egf" -> "egg", "chiken" -> "chicken")
+  return list.filter((food) => {
+    const words = `${food.name} ${food.category ?? ''}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    return tokens.every((token) =>
+      words.some((word) => isFuzzyMatch(token, word)),
+    );
   });
 };
 
