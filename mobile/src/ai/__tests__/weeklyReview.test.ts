@@ -155,7 +155,7 @@ describe('weeklyReview metrics extractor and schema', () => {
     });
 
     const prompt = buildCoachingPrompt(metrics, 'lose');
-    expect(prompt).toContain('- Goal: LOSE');
+    expect(prompt).toContain('- Goal: Fat Loss (Calorie Deficit)');
     expect(prompt).toContain('-0.7 kg');
     expect(prompt).toContain('Barbell Bench Press: 80 kg × 6 -> 82.5 kg × 6 (+2.5 kg)');
     expect(prompt).toContain('HIGH');

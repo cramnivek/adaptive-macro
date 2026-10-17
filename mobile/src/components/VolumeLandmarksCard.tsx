@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { VolumeDiagnostics } from '@adaptive-macros/engine';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
+import { thud } from '../platform/haptics';
 
 interface VolumeLandmarksCardProps {
   diagnostics: VolumeDiagnostics;
@@ -18,30 +20,35 @@ const ZONE_COLORS = {
     bg: '#14261C',
     border: '#234430',
     bar: '#6FB58A',
+    friendlyName: 'SWEET SPOT',
   },
   effective: {
     text: '#C8A45C',
     bg: '#241F14',
     border: '#443A22',
     bar: '#C8A45C',
+    friendlyName: 'GROWTH',
   },
   maintenance: {
     text: '#9C9C96',
     bg: '#1C1C1F',
     border: '#2E2E33',
     bar: '#67676C',
+    friendlyName: 'MAINTAINING',
   },
   untrained: {
     text: '#67676C',
     bg: '#141416',
     border: '#222226',
     bar: '#26262B',
+    friendlyName: 'NOT WORKED',
   },
   overreaching: {
     text: '#E8352A',
     bg: '#281414',
     border: '#4D1D1B',
     bar: '#E8352A',
+    friendlyName: 'OVERWORKING',
   },
 };
 
@@ -52,15 +59,78 @@ export const VolumeLandmarksCard = ({
   targetKcalDelta,
 }: VolumeLandmarksCardProps) => {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [showScience, setShowScience] = useState(false);
+  const [showDeficitScience, setShowDeficitScience] = useState(false);
 
   const { muscleVolumes, pushPullBalance, legBalance, weeklyWorkingSets } = diagnostics;
 
   return (
-    <Card loud title="Volume & Growth Landmarks">
+    <Card loud title="Muscle Growth Zones">
       <Text style={styles.subtitle}>
-        Weekly sets vs. evidence-based hypertrophy thresholds (Israetel & Schoenfeld).
+        How many sets you completed for each muscle, categorized into simple growth zones so you know whether you're doing enough to grow, or doing too much.
         {periodDays > 7 ? ' Scaled to a 7-day rate.' : ''}
       </Text>
+
+      {/* Expandable Science Reference Button */}
+      <Pressable
+        onPress={() => {
+          thud('light');
+          setShowScience((prev) => !prev);
+        }}
+        style={styles.scienceToggleRow}
+      >
+        <Ionicons name="school-outline" size={15} color="#00E5FF" />
+        <Text style={styles.scienceToggleText}>
+          {showScience ? 'Hide the science & references' : 'How does this work? (Science & References)'}
+        </Text>
+        <Ionicons
+          name={showScience ? 'chevron-up' : 'chevron-down'}
+          size={14}
+          color="#00E5FF"
+        />
+      </Pressable>
+
+      {/* Expanded Science Details */}
+      {showScience && (
+        <View style={styles.scienceDetailsBox}>
+          <Text style={styles.scienceIntro}>
+            Research in exercise physiology shows that muscles respond to weekly "working sets" (tough sets taken close to failure) in distinct tiers:
+          </Text>
+
+          <View style={styles.scienceTier}>
+            <Text style={[styles.tierTitle, { color: '#9C9C96' }]}>1. Maintenance (MEV ~6–10 sets/wk)</Text>
+            <Text style={styles.tierDesc}>
+              The minimum sets needed to protect your muscle from atrophy, or make initial beginner gains.
+            </Text>
+          </View>
+
+          <View style={styles.scienceTier}>
+            <Text style={[styles.tierTitle, { color: '#6FB58A' }]}>2. Growth Sweet Spot (MAV ~12–20 sets/wk)</Text>
+            <Text style={styles.tierDesc}>
+              The optimal volume zone where you build muscle at the fastest rate with manageable soreness.
+            </Text>
+          </View>
+
+          <View style={styles.scienceTier}>
+            <Text style={[styles.tierTitle, { color: '#E8352A' }]}>3. Recovery Ceiling (MRV ~20–25+ sets/wk)</Text>
+            <Text style={styles.tierDesc}>
+              Doing more sets than your body can recover from. Produces excessive fatigue and 'junk volume' without extra muscle growth.
+            </Text>
+          </View>
+
+          <View style={styles.scienceRefDivider} />
+          <Text style={styles.scienceRefHeader}>ACADEMIC CITATIONS:</Text>
+          <Text style={styles.scienceCitation}>
+            • <Text style={styles.scienceAuthor}>Schoenfeld, B. J. et al. (2017)</Text>. Dose-response relationship between weekly resistance training volume and increases in muscle mass. <Text style={styles.scienceJournal}>J Sports Sci</Text>.
+          </Text>
+          <Text style={styles.scienceCitation}>
+            • <Text style={styles.scienceAuthor}>Israetel, M. A. et al. (2020)</Text>. Hypertrophy Volume Landmarks: MEV, MAV, and MRV. <Text style={styles.scienceJournal}>Renaissance Periodization</Text>.
+          </Text>
+          <Text style={styles.scienceCitation}>
+            • <Text style={styles.scienceAuthor}>Helms, E. R. et al. (2014)</Text>. Evidence-based recommendations for natural bodybuilding. <Text style={styles.scienceJournal}>JISSN</Text>.
+          </Text>
+        </View>
+      )}
 
       {/* Adaptive Energy Balance Recovery Guidance */}
       {goal === 'lose' && (
@@ -68,12 +138,28 @@ export const VolumeLandmarksCard = ({
           <View style={styles.energyBadgeRow}>
             <View style={[styles.energyDot, { backgroundColor: '#FBBF24' }]} />
             <Text style={styles.energyBadgeTitle}>
-              ENERGY BALANCE: CALORIC DEFICIT {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
+              EATING TO LOSE FAT (CALORIE DEFICIT) {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
             </Text>
           </View>
           <Text style={styles.energyBannerBody}>
-            In a sustained caloric deficit, systemic recovery capacity is constrained and Maximum Recoverable Volume (MRV) drops by ~15–25%. Prioritize strength retention near MEV–MAV (10–14 sets/wk) to preserve lean muscle without generating unrecoverable fatigue.
+            Because you are eating fewer calories to burn fat, your body has less energy to repair muscle after intense workouts. We automatically recommend fewer sets so you keep your muscle without burning out.
           </Text>
+          <Pressable
+            onPress={() => {
+              thud('light');
+              setShowDeficitScience((prev) => !prev);
+            }}
+            style={styles.deficitSubToggle}
+          >
+            <Text style={styles.deficitSubToggleText}>
+              {showDeficitScience ? 'Hide deficit science ▴' : 'Why does recovery drop in a deficit? ▾'}
+            </Text>
+          </Pressable>
+          {showDeficitScience && (
+            <Text style={styles.deficitScienceBody}>
+              When daily energy intake is restricted, muscle protein synthesis (MPS) is reduced and recovery bandwidth drops by ~15–25%. Keeping your sets in the 10–14 sets/wk range maximizes muscle retention while preventing chronic cortisol spikes (Helms et al., 2014; Morton et al., 2018).
+            </Text>
+          )}
         </View>
       )}
 
@@ -82,11 +168,11 @@ export const VolumeLandmarksCard = ({
           <View style={styles.energyBadgeRow}>
             <View style={[styles.energyDot, { backgroundColor: '#10B981' }]} />
             <Text style={[styles.energyBadgeTitle, { color: '#10B981' }]}>
-              ENERGY BALANCE: CALORIC SURPLUS {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
+              EATING TO BUILD MUSCLE (CALORIE SURPLUS) {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
             </Text>
           </View>
           <Text style={styles.energyBannerBody}>
-            Surplus energy and elevated glycogen stores heighten muscle protein synthesis (MPS) and accelerate systemic recovery. This is your prime window to push training volume into the upper MAV–MRV sweet spot.
+            With extra calories and full energy stores, your muscles recover much faster. This is your best window to push training into the upper sweet spot for rapid muscle growth!
           </Text>
         </View>
       )}
@@ -100,10 +186,10 @@ export const VolumeLandmarksCard = ({
           </Text>
         </View>
         <View style={styles.stripStat}>
-          <Text style={styles.stripLabel}>SWEET SPOT (MAV)</Text>
+          <Text style={styles.stripLabel}>IN GROWTH SWEET SPOT</Text>
           <Text style={[styles.stripValue, { color: '#6FB58A' }]}>
             {diagnostics.optimalMusclesCount} / {muscleVolumes.length}{' '}
-            <Text style={styles.stripUnit}>groups</Text>
+            <Text style={styles.stripUnit}>muscles</Text>
           </Text>
         </View>
       </View>
@@ -113,6 +199,8 @@ export const VolumeLandmarksCard = ({
         {muscleVolumes.map((item) => {
           const colors = ZONE_COLORS[item.zone];
           const isSelected = selectedGroup === item.key;
+
+          const friendlyZoneName = colors.friendlyName;
 
           return (
             <Pressable
@@ -136,7 +224,7 @@ export const VolumeLandmarksCard = ({
                   ]}
                 >
                   <Text style={[styles.badgeText, { color: colors.text }]}>
-                    {item.zoneLabel}
+                    {friendlyZoneName}
                   </Text>
                 </View>
               </View>
@@ -152,26 +240,36 @@ export const VolumeLandmarksCard = ({
                     },
                   ]}
                 />
-                {/* Visual landmark indicator for MAV range */}
+                {/* Visual landmark indicator for sweet spot */}
                 <View style={styles.mavZoneMarker} />
               </View>
 
               {/* Collapsible Info Drawer on Tap */}
               {isSelected && (
                 <View style={styles.drawer}>
-                  <Text style={styles.drawerDesc}>{item.zoneDescription}</Text>
+                  <Text style={styles.drawerDesc}>
+                    {item.zone === 'optimal'
+                      ? `Great work! Your ${item.label.toLowerCase()} is right in the research sweet spot for fastest gains.`
+                      : item.zone === 'effective'
+                        ? `You have crossed the threshold to grow new muscle. Add 2 more sets to hit your sweet spot!`
+                        : item.zone === 'maintenance'
+                          ? `You are doing enough sets to maintain your muscle, but need ~${Math.max(1, item.mavMin - item.effectiveWeeklySets)} more sets/week to trigger active growth.`
+                          : item.zone === 'overreaching'
+                            ? `You've done a high number of sets for your ${item.label.toLowerCase()}. Take it easy or give it extra rest to avoid burnout.`
+                            : `No sets logged for ${item.label.toLowerCase()} yet this week.`}
+                  </Text>
                   <View style={styles.landmarksRow}>
                     <Text style={styles.landmarkItem}>
-                      MEV: <Text style={styles.landmarkVal}>{item.mev}</Text>
+                      Maintain: <Text style={styles.landmarkVal}>{item.mev}+ sets</Text>
                     </Text>
                     <Text style={styles.landmarkItem}>
-                      MAV (Sweet spot):{' '}
+                      Sweet spot:{' '}
                       <Text style={[styles.landmarkVal, { color: '#6FB58A' }]}>
-                        {item.mavMin}–{item.mavMax}
+                        {item.mavMin}–{item.mavMax} sets
                       </Text>
                     </Text>
                     <Text style={styles.landmarkItem}>
-                      MRV Ceiling: <Text style={styles.landmarkVal}>{item.mrv}</Text>
+                      Recovery limit: <Text style={styles.landmarkVal}>{item.mrv} sets</Text>
                     </Text>
                   </View>
                 </View>
@@ -182,12 +280,15 @@ export const VolumeLandmarksCard = ({
       </View>
 
       {/* Structural Movement Balance Section */}
-      <Text style={styles.balanceHeading}>STRUCTURAL MOVEMENT BALANCE</Text>
+      <Text style={styles.balanceHeading}>JOINT & POSTURE BALANCE</Text>
+      <Text style={styles.balanceSubtext}>
+        Balancing opposing muscle groups keeps your joints healthy and your posture upright.
+      </Text>
       <View style={styles.balanceGrid}>
         {/* Push vs Pull Tile */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceTop}>
-            <Text style={styles.balanceTitle}>PUSH : PULL</Text>
+            <Text style={styles.balanceTitle}>PUSH (CHEST/SHOULDERS) : PULL (BACK)</Text>
             <View
               style={[
                 styles.smallBadge,
@@ -205,7 +306,7 @@ export const VolumeLandmarksCard = ({
                   },
                 ]}
               >
-                {pushPullBalance.label}
+                {pushPullBalance.status === 'balanced' ? 'BALANCED' : 'NEEDS ATTENTION'}
               </Text>
             </View>
           </View>
@@ -220,7 +321,7 @@ export const VolumeLandmarksCard = ({
         {/* Quad vs Posterior Chain Tile */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceTop}>
-            <Text style={styles.balanceTitle}>QUAD : POSTERIOR</Text>
+            <Text style={styles.balanceTitle}>FRONT LEGS (QUADS) : BACK LEGS (GLUTES/HAMS)</Text>
             <View
               style={[
                 styles.smallBadge,
@@ -238,7 +339,7 @@ export const VolumeLandmarksCard = ({
                   },
                 ]}
               >
-                {legBalance.label}
+                {legBalance.status === 'balanced' ? 'BALANCED' : 'NEEDS ATTENTION'}
               </Text>
             </View>
           </View>
@@ -257,10 +358,78 @@ export const VolumeLandmarksCard = ({
 const styles = StyleSheet.create({
   subtitle: {
     fontFamily: font.ui,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 18,
     color: loud.figureFaint,
+    marginBottom: space.sm,
+  },
+  scienceToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
     marginBottom: space.md,
+  },
+  scienceToggleText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    color: '#00E5FF',
+  },
+  scienceDetailsBox: {
+    backgroundColor: '#0D1520',
+    borderColor: '#1D3B54',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: space.md,
+    marginBottom: space.md,
+    gap: space.xs,
+  },
+  scienceIntro: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: '#CBD5E1',
+    lineHeight: 17,
+    marginBottom: 4,
+  },
+  scienceTier: {
+    marginTop: 4,
+  },
+  tierTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  tierDesc: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: '#94A3B8',
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  scienceRefDivider: {
+    height: 1,
+    backgroundColor: '#1E2530',
+    marginVertical: 6,
+  },
+  scienceRefHeader: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 1.1,
+    color: '#64748B',
+  },
+  scienceCitation: {
+    fontFamily: font.ui,
+    fontSize: 10,
+    color: '#94A3B8',
+    lineHeight: 15,
+  },
+  scienceAuthor: {
+    fontFamily: font.uiStrong,
+    color: '#CBD5E1',
+  },
+  scienceJournal: {
+    fontStyle: 'italic',
+    color: '#64748B',
   },
   statStrip: {
     flexDirection: 'row',
@@ -365,8 +534,8 @@ const styles = StyleSheet.create({
   },
   drawerDesc: {
     fontFamily: font.ui,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     color: loud.figureMuted,
     marginBottom: 6,
   },
@@ -377,7 +546,7 @@ const styles = StyleSheet.create({
   },
   landmarkItem: {
     fontFamily: font.ui,
-    fontSize: 10,
+    fontSize: 11,
     color: loud.figureFaint,
   },
   landmarkVal: {
@@ -390,6 +559,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     color: loud.figureFaint,
     marginTop: space.xl,
+    marginBottom: 2,
+  },
+  balanceSubtext: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: loud.figureMuted,
     marginBottom: space.sm,
   },
   balanceGrid: {
@@ -411,8 +586,8 @@ const styles = StyleSheet.create({
   },
   balanceTitle: {
     fontFamily: font.display,
-    fontSize: 11,
-    letterSpacing: 1.2,
+    fontSize: 10,
+    letterSpacing: 1.1,
     color: loud.figureMuted,
   },
   smallBadge: {
@@ -482,5 +657,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: loud.figureMuted,
+  },
+  deficitSubToggle: {
+    paddingTop: 6,
+  },
+  deficitSubToggleText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    color: '#FBBF24',
+  },
+  deficitScienceBody: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#CBD5E1',
+    marginTop: 4,
+    backgroundColor: '#281C10',
+    padding: space.sm,
+    borderRadius: radius.sm,
   },
 });

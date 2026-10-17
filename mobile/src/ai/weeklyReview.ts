@@ -19,8 +19,10 @@ export const WeeklyReviewSchema = z.object({
   confidenceRationale: z.string(),
   keyWins: z.array(z.string()).min(1).max(4),
   synthesis: z.string(),
+  plainSummary: z.string().optional(),
   trainingInsight: z.string(),
   nutritionInsight: z.string(),
+  scienceExplanation: z.string().optional(),
   suggestedAdjustment: z.object({
     hasAdjustment: z.boolean(),
     type: z.enum(['calories', 'protein', 'volume', 'deload', 'none']),
@@ -36,25 +38,33 @@ export type WeeklyReviewResult = z.infer<typeof WeeklyReviewSchema>;
 export const WEEKLY_REVIEW_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
-    headline: { type: 'string', description: 'Punchy 5-10 word headline summarizing the week' },
+    headline: { type: 'string', description: 'Punchy 5-10 word headline summarizing the week in friendly terms' },
     dataConfidence: { type: 'string', enum: ['high', 'moderate', 'low'] },
-    confidenceRationale: { type: 'string', description: 'Brief explanation of confidence based on logging consistency' },
+    confidenceRationale: { type: 'string', description: 'Plain English reason for this confidence level' },
     keyWins: {
       type: 'array',
       items: { type: 'string' },
-      description: '2-4 specific achievements, PRs, or consistency wins',
+      description: '1 to 4 friendly bullet points celebrating achievements, PRs, or consistency',
     },
     synthesis: {
       type: 'string',
-      description: '2-3 sentences connecting training performance with energy balance and weight trajectory',
+      description: 'Easy-to-understand narrative explaining how nutrition and workouts worked together',
+    },
+    plainSummary: {
+      type: 'string',
+      description: 'Simple 2-3 sentence summary written for someone with zero fitness or science background',
     },
     trainingInsight: {
       type: 'string',
-      description: 'Observations on progressive overload, RPE trends, and muscle recovery',
+      description: 'Actionable, easy-to-understand gym advice in plain English',
     },
     nutritionInsight: {
       type: 'string',
-      description: 'Observations on calorie deficit/surplus accuracy, protein targets, and adherence',
+      description: 'Actionable, easy-to-understand eating & calorie advice in plain English',
+    },
+    scienceExplanation: {
+      type: 'string',
+      description: 'Detailed physiological explanation citing scientific concepts and researchers (Schoenfeld, Israetel, Helms) for users who want to know the deep science',
     },
     suggestedAdjustment: {
       type: 'object',
@@ -64,7 +74,7 @@ export const WEEKLY_REVIEW_RESPONSE_SCHEMA = {
         title: { type: 'string', description: 'Short action title e.g. "+150 kcal/day"' },
         deltaKcal: { type: 'number', description: 'Recommended calorie delta (+/- kcal), if applicable' },
         deltaSets: { type: 'number', description: 'Recommended sets delta (+/- sets), if applicable' },
-        rationale: { type: 'string', description: 'Clear scientific rationale for the suggestion' },
+        rationale: { type: 'string', description: 'Clear rationale in plain English' },
       },
       required: ['hasAdjustment', 'type', 'title', 'rationale'],
     },
@@ -294,18 +304,25 @@ export const buildCoachingPrompt = (
   metrics: WeeklyExtractedMetrics,
   goal: 'lose' | 'maintain' | 'gain' = 'maintain',
 ): string => {
-  return `You are an elite, evidence-based strength & nutrition coach for Ascend.
-Analyze the lifter's actual 7-day data across training performance, bodyweight scale readings, and nutrition energy balance.
+  return `You are a warm, encouraging, expert personal coach for Ascend.
+Explain the lifter's actual 7-day progress in friendly, everyday language. Assume they have NO background in sports science or anatomy.
+
+TONE & USER-FRIENDLY GUIDELINES:
+1. Speak like an encouraging personal trainer who makes fitness easy to understand.
+2. DO NOT use confusing scientific jargon in the main fields (avoid terms like 'hypertrophic stimulus', 'hypocaloric deficit', 'systemic fatigue', 'volume landmarks', etc.). Instead use simple terms like 'building muscle', 'eating in a deficit to lose fat', 'feeling tired', 'doing enough sets to grow'.
+3. Always explain the "why" simply (e.g. "Because you're eating less food right now, it's completely normal to feel like you have a bit less energy on your heaviest sets.").
+4. In 'plainSummary', write 2-3 friendly sentences summarizing the week for a beginner.
+5. In 'scienceExplanation', provide the deep-dive exercise physiology explanation with specific scientific references (e.g., Brad Schoenfeld on volume, Eric Helms on deficit nutrition, Mike Israetel on recovery thresholds) for users who tap "Learn the Science".
 
 ATHLETE DATA (PAST 7 DAYS):
-- Goal: ${goal.toUpperCase()}
+- Goal: ${goal === 'lose' ? 'Fat Loss (Calorie Deficit)' : goal === 'gain' ? 'Muscle Building (Calorie Surplus)' : 'Weight Maintenance'}
 - Data Confidence: ${metrics.confidence.toUpperCase()} (Weight logged: ${metrics.weight.loggedDays}/7 days, Nutrition logged: ${metrics.nutrition.loggedDays}/7 days)
 
 WEIGHT & ENERGY BALANCE:
 - Scale Weight Delta: ${metrics.weight.deltaKg !== null ? `${metrics.weight.deltaKg > 0 ? `+${metrics.weight.deltaKg}` : metrics.weight.deltaKg} kg (${metrics.weight.percentBwChange}% bodyweight)` : 'Sparse weigh-ins'}
 - Average Calories Logged: ${metrics.nutrition.avgCalories ?? 'Not logged'} kcal/day (Target: ${metrics.nutrition.targetCalories ?? 'N/A'} kcal/day)
 - Estimated Expenditure: ${metrics.nutrition.avgExpenditure ?? 'N/A'} kcal/day
-- Net Energy Balance: ${metrics.nutrition.avgEnergyDeltaKcal !== null ? `${metrics.nutrition.avgEnergyDeltaKcal > 0 ? `+${metrics.nutrition.avgEnergyDeltaKcal}` : metrics.nutrition.avgEnergyDeltaKcal} kcal/day` : 'Unknown'}
+- Net Energy Balance: ${metrics.nutrition.avgEnergyDeltaKcal !== null ? `${metrics.nutrition.avgEnergyDeltaKcal > 0 ? `+${metrics.nutrition.avgEnergyDeltaKcal} surplus` : `${metrics.nutrition.avgEnergyDeltaKcal} deficit`} kcal/day` : 'Unknown'}
 
 TRAINING PERFORMANCE:
 - Completed Workouts: ${metrics.training.sessionsCount} sessions
@@ -313,16 +330,16 @@ TRAINING PERFORMANCE:
 - Total Volume Load: ${metrics.training.totalVolumeKg.toLocaleString()} kg
 - Progressive Overload Highlights:
 ${metrics.training.progressions.map((p) => `  * ${p.exercise}: ${p.previous} -> ${p.current} (${p.delta})`).join('\n') || '  * No prior week baseline comparisons available'}
-- Volume Landmarks:
-  * Optimal (MAV): ${metrics.training.optimalVolumeGroups.join(', ') || 'None'}
-  * Under Minimum Effective Volume (MEV): ${metrics.training.underVolumeGroups.join(', ') || 'None'}
-  * Exceeding Max Recoverable Volume (MRV): ${metrics.training.overVolumeGroups.join(', ') || 'None'}
+- Muscle Focus:
+  * Muscles in the Growth Sweet Spot: ${metrics.training.optimalVolumeGroups.join(', ') || 'None'}
+  * Muscles that could use more sets: ${metrics.training.underVolumeGroups.join(', ') || 'None'}
+  * Muscles that might be doing too much: ${metrics.training.overVolumeGroups.join(', ') || 'None'}
 
 INSTRUCTIONS:
-1. Synthesize the interaction between nutrition energy balance, scale weight rate of change, and gym performance (e.g. is a steep deficit hurting top working sets? Or is a surplus fueling progressive overload?).
-2. State 2 to 3 concrete wins (specific PRs or adherence).
-3. If data is sparse (<3 days logged), acknowledge uncertainty with humility.
-4. If an adjustment to calories or volume is warranted, provide a clear, actionable recommendation with an exact number (e.g. +150 kcal/day or -2 sets for fatigued groups). If on track, recommend maintaining.`;
+1. Synthesize the interaction between nutrition energy balance, scale weight rate of change, and gym performance in plain, simple English.
+2. State 2 to 3 concrete wins (celebrate specific PRs or consistency).
+3. If data is sparse (<3 days logged), acknowledge uncertainty with kindness and encourage more logging.
+4. If an adjustment to calories or volume is warranted, provide a clear, actionable recommendation with an exact number (e.g. +150 kcal/day or -2 sets for fatigued groups). If on track, recommend keeping things steady.`;
 };
 
 /**

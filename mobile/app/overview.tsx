@@ -7,8 +7,10 @@ import {
 } from '@adaptive-macros/engine';
 import type { DatedSet, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../src/components/Card';
 import { CountUp } from '../src/components/CountUp';
 import { FadeIn } from '../src/components/FadeIn';
@@ -20,7 +22,16 @@ import { SlashPanel } from '../src/components/SlashPanel';
 import { Tappable } from '../src/components/Tappable';
 import { VolumeLandmarksCard } from '../src/components/VolumeLandmarksCard';
 import { WeeklyReviewCard } from '../src/components/WeeklyReviewCard';
+import { WeeklyReviewModal } from '../src/components/WeeklyReviewModal';
 import { WeeklyBars } from '../src/components/WeeklyBars';
+import {
+  extractWeeklyMetrics,
+  requestWeeklyReview,
+  type WeeklyExtractedMetrics,
+  type WeeklyReviewResult,
+} from '../src/ai/weeklyReview';
+import { notify } from '../src/dialog';
+import { thud } from '../src/platform/haptics';
 import {
   catalogueRegionsByExerciseName,
   finishedSessionTimes,
@@ -141,6 +152,91 @@ export default function OverviewScreen() {
     [sets, regions, from, to, period.days],
   );
 
+  const [coachingModalOpen, setCoachingModalOpen] = useState(false);
+  const [coachingReview, setCoachingReview] = useState<WeeklyReviewResult | null>(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
+  const [coachingError, setCoachingError] = useState<string | null>(null);
+  const [coachingApplied, setCoachingApplied] = useState(false);
+
+  const coachingMetrics: WeeklyExtractedMetrics = useMemo(
+    () =>
+      extractWeeklyMetrics({
+        series,
+        observations,
+        sets,
+        diagnostics: diagnostics.totalWorkingSets > 0 ? diagnostics : null,
+        goalDirection: settings.goal?.direction,
+        targetKcal: program?.calories?.kcal,
+        targetProteinG: program?.macros?.proteinG,
+        units: settings.units,
+      }),
+    [
+      series,
+      observations,
+      sets,
+      diagnostics,
+      settings.goal?.direction,
+      program?.calories?.kcal,
+      program?.macros?.proteinG,
+      settings.units,
+    ],
+  );
+
+  const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
+
+  useEffect(() => {
+    let alive = true;
+    void AsyncStorage.getItem(coachingCacheKey).then((saved) => {
+      if (alive && saved) {
+        try {
+          setCoachingReview(JSON.parse(saved) as WeeklyReviewResult);
+        } catch {}
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [coachingCacheKey]);
+
+  const handleGenerateCoaching = useCallback(async () => {
+    setCoachingLoading(true);
+    setCoachingError(null);
+    try {
+      thud('light');
+      const result = await requestWeeklyReview(coachingMetrics, '', settings.goal?.direction);
+      setCoachingReview(result);
+      setCoachingApplied(false);
+      await AsyncStorage.setItem(coachingCacheKey, JSON.stringify(result));
+      thud('heavy');
+      notify('Review ready', 'Your weekly coaching review is ready.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate coaching review';
+      setCoachingError(msg);
+      notify('Coaching Review', msg);
+    } finally {
+      setCoachingLoading(false);
+    }
+  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey]);
+
+  const handleApplyCoachingAdjustment = useCallback(async () => {
+    if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
+    thud('heavy');
+    setCoachingApplied(true);
+    const adj = coachingReview.suggestedAdjustment;
+    if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
+      const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
+      const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
+      const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
+      await updateSettings({
+        goal: {
+          ...settings.goal,
+          rateKgPerWeek: newRate,
+        },
+      });
+      notify('Adjustment Applied', `Updated target: ${adj.title}`);
+    }
+  }, [coachingReview, coachingApplied, program?.calories?.kcal, settings.goal, updateSettings]);
+
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, to), [sessionTimes, sets, to]);
   // Older weeks can have training in them when this window is empty, and that
   // is when seeing the trend matters most.
@@ -192,6 +288,51 @@ export default function OverviewScreen() {
           );
         })}
       </View>
+
+      {/* Prominent High-Visibility Coaching Banner */}
+      <FadeIn>
+        <Tappable
+          onPress={() => {
+            thud('light');
+            setCoachingModalOpen(true);
+          }}
+          style={styles.coachingBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Open Weekly AI Coaching Review"
+        >
+          <View style={styles.coachingBannerLeft}>
+            <View style={styles.coachingIconCircle}>
+              <Ionicons name="sparkles" size={18} color="#00E5FF" />
+            </View>
+            <View style={styles.coachingBannerContent}>
+              <View style={styles.coachingTagRow}>
+                <Text style={styles.coachingTag}>WEEKLY AI COACH</Text>
+                <View
+                  style={[
+                    styles.readyPill,
+                    coachingReview ? styles.readyPillActive : styles.readyPillPending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.readyPillText,
+                      coachingReview ? styles.readyTextActive : styles.readyTextPending,
+                    ]}
+                  >
+                    {coachingReview ? 'REVIEW READY' : 'TAP TO GENERATE'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.coachingHeadline} numberOfLines={1}>
+                {coachingReview ? `"${coachingReview.headline}"` : 'See what your workouts & nutrition achieved this week'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.coachingArrowWrap}>
+            <Ionicons name="chevron-forward" size={18} color="#00E5FF" />
+          </View>
+        </Tappable>
+      </FadeIn>
 
       {summary.sessions === 0 ? (
         <Card loud title="Nothing yet">
@@ -288,6 +429,7 @@ export default function OverviewScreen() {
               targetKcal={program?.calories?.kcal}
               targetProteinG={program?.macros?.proteinG}
               units={settings.units}
+              onOpenModal={() => setCoachingModalOpen(true)}
               onApplyAdjustment={async (adj) => {
                 if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
                   const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
@@ -345,6 +487,19 @@ export default function OverviewScreen() {
           </Card>
         </FadeIn>
       )}
+
+      {/* Weekly Coaching Review Modal Popup */}
+      <WeeklyReviewModal
+        open={coachingModalOpen}
+        onClose={() => setCoachingModalOpen(false)}
+        review={coachingReview}
+        metrics={coachingMetrics}
+        loading={coachingLoading}
+        error={coachingError}
+        applied={coachingApplied}
+        onGenerate={handleGenerateCoaching}
+        onApplyAdjustment={handleApplyCoachingAdjustment}
+      />
     </Screen>
   );
 }
@@ -426,5 +581,82 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: loud.figureFaint,
     marginTop: space.md,
+  },
+  coachingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#071626',
+    borderWidth: 1,
+    borderColor: '#00E5FF',
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    marginBottom: space.lg,
+  },
+  coachingBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    flex: 1,
+  },
+  coachingIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#092532',
+    borderWidth: 1,
+    borderColor: '#00E5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coachingBannerContent: {
+    flex: 1,
+    gap: 2,
+  },
+  coachingTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  coachingTag: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: '#00E5FF',
+  },
+  readyPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  readyPillActive: {
+    backgroundColor: '#102A1E',
+    borderColor: '#1D5A3C',
+  },
+  readyPillPending: {
+    backgroundColor: '#1C1914',
+    borderColor: '#4D3B18',
+  },
+  readyPillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 0.8,
+  },
+  readyTextActive: {
+    color: '#10B981',
+  },
+  readyTextPending: {
+    color: '#FBBF24',
+  },
+  coachingHeadline: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    color: '#F0F9FF',
+    lineHeight: 18,
+  },
+  coachingArrowWrap: {
+    marginLeft: space.sm,
   },
 });

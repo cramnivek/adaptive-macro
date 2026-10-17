@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import type {
@@ -32,6 +32,7 @@ interface WeeklyReviewCardProps {
   targetProteinG?: number;
   units?: UnitSystem;
   geminiApiKey?: string;
+  onOpenModal?: () => void;
   onApplyAdjustment?: (adjustment: { deltaKcal?: number; deltaSets?: number; type: string }) => void;
 }
 
@@ -53,12 +54,14 @@ export const WeeklyReviewCard = ({
   targetProteinG,
   units = 'metric',
   geminiApiKey = '',
+  onOpenModal,
   onApplyAdjustment,
 }: WeeklyReviewCardProps) => {
   const [review, setReview] = useState<WeeklyReviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
+  const [showScience, setShowScience] = useState(false);
 
   const metrics: WeeklyExtractedMetrics = useMemo(
     () =>
@@ -102,7 +105,7 @@ export const WeeklyReviewCard = ({
       setApplied(false);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(result));
       thud('heavy');
-      notify('Review generated', 'Your weekly coaching review is ready.');
+      notify('Review ready', 'Your weekly coaching review is ready.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to generate coaching review';
       setError(msg);
@@ -121,10 +124,11 @@ export const WeeklyReviewCard = ({
       deltaSets: review.suggestedAdjustment.deltaSets,
       type: review.suggestedAdjustment.type,
     });
-    notify('Adjustment Applied', `Updated targets: ${review.suggestedAdjustment.title}`);
+    notify('Adjustment Applied', `Updated target: ${review.suggestedAdjustment.title}`);
   }, [review, applied, onApplyAdjustment]);
 
-  const confColor = review ? CONFIDENCE_COLORS[review.dataConfidence] : CONFIDENCE_COLORS[metrics.confidence];
+  const conf = review?.dataConfidence ?? metrics.confidence;
+  const confColor = CONFIDENCE_COLORS[conf];
 
   return (
     <Card style={styles.container}>
@@ -140,11 +144,24 @@ export const WeeklyReviewCard = ({
           </Text>
         </View>
 
-        <View style={[styles.confPill, { backgroundColor: confColor.bg, borderColor: confColor.border }]}>
-          <View style={[styles.confDot, { backgroundColor: confColor.text }]} />
-          <Text style={[styles.confPillText, { color: confColor.text }]}>
-            {(review?.dataConfidence ?? metrics.confidence).toUpperCase()} CONFIDENCE
-          </Text>
+        <View style={styles.headerRightWrap}>
+          <View style={[styles.confPill, { backgroundColor: confColor.bg, borderColor: confColor.border }]}>
+            <View style={[styles.confDot, { backgroundColor: confColor.text }]} />
+            <Text style={[styles.confPillText, { color: confColor.text }]}>
+              {conf.toUpperCase()}
+            </Text>
+          </View>
+
+          {onOpenModal && (
+            <Tappable
+              onPress={onOpenModal}
+              style={styles.openPopupBtn}
+              scaleTo={0.92}
+              accessibilityLabel="Open coaching review as full popup"
+            >
+              <Ionicons name="expand" size={14} color="#00E5FF" />
+            </Tappable>
+          )}
         </View>
       </View>
 
@@ -163,7 +180,7 @@ export const WeeklyReviewCard = ({
                   ? `${metrics.weight.deltaKg > 0 ? `+${metrics.weight.deltaKg}` : metrics.weight.deltaKg}`
                   : '—'}
               </Text>
-              <Text style={styles.glanceLabel}>KG DELTA</Text>
+              <Text style={styles.glanceLabel}>KG CHANGE</Text>
             </View>
             <View style={styles.glanceDivider} />
             <View style={styles.glanceItem}>
@@ -172,27 +189,40 @@ export const WeeklyReviewCard = ({
                   ? `${metrics.nutrition.avgEnergyDeltaKcal > 0 ? `+${metrics.nutrition.avgEnergyDeltaKcal}` : metrics.nutrition.avgEnergyDeltaKcal}`
                   : '—'}
               </Text>
-              <Text style={styles.glanceLabel}>ENERGY KCAL</Text>
+              <Text style={styles.glanceLabel}>CALORIE BALANCE</Text>
             </View>
           </View>
 
           <Text style={styles.promptPitch}>
-            Synthesize progressive overload on key lifts, 7-day scale weight rate of change, and energy balance into
-            actionable guidance.
+            Connect your gym progress, scale weight readings, and nutrition balance into clear, personalized coaching advice.
           </Text>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
-          <Tappable
-            onPress={handleGenerate}
-            style={styles.generateBtn}
-            scaleTo={0.97}
-            accessibilityRole="button"
-            accessibilityLabel="Generate weekly AI coaching review"
-          >
-            <Ionicons name="sparkles" size={16} color="#0A0A0B" style={{ marginRight: 6 }} />
-            <Text style={styles.generateBtnText}>GENERATE WEEKLY REVIEW</Text>
-          </Tappable>
+          <View style={styles.btnRow}>
+            <Tappable
+              onPress={handleGenerate}
+              style={styles.generateBtn}
+              scaleTo={0.97}
+              accessibilityRole="button"
+              accessibilityLabel="Generate weekly AI coaching review"
+            >
+              <Ionicons name="sparkles" size={16} color="#0A0A0B" style={{ marginRight: 6 }} />
+              <Text style={styles.generateBtnText}>GENERATE REVIEW</Text>
+            </Tappable>
+
+            {onOpenModal && (
+              <Tappable
+                onPress={onOpenModal}
+                style={styles.popupLauncherBtn}
+                scaleTo={0.97}
+                accessibilityRole="button"
+                accessibilityLabel="Open review popup"
+              >
+                <Ionicons name="open-outline" size={16} color="#00E5FF" />
+              </Tappable>
+            )}
+          </View>
         </View>
       )}
 
@@ -200,8 +230,8 @@ export const WeeklyReviewCard = ({
       {loading && (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="small" color="#00E5FF" style={{ marginBottom: space.sm }} />
-          <Text style={styles.loadingText}>Synthesizing workouts, scale trends & nutrition...</Text>
-          <Text style={styles.loadingSub}>Evaluating progressive overload and energy balance</Text>
+          <Text style={styles.loadingText}>Analyzing workouts, scale trends & nutrition...</Text>
+          <Text style={styles.loadingSub}>Synthesizing your progress into plain-English coaching</Text>
         </View>
       )}
 
@@ -213,7 +243,7 @@ export const WeeklyReviewCard = ({
 
           {/* Key Wins */}
           <View style={styles.winsWrap}>
-            <Text style={styles.sectionTitle}>KEY ACHIEVEMENTS</Text>
+            <Text style={styles.sectionTitle}>WINS THIS WEEK</Text>
             {review.keyWins.map((win, idx) => (
               <View key={idx} style={styles.winRow}>
                 <Ionicons name="checkmark-circle" size={15} color="#10B981" style={{ marginTop: 2 }} />
@@ -222,10 +252,10 @@ export const WeeklyReviewCard = ({
             ))}
           </View>
 
-          {/* Holistic Synthesis */}
+          {/* Holistic Summary */}
           <View style={styles.synthesisWrap}>
-            <Text style={styles.sectionTitle}>HOLISTIC SYNTHESIS</Text>
-            <Text style={styles.synthesisBody}>{review.synthesis}</Text>
+            <Text style={styles.sectionTitle}>THE BIG PICTURE</Text>
+            <Text style={styles.synthesisBody}>{review.plainSummary ?? review.synthesis}</Text>
           </View>
 
           {/* Dual Insight Cards */}
@@ -233,7 +263,7 @@ export const WeeklyReviewCard = ({
             <View style={styles.insightBox}>
               <View style={styles.insightHeader}>
                 <Ionicons name="barbell-outline" size={14} color="#00E5FF" />
-                <Text style={styles.insightTitle}>TRAINING & VOLUME</Text>
+                <Text style={styles.insightTitle}>WORKOUTS & STRENGTH</Text>
               </View>
               <Text style={styles.insightBody}>{review.trainingInsight}</Text>
             </View>
@@ -241,7 +271,7 @@ export const WeeklyReviewCard = ({
             <View style={styles.insightBox}>
               <View style={styles.insightHeader}>
                 <Ionicons name="nutrition-outline" size={14} color="#FBBF24" />
-                <Text style={[styles.insightTitle, { color: '#FBBF24' }]}>ENERGY & NUTRITION</Text>
+                <Text style={[styles.insightTitle, { color: '#FBBF24' }]}>NUTRITION & SCALE</Text>
               </View>
               <Text style={styles.insightBody}>{review.nutritionInsight}</Text>
             </View>
@@ -289,17 +319,68 @@ export const WeeklyReviewCard = ({
             )}
           </View>
 
-          {/* Refresh / Regenerate button */}
-          <Tappable
-            onPress={handleGenerate}
-            style={styles.refreshBtn}
-            scaleTo={0.96}
-            accessibilityRole="button"
-            accessibilityLabel="Regenerate review"
-          >
-            <Ionicons name="refresh-outline" size={12} color={loud.figureMuted} />
-            <Text style={styles.refreshBtnText}>Re-analyze with latest logs</Text>
-          </Tappable>
+          {/* Expandable Science Drawer */}
+          <View style={styles.scienceBox}>
+            <Pressable
+              style={styles.scienceHeader}
+              onPress={() => {
+                thud('light');
+                setShowScience((prev) => !prev);
+              }}
+            >
+              <View style={styles.scienceTitleGroup}>
+                <Ionicons name="school-outline" size={15} color="#00E5FF" />
+                <Text style={styles.scienceTitle}>The Science & References</Text>
+              </View>
+              <Ionicons
+                name={showScience ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color="#64748B"
+              />
+            </Pressable>
+
+            {showScience && (
+              <View style={styles.scienceBody}>
+                <Text style={styles.scienceText}>
+                  {review.scienceExplanation ??
+                    'Ascend evaluates your progressive overload against exercise physiology volume landmarks (Israetel et al., 2020) and energy availability kinetics (Helms et al., 2014) to maintain lean mass and prevent fatigue accumulation.'}
+                </Text>
+                <Text style={styles.scienceCitation}>
+                  • Schoenfeld, B. J. et al. (2017). Dose-response volume in muscle hypertrophy. J Sports Sci.
+                </Text>
+                <Text style={styles.scienceCitation}>
+                  • Helms, E. R. et al. (2014). Nutrition recommendations for natural bodybuilding. JISSN.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Bottom Action Row */}
+          <View style={styles.bottomActionRow}>
+            {onOpenModal && (
+              <Tappable
+                onPress={onOpenModal}
+                style={styles.popupTextBtn}
+                scaleTo={0.96}
+                accessibilityRole="button"
+                accessibilityLabel="Open popup view"
+              >
+                <Ionicons name="expand" size={13} color="#00E5FF" />
+                <Text style={styles.popupTextBtnText}>OPEN AS POPUP</Text>
+              </Tappable>
+            )}
+
+            <Tappable
+              onPress={handleGenerate}
+              style={styles.refreshBtn}
+              scaleTo={0.96}
+              accessibilityRole="button"
+              accessibilityLabel="Regenerate review"
+            >
+              <Ionicons name="refresh-outline" size={13} color={loud.figureMuted} />
+              <Text style={styles.refreshText}>RE-ANALYZE</Text>
+            </Tappable>
+          </View>
         </View>
       )}
     </Card>
@@ -308,46 +389,51 @@ export const WeeklyReviewCard = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0E1015',
-    borderColor: '#1C2230',
+    backgroundColor: '#070D14',
+    borderColor: '#162333',
     borderWidth: 1,
     borderRadius: radius.md,
     padding: space.md,
-    marginBottom: space.md,
   },
   headerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: space.sm,
+    paddingBottom: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1A293D',
+    marginBottom: space.md,
   },
   headerTitleWrap: {
-    flex: 1,
+    gap: 2,
   },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
+    gap: 5,
   },
   headerBadge: {
-    fontFamily: font.display,
-    fontSize: 12,
+    fontFamily: font.uiStrong,
+    fontSize: 11,
     letterSpacing: 1.2,
     color: '#00E5FF',
   },
   headerSubtitle: {
     fontFamily: font.figure,
-    fontSize: 10,
-    color: loud.figureMuted,
-    letterSpacing: 0.5,
+    fontSize: 11,
+    color: loud.figureFaint,
+  },
+  headerRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   confPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingVertical: 3,
     paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
@@ -357,68 +443,97 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   confPillText: {
-    fontFamily: font.display,
-    fontSize: 9,
+    fontFamily: font.uiStrong,
+    fontSize: 10,
     letterSpacing: 0.8,
   },
+  openPopupBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#092532',
+    borderWidth: 1,
+    borderColor: '#00E5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   unopenedWrap: {
-    marginTop: space.sm,
+    gap: space.md,
   },
   glanceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: '#141822',
+    justifyContent: 'space-between',
+    backgroundColor: '#0B1522',
     borderRadius: radius.sm,
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
-    marginBottom: space.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#212A3D',
+    borderColor: '#1A2C42',
   },
   glanceItem: {
     alignItems: 'center',
+    flex: 1,
   },
   glanceVal: {
     fontFamily: font.figure,
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: loud.figure,
+    fontVariant: ['tabular-nums'],
   },
   glanceLabel: {
     fontFamily: font.display,
     fontSize: 9,
-    letterSpacing: 0.8,
-    color: loud.figureMuted,
+    letterSpacing: 1,
+    color: loud.figureFaint,
     marginTop: 2,
   },
   glanceDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#2A344A',
+    width: StyleSheet.hairlineWidth,
+    height: 24,
+    backgroundColor: '#1E324A',
   },
   promptPitch: {
     fontFamily: font.ui,
     fontSize: 12,
     lineHeight: 17,
     color: loud.figureMuted,
-    marginBottom: space.md,
+  },
+  errorText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: loud.warn,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
   generateBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#00E5FF',
+    borderRadius: radius.sm,
     paddingVertical: 11,
     paddingHorizontal: space.md,
-    borderRadius: radius.sm,
   },
   generateBtnText: {
-    fontFamily: font.display,
+    fontFamily: font.uiStrong,
     fontSize: 12,
     letterSpacing: 1,
     color: '#0A0A0B',
-    fontWeight: 'bold',
+  },
+  popupLauncherBtn: {
+    width: 44,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: '#092532',
+    borderWidth: 1,
+    borderColor: '#00E5FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingWrap: {
     paddingVertical: space.lg,
@@ -427,90 +542,85 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: font.uiStrong,
     fontSize: 13,
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: loud.figure,
+    marginBottom: 2,
   },
   loadingSub: {
     fontFamily: font.ui,
     fontSize: 11,
-    color: loud.figureMuted,
-  },
-  errorText: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    color: '#EF4444',
-    marginBottom: space.sm,
+    color: loud.figureFaint,
   },
   reviewContent: {
-    marginTop: space.xs,
+    gap: space.md,
   },
   headline: {
     fontFamily: font.display,
-    fontSize: 15,
-    lineHeight: 21,
-    color: '#FFFFFF',
-    marginBottom: space.md,
-    letterSpacing: 0.2,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#E0F7FF',
+    fontStyle: 'italic',
   },
   winsWrap: {
-    backgroundColor: '#111A16',
-    borderColor: '#1D3B2E',
+    backgroundColor: '#0B1A24',
+    borderColor: '#133930',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
-    padding: space.sm + 2,
-    marginBottom: space.md,
+    padding: space.sm,
+    gap: 4,
   },
   sectionTitle: {
     fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: loud.figureMuted,
-    marginBottom: 6,
+    fontSize: 9,
+    letterSpacing: 1.2,
+    color: loud.figureFaint,
+    marginBottom: 2,
   },
   winRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
   },
   winText: {
-    flex: 1,
     fontFamily: font.ui,
     fontSize: 12,
     lineHeight: 16,
-    color: '#E2E8F0',
+    color: '#A7F3D0',
+    flex: 1,
   },
   synthesisWrap: {
-    marginBottom: space.md,
+    backgroundColor: '#0B1522',
+    borderRadius: radius.sm,
+    padding: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#1A2C42',
   },
   synthesisBody: {
     fontFamily: font.ui,
     fontSize: 12,
     lineHeight: 18,
-    color: '#CBD5E1',
+    color: loud.figure,
   },
   insightsRow: {
     flexDirection: 'column',
     gap: space.sm,
-    marginBottom: space.md,
   },
   insightBox: {
-    backgroundColor: '#121620',
-    borderColor: '#1F293D',
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: '#09131F',
     borderRadius: radius.sm,
-    padding: space.sm + 2,
+    padding: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#152438',
   },
   insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     marginBottom: 4,
   },
   insightTitle: {
     fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 0.8,
+    fontSize: 9,
+    letterSpacing: 1,
     color: '#00E5FF',
   },
   insightBody: {
@@ -520,18 +630,17 @@ const styles = StyleSheet.create({
     color: loud.figureMuted,
   },
   adjustmentWrap: {
-    backgroundColor: '#1B1710',
-    borderColor: '#4D3B18',
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: '#121D2C',
     borderRadius: radius.sm,
-    padding: space.sm + 4,
-    marginBottom: space.sm,
+    padding: space.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#1E3550',
+    gap: 6,
   },
   adjustmentHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
   },
   adjustmentTitle: {
     fontFamily: font.display,
@@ -540,44 +649,99 @@ const styles = StyleSheet.create({
   },
   adjustmentRationale: {
     fontFamily: font.ui,
-    fontSize: 12,
-    lineHeight: 17,
-    color: '#D4D4D8',
-    marginBottom: space.sm,
+    fontSize: 11,
+    lineHeight: 16,
+    color: loud.figureMuted,
   },
   applyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F59E0B',
-    paddingVertical: 9,
-    paddingHorizontal: space.md,
+    backgroundColor: '#00E5FF',
     borderRadius: radius.sm,
+    paddingVertical: 9,
+    marginTop: 4,
   },
   applyBtnDisabled: {
-    backgroundColor: '#27272A',
+    backgroundColor: '#102A1E',
   },
   applyBtnText: {
-    fontFamily: font.display,
+    fontFamily: font.uiStrong,
     fontSize: 11,
     letterSpacing: 0.8,
     color: '#0A0A0B',
-    fontWeight: 'bold',
   },
   applyBtnTextDisabled: {
-    color: '#71717A',
+    color: '#10B981',
+  },
+  scienceBox: {
+    backgroundColor: '#08101A',
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#16283D',
+    overflow: 'hidden',
+  },
+  scienceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: space.sm,
+  },
+  scienceTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scienceTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    color: '#00E5FF',
+  },
+  scienceBody: {
+    padding: space.sm,
+    paddingTop: 0,
+    gap: 4,
+  },
+  scienceText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 16,
+    color: loud.figureMuted,
+  },
+  scienceCitation: {
+    fontFamily: font.ui,
+    fontSize: 10,
+    color: '#64748B',
+    lineHeight: 14,
+  },
+  bottomActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  popupTextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 4,
+  },
+  popupTextBtnText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: '#00E5FF',
   },
   refreshBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 4,
-    paddingVertical: 6,
-    marginTop: 4,
+    paddingVertical: 4,
   },
-  refreshBtnText: {
-    fontFamily: font.figure,
+  refreshText: {
+    fontFamily: font.uiStrong,
     fontSize: 10,
-    color: loud.figureMuted,
+    letterSpacing: 0.8,
+    color: loud.figureFaint,
   },
 });
