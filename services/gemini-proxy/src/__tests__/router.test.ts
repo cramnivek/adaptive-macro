@@ -562,4 +562,143 @@ describe('per-user limits', () => {
     expect(usda.status).toBe(401);
     expect(jwksFetches).toBe(0);
   });
+
+  describe('/api/upload-card security and validation', () => {
+    const validJpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+    const invalidFile = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04]);
+
+    it('refuses non-POST methods', async () => {
+      const router = createRouter({ env, webRoot });
+      const res = await router(new Request('https://x.test/api/upload-card', { method: 'GET' }));
+      expect(res.status).toBe(405);
+    });
+
+    it('refuses unauthenticated upload attempts with 401', async () => {
+      const router = createRouter({ env, webRoot });
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          body: validJpeg,
+        }),
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it('refuses request missing sessionId with 400', async () => {
+      const router = createRouter({ env, webRoot });
+      const res = await router(
+        new Request('https://x.test/api/upload-card', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: validJpeg,
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'sessionId required' });
+    });
+
+    it('refuses empty body with 400', async () => {
+      const router = createRouter({ env, webRoot });
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: new Uint8Array([]),
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Empty body' });
+    });
+
+    it('refuses non-image magic bytes with 400', async () => {
+      const router = createRouter({ env, webRoot });
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: invalidFile,
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Invalid image format. Expected JPEG, PNG, or WebP' });
+    });
+
+    it('refuses images exceeding 5MB ceiling with 413', async () => {
+      const router = createRouter({ env, webRoot });
+      const oversized = new Uint8Array(5 * 1024 * 1024 + 10);
+      oversized[0] = 0xff;
+      oversized[1] = 0xd8;
+      oversized[2] = 0xff;
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: oversized,
+        }),
+      );
+      expect(res.status).toBe(413);
+    });
+
+    it('scopes filename to user ID when authenticated with Supabase token', async () => {
+      let uploadedFilename = '';
+      const mockUploader = vi.fn(async (filename: string) => {
+        uploadedFilename = filename;
+        return `https://storage.googleapis.com/test-bucket/${filename}`;
+      });
+
+      const router = createRouter({
+        env: userEnv,
+        webRoot,
+        uploadCardImpl: mockUploader,
+      });
+      const alice = await tokenFor('alice');
+
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=workout_123', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${alice}`,
+          },
+          body: validJpeg,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(uploadedFilename).toBe('alice/workout_123.jpg');
+      expect(await res.json()).toEqual({
+        ok: true,
+        url: 'https://storage.googleapis.com/test-bucket/alice/workout_123.jpg',
+      });
+    });
+
+    it('enforces upload rate limiting', async () => {
+      const mockUploader = vi.fn(async (filename: string) => `https://test/${filename}`);
+      const router = createRouter({
+        env,
+        webRoot,
+        uploadCardImpl: mockUploader,
+      });
+
+      for (let i = 0; i < 15; i++) {
+        const res = await router(
+          new Request(`https://x.test/api/upload-card?sessionId=sess_${i}`, {
+            method: 'POST',
+            headers: { 'x-proxy-token': 'shared-token' },
+            body: validJpeg,
+          }),
+        );
+        expect(res.status).toBe(200);
+      }
+
+      // 16th upload exceeds rate limit
+      const resExceeded = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess_16', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: validJpeg,
+        }),
+      );
+      expect(resExceeded.status).toBe(429);
+    });
+  });
 });

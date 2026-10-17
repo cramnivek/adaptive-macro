@@ -1,4 +1,6 @@
 import { Platform, Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import { type ShareCard, titleLines } from '../shareCard';
 import { coverRect } from './depth';
 import {
@@ -621,14 +623,58 @@ const asText = (summary: ShareCard): string => {
  */
 export const shareWorkout = async (
   summary: ShareCard,
-  card: { file: File; url: string } | null,
+  card: { file?: File | Blob | null; url: string } | null,
 ): Promise<'shared' | 'downloaded' | 'cancelled'> => {
-  if (Platform.OS !== 'web' || card === null) {
+  // 1. Native iOS & Android support with expo-sharing
+  if (Platform.OS !== 'web') {
+    if (card && card.url) {
+      try {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          let localUri = card.url;
+          const targetPath = `${FileSystem.cacheDirectory ?? ''}ascend-workout-card.jpg`;
+
+          if (card.url.startsWith('data:')) {
+            const base64Data = card.url.split(',')[1] ?? card.url;
+            await FileSystem.writeAsStringAsync(targetPath, base64Data, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            localUri = targetPath;
+          } else if (card.url.startsWith('http')) {
+            const downloaded = await FileSystem.downloadAsync(card.url, targetPath);
+            localUri = downloaded.uri;
+          }
+
+          await Sharing.shareAsync(localUri, {
+            mimeType: 'image/jpeg',
+            dialogTitle: summary.title,
+            UTI: 'public.jpeg',
+          });
+          return 'shared';
+        }
+      } catch {
+        // Fall back to text share if native image sharing fails or was cancelled
+      }
+    }
     await Share.share({ message: asText(summary) });
     return 'shared';
   }
-  const data = { files: [card.file], title: summary.title };
-  if (typeof navigator !== 'undefined' && navigator.canShare?.(data)) {
+
+  // 2. Web browser share sheet or download fallback
+  if (card === null) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: summary.title, text: asText(summary) });
+        return 'shared';
+      } catch {
+        return 'cancelled';
+      }
+    }
+    return 'cancelled';
+  }
+
+  const data = card.file ? { files: [card.file as File], title: summary.title } : null;
+  if (data && typeof navigator !== 'undefined' && navigator.canShare?.(data)) {
     try {
       await navigator.share(data);
       return 'shared';
@@ -637,9 +683,10 @@ export const shareWorkout = async (
       return 'cancelled';
     }
   }
+
   const link = document.createElement('a');
   link.href = card.url;
-  link.download = card.file.name;
+  link.download = card.file && 'name' in card.file ? (card.file as File).name : 'ascend-workout-card.jpg';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

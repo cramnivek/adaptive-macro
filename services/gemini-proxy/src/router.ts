@@ -18,6 +18,34 @@ import { uploadCardToGcs } from './gcsUpload.js';
 */
 const GEMINI_LIMIT = { windowMs: 10 * 60_000, max: 20 };
 const LOOKUP_LIMIT = { windowMs: 10 * 60_000, max: 150 };
+const UPLOAD_LIMIT = { windowMs: 10 * 60_000, max: 15 };
+
+const detectImageFormat = (buffer: ArrayBuffer): { valid: boolean; contentType: string } => {
+  if (!buffer || buffer.byteLength < 4) return { valid: false, contentType: '' };
+  const bytes = new Uint8Array(buffer.slice(0, 12));
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { valid: true, contentType: 'image/jpeg' };
+  }
+  // PNG: 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return { valid: true, contentType: 'image/png' };
+  }
+  // WebP: RIFF .... WEBP
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return { valid: true, contentType: 'image/webp' };
+  }
+  return { valid: false, contentType: '' };
+};
 
 /*
   How the Gemini budget is divided, now that a caller can say who they are.
@@ -90,7 +118,11 @@ const tooMany = (retryAfterSeconds: number, limit?: 'user-daily') =>
  * hosts, which failed every call with `TypeError: Failed to fetch` and would
  * have needed an allowlist kept correct forever.
  */
-export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
+export const createRouter = (opts: {
+  env: ProxyEnv;
+  webRoot: string;
+  uploadCardImpl?: (filename: string, buffer: ArrayBuffer | Uint8Array, contentType?: string) => Promise<string | null>;
+}) => {
   // One limiter per route family, held across requests by the closure.
   const signedOutBurstLimiter = createRateLimiter(GEMINI_LIMIT);
   const userBurstLimiter = createRateLimiter(GEMINI_LIMIT);
@@ -103,6 +135,8 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
     : null;
   const geminiCeiling = createRateLimiter(GEMINI_DAILY_CEILING);
   const lookupLimiter = createRateLimiter(LOOKUP_LIMIT);
+  const uploadLimiter = createRateLimiter(UPLOAD_LIMIT);
+  const uploadCard = opts.uploadCardImpl ?? uploadCardToGcs;
 
   return async (request: Request): Promise<Response> => {
     const { pathname } = new URL(request.url);
@@ -185,20 +219,64 @@ export const createRouter = (opts: { env: ProxyEnv; webRoot: string }) => {
       if (request.method !== 'POST') {
         return new Response('Method not allowed', { status: 405 });
       }
-      const sessionId = request.headers.get('x-session-id') || new URL(request.url).searchParams.get('sessionId');
-      if (!sessionId) {
+
+      // 1. Authentication check
+      const authHeader = request.headers.get('authorization');
+      const proxyTokenHeader = request.headers.get('x-proxy-token');
+      let userId: string | null = null;
+
+      if (verifier) {
+        const who = await verifier.check(authHeader);
+        if (who && 'userId' in who) {
+          userId = who.userId;
+        } else if (who && 'problem' in who && who.problem === 'expired') {
+          return Response.json(
+            { error: 'Session expired' },
+            { status: 401, headers: { 'x-auth': 'expired' } },
+          );
+        } else if (!proxyTokenHeader || proxyTokenHeader !== opts.env.proxyToken) {
+          return Response.json({ error: 'Authentication required' }, { status: 401 });
+        }
+      } else {
+        if (!proxyTokenHeader || proxyTokenHeader !== opts.env.proxyToken) {
+          return Response.json({ error: 'Authentication required' }, { status: 401 });
+        }
+      }
+
+      // 2. Rate limiting (per-user or per-caller IP)
+      const rateLimitKey = userId ? `upload:user:${userId}` : `upload:ip:${callerKey(request)}`;
+      const verdict = uploadLimiter.check(rateLimitKey);
+      if (!verdict.allowed) {
+        return tooMany(verdict.retryAfterSeconds);
+      }
+
+      // 3. Session ID validation
+      const sessionId =
+        request.headers.get('x-session-id') || new URL(request.url).searchParams.get('sessionId');
+      if (!sessionId || sessionId.length > 128) {
         return Response.json({ error: 'sessionId required' }, { status: 400 });
       }
       const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `${safeId}.jpg`;
+
+      // 4. Body size and image format magic bytes validation
       const body = await request.arrayBuffer();
       if (!body || body.byteLength === 0) {
         return Response.json({ error: 'Empty body' }, { status: 400 });
       }
-      if (body.byteLength > 10 * 1024 * 1024) {
-        return Response.json({ error: 'Image too large' }, { status: 413 });
+      if (body.byteLength > 5 * 1024 * 1024) {
+        return Response.json({ error: 'Image too large (max 5MB)' }, { status: 413 });
       }
-      const publicUrl = await uploadCardToGcs(filename, body, 'image/jpeg');
+      const detected = detectImageFormat(body);
+      if (!detected.valid) {
+        return Response.json(
+          { error: 'Invalid image format. Expected JPEG, PNG, or WebP' },
+          { status: 400 },
+        );
+      }
+
+      // 5. Scoped object name: prevent cross-user overwrite
+      const filename = userId ? `${userId}/${safeId}.jpg` : `${safeId}.jpg`;
+      const publicUrl = await uploadCard(filename, body, detected.contentType);
       if (!publicUrl) {
         return Response.json({ error: 'Failed to upload' }, { status: 500 });
       }

@@ -23,7 +23,14 @@ import {
 } from '../platform/shareImage';
 import { postViewToShareCard } from '../shareCard';
 import { TEMPLATES } from '../shareCardTemplate';
-import { getLocalCustomCard, getPublicCardUrl, persistCustomCard } from '../social/customCard';
+import {
+  type CardSyncStatus,
+  getCustomCardStatus,
+  getLocalCustomCard,
+  getPublicCardUrl,
+  persistCustomCard,
+  retryCustomCardUpload,
+} from '../social/customCard';
 import type { PostExercise, PostView } from '../social/postPayload';
 import { useApp } from '../state/AppStore';
 import { font, radius, space, useTheme } from '../theme';
@@ -83,6 +90,8 @@ export const PostCard = ({
   const [viewMode, setViewMode] = useState<'card' | 'breakdown'>('card');
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
   const [customCardUrl, setCustomCardUrl] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<CardSyncStatus | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -120,15 +129,20 @@ export const PostCard = ({
         if (local) {
           setCustomCardUrl(local);
         } else {
-          const publicUrl = getPublicCardUrl(view.sessionId);
+          const publicUrl = getPublicCardUrl(view.sessionId, (view as any).authorId);
           if (publicUrl) setCustomCardUrl(publicUrl);
         }
       });
+      if (canEditPhoto) {
+        void getCustomCardStatus(view.sessionId).then((st) => {
+          if (alive) setSyncStatus(st);
+        });
+      }
     }
     return () => {
       alive = false;
     };
-  }, [view.sessionId]);
+  }, [view.sessionId, canEditPhoto]);
 
   const generateCard = useCallback(async (): Promise<{ file: File; url: string } | null> => {
     if (card) return card;
@@ -216,13 +230,30 @@ export const PostCard = ({
         setCard(newCard);
         setCustomCardUrl(newCard.url);
         if (view.sessionId) {
-          void persistCustomCard(view.sessionId, newCard);
+          void persistCustomCard(view.sessionId, newCard).then(() => {
+            void getCustomCardStatus(view.sessionId).then(setSyncStatus);
+          });
         }
       }
     } catch {
       // Photo cancelled
     } finally {
       setDrawing(false);
+    }
+  };
+
+  const handleRetryUpload = async () => {
+    if (!view.sessionId || retrying) return;
+    setRetrying(true);
+    try {
+      const url = await retryCustomCardUpload(view.sessionId);
+      if (url) {
+        setCustomCardUrl(url);
+      }
+      const st = await getCustomCardStatus(view.sessionId);
+      setSyncStatus(st);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -722,6 +753,21 @@ export const PostCard = ({
                   <Ionicons name="camera-outline" size={16} color={loud.figure} />
                   <Text style={styles.secondaryActionText}>
                     {customCardUrl ? 'CHANGE PHOTO' : 'ADD PHOTO'}
+                  </Text>
+                </Tappable>
+              )}
+
+              {/* Retry Cloud Sync if upload previously failed */}
+              {canEditPhoto && syncStatus?.status === 'failed' && (
+                <Tappable
+                  onPress={handleRetryUpload}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry uploading customized card to cloud"
+                  style={[styles.secondaryActionBtn, { borderColor: '#7F1D1D', backgroundColor: '#201012' }]}
+                >
+                  <Ionicons name="cloud-offline-outline" size={16} color="#F87171" />
+                  <Text style={[styles.secondaryActionText, { color: '#F87171' }]}>
+                    {retrying ? 'SYNCING...' : 'RETRY CLOUD SYNC'}
                   </Text>
                 </Tappable>
               )}
