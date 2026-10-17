@@ -886,3 +886,115 @@ export const marksFor = (motionId: MotionId, progress: number, load: Load): Mark
     ? sideMarks(motion, sideJointsAt(motion, progress), load)
     : frontMarks(motion, progress, load);
 };
+
+export interface JointTelemetry {
+  view: 'side' | 'front';
+  kneeAngle?: number;
+  hipAngle?: number;
+  elbowAngle?: number;
+  torsoAngle?: number;
+  abductionAngle?: number;
+  barCurrent?: Point;
+  barTrajectory?: Point[];
+  phaseLabel: string;
+  isParallelReached?: boolean;
+}
+
+const angleBetween = (v1: Point, v2: Point): number => {
+  const dot = v1[0] * v2[0] + v1[1] * v2[1];
+  const mag1 = Math.hypot(v1[0], v1[1]);
+  const mag2 = Math.hypot(v2[0], v2[1]);
+  if (mag1 < 1e-4 || mag2 < 1e-4) return 180;
+  const cos = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+  return Math.round((Math.acos(cos) * 180) / Math.PI);
+};
+
+const primaryLoadPoint = (motionId: MotionId, joints: Joints): Point => {
+  if (motionId === 'squat' || motionId === 'good-morning' || motionId === 'hack-squat') {
+    return joints.shoulder;
+  }
+  if (
+    motionId === 'leg-extension' ||
+    motionId === 'leg-curl' ||
+    motionId === 'lying-leg-raise' ||
+    motionId === 'hanging-leg-raise'
+  ) {
+    return joints.frontAnkle;
+  }
+  return joints.hand;
+};
+
+/**
+ * Real-time Biomechanical Joint Telemetry Engine.
+ * Computes exact clinical angles for knee flexion, hip hinge, elbow flexion,
+ * torso inclination, and traces the 20-point bar/load path trajectory.
+ */
+export const jointTelemetryFor = (motionId: MotionId, progress: number): JointTelemetry => {
+  const motion = MOTIONS[motionId];
+  const k = Math.max(0, Math.min(1, progress));
+
+  if (motion.view === 'front') {
+    let abductionAngle = 0;
+    if ('raise' in motion && motion.raise) {
+      abductionAngle = Math.round(lerp(motion.raise.from, motion.raise.to, k));
+    } else if ('open' in motion && motion.open) {
+      abductionAngle = Math.round(lerp(motion.open.from, motion.open.to, k));
+    }
+    const phaseLabel =
+      k < 0.25 ? 'STARTING EXTENSION' : k > 0.75 ? 'PEAK CONTRACTION' : 'CONCENTRIC ABDUCTION';
+
+    return {
+      view: 'front',
+      abductionAngle,
+      phaseLabel,
+    };
+  }
+
+  const joints = sideJointsAt(motion, k);
+
+  // Knee angle (vector from knee to hip vs vector from knee to ankle)
+  const vThigh: Point = [joints.hip[0] - joints.frontKnee[0], joints.hip[1] - joints.frontKnee[1]];
+  const vShin: Point = [joints.frontAnkle[0] - joints.frontKnee[0], joints.frontAnkle[1] - joints.frontKnee[1]];
+  const kneeAngle = angleBetween(vThigh, vShin);
+
+  // Hip hinge angle (vector from hip to shoulder vs vector from hip to knee)
+  const vTorso: Point = [joints.shoulder[0] - joints.hip[0], joints.shoulder[1] - joints.hip[1]];
+  const vThighFromHip: Point = [joints.frontKnee[0] - joints.hip[0], joints.frontKnee[1] - joints.hip[1]];
+  const hipAngle = angleBetween(vTorso, vThighFromHip);
+
+  // Elbow angle (vector from elbow to shoulder vs vector from elbow to hand)
+  const vUpperArm: Point = [joints.shoulder[0] - joints.elbow[0], joints.shoulder[1] - joints.elbow[1]];
+  const vForearm: Point = [joints.hand[0] - joints.elbow[0], joints.hand[1] - joints.elbow[1]];
+  const elbowAngle = angleBetween(vUpperArm, vForearm);
+
+  // Torso inclination relative to floor (horizontal = 0°, vertical upright = 90°)
+  const dx = joints.shoulder[0] - joints.hip[0];
+  const dy = joints.hip[1] - joints.shoulder[1]; // Invert SVG y so upright dy > 0
+  const torsoAngle = Math.round((Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI);
+
+  // 20-point bar path trajectory
+  const barTrajectory: Point[] = [];
+  for (let step = 0; step <= 20; step++) {
+    const stepProgress = step / 20;
+    const stepJoints = sideJointsAt(motion, stepProgress);
+    barTrajectory.push(primaryLoadPoint(motionId, stepJoints));
+  }
+  const barCurrent = primaryLoadPoint(motionId, joints);
+
+  const isParallelReached = kneeAngle <= 92;
+  const phaseLabel =
+    k < 0.25 ? 'PHASE 1: SETUP' : k > 0.75 ? 'PHASE 2: PEAK' : 'ACTIVE EXCURSION';
+
+  return {
+    view: 'side',
+    kneeAngle,
+    hipAngle,
+    elbowAngle,
+    torsoAngle,
+    barCurrent,
+    barTrajectory,
+    phaseLabel,
+    isParallelReached,
+  };
+};
+

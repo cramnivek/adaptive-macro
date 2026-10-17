@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogueEntry } from '../db';
@@ -12,6 +13,7 @@ import { ExerciseVideoPlayer } from './ExerciseVideoPlayer';
 import { KinematicMotionStudio } from './MovementFigure';
 import { MuscleFigure } from './MuscleFigure';
 import { REGION_LABELS } from './muscleMap';
+import { researchProfileFor } from '../exerciseResearch';
 
 interface ExerciseInfoSheetProps {
   entry: CatalogueEntry | null;
@@ -28,6 +30,8 @@ interface ExerciseInfoSheetProps {
  */
 export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) => {
   const insets = useSafeAreaInsets();
+  const [activeSection, setActiveSection] = useState<'steps' | 'research'>('steps');
+  const research = entry ? researchProfileFor(entry.canonicalName, entry.movementPattern) : null;
 
   return (
     <Modal visible={entry !== null} animationType="slide" transparent onRequestClose={onClose}>
@@ -125,28 +129,122 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               </View>
             )}
 
-            {entry.steps.length > 0 ? (
-              entry.steps.map((step, index) => (
-                // Index, not the text: a model emitting "Repeat." twice would collide.
-                <View key={index} style={styles.step}>
-                  <Text style={[styles.stepNumber, { color: loud.loud }]}>{index + 1}</Text>
-                  <Text style={[styles.stepText, { color: loud.figureMuted }]}>{step}</Text>
-                </View>
-              ))
-            ) : entry.instructions ? (
-              // An entry catalogued before steps existed still has its prose,
-              // and showing that beats showing nothing while a backfill waits.
-              <Text style={[styles.body, { color: loud.figureMuted }]}>{entry.instructions}</Text>
-            ) : (
-              <Text style={[styles.body, { color: loud.figureFaint }]}>
-                No instructions for this one yet.
-              </Text>
-            )}
+            {/* Segmented Switcher: Steps vs Research */}
+            <View style={styles.sectionTabs}>
+              <Pressable
+                onPress={() => setActiveSection('steps')}
+                style={[styles.sectionTab, activeSection === 'steps' && styles.sectionTabActive]}
+              >
+                <Text style={[styles.sectionTabLabel, activeSection === 'steps' && styles.sectionTabLabelActive]}>
+                  EXECUTION STEPS
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setActiveSection('research')}
+                style={[styles.sectionTab, activeSection === 'research' && styles.sectionTabActive]}
+              >
+                <Text style={[styles.sectionTabLabel, activeSection === 'research' && styles.sectionTabLabelActive]}>
+                  🔬 RESEARCH & EVIDENCE
+                </Text>
+              </Pressable>
+            </View>
 
-            {(entry.instructions || entry.steps.length > 0) && (
-              <Text style={[styles.caveat, { color: loud.warn }]}>
-                Written by a model. Check it against a source you trust before loading a bar.
-              </Text>
+            {activeSection === 'steps' ? (
+              <>
+                {entry.steps.length > 0 ? (
+                  entry.steps.map((step, index) => (
+                    // Index, not the text: a model emitting "Repeat." twice would collide.
+                    <View key={index} style={styles.step}>
+                      <Text style={[styles.stepNumber, { color: loud.loud }]}>{index + 1}</Text>
+                      <Text style={[styles.stepText, { color: loud.figureMuted }]}>{step}</Text>
+                    </View>
+                  ))
+                ) : entry.instructions ? (
+                  // An entry catalogued before steps existed still has its prose,
+                  // and showing that beats showing nothing while a backfill waits.
+                  <Text style={[styles.body, { color: loud.figureMuted }]}>{entry.instructions}</Text>
+                ) : (
+                  <Text style={[styles.body, { color: loud.figureFaint }]}>
+                    No instructions for this one yet.
+                  </Text>
+                )}
+
+                {(entry.instructions || entry.steps.length > 0) && (
+                  <Text style={[styles.caveat, { color: loud.warn }]}>
+                    Written by a model. Check it against a source you trust before loading a bar.
+                  </Text>
+                )}
+              </>
+            ) : (
+              research && (
+                <View style={styles.researchContainer}>
+                  {/* Breathing & Bracing Protocol Card */}
+                  <View style={styles.researchCard}>
+                    <View style={styles.researchCardHeader}>
+                      <Text style={styles.researchCardBadge}>🫁 BREATHING & BRACING PROTOCOL</Text>
+                    </View>
+                    <Text style={styles.researchCardTitle}>{research.breathing.title}</Text>
+                    <Text style={styles.researchCardBody}>{research.breathing.instruction}</Text>
+                    <Text style={styles.researchCardRationale}>
+                      <Text style={{ fontWeight: '700', color: loud.loud }}>Biomechanics: </Text>
+                      {research.breathing.biomechanicalRationale}
+                    </Text>
+                    <Text style={styles.researchCitationTag}>Ref: {research.breathing.citation}</Text>
+                  </View>
+
+                  {/* Meta-Analyses Evidence Card */}
+                  <View style={styles.researchCard}>
+                    <View style={styles.researchCardHeader}>
+                      <Text style={styles.researchCardBadge}>📚 PEER-REVIEWED META-ANALYSES</Text>
+                    </View>
+                    {research.metaAnalyses.map((meta, idx) => (
+                      <View key={idx} style={[styles.metaItem, idx > 0 && styles.itemDivider]}>
+                        <Text style={styles.metaCitation}>
+                          {meta.citation} ({meta.year}) • {meta.journal}
+                        </Text>
+                        <Text style={styles.metaFinding}>{meta.keyFinding}</Text>
+                        <Text style={styles.metaTakeaway}>
+                          <Text style={{ fontWeight: '700', color: '#10B981' }}>Takeaway: </Text>
+                          {meta.practicalTakeaway}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Common Biomechanical Mistakes & Evidence-Based Fixes */}
+                  <View style={styles.researchCard}>
+                    <View style={styles.researchCardHeader}>
+                      <Text style={styles.researchCardBadge}>⚠️ COMMON MISTAKES & EVIDENCE-BASED FIXES</Text>
+                    </View>
+                    {research.diagnostics.map((diag, idx) => (
+                      <View key={idx} style={[styles.diagItem, idx > 0 && styles.itemDivider]}>
+                        <Text style={styles.diagTitle}>{diag.title}</Text>
+                        <Text style={styles.diagStandard}>
+                          <Text style={{ fontWeight: '700', color: loud.figure }}>Standard: </Text>
+                          {diag.biomechanicalStandard}
+                        </Text>
+                        {diag.idealAngleOrPosition && (
+                          <Text style={styles.diagAngle}>
+                            <Text style={{ fontWeight: '700', color: '#00E5FF' }}>Ideal Target: </Text>
+                            {diag.idealAngleOrPosition}
+                          </Text>
+                        )}
+                        <Text style={styles.diagFlaw}>
+                          <Text style={{ fontWeight: '700', color: loud.warn }}>Flaw / Risk: </Text>
+                          {diag.biomechanicalFlawOrRisk}
+                        </Text>
+                        <Text style={styles.diagFix}>
+                          <Text style={{ fontWeight: '700', color: '#10B981' }}>Fix: </Text>
+                          {diag.evidenceBasedFix}
+                        </Text>
+                        <Text style={styles.diagCitation}>
+                          Evidence: {diag.evidence.citation} ({diag.evidence.year})
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )
             )}
 
             <View style={{ height: space.md }} />
@@ -192,4 +290,155 @@ const styles = StyleSheet.create({
   closeLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.onLoud },
   stepText: { flex: 1, fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
   caveat: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.md },
+  sectionTabs: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(9, 10, 13, 0.6)',
+    borderRadius: radius.md,
+    padding: 3,
+    marginBottom: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  sectionTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+  },
+  sectionTabActive: {
+    backgroundColor: loud.ground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  sectionTabLabel: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: loud.figureFaint,
+  },
+  sectionTabLabelActive: {
+    color: loud.figure,
+    fontWeight: '700',
+  },
+  researchContainer: {
+    gap: space.md,
+    marginBottom: space.sm,
+  },
+  researchCard: {
+    backgroundColor: 'rgba(9, 10, 13, 0.75)',
+    borderRadius: radius.md,
+    padding: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  researchCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: space.xs,
+  },
+  researchCardBadge: {
+    fontFamily: font.display,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: '#00E5FF',
+    fontWeight: '700',
+  },
+  researchCitationTag: {
+    fontFamily: font.figure,
+    fontSize: 9,
+    color: loud.figureFaint,
+    marginTop: space.xs,
+  },
+  researchCardTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+    color: loud.figure,
+    marginBottom: 4,
+  },
+  researchCardBody: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    lineHeight: 19,
+    color: loud.figureMuted,
+    marginBottom: 6,
+  },
+  researchCardRationale: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 18,
+    color: loud.figureMuted,
+    backgroundColor: 'rgba(255, 85, 0, 0.08)',
+    padding: space.xs,
+    borderRadius: radius.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: loud.loud,
+  },
+  metaItem: {
+    gap: 4,
+    paddingVertical: space.xs,
+  },
+  itemDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: loud.rule,
+    marginTop: space.xs,
+    paddingTop: space.xs,
+  },
+  metaCitation: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    color: '#00E5FF',
+  },
+  metaFinding: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 18,
+    color: loud.figureMuted,
+  },
+  metaTakeaway: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 18,
+    color: loud.figure,
+  },
+  diagItem: {
+    gap: 4,
+    paddingVertical: space.xs,
+  },
+  diagTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
+    color: loud.figure,
+  },
+  diagStandard: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    color: loud.figureMuted,
+  },
+  diagAngle: {
+    fontFamily: font.figure,
+    fontSize: 11,
+    lineHeight: 16,
+    color: loud.figureMuted,
+  },
+  diagFlaw: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    color: loud.figureMuted,
+  },
+  diagFix: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    color: loud.figure,
+  },
+  diagCitation: {
+    fontFamily: font.figure,
+    fontSize: 10,
+    color: loud.figureFaint,
+    marginTop: 2,
+  },
 });

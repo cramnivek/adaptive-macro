@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Line, Path } from 'react-native-svg';
-import { type Load, type MotionId, type Tone, loadFor, marksFor, repProgress } from '../exerciseMotion';
+import {
+  type Load,
+  type MotionId,
+  type Tone,
+  FLOOR_Y,
+  jointTelemetryFor,
+  loadFor,
+  marksFor,
+  repProgress,
+} from '../exerciseMotion';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 
@@ -14,6 +23,8 @@ interface MovementFigureProps {
   colours: Record<Tone, string>;
   /** Optional external progress (0..1) when driven by an interactive scrubber. */
   progressOverride?: number;
+  /** When true, renders live biomechanical bar path traces and plumb lines. */
+  showHud?: boolean;
 }
 
 const line = (points: [number, number][]) =>
@@ -33,6 +44,7 @@ export const MovementFigure = ({
   size = 150,
   colours,
   progressOverride,
+  showHud = false,
 }: MovementFigureProps) => {
   const load: Load = loadFor(motion, exerciseName, equipment);
   const [internalProgress, setInternalProgress] = useState(1);
@@ -71,6 +83,7 @@ export const MovementFigure = ({
   const marks = marksFor(motion, activeProgress, load);
   const marksStart = marksFor(motion, 0, load);
   const marksEnd = marksFor(motion, 1, load);
+  const telemetry = showHud ? jointTelemetryFor(motion, activeProgress) : null;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`A figure doing ${exerciseName}`}>
@@ -80,6 +93,61 @@ export const MovementFigure = ({
         <Line x1="10" y1="30" x2="90" y2="30" stroke={colours.ground} strokeWidth="0.4" />
         <Line x1="10" y1="60" x2="90" y2="60" stroke={colours.ground} strokeWidth="0.4" />
       </G>
+
+      {/* Kinematics Pro HUD: Live Biomechanical Bar Path Trajectory & Plumb Line */}
+      {showHud && telemetry?.barTrajectory && telemetry.barTrajectory.length > 1 && (
+        <G>
+          {/* Outer glow for bar trajectory */}
+          <Path
+            d={line(telemetry.barTrajectory)}
+            stroke="#00E5FF"
+            strokeWidth={2.4}
+            strokeDasharray="2,2"
+            fill="none"
+            opacity={0.3}
+          />
+          {/* Core trajectory line */}
+          <Path
+            d={line(telemetry.barTrajectory)}
+            stroke="#00E5FF"
+            strokeWidth={1.2}
+            strokeDasharray="2.5,1.5"
+            fill="none"
+            opacity={0.85}
+          />
+          {/* Vertical plumb reference line from initial bar position to floor */}
+          <Line
+            x1={telemetry.barTrajectory[0][0]}
+            y1={telemetry.barTrajectory[0][1]}
+            x2={telemetry.barTrajectory[0][0]}
+            y2={FLOOR_Y}
+            stroke="#00E5FF"
+            strokeWidth={0.65}
+            strokeDasharray="1.5,3"
+            opacity={0.4}
+          />
+          {/* Live tracking bar bead with dual-layer halo */}
+          {telemetry.barCurrent && (
+            <G>
+              <Circle
+                cx={telemetry.barCurrent[0]}
+                cy={telemetry.barCurrent[1]}
+                r={3.2}
+                fill="#00E5FF"
+                opacity={0.4}
+              />
+              <Circle
+                cx={telemetry.barCurrent[0]}
+                cy={telemetry.barCurrent[1]}
+                r={1.8}
+                fill="#FFFFFF"
+                stroke="#00E5FF"
+                strokeWidth={0.8}
+              />
+            </G>
+          )}
+        </G>
+      )}
 
       {marks.map((mark, index) => {
         if (mark.kind === 'path') {
@@ -208,6 +276,7 @@ export const KinematicMotionStudio = ({
   const [progressPct, setProgressPct] = useState(0); // 0..100
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(1.0);
+  const [showHud, setShowHud] = useState(true);
 
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -253,6 +322,7 @@ export const KinematicMotionStudio = ({
 
   // Smooth cosine easing for natural biomechanical acceleration/deceleration
   const normalized = (1 - Math.cos((progressPct / 100) * Math.PI)) / 2;
+  const telemetry = jointTelemetryFor(motion, normalized);
 
   const isSetup = progressPct < 30;
   const isPeak = progressPct > 70;
@@ -272,6 +342,7 @@ export const KinematicMotionStudio = ({
           equipment={equipment}
           size={240}
           progressOverride={normalized}
+          showHud={showHud}
           colours={{
             body: loud.figure,
             far: loud.figureMuted,
@@ -285,8 +356,20 @@ export const KinematicMotionStudio = ({
           <Text style={studioStyles.badgeText}>{phaseLabel}</Text>
         </View>
 
+        <Pressable
+          onPress={() => setShowHud((h) => !h)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle Biomechanical Telemetry HUD"
+          style={[studioStyles.hudPill, showHud && studioStyles.hudPillActive]}
+        >
+          <Text style={[studioStyles.hudPillText, showHud && studioStyles.hudPillTextActive]}>
+            {showHud ? '⚡ HUD ON' : '⚡ HUD OFF'}
+          </Text>
+        </Pressable>
+
         <View style={studioStyles.engineBadge}>
-          <Text style={studioStyles.engineBadgeText}>KINEMATIC ENGINE • 60 FPS</Text>
+          <Text style={studioStyles.engineBadgeText}>KINEMATIC PRO • 60 FPS</Text>
         </View>
       </View>
 
@@ -367,6 +450,62 @@ export const KinematicMotionStudio = ({
             ))}
           </View>
         </View>
+
+        {/* Live Biomechanical Telemetry Cards */}
+        {showHud && (
+          <View style={studioStyles.telemetryBar}>
+            <View style={studioStyles.telemetryGrid}>
+              {telemetry.kneeAngle !== undefined && (
+                <View style={studioStyles.telemetryCard}>
+                  <Text style={studioStyles.telemetryMetricLabel}>KNEE ANGLE</Text>
+                  <View style={studioStyles.telemetryValueRow}>
+                    <Text
+                      style={[
+                        studioStyles.telemetryMetricValue,
+                        telemetry.isParallelReached && studioStyles.telemetrySuccess,
+                      ]}
+                    >
+                      {telemetry.kneeAngle}°
+                    </Text>
+                    {telemetry.isParallelReached && (
+                      <View style={studioStyles.successBadge}>
+                        <Text style={studioStyles.successBadgeText}>PARALLEL ✓</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {telemetry.hipAngle !== undefined && (
+                <View style={studioStyles.telemetryCard}>
+                  <Text style={studioStyles.telemetryMetricLabel}>HIP HINGE</Text>
+                  <Text style={studioStyles.telemetryMetricValue}>{telemetry.hipAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.elbowAngle !== undefined && (
+                <View style={studioStyles.telemetryCard}>
+                  <Text style={studioStyles.telemetryMetricLabel}>ELBOW EXT</Text>
+                  <Text style={studioStyles.telemetryMetricValue}>{telemetry.elbowAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.torsoAngle !== undefined && (
+                <View style={studioStyles.telemetryCard}>
+                  <Text style={studioStyles.telemetryMetricLabel}>TORSO</Text>
+                  <Text style={studioStyles.telemetryMetricValue}>{telemetry.torsoAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.abductionAngle !== undefined && (
+                <View style={studioStyles.telemetryCard}>
+                  <Text style={studioStyles.telemetryMetricLabel}>ABDUCTION</Text>
+                  <Text style={studioStyles.telemetryMetricValue}>{telemetry.abductionAngle}°</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -413,6 +552,31 @@ const studioStyles = StyleSheet.create({
     fontSize: 9,
     letterSpacing: 0.8,
     color: loud.figure,
+  },
+  hudPill: {
+    position: 'absolute',
+    top: space.sm,
+    right: space.sm,
+    backgroundColor: 'rgba(9, 10, 13, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  hudPillActive: {
+    borderColor: '#00E5FF',
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+  },
+  hudPillText: {
+    fontFamily: font.display,
+    fontSize: 8.5,
+    letterSpacing: 0.6,
+    color: loud.figureFaint,
+  },
+  hudPillTextActive: {
+    color: '#00E5FF',
+    fontWeight: '700',
   },
   engineBadge: {
     position: 'absolute',
@@ -510,6 +674,62 @@ const studioStyles = StyleSheet.create({
   },
   speedBtnTextActive: {
     color: loud.loud,
+    fontWeight: '700',
+  },
+  telemetryBar: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: loud.rule,
+  },
+  telemetryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  telemetryCard: {
+    flex: 1,
+    minWidth: 80,
+    backgroundColor: 'rgba(9, 10, 13, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  telemetryMetricLabel: {
+    fontFamily: font.display,
+    fontSize: 7.5,
+    letterSpacing: 0.7,
+    color: loud.figureFaint,
+    marginBottom: 2,
+  },
+  telemetryValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  telemetryMetricValue: {
+    fontFamily: font.figure,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#00E5FF',
+  },
+  telemetrySuccess: {
+    color: '#10B981',
+  },
+  successBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#10B981',
+  },
+  successBadgeText: {
+    fontFamily: font.display,
+    fontSize: 7,
+    color: '#10B981',
     fontWeight: '700',
   },
 });
