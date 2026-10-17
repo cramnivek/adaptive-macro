@@ -2368,3 +2368,36 @@ export const dailyKcalBetween = async (
     .filter((row) => row.kcal !== null && row.kcal > 0)
     .map((row) => ({ date: row.date, kcal: row.kcal ?? 0 }));
 };
+
+export interface DailyIntakeNutrients {
+  date: ISODate;
+  kcal: number;
+  proteinG: number;
+}
+
+/**
+ * Aggregates both daily calorie and protein totals between two dates.
+ * Days with zero intake are omitted to represent unlogged days.
+ */
+export const dailyIntakeBetween = async (
+  from: ISODate,
+  to: ISODate,
+): Promise<DailyIntakeNutrients[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ date: ISODate; kcal: number | null; protein_g: number | null }>(
+    `SELECT date, SUM(kcal) AS kcal, SUM(protein_g) AS protein_g
+       FROM log_entries
+      WHERE date BETWEEN ? AND ?
+      GROUP BY date
+      ORDER BY date`,
+    from,
+    to,
+  );
+  return rows
+    .filter((row) => row.kcal !== null && row.kcal > 0)
+    .map((row) => ({
+      date: row.date,
+      kcal: row.kcal ?? 0,
+      proteinG: Math.round((row.protein_g ?? 0) * 10) / 10,
+    }));
+};

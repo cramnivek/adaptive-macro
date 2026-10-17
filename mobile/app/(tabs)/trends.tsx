@@ -30,10 +30,12 @@ import { WeeklyBars } from '../../src/components/WeeklyBars';
 import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
 import {
   catalogueRegionsByExerciseName,
+  dailyIntakeBetween,
   dailyKcalBetween,
   finishedSessionTimes,
   listAllSets,
 } from '../../src/db';
+import { calculateCoachingGoalAdjustment } from '../../src/ai/coachingAdjustment';
 import {
   axisDecimals,
   displayWeight,
@@ -78,7 +80,7 @@ export default function TrendsScreen() {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
-  const [intake, setIntake] = useState<{ date: string; kcal: number }[]>([]);
+  const [intake, setIntake] = useState<{ date: string; kcal: number; proteinG?: number }[]>([]);
   const [method, setMethod] = useState(false);
   const [sets, setSets] = useState<DatedSet[]>([]);
   const [regions, setRegions] = useState<
@@ -101,13 +103,13 @@ export default function TrendsScreen() {
     useCallback(() => {
       let current = true;
       void Promise.all([
-        dailyKcalBetween(from, today),
+        dailyIntakeBetween(from, today),
         listAllSets(),
         catalogueRegionsByExerciseName(),
         finishedSessionTimes(addDays(today, -84)),
-      ]).then(([kcalRows, allSets, byName, times]) => {
+      ]).then(([intakeRows, allSets, byName, times]) => {
         if (!current) return;
-        setIntake(kcalRows);
+        setIntake(intakeRows);
         setSets(allSets);
         setRegions(byName);
         setSessionTimes(times);
@@ -187,6 +189,7 @@ export default function TrendsScreen() {
       extractWeeklyMetrics({
         series,
         observations,
+        intake,
         sets,
         diagnostics: diagnostics7D.totalWorkingSets > 0 ? diagnostics7D : null,
         goalDirection: settings.goal?.direction,
@@ -197,6 +200,7 @@ export default function TrendsScreen() {
     [
       series,
       observations,
+      intake,
       sets,
       diagnostics7D,
       settings.goal?.direction,
@@ -206,7 +210,7 @@ export default function TrendsScreen() {
     ],
   );
 
-  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}`;
+  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.totalVolumeKg}_${summary7D.totalWorkingSets}`;
   const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
   const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
 
@@ -222,12 +226,21 @@ export default function TrendsScreen() {
           const parsed = JSON.parse(savedReview) as
             | { review: WeeklyReviewResult; fingerprint: string }
             | WeeklyReviewResult;
-          if ('review' in parsed && parsed.review) {
-            setCoachingReview(parsed.review);
+          if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
+            // Discard stale review if underlying logs, targets, or workouts have changed
+            if (parsed.fingerprint === coachingFingerprint) {
+              setCoachingReview(parsed.review);
+            } else {
+              setCoachingReview(null);
+            }
           } else {
-            setCoachingReview(parsed as WeeklyReviewResult);
+            setCoachingReview(null);
           }
-        } catch {}
+        } catch {
+          setCoachingReview(null);
+        }
+      } else {
+        setCoachingReview(null);
       }
       if (savedApplied) {
         setCoachingApplied(true);
@@ -236,7 +249,7 @@ export default function TrendsScreen() {
     return () => {
       alive = false;
     };
-  }, [coachingCacheKey, coachingAppliedKey]);
+  }, [coachingCacheKey, coachingAppliedKey, coachingFingerprint]);
 
   const handleGenerateCoaching = useCallback(async () => {
     setCoachingLoading(true);
@@ -266,19 +279,15 @@ export default function TrendsScreen() {
     thud('heavy');
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
-      const currentCal = program.calories.kcal;
-      const proposedCal = Math.max(1200, currentCal + adj.deltaKcal);
-
-      // Adjust rateKgPerWeek proportionally
-      const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
-      const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
-      const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
+      const exp = latest?.expenditureKcal ?? program.expenditureKcal ?? 2200;
+      const result = calculateCoachingGoalAdjustment({
+        currentGoal: settings.goal,
+        expenditureKcal: exp,
+        deltaKcal: adj.deltaKcal,
+      });
 
       await updateSettings({
-        goal: {
-          ...settings.goal,
-          rateKgPerWeek: newRate,
-        },
+        goal: result.proposedGoal,
       });
 
       // Persist exact applied adjustment so app restarts don't lose applied state
@@ -287,14 +296,18 @@ export default function TrendsScreen() {
         JSON.stringify({
           appliedAt: Date.now(),
           deltaKcal: adj.deltaKcal,
-          previousKcal: currentCal,
-          newKcal: proposedCal,
+          previousKcal: result.currentKcal,
+          newKcal: result.achievableKcal,
+          proposedGoal: result.proposedGoal,
         }),
       );
       setCoachingApplied(true);
-      notify('Adjustment Applied', `Target adjusted by ${adj.deltaKcal > 0 ? '+' : ''}${adj.deltaKcal} kcal/day`);
+      notify(
+        'Adjustment Applied',
+        `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
+      );
     }
-  }, [coachingReview, coachingApplied, program?.calories?.kcal, settings.goal, updateSettings, coachingAppliedKey]);
+  }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, coachingAppliedKey]);
 
   // 90-day charts calculations
   const window = useMemo(() => series.slice(-WINDOW_DAYS), [series]);
@@ -775,6 +788,8 @@ export default function TrendsScreen() {
         applied={coachingApplied}
         onGenerate={handleGenerateCoaching}
         onApplyAdjustment={handleApplyCoachingAdjustment}
+        goal={settings.goal}
+        expenditureKcal={latest?.expenditureKcal ?? program.expenditureKcal}
       />
     </Screen>
   );

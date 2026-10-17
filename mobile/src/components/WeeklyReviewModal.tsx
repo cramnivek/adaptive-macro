@@ -16,6 +16,8 @@ import { Tappable } from './Tappable';
 import { Button } from './Controls';
 import { thud } from '../platform/haptics';
 import type { WeeklyExtractedMetrics, WeeklyReviewResult } from '../ai/weeklyReview';
+import type { Goal } from '@adaptive-macros/engine';
+import { calculateCoachingGoalAdjustment } from '../ai/coachingAdjustment';
 
 interface WeeklyReviewModalProps {
   open: boolean;
@@ -27,6 +29,8 @@ interface WeeklyReviewModalProps {
   applied: boolean;
   onGenerate: () => void;
   onApplyAdjustment?: () => void;
+  goal?: Goal;
+  expenditureKcal?: number;
 }
 
 const CONFIDENCE_COLORS = {
@@ -45,6 +49,8 @@ export const WeeklyReviewModal = ({
   applied,
   onGenerate,
   onApplyAdjustment,
+  goal,
+  expenditureKcal,
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -52,6 +58,19 @@ export const WeeklyReviewModal = ({
 
   const conf = review?.dataConfidence ?? metrics.confidence;
   const confColor = CONFIDENCE_COLORS[conf];
+
+  const adjustmentPreview = useMemo(() => {
+    if (!review?.suggestedAdjustment?.hasAdjustment || !review.suggestedAdjustment.deltaKcal) {
+      return null;
+    }
+    const exp = expenditureKcal ?? metrics.nutrition.avgExpenditure ?? 2200;
+    const currentGoal: Goal = goal ?? { direction: 'maintain', rateKgPerWeek: 0 };
+    return calculateCoachingGoalAdjustment({
+      currentGoal,
+      expenditureKcal: exp,
+      deltaKcal: review.suggestedAdjustment.deltaKcal,
+    });
+  }, [review?.suggestedAdjustment, expenditureKcal, metrics.nutrition.avgExpenditure, goal]);
 
   const confLabel =
     conf === 'high'
@@ -220,38 +239,55 @@ export const WeeklyReviewModal = ({
                   </Text>
 
                   {/* Explicit Before / After Comparison Preview */}
-                  {review.suggestedAdjustment.hasAdjustment && metrics.nutrition.targetCalories && (
+                  {review.suggestedAdjustment.hasAdjustment && (
                     <View style={styles.beforeAfterContainer}>
                       <View style={styles.beforeAfterCol}>
                         <Text style={styles.beforeAfterLabel}>CURRENT TARGET</Text>
                         <Text style={styles.beforeAfterVal}>
-                          {metrics.nutrition.targetCalories.toLocaleString()} kcal
+                          {adjustmentPreview
+                            ? `${Math.round(adjustmentPreview.currentKcal).toLocaleString()} kcal`
+                            : (metrics.nutrition.targetCalories
+                                ? `${metrics.nutrition.targetCalories.toLocaleString()} kcal`
+                                : '—')}
                         </Text>
+                        {adjustmentPreview && (
+                          <Text style={styles.beforeAfterSub}>
+                            {adjustmentPreview.currentGoal.direction === 'maintain'
+                              ? 'Maintenance'
+                              : adjustmentPreview.currentGoal.direction === 'lose'
+                                ? `Lose ${adjustmentPreview.currentGoal.rateKgPerWeek} kg/wk`
+                                : `Gain +${adjustmentPreview.currentGoal.rateKgPerWeek} kg/wk`}
+                          </Text>
+                        )}
                       </View>
                       <Ionicons name="arrow-forward" size={16} color="#00E5FF" />
                       <View style={styles.beforeAfterCol}>
-                        <Text style={styles.beforeAfterLabel}>RECOMMENDED</Text>
+                        <Text style={styles.beforeAfterLabel}>RECALCULATED</Text>
                         <Text style={[styles.beforeAfterVal, { color: '#00E5FF' }]}>
-                          {review.suggestedAdjustment.deltaKcal
-                            ? `${(metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal).toLocaleString()} kcal (${review.suggestedAdjustment.deltaKcal > 0 ? '+' : ''}${review.suggestedAdjustment.deltaKcal})`
-                            : `${metrics.nutrition.targetCalories.toLocaleString()} kcal`}
+                          {adjustmentPreview
+                            ? `${Math.round(adjustmentPreview.achievableKcal).toLocaleString()} kcal`
+                            : review.suggestedAdjustment.deltaKcal && metrics.nutrition.targetCalories
+                              ? `${(metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal).toLocaleString()} kcal`
+                              : '—'}
                         </Text>
+                        {adjustmentPreview && (
+                          <Text style={[styles.beforeAfterSub, { color: '#00E5FF' }]}>
+                            {adjustmentPreview.rateChangeDescription}
+                          </Text>
+                        )}
                       </View>
                     </View>
                   )}
 
                   {/* Safety Guardrail Alert if below 1200 kcal */}
-                  {review.suggestedAdjustment.hasAdjustment &&
-                    metrics.nutrition.targetCalories &&
-                    review.suggestedAdjustment.deltaKcal &&
-                    metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal < 1200 && (
-                      <View style={styles.safetyWarningBox}>
-                        <Ionicons name="warning-outline" size={14} color="#FBBF24" />
-                        <Text style={styles.safetyWarningText}>
-                          Safety floor notice: This target would drop below 1,200 kcal/day. Consider increasing daily steps or taking a maintenance break rather than lowering calories further.
-                        </Text>
-                      </View>
-                    )}
+                  {adjustmentPreview?.isSafetyFloorTriggered && (
+                    <View style={styles.safetyWarningBox}>
+                      <Ionicons name="warning-outline" size={14} color="#FBBF24" />
+                      <Text style={styles.safetyWarningText}>
+                        Safety floor notice: This target reaches the 1,200 kcal/day lower bound. To protect metabolism and lean tissue, Ascend will not program targets below 1,200 kcal/day. Consider increasing daily activity or taking a maintenance break.
+                      </Text>
+                    </View>
+                  )}
 
                   {review.suggestedAdjustment.hasAdjustment ? (
                     <Tappable
@@ -621,6 +657,12 @@ const styles = StyleSheet.create({
     fontFamily: font.display,
     fontSize: 14,
     color: '#F8FAFC',
+  },
+  beforeAfterSub: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
   },
   safetyWarningBox: {
     flexDirection: 'row',

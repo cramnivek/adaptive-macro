@@ -94,6 +94,7 @@ export const WEEKLY_REVIEW_RESPONSE_SCHEMA = {
 export interface WeeklyMetricsInput {
   series: DailyEstimate[];
   observations?: DailyObservation[];
+  intake?: { date: ISODate; kcal: number; proteinG?: number }[];
   sets: DatedSet[];
   diagnostics?: VolumeDiagnostics | null;
   goalDirection?: 'lose' | 'maintain' | 'gain';
@@ -154,9 +155,18 @@ export const extractWeeklyMetrics = (input: WeeklyMetricsInput): WeeklyExtracted
           .map((d) => d.trendWeightKg)
           .filter((w): w is number => Number.isFinite(w));
 
-  const calorieEntries = currentObs
-    .map((o) => o.intakeKcal)
-    .filter((c): c is number => c !== undefined && Number.isFinite(c) && c > 0);
+  const intakeEntries = (input.intake ?? []).filter((i) => i.date >= from && i.date <= to && i.kcal > 0);
+
+  const calorieEntries =
+    currentObs.length > 0 && currentObs.some((o) => (o.intakeKcal ?? 0) > 0)
+      ? currentObs
+          .map((o) => o.intakeKcal)
+          .filter((c): c is number => c !== undefined && Number.isFinite(c) && c > 0)
+      : intakeEntries.map((i) => i.kcal);
+
+  const proteinEntries = intakeEntries
+    .map((i) => i.proteinG)
+    .filter((p): p is number => p !== undefined && Number.isFinite(p) && p > 0);
 
   const expenditureEntries = currentDays
     .map((d) => d.expenditureKcal)
@@ -178,6 +188,10 @@ export const extractWeeklyMetrics = (input: WeeklyMetricsInput): WeeklyExtracted
   const avgCalories =
     calorieEntries.length > 0
       ? Math.round(calorieEntries.reduce((a, b) => a + b, 0) / calorieEntries.length)
+      : null;
+  const avgProteinG =
+    proteinEntries.length > 0
+      ? Math.round(proteinEntries.reduce((a, b) => a + b, 0) / proteinEntries.length)
       : null;
   const avgExpenditure =
     expenditureEntries.length > 0
@@ -284,7 +298,7 @@ export const extractWeeklyMetrics = (input: WeeklyMetricsInput): WeeklyExtracted
       targetCalories: input.targetKcal ?? null,
       avgExpenditure,
       avgEnergyDeltaKcal,
-      avgProteinG: null,
+      avgProteinG,
       targetProteinG: input.targetProteinG ?? null,
     },
     training: {

@@ -30,6 +30,7 @@ import {
   type WeeklyExtractedMetrics,
   type WeeklyReviewResult,
 } from '../src/ai/weeklyReview';
+import { calculateCoachingGoalAdjustment } from '../src/ai/coachingAdjustment';
 import { notify } from '../src/dialog';
 import { thud } from '../src/platform/haptics';
 import {
@@ -182,6 +183,7 @@ export default function OverviewScreen() {
     ],
   );
 
+  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${program?.calories?.kcal ?? 0}`;
   const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
 
   useEffect(() => {
@@ -189,14 +191,29 @@ export default function OverviewScreen() {
     void AsyncStorage.getItem(coachingCacheKey).then((saved) => {
       if (alive && saved) {
         try {
-          setCoachingReview(JSON.parse(saved) as WeeklyReviewResult);
-        } catch {}
+          const parsed = JSON.parse(saved) as
+            | { review: WeeklyReviewResult; fingerprint: string }
+            | WeeklyReviewResult;
+          if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
+            if (parsed.fingerprint === coachingFingerprint) {
+              setCoachingReview(parsed.review);
+            } else {
+              setCoachingReview(null);
+            }
+          } else {
+            setCoachingReview(null);
+          }
+        } catch {
+          setCoachingReview(null);
+        }
+      } else {
+        setCoachingReview(null);
       }
     });
     return () => {
       alive = false;
     };
-  }, [coachingCacheKey]);
+  }, [coachingCacheKey, coachingFingerprint]);
 
   const handleGenerateCoaching = useCallback(async () => {
     setCoachingLoading(true);
@@ -206,7 +223,10 @@ export default function OverviewScreen() {
       const result = await requestWeeklyReview(coachingMetrics, '', settings.goal?.direction);
       setCoachingReview(result);
       setCoachingApplied(false);
-      await AsyncStorage.setItem(coachingCacheKey, JSON.stringify(result));
+      await AsyncStorage.setItem(
+        coachingCacheKey,
+        JSON.stringify({ review: result, fingerprint: coachingFingerprint }),
+      );
       thud('heavy');
       notify('Review ready', 'Your weekly coaching review is ready.');
     } catch (err) {
@@ -216,7 +236,7 @@ export default function OverviewScreen() {
     } finally {
       setCoachingLoading(false);
     }
-  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey]);
+  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey, coachingFingerprint]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
     if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
@@ -224,18 +244,21 @@ export default function OverviewScreen() {
     setCoachingApplied(true);
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
-      const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
-      const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
-      const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
-      await updateSettings({
-        goal: {
-          ...settings.goal,
-          rateKgPerWeek: newRate,
-        },
+      const exp = latest?.expenditureKcal ?? program.expenditureKcal ?? 2200;
+      const result = calculateCoachingGoalAdjustment({
+        currentGoal: settings.goal,
+        expenditureKcal: exp,
+        deltaKcal: adj.deltaKcal,
       });
-      notify('Adjustment Applied', `Updated target: ${adj.title}`);
+      await updateSettings({
+        goal: result.proposedGoal,
+      });
+      notify(
+        'Adjustment Applied',
+        `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
+      );
     }
-  }, [coachingReview, coachingApplied, program?.calories?.kcal, settings.goal, updateSettings]);
+  }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings]);
 
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, to), [sessionTimes, sets, to]);
   // Older weeks can have training in them when this window is empty, and that
@@ -432,16 +455,19 @@ export default function OverviewScreen() {
               onOpenModal={() => setCoachingModalOpen(true)}
               onApplyAdjustment={async (adj) => {
                 if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
-                  const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
-                  // If increasing calories in a deficit, slow rate of loss; if decreasing, steepen
-                  const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
-                  const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
-                  await updateSettings({
-                    goal: {
-                      ...settings.goal,
-                      rateKgPerWeek: newRate,
-                    },
+                  const exp = latest?.expenditureKcal ?? program.expenditureKcal ?? 2200;
+                  const result = calculateCoachingGoalAdjustment({
+                    currentGoal: settings.goal,
+                    expenditureKcal: exp,
+                    deltaKcal: adj.deltaKcal,
                   });
+                  await updateSettings({
+                    goal: result.proposedGoal,
+                  });
+                  notify(
+                    'Adjustment Applied',
+                    `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
+                  );
                 }
               }}
             />
@@ -499,6 +525,8 @@ export default function OverviewScreen() {
         applied={coachingApplied}
         onGenerate={handleGenerateCoaching}
         onApplyAdjustment={handleApplyCoachingAdjustment}
+        goal={settings.goal}
+        expenditureKcal={latest?.expenditureKcal ?? program.expenditureKcal}
       />
     </Screen>
   );

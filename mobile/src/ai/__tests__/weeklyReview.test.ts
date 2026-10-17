@@ -261,4 +261,26 @@ describe('weeklyReview metrics extractor and schema', () => {
     expect(result.dataConfidence).toBe('high');
     expect(result.keyWins).toHaveLength(2);
   });
+
+  it('aggregates daily protein intake and target protein in nutrition metrics', () => {
+    const metrics = extractWeeklyMetrics({
+      series: mockSeries,
+      observations: mockObservations,
+      intake: [
+        { date: '2026-10-11', kcal: 2200, proteinG: 160 },
+        { date: '2026-10-13', kcal: 2150, proteinG: 155 },
+        { date: '2026-10-15', kcal: 2100, proteinG: 165 },
+        { date: '2026-10-17', kcal: 2150, proteinG: 160 },
+      ],
+      sets: mockSets,
+      goalDirection: 'lose',
+      targetKcal: 2100,
+      targetProteinG: 160,
+      units: 'metric',
+      endDate: baseDate,
+    });
+
+    expect(metrics.nutrition.avgProteinG).toBe(160);
+    expect(metrics.nutrition.targetProteinG).toBe(160);
+  });
 });
