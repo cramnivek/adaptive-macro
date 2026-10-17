@@ -8,6 +8,8 @@ import { Card } from './Card';
 interface VolumeLandmarksCardProps {
   diagnostics: VolumeDiagnostics;
   periodDays: number;
+  goal?: 'lose' | 'maintain' | 'gain';
+  targetKcalDelta?: number;
 }
 
 const ZONE_COLORS = {
@@ -43,7 +45,12 @@ const ZONE_COLORS = {
   },
 };
 
-export const VolumeLandmarksCard = ({ diagnostics, periodDays }: VolumeLandmarksCardProps) => {
+export const VolumeLandmarksCard = ({
+  diagnostics,
+  periodDays,
+  goal,
+  targetKcalDelta,
+}: VolumeLandmarksCardProps) => {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   const { muscleVolumes, pushPullBalance, legBalance, weeklyWorkingSets } = diagnostics;
@@ -54,6 +61,35 @@ export const VolumeLandmarksCard = ({ diagnostics, periodDays }: VolumeLandmarks
         Weekly sets vs. evidence-based hypertrophy thresholds (Israetel & Schoenfeld).
         {periodDays > 7 ? ' Scaled to a 7-day rate.' : ''}
       </Text>
+
+      {/* Adaptive Energy Balance Recovery Guidance */}
+      {goal === 'lose' && (
+        <View style={styles.energyAdaptiveBanner}>
+          <View style={styles.energyBadgeRow}>
+            <View style={[styles.energyDot, { backgroundColor: '#FBBF24' }]} />
+            <Text style={styles.energyBadgeTitle}>
+              ENERGY BALANCE: CALORIC DEFICIT {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
+            </Text>
+          </View>
+          <Text style={styles.energyBannerBody}>
+            In a sustained caloric deficit, systemic recovery capacity is constrained and Maximum Recoverable Volume (MRV) drops by ~15–25%. Prioritize strength retention near MEV–MAV (10–14 sets/wk) to preserve lean muscle without generating unrecoverable fatigue.
+          </Text>
+        </View>
+      )}
+
+      {goal === 'gain' && (
+        <View style={[styles.energyAdaptiveBanner, styles.energyBannerSurplus]}>
+          <View style={styles.energyBadgeRow}>
+            <View style={[styles.energyDot, { backgroundColor: '#10B981' }]} />
+            <Text style={[styles.energyBadgeTitle, { color: '#10B981' }]}>
+              ENERGY BALANCE: CALORIC SURPLUS {targetKcalDelta ? `(${targetKcalDelta > 0 ? `+${targetKcalDelta}` : targetKcalDelta} KCAL/DAY)` : ''}
+            </Text>
+          </View>
+          <Text style={styles.energyBannerBody}>
+            Surplus energy and elevated glycogen stores heighten muscle protein synthesis (MPS) and accelerate systemic recovery. This is your prime window to push training volume into the upper MAV–MRV sweet spot.
+          </Text>
+        </View>
+      )}
 
       {/* Overview Stat Strip */}
       <View style={styles.statStrip}>
@@ -411,5 +447,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     color: loud.figureFaint,
+  },
+  energyAdaptiveBanner: {
+    backgroundColor: '#1C1914',
+    borderColor: '#4D3B18',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: space.md,
+    marginBottom: space.md,
+  },
+  energyBannerSurplus: {
+    backgroundColor: '#122018',
+    borderColor: '#1D452E',
+  },
+  energyBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  energyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  energyBadgeTitle: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: '#FBBF24',
+  },
+  energyBannerBody: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    color: loud.figureMuted,
   },
 });

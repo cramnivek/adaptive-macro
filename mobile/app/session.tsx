@@ -70,10 +70,10 @@ import { displayWeight, parseWeight, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
-import { usesBarbell } from '../src/plates';
+import { BAR_WEIGHT, describePlates, platesFor, usesBarbell } from '../src/plates';
 import { PlateSheet } from '../src/components/PlateSheet';
 import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
-import type { WarmupSet } from '../src/warmup';
+import { generateWarmupRamp, type WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
@@ -879,6 +879,54 @@ export default function SessionScreen() {
     thud('heavy');
     notify('Warm-ups added', `Added ${warmupSets.length} warm-up sets for ${block.name}.`);
     setCalcTarget(null);
+  };
+
+  /**
+   * 1-Tap Quick Warmup Generator:
+   * Finds the target working weight in the block, calculates the ascending ramp,
+   * prepends the sets, and triggers haptics.
+   */
+  const quickAddWarmupLadder = (block: Block, blockIndex: number) => {
+    const targetWeight = plateWeightFor(block);
+    if (!targetWeight) {
+      notify('Target weight needed', 'Enter a working weight first to calculate warm-up sets.');
+      return;
+    }
+    const isBb = usesBarbell(block.name);
+    const ramp = generateWarmupRamp(
+      targetWeight,
+      settings.units,
+      settings.barbell,
+      settings.customPlates?.[settings.units],
+      isBb,
+    );
+    if (ramp.length === 0) {
+      notify('Light working weight', `Working weight (${targetWeight} ${unit}) is already at or near warm-up load.`);
+      return;
+    }
+    const warmupRows: Row[] = ramp.map((ws) => ({
+      key: newKey(),
+      id: null,
+      weight: String(ws.weight),
+      reps: String(ws.reps),
+      setType: 'warmup',
+      done: false,
+      rpe: null,
+    }));
+
+    setBlocks((current) =>
+      current.map((b, index) => {
+        if (index !== blockIndex) return b;
+        const firstWorkingIndex = b.rows.findIndex((r) => r.setType !== 'warmup');
+        const insertAt = firstWorkingIndex !== -1 ? firstWorkingIndex : 0;
+        const newRows = [...b.rows];
+        newRows.splice(insertAt, 0, ...warmupRows);
+        return { ...b, rows: newRows };
+      }),
+    );
+
+    thud('heavy');
+    notify('Warm-up ladder added', `Added ${ramp.length} progressive warm-up sets for ${block.name}.`);
   };
 
   const addCustomPlate = async (plate: number) => {
@@ -1740,6 +1788,23 @@ export default function SessionScreen() {
                   </View>
                 </Tappable>
 
+                {!block.isCardio &&
+                  !block.bodyweightBased &&
+                  !block.rows.some((r) => r.setType === 'warmup') && (
+                    <Tappable
+                      onPress={() => quickAddWarmupLadder(block, blockIndex)}
+                      style={styles.actionPillBtn}
+                      scaleTo={0.92}
+                      accessibilityRole="button"
+                      accessibilityLabel={`1-tap warm-up ladder for ${block.name}`}
+                    >
+                      <View style={[styles.actionPill, styles.actionPillAccent]}>
+                        <Ionicons name="flash" size={12} color="#FBBF24" />
+                        <Text style={[styles.actionPillText, { color: '#FBBF24' }]}>+WARMUPS</Text>
+                      </View>
+                    </Tappable>
+                  )}
+
                 {!block.isCardio && !block.bodyweightBased && (
                   <Tappable
                     onPress={() => openPlates(block, blockIndex, 'warmup')}
@@ -2161,6 +2226,29 @@ export default function SessionScreen() {
                       )}
                     </View>
 
+                    {!block.isCardio && (() => {
+                      const rowWeightNum = parseFloat(row.weight);
+                      const isBb = usesBarbell(block.name);
+                      if (!isBb || !Number.isFinite(rowWeightNum) || rowWeightNum < BAR_WEIGHT[settings.units][settings.barbell]) {
+                        return null;
+                      }
+                      const p = platesFor(rowWeightNum, settings.units, settings.barbell, settings.customPlates?.[settings.units]);
+                      if (!p || p.perSide.length === 0 || row.done) return null;
+                      return (
+                        <Tappable
+                          onPress={() => openPlates(block, blockIndex, 'plates')}
+                          style={styles.plateRowTag}
+                          scaleTo={0.97}
+                          accessibilityLabel={`Barbell rack load for ${block.name}: ${describePlates(p.perSide)} per side`}
+                        >
+                          <Ionicons name="barbell-outline" size={11} color="#00E5FF" style={{ marginRight: 4 }} />
+                          <Text style={styles.plateRowText}>
+                            RACK: <Text style={styles.plateRowTextLoud}>{describePlates(p.perSide)}</Text> / side ({p.bar} {unit} bar)
+                          </Text>
+                        </Tappable>
+                      );
+                    })()}
+
                     {block.isCardio && liveEstimate ? (
                       <View style={styles.cardioLiveBadge}>
                         <Text style={styles.cardioLiveText}>{liveEstimate}</Text>
@@ -2540,6 +2628,35 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     letterSpacing: 0.8,
     color: loud.figureMuted,
+  },
+  actionPillAccent: {
+    borderColor: '#78350F',
+    backgroundColor: '#1E1810',
+  },
+  plateRowTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: space.sm,
+    backgroundColor: '#111318',
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#1E2433',
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    marginBottom: 4,
+    marginLeft: 32,
+  },
+  plateRowText: {
+    fontFamily: font.display,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    color: '#00E5FF',
+  },
+  plateRowTextLoud: {
+    color: '#FFFFFF',
+    fontFamily: font.figure,
+    fontWeight: 'bold',
   },
   blockMetaRow: {
     flexDirection: 'row',

@@ -56,7 +56,7 @@ const PERIODS = [
  * looking at.
  */
 export default function OverviewScreen() {
-  const { series, settings } = useApp();
+  const { series, settings, latest, program } = useApp();
   const unit = weightUnit(settings.units);
 
   const [periodIndex, setPeriodIndex] = useState(0);
@@ -281,6 +281,12 @@ export default function OverviewScreen() {
               <VolumeLandmarksCard
                 diagnostics={diagnostics}
                 periodDays={period.days}
+                goal={settings.goal?.direction}
+                targetKcalDelta={
+                  latest?.expenditureKcal != null && program?.calories?.kcal != null
+                    ? Math.round(program.calories.kcal - latest.expenditureKcal)
+                    : undefined
+                }
               />
             </FadeIn>
           )}

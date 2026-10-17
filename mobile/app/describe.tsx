@@ -519,16 +519,32 @@ export default function DescribeScreen() {
                       </View>
                     </Pressable>
 
-                    <Pressable
-                      onPress={() =>
-                        setDrafts((current) => current.filter((_, i) => i !== index))
-                      }
-                      hitSlop={10}
-                      style={[styles.removeItemBtn, { borderColor: colors.border }]}
-                      accessibilityLabel={`Remove ${draft.item.name}`}
-                    >
-                      <Text style={[styles.removeItemBtnText, { color: colors.danger }]}>✕ Remove</Text>
-                    </Pressable>
+                    <View style={styles.itemActionGroup}>
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: '/search',
+                            params: { q: draft.item.name, meal },
+                          })
+                        }
+                        hitSlop={8}
+                        style={[styles.matchItemBtn, { borderColor: colors.border }]}
+                        accessibilityLabel={`Look up ${draft.item.name} in food database`}
+                      >
+                        <Text style={[styles.matchItemBtnText, { color: colors.accent }]}>🔍 Match</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() =>
+                          setDrafts((current) => current.filter((_, i) => i !== index))
+                        }
+                        hitSlop={10}
+                        style={[styles.removeItemBtn, { borderColor: colors.border }]}
+                        accessibilityLabel={`Remove ${draft.item.name}`}
+                      >
+                        <Text style={[styles.removeItemBtnText, { color: colors.danger }]}>✕ Remove</Text>
+                      </Pressable>
+                    </View>
                   </View>
 
                   {draft.item.assumption.trim().length > 0 && (
@@ -642,4 +658,12 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   removeItemBtnText: { fontFamily: font.uiStrong, fontSize: 11 },
+  itemActionGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  matchItemBtn: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  matchItemBtnText: { fontFamily: font.uiStrong, fontSize: 11 },
 });
