@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { motionFor } from '../exerciseMotion';
-import type { ExerciseCameraAngle, ExerciseVideoBundle, KeyframePair, LifterGender } from '../exerciseVideos';
+import {
+  type ExerciseCameraAngle,
+  type ExerciseVideoBundle,
+  getKeyframePhaseConfig,
+  type KeyframePair,
+  type LifterGender,
+} from '../exerciseVideos';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { KinematicMotionStudio } from './MovementFigure';
@@ -83,10 +89,18 @@ const StandardVideoPlayer = ({ url }: { url: string }) => {
  * providing zero-distortion, 100% anatomically accurate motion with interactive
  * scrubbing, pause/play, and phase cues. Costs $0.00.
  */
-const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
+const KeyframeMotionPlayer = ({
+  keyframes,
+  canonicalName,
+}: {
+  keyframes: KeyframePair;
+  canonicalName?: string;
+}) => {
   const [progress, setProgress] = useState(0); // 0 (setup) to 100 (depth)
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(1.0);
+
+  const phaseConfig = getKeyframePhaseConfig(canonicalName);
 
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -136,10 +150,10 @@ const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
   const isSetup = progress < 35;
   const isDepth = progress > 65;
   const phaseLabel = isSetup
-    ? 'PHASE 1: STARTING SETUP'
+    ? phaseConfig.setupLabel
     : isDepth
-      ? 'PHASE 2: BELOW-PARALLEL DEPTH'
-      : 'TRANSITION';
+      ? phaseConfig.depthLabel
+      : phaseConfig.transitionLabel;
   const dotColor = isSetup ? loud.onLoud : isDepth ? loud.loud : '#FBBF24';
 
   return (
@@ -213,7 +227,7 @@ const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
       <View style={styles.motionControls}>
         {/* Scrubber row */}
         <View style={styles.scrubberRow}>
-          <Text style={styles.scrubEdgeText}>SETUP</Text>
+          <Text style={styles.scrubEdgeText}>{phaseConfig.scrubberStart}</Text>
           {Platform.OS === 'web' ? (
             <input
               type="range"
@@ -238,7 +252,7 @@ const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
               <View style={[styles.nativeFill, { width: `${progress}%` }]} />
             </View>
           )}
-          <Text style={[styles.scrubEdgeText, { textAlign: 'right' }]}>DEPTH</Text>
+          <Text style={[styles.scrubEdgeText, { textAlign: 'right' }]}>{phaseConfig.scrubberEnd}</Text>
         </View>
 
         {/* Action Buttons */}
@@ -265,7 +279,7 @@ const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
               }}
               style={({ pressed }) => [styles.actionBtn, pressed && styles.btnPressed]}
             >
-              <Text style={styles.actionBtnText}>SETUP</Text>
+              <Text style={styles.actionBtnText}>{phaseConfig.scrubberStart}</Text>
             </Pressable>
 
             <Pressable
@@ -276,7 +290,7 @@ const KeyframeMotionPlayer = ({ keyframes }: { keyframes: KeyframePair }) => {
               }}
               style={({ pressed }) => [styles.actionBtn, pressed && styles.btnPressed]}
             >
-              <Text style={styles.actionBtnText}>DEPTH</Text>
+              <Text style={styles.actionBtnText}>{phaseConfig.scrubberEnd}</Text>
             </Pressable>
           </View>
 
@@ -533,6 +547,7 @@ export const ExerciseVideoPlayer = ({
         <KeyframeMotionPlayer
           key={`${angle}_${gender}_${activeKeyframes.standing}`}
           keyframes={activeKeyframes}
+          canonicalName={bundle.canonicalName}
         />
       ) : (
         <StandardVideoPlayer

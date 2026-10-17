@@ -27,6 +27,77 @@ export interface AngleMetadata {
   checkpoints: FormCheckpoint[];
 }
 
+export interface KeyframePhaseConfig {
+  setupLabel: string;
+  depthLabel: string;
+  transitionLabel: string;
+  scrubberStart: string;
+  scrubberEnd: string;
+}
+
+export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseConfig => {
+  const norm = (canonicalName ?? '').toLowerCase();
+
+  if (norm.includes('bench press')) {
+    return {
+      setupLabel: 'PHASE 1: STARTING LOCKOUT',
+      depthLabel: 'PHASE 2: CHEST TOUCH & ARCH',
+      transitionLabel: 'ECCENTRIC / CONCENTRIC DRIVE',
+      scrubberStart: 'LOCKOUT',
+      scrubberEnd: 'CHEST TOUCH',
+    };
+  }
+
+  if (norm.includes('deadlift')) {
+    return {
+      setupLabel: 'PHASE 1: TOP LOCKOUT',
+      depthLabel: 'PHASE 2: FLOOR SETUP & SLACK PULL',
+      transitionLabel: 'HINGE / WEDGE DRIVE',
+      scrubberStart: 'LOCKOUT',
+      scrubberEnd: 'FLOOR SETUP',
+    };
+  }
+
+  if (norm.includes('overhead') || norm.includes('military') || norm.includes('shoulder')) {
+    return {
+      setupLabel: 'PHASE 1: OVERHEAD LOCKOUT',
+      depthLabel: 'PHASE 2: FRONT RACK SETUP',
+      transitionLabel: 'VERTICAL PRESS / HEAD WINDOW',
+      scrubberStart: 'LOCKOUT',
+      scrubberEnd: 'FRONT RACK',
+    };
+  }
+
+  if (norm.includes('row')) {
+    return {
+      setupLabel: 'PHASE 1: HINGE SETUP / HANG',
+      depthLabel: 'PHASE 2: PEAK CONTRACTION',
+      transitionLabel: 'LAT PULL / SCAPULAR DRIVE',
+      scrubberStart: 'SETUP',
+      scrubberEnd: 'PEAK ROW',
+    };
+  }
+
+  if (norm.includes('pull-up') || norm.includes('pull up') || norm.includes('chin')) {
+    return {
+      setupLabel: 'PHASE 1: ACTIVE HANG / SETUP',
+      depthLabel: 'PHASE 2: CHIN OVER BAR',
+      transitionLabel: 'VERTICAL PULL / SCAPULAR DEPRESSION',
+      scrubberStart: 'HANG',
+      scrubberEnd: 'TOP CHIN',
+    };
+  }
+
+  // Squat family default
+  return {
+    setupLabel: 'PHASE 1: STARTING SETUP',
+    depthLabel: 'PHASE 2: PARALLEL DEPTH',
+    transitionLabel: 'DESCENT / ASCENT',
+    scrubberStart: 'SETUP',
+    scrubberEnd: 'DEPTH',
+  };
+};
+
 export interface ExerciseVideoBundle {
   canonicalName: string;
   iso: {
@@ -578,81 +649,135 @@ export const EXERCISE_VIDEO_REGISTRY: Record<string, ExerciseVideoBundle> = {
 };
 
 /**
- * Core Movement Pattern Inheritance:
- * Matches an exercise name against its foundational movement family in the registry.
- * Variations that have a dedicated distinct 2D kinematic animation (like cable flyes,
- * push-ups, dips, seated cable rows, leg extensions) fall through to the upgraded
- * Kinematic Motion Studio unless they are direct barbell/dumbbell family members.
+ * Flagship Compound Keyframe Studio Selector:
+ * Matches ONLY canonical barbell compound lifts and strict bodyweight pull-ups where the
+ * photorealistic 8K keyframes and multi-angle studio assets genuinely depict the exact exercise.
+ *
+ * Distinct equipment and movement variations (such as Arnold Press, Dumbbell Rows, Lat Pulldowns,
+ * Incline/Decline Press, Good Mornings, RDLs, Hack Squats, Leg Press, etc.) fall through to the
+ * 60 FPS Kinematic Pro Studio with dedicated biomechanical reticles and joint-angle HUDs.
  */
 export const videoBundleFor = (exerciseName: string): ExerciseVideoBundle | null => {
-  const norm = exerciseName.toLowerCase();
+  const norm = exerciseName.toLowerCase().trim();
 
-  // 1. Horizontal Push Family (Bench Press variations)
+  // Any dumbbell, machine, cable, or smith variations must use their dedicated 2D kinematic model
+  const isDumbbell = /\b(dumbbell|db)\b/.test(norm);
+  const isMachine = /\b(machine|cable|smith|plate-loaded)\b/.test(norm);
+
+  // 1. Horizontal Push: Flat Barbell Bench Press ONLY
   if (
-    norm.includes('bench press') ||
-    norm.includes('chest press') ||
-    norm.includes('floor press') ||
-    norm.includes('spoto press') ||
-    norm.includes('larsen press')
+    !isDumbbell &&
+    !isMachine &&
+    !/\b(incline|decline|close[- ]grip|cgbp|floor|spoto|larsen|reverse[- ]grip)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['bench-press'];
+    if (
+      norm === 'bench press' ||
+      norm === 'bench press (barbell)' ||
+      norm === 'barbell bench press' ||
+      norm === 'flat barbell bench press' ||
+      norm === 'barbell flat bench press' ||
+      norm === 'barbell bench'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['bench-press'];
+    }
   }
 
-  // 2. Squat Family (Squat variations — excluding split squat / lunge which have split-stance kinematics)
+  // 2. Squat Family: Barbell Back Squat ONLY
   if (
-    norm.includes('squat') &&
-    !norm.includes('split') &&
-    !norm.includes('bulgarian') &&
-    !norm.includes('sissy')
+    !isDumbbell &&
+    !isMachine &&
+    !/\b(front|goblet|hack|pendulum|split|bulgarian|lunge|sissy|box|step|zercher|overhead|safety|leg press)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['squat'];
+    if (
+      norm === 'squat' ||
+      norm === 'squats' ||
+      norm === 'squat (barbell)' ||
+      norm === 'barbell squat' ||
+      norm === 'barbell back squat' ||
+      norm === 'back squat (barbell)' ||
+      norm === 'back squat'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['squat'];
+    }
   }
 
-  // 3. Hinge Family (Deadlift & RDL variations)
+  // 3. Hinge Family: Conventional Barbell Deadlift ONLY
   if (
-    norm.includes('deadlift') ||
-    norm.includes('rdl') ||
-    norm.includes('good morning') ||
-    norm.includes('rack pull')
+    !isDumbbell &&
+    !isMachine &&
+    !/\b(romanian|rdl|stiff|straight|sumo|trap|hex|snatch|deficit|rack pull|good morning)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['deadlift'];
+    if (
+      norm === 'deadlift' ||
+      norm === 'deadlifts' ||
+      norm === 'deadlift (barbell)' ||
+      norm === 'barbell deadlift' ||
+      norm === 'conventional deadlift' ||
+      norm === 'conventional barbell deadlift'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['deadlift'];
+    }
   }
 
-  // 4. Vertical Push Family (Overhead / Military / Shoulder Press)
+  // 4. Vertical Push Family: Standing Barbell Overhead Press ONLY
   if (
-    norm.includes('overhead press') ||
-    norm.includes('military press') ||
-    norm.includes('shoulder press') ||
-    norm.includes('push press') ||
-    norm.includes('arnold press') ||
-    norm.includes('strict press') ||
-    norm.includes('z press')
+    !isDumbbell &&
+    !isMachine &&
+    !/\b(arnold|seated|push press|z press|behind|incline|bench)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['overhead-press'];
+    if (
+      norm === 'overhead press' ||
+      norm === 'ohp' ||
+      norm === 'overhead press (barbell)' ||
+      norm === 'barbell overhead press' ||
+      norm === 'standing overhead press' ||
+      norm === 'standing barbell overhead press' ||
+      norm === 'military press' ||
+      norm === 'barbell military press' ||
+      norm === 'military press (barbell)' ||
+      norm === 'strict press' ||
+      norm === 'strict overhead press'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['overhead-press'];
+    }
   }
 
-  // 5. Horizontal Pull Family (Free-weight Bent-Over Rows)
+  // 5. Horizontal Pull Family: Barbell Bent-Over Row ONLY
   if (
-    norm.includes('bent-over row') ||
-    norm.includes('bent over row') ||
-    norm.includes('barbell row') ||
-    norm.includes('pendlay row') ||
-    norm.includes('t-bar row') ||
-    norm.includes('yates row') ||
-    norm.includes('dumbbell row')
+    !isDumbbell &&
+    !isMachine &&
+    !/\b(chest[- ]supported|seated|cable|t[- ]bar|incline|one[- ]arm|single[- ]arm|upright|low row)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['barbell-row'];
+    if (
+      norm === 'bent over row (barbell)' ||
+      norm === 'bent-over row (barbell)' ||
+      norm === 'barbell bent-over row' ||
+      norm === 'barbell bent over row' ||
+      norm === 'barbell row' ||
+      norm === 'pendlay row' ||
+      norm === 'bent-over row' ||
+      norm === 'bent over row'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['barbell-row'];
+    }
   }
 
-  // 6. Vertical Pull Family (Pull-Up, Chin-Up, Lat Pulldown)
+  // 6. Vertical Pull Family: Bodyweight Pull-Up ONLY
   if (
-    norm.includes('pull-up') ||
-    norm.includes('pull up') ||
-    norm.includes('chin-up') ||
-    norm.includes('chin up') ||
-    norm.includes('lat pulldown')
+    !isMachine &&
+    !/\b(chin|pulldown|assisted|band|cable)\b/.test(norm)
   ) {
-    return EXERCISE_VIDEO_REGISTRY['pull-up'];
+    if (
+      norm === 'pull-up' ||
+      norm === 'pull up' ||
+      norm === 'pull-ups' ||
+      norm === 'pull ups' ||
+      norm === 'bodyweight pull-up' ||
+      norm === 'bodyweight pull up' ||
+      norm === 'strict pull-up'
+    ) {
+      return EXERCISE_VIDEO_REGISTRY['pull-up'];
+    }
   }
 
   return null;
