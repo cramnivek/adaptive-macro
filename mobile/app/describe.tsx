@@ -8,7 +8,6 @@ import {
   type MealEstimate,
   type MealPhoto,
   describeErrorMessage,
-  estimateCostUsd,
   estimateMeal,
 } from '../src/ai/describeMeal';
 import { scanPhaseOf } from '../src/ai/foodScan';
@@ -100,8 +99,6 @@ export default function DescribeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<MealEstimate | null>(null);
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
-  const [costUsd, setCostUsd] = useState<number | null>(null);
-  const [ranOn, setRanOn] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -234,12 +231,6 @@ export default function DescribeScreen() {
       );
       if (controller.signal.aborted) return;
       setEstimate(result.estimate);
-      setRanOn(result.model);
-      // A local model has no per-request price, so there is no cost to show —
-      // deliberately not a "$0.0000", which would read as a failed lookup.
-      setCostUsd(
-        settings.aiProvider === 'anthropic' ? estimateCostUsd(result.usage, result.model) : null,
-      );
       setDrafts(
         result.estimate.items.map((item) => ({ item, grams: item.grams, included: true })),
       );
@@ -338,11 +329,11 @@ export default function DescribeScreen() {
       keyboardShouldPersistTaps="handled"
     >
       {!ready && (
-        <Card title={usingLocal ? 'Pick a local model first' : 'Needs your Anthropic API key'}>
+        <Card title={usingLocal ? 'Pick a local model first' : 'API key needed'}>
           <Text style={[styles.body, { color: colors.textMuted }]}>
             {usingLocal
               ? 'Describe a meal in words and get macros back, estimated by a model running on your own machine — no key, no cost, nothing leaves the device. Choose which model in Settings.'
-              : 'This describes a meal to Claude and gets macros back, billed to your own API key at roughly one to four cents a meal. Add a key in Settings, or switch to a local model there instead.'}
+              : 'Describe what you ate or drank to estimate calories and macros. Add an API key in Settings, or switch to a local model there instead.'}
           </Text>
           <View style={{ height: space.md }} />
           <Button label="Open Settings" onPress={() => router.replace('/settings')} />
@@ -433,7 +424,7 @@ export default function DescribeScreen() {
               ? `${scanPhaseOf(elapsed).label} (${elapsed}s)`
               : usingLocal
                 ? `Running ${settings.ollamaModel} on this machine — a large local model usually takes 10 to 45 seconds.`
-                : `Asking ${settings.aiProvider === 'gemini' ? 'Gemini' : 'Claude'}…`}
+                : 'Estimating macros…'}
           </Text>
         </Card>
       )}
@@ -447,7 +438,7 @@ export default function DescribeScreen() {
       {estimate?.notFood && (
         <Card title="That does not look like food">
           <Text style={[styles.body, { color: colors.textMuted }]}>
-            Claude could not read that as something you ate. Try describing the food and roughly how much.
+            Could not identify food items. Try describing what you ate and roughly how much.
           </Text>
         </Card>
       )}
@@ -546,19 +537,6 @@ export default function DescribeScreen() {
               P {Math.round(totals.proteinG)} g · C {Math.round(totals.carbsG)} g · F{' '}
               {Math.round(totals.fatG)} g
             </Text>
-            {costUsd !== null ? (
-              <Text style={[styles.cost, { color: colors.textFaint }]}>
-                Estimated by {ranOn} — about ${costUsd.toFixed(4)} of API usage.
-              </Text>
-            ) : (
-              ranOn && (
-                <Text style={[styles.cost, { color: colors.textFaint }]}>
-                  {/* Only a local model runs here and costs nothing; Gemini goes through the
-                      server, so it says only which model answered. */}
-                  {usingLocal ? `Estimated by ${ranOn}, on this machine. No cost.` : `Estimated by ${ranOn}.`}
-                </Text>
-              )
-            )}
             <View style={{ height: space.md }} />
             <Button
               label="Add to diary"

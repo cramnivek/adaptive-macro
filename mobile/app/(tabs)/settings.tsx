@@ -18,7 +18,6 @@ import {
 import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { BATCH_SIZE, EnrichmentParseError, batchNames } from '../../src/ai/exercises';
-import { defaultOllamaHost, listOllamaModels } from '../../src/ai/ollama';
 import { GeminiAccessError, enrichExercises } from '../../src/api/gemini';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Controls';
@@ -130,37 +129,6 @@ export default function SettingsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   /** Guards the window between the first tap and `busy` being set. */
   const building = useRef(false);
-
-  // Populated by an explicit connection check rather than on mount: probing a
-  // local server the user may not be running would fail noisily on every visit
-  // to this screen.
-  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
-  const [probing, setProbing] = useState<string | null>(null);
-
-  // On a phone this resolves to the machine serving the bundle over the LAN;
-  // in a browser it is loopback. Read fresh on every render so a changed dev
-  // server address shows up without restarting the app.
-  const detectedOllamaHost = defaultOllamaHost();
-
-  const probeOllama = async () => {
-    setProbing('Checking…');
-    try {
-      const models = await listOllamaModels(settings.ollamaHost);
-      setOllamaModels(models);
-      notify(
-        models.length ? 'Ollama is reachable' : 'Ollama is reachable but has no models',
-        models.length ? `Models: ${models.join(', ')}` : 'Pull one with: ollama pull qwen2.5:32b',
-      );
-      // Save a keystroke when there is only one sensible answer.
-      if (models.length === 1 && !settings.ollamaModel) {
-        void updateSettings({ ollamaModel: models[0] });
-      }
-    } catch (error) {
-      notify('Could not reach Ollama', (error as Error).message);
-    } finally {
-      setProbing(null);
-    }
-  };
 
   const runBulk = async (label: string, work: () => Promise<void>) => {
     setBusy(label);
@@ -566,32 +534,23 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Food data">
+      <Section title="Food & Estimation">
         <Card>
           <Field
             label="Food database country"
             value={settings.foodCountry}
             onChangeText={(foodCountry) => void updateSettings({ foodCountry })}
             placeholder="world"
-            hint="A country code like ph, us, gb, jp — or 'world'. Open Food Facts keeps a separate view per country holding what is actually sold there, so local brands that are missing from the global view turn up in their own market's. Both are searched, local results first."
-          />
-          <Field
-            label="USDA API key"
-            value={settings.usdaApiKey}
-            onChangeText={(usdaApiKey) => void updateSettings({ usdaApiKey })}
-            hint="Leave this as DEMO_KEY to use the app's shared key, which is held server-side and is what most people want. Enter your own to get a quota nobody else is spending — free key at fdc.nal.usda.gov/api-key-signup.html"
+            hint="A country code like ph, us, gb, jp — or 'world'. Searches local country products first, then global databases."
           />
         </Card>
 
-        <Card title="Looking up restaurant food">
+        <Card title="Smart Food Search & Macro Estimation" subtitle="Automatic food recognition and restaurant menu lookup.">
           <Text style={[styles.note, { color: colors.textFaint }]}>
-            Chain and restaurant meals are not in the food databases, so searches that come
-            back empty can offer a web lookup, which shows you the sources it read before you
-            save anything. This works with no setup. Add your own Gemini API key to use your
-            own allowance instead, for both lookups and meal estimates.
+            Works automatically with zero setup using the built-in hosted service. If you prefer to supply a custom API key for dedicated quota, enter it below.
           </Text>
           <Field
-            label="Gemini API key"
+            label="Custom API key (optional)"
             value={settings.foodLookup.geminiApiKey}
             onChangeText={(geminiApiKey) =>
               void updateSettings({
@@ -599,95 +558,8 @@ export default function SettingsScreen() {
               })
             }
             placeholder="AIza…"
+            hint="Leave blank to use the built-in service."
           />
-        </Card>
-
-        <Card title="Describing meals" subtitle="Write a meal in words and get macros back.">
-          <Segmented
-            label="Estimated by"
-            value={settings.aiProvider}
-            onChange={(aiProvider) => void updateSettings({ aiProvider })}
-            options={[
-              { value: 'gemini' as const, label: 'Gemini' },
-              { value: 'ollama' as const, label: 'Local model' },
-              { value: 'anthropic' as const, label: 'Claude API' },
-            ]}
-          />
-
-          {settings.aiProvider === 'gemini' && (
-            <Text style={[styles.note, { color: colors.textFaint }]}>
-              Works with no setup. Estimates run on a shared allowance, so they may be
-              unavailable if it runs out — adding your own Gemini API key above uses that
-              instead, for both meal estimates and restaurant lookups.
-            </Text>
-          )}
-
-          {settings.aiProvider === 'ollama' ? (
-            <>
-              <Field
-                label="Ollama address"
-                value={settings.ollamaHost}
-                onChangeText={(ollamaHost) => void updateSettings({ ollamaHost })}
-                placeholder="http://127.0.0.1:11434"
-              />
-              {/*
-                On a phone the right address is the dev machine's LAN IP, and that
-                IP changes whenever its DHCP lease does — at which point the
-                address saved here is silently stale. Offering the freshly
-                detected one turns a confusing "could not reach Ollama" into one
-                tap.
-              */}
-              {detectedOllamaHost !== settings.ollamaHost && (
-                <Button
-                  label={`Use this session's computer (${detectedOllamaHost})`}
-                  variant="subtle"
-                  onPress={() => void updateSettings({ ollamaHost: detectedOllamaHost })}
-                />
-              )}
-              <Field
-                label="Model"
-                value={settings.ollamaModel}
-                onChangeText={(ollamaModel) => void updateSettings({ ollamaModel })}
-                placeholder="qwen2.5:32b"
-                hint={ollamaModels.length ? `On this server: ${ollamaModels.join(', ')}` : undefined}
-              />
-              <Button
-                label={probing ?? 'Check connection'}
-                variant="subtle"
-                disabled={probing !== null}
-                onPress={() => void probeOllama()}
-              />
-              <Text style={[styles.note, { color: colors.textFaint }]}>
-                Runs entirely on your own machine. Nothing leaves it, there is no key and no cost. On this
-                project's eval, qwen2.5:32b got every precisely-described meal right with a −2.5% calorie
-                bias, and underestimated loosely-described ones like "fish and chips at the pub" — so weigh
-                what you can, and check the numbers when you cannot.
-              </Text>
-              <Text style={[styles.note, { color: colors.textFaint }]}>
-                In the browser, Ollama must be started with OLLAMA_ORIGINS set (for example
-                OLLAMA_ORIGINS=* ) or it will refuse the request as cross-origin. Expect 10–45 seconds per
-                estimate on a 32B model.
-              </Text>
-            </>
-          ) : (
-            <>
-              <Field
-                label="Anthropic API key"
-                value={settings.anthropicApiKey}
-                onChangeText={(anthropicApiKey) => void updateSettings({ anthropicApiKey })}
-                placeholder="sk-ant-..."
-              />
-              <Text style={[styles.note, { color: colors.textFaint }]}>
-                Requests go straight from this device to api.anthropic.com, billed to your own account. On
-                Claude Opus 5 that is roughly one to four cents a meal. The screen shows what each estimate
-                actually cost.
-              </Text>
-              <Text style={[styles.note, { color: colors.textFaint }]}>
-                The key is stored unencrypted on this device, the same as the rest of your data, and is
-                readable by anyone who can open this browser profile or phone.
-              </Text>
-            </>
-          )}
         </Card>
       </Section>
 

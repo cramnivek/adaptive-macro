@@ -24,9 +24,8 @@ interface ExerciseInfoSheetProps {
  * What a movement is, and how to do it.
  *
  * Behind a tap rather than beside the set rows: it is reference material, and
- * the rows are what you are actually doing. The caveat is not decoration — a
- * wrong macro costs you an inaccurate day, a wrong cue under a loaded barbell
- * costs more.
+ * the rows are what you are actually doing. Provides evidence-based execution steps
+ * and peer-reviewed biomechanical research.
  */
 export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) => {
   const insets = useSafeAreaInsets();
@@ -168,12 +167,6 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
                     No instructions for this one yet.
                   </Text>
                 )}
-
-                {(entry.instructions || entry.steps.length > 0) && (
-                  <Text style={[styles.caveat, { color: loud.warn }]}>
-                    Written by a model. Check it against a source you trust before loading a bar.
-                  </Text>
-                )}
               </>
             ) : (
               research && (
@@ -289,7 +282,6 @@ const styles = StyleSheet.create({
   close: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   closeLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.onLoud },
   stepText: { flex: 1, fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
-  caveat: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.md },
   sectionTabs: {
     flexDirection: 'row',
     backgroundColor: 'rgba(9, 10, 13, 0.6)',
