@@ -516,8 +516,8 @@ export default function SearchScreen() {
                   </Text>
                 )}
                 {item.source === 'ai' && (
-                  <Text style={[styles.rowWarning, { color: colors.warning }]}>
-                    Estimated by a model, not looked up. Check it before trusting it.
+                  <Text style={[styles.rowWarning, { color: colors.textMuted }]}>
+                    Estimated macro profile · verify portion
                   </Text>
                 )}
                 {!isNutritionallyConsistent(item.per100g) && (

@@ -1948,25 +1948,33 @@ export const findBuiltinCatalogueEntry = (name: string): CatalogueEntry | null =
     const canonLower = spec.canonicalName.toLowerCase();
     if (
       (words.includes('lat') && words.includes('pulldown') && canonLower.includes('lat pulldown')) ||
-      (words.includes('incline') && words.includes('bench') && words.includes('dumbbell') && canonLower.includes('incline') && canonLower.includes('dumbbell')) ||
-      (words.includes('incline') && words.includes('bench') && canonLower.includes('incline') && canonLower.includes('barbell')) ||
-      (words.includes('bench') && words.includes('press') && words.includes('dumbbell') && canonLower === 'bench press (dumbbell)') ||
-      (words.includes('bench') && words.includes('press') && canonLower === 'bench press (barbell)') ||
-      (words.includes('overhead') && words.includes('press') && canonLower === 'overhead press (barbell)') ||
-      (words.includes('shoulder') && words.includes('press') && canonLower === 'shoulder press (dumbbell)') ||
+      (words.includes('incline') && (words.includes('bench') || words.includes('press') || words.includes('chest')) && (words.includes('dumbbell') || words.includes('db')) && canonLower.includes('incline') && canonLower.includes('dumbbell')) ||
+      (words.includes('incline') && (words.includes('bench') || words.includes('press') || words.includes('chest')) && !words.includes('dumbbell') && !words.includes('db') && canonLower.includes('incline') && canonLower.includes('barbell')) ||
+      (words.includes('decline') && (words.includes('bench') || words.includes('press')) && canonLower.includes('decline')) ||
+      (words.includes('close') && (words.includes('bench') || words.includes('press')) && canonLower.includes('close-grip')) ||
+      (words.includes('bench') && words.includes('press') && (words.includes('dumbbell') || words.includes('db')) && !words.includes('incline') && !words.includes('decline') && canonLower === 'bench press (dumbbell)') ||
+      (words.includes('bench') && words.includes('press') && !words.includes('incline') && !words.includes('decline') && !words.includes('dumbbell') && !words.includes('db') && !words.includes('close') && !words.includes('cgbp') && canonLower === 'bench press (barbell)') ||
+      (words.includes('overhead') && words.includes('press') && !words.includes('dumbbell') && !words.includes('db') && !words.includes('tricep') && canonLower === 'overhead press (barbell)') ||
+      (words.includes('shoulder') && words.includes('press') && (words.includes('dumbbell') || words.includes('db')) && canonLower === 'shoulder press (dumbbell)') ||
+      (words.includes('shoulder') && words.includes('press') && canonLower.includes('shoulder press')) ||
       (words.includes('lateral') && words.includes('raise') && canonLower.includes('lateral raise')) ||
       (words.includes('romanian') && words.includes('deadlift') && canonLower.includes('romanian deadlift')) ||
       (words.includes('sumo') && words.includes('deadlift') && canonLower.includes('sumo deadlift')) ||
       (words.includes('trap') && words.includes('deadlift') && canonLower.includes('trap bar deadlift')) ||
-      (words.includes('deadlift') && !words.includes('romanian') && !words.includes('sumo') && !words.includes('trap') && !words.includes('hex') && canonLower === 'deadlift (barbell)') ||
-      (words.includes('squat') && words.includes('split') && canonLower.includes('split squat')) ||
+      (words.includes('deadlift') && !words.includes('romanian') && !words.includes('rdl') && !words.includes('sumo') && !words.includes('trap') && !words.includes('hex') && !words.includes('stiff') && !words.includes('deficit') && canonLower === 'deadlift (barbell)') ||
+      (words.includes('squat') && (words.includes('split') || words.includes('bulgarian')) && canonLower.includes('split squat')) ||
       (words.includes('squat') && words.includes('zercher') && canonLower.includes('zercher squat')) ||
       (words.includes('squat') && words.includes('sissy') && canonLower.includes('sissy squat')) ||
-      (words.includes('squat') && !words.includes('split') && !words.includes('hack') && !words.includes('zercher') && !words.includes('sissy') && canonLower === 'squat (barbell)') ||
+      (words.includes('squat') && words.includes('hack') && canonLower.includes('hack squat')) ||
+      (words.includes('squat') && words.includes('front') && canonLower.includes('front squat')) ||
+      (words.includes('squat') && words.includes('goblet') && canonLower.includes('goblet squat')) ||
+      (words.includes('squat') && !words.includes('split') && !words.includes('hack') && !words.includes('zercher') && !words.includes('sissy') && !words.includes('front') && !words.includes('goblet') && !words.includes('bulgarian') && canonLower === 'squat (barbell)') ||
       (words.includes('leg') && words.includes('press') && canonLower === 'leg press') ||
       (words.includes('leg') && words.includes('extension') && canonLower.includes('leg extension')) ||
       (words.includes('nordic') && canonLower.includes('nordic hamstring curl')) ||
-      (words.includes('leg') && words.includes('curl') && canonLower.includes('leg curl')) ||
+      (words.includes('seated') && words.includes('leg') && words.includes('curl') && canonLower.includes('seated leg curl')) ||
+      (words.includes('leg') && words.includes('curl') && !words.includes('seated') && canonLower.includes('leg curl')) ||
+      (words.includes('seated') && words.includes('calf') && words.includes('raise') && canonLower.includes('seated calf raise')) ||
       (words.includes('calf') && words.includes('raise') && canonLower.includes('calf raise')) ||
       (words.includes('pull') && (words.includes('up') || words.includes('chin')) && canonLower === 'pull-up') ||
       (words.includes('dip') && canonLower === 'chest dip') ||
@@ -1975,9 +1983,11 @@ export const findBuiltinCatalogueEntry = (name: string): CatalogueEntry | null =
       (words.includes('pushdown') && canonLower === 'triceps pushdown') ||
       (words.includes('pallof') && canonLower.includes('pallof press')) ||
       (words.includes('incline') && words.includes('fly') && canonLower.includes('incline dumbbell fly')) ||
-      (words.includes('curl') && !words.includes('leg') && canonLower === 'bicep curl (dumbbell)') ||
+      (words.includes('incline') && words.includes('curl') && canonLower.includes('incline dumbbell curl')) ||
+      (words.includes('curl') && !words.includes('leg') && !words.includes('incline') && canonLower === 'bicep curl (dumbbell)') ||
       (words.includes('row') && words.includes('cable') && canonLower === 'seated cable row') ||
-      (words.includes('row') && canonLower === 'bent over row (barbell)')
+      (words.includes('row') && (words.includes('chest') || words.includes('supported') || words.includes('t bar')) && canonLower.includes('chest-supported')) ||
+      (words.includes('row') && !words.includes('cable') && !words.includes('chest') && !words.includes('supported') && !words.includes('upright') && canonLower === 'bent over row (barbell)')
     ) {
       const { aliases: _a, ...rest } = spec;
       return { ...rest, recordedName: trimmed };

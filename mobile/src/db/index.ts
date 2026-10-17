@@ -1246,6 +1246,55 @@ const enrichWithBuiltinFallback = (entry: CatalogueEntry, queryName: string): Ca
  * what it will be for anything just picked out of the picker, and finally falls
  * back to the built-in exercise encyclopedia so core lifts always have details.
  */
+const VARIATION_MODIFIERS = [
+  'incline',
+  'decline',
+  'close-grip',
+  'close grip',
+  'cgbp',
+  'dumbbell',
+  'db',
+  'barbell',
+  'bb',
+  'machine',
+  'cable',
+  'smith',
+  'deficit',
+  'spoto',
+  'floor',
+  'front',
+  'hack',
+  'zercher',
+  'romanian',
+  'rdl',
+  'sumo',
+  'trap bar',
+  'trap',
+  'hex',
+  'sissy',
+  'split',
+  'bulgarian',
+  'goblet',
+  'overhead',
+  'seated',
+  'standing',
+  'lying',
+  'preacher',
+  'spider',
+  'hammer',
+  'reverse',
+];
+
+const hasVariationMismatch = (recorded: string, canonical: string): boolean => {
+  const r = recorded.toLowerCase();
+  const c = canonical.toLowerCase();
+  for (const mod of VARIATION_MODIFIERS) {
+    if (r.includes(mod) && !c.includes(mod)) return true;
+    if (!r.includes(mod) && c.includes(mod)) return true;
+  }
+  return false;
+};
+
 export const catalogueEntryForExercise = async (
   exerciseName: string,
 ): Promise<CatalogueEntry | null> => {
@@ -1254,7 +1303,27 @@ export const catalogueEntryForExercise = async (
     CATALOGUE_BY_LINKED_NAME,
     exerciseName,
   );
-  if (linked) return enrichWithBuiltinFallback(toCatalogueEntry(linked), exerciseName);
+  if (linked) {
+    if (hasVariationMismatch(exerciseName, linked.canonical_name)) {
+      const correct = findBuiltinCatalogueEntry(exerciseName);
+      if (correct) {
+        const existingCat = await db.getFirstAsync<{ id: string }>(
+          'SELECT id FROM exercise_catalogue WHERE canonical_name = ?',
+          correct.canonicalName,
+        );
+        if (existingCat) {
+          await db.runAsync(
+            'UPDATE exercises SET catalogue_id = ? WHERE name = ?',
+            existingCat.id,
+            exerciseName,
+          );
+        }
+        return correct;
+      }
+    } else {
+      return enrichWithBuiltinFallback(toCatalogueEntry(linked), exerciseName);
+    }
+  }
 
   const byName = await db.getFirstAsync<CatalogueRow>(
     CATALOGUE_BY_CANONICAL_NAME,

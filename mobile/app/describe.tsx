@@ -332,7 +332,7 @@ export default function DescribeScreen() {
         <Card title={usingLocal ? 'Pick a local model first' : 'API key needed'}>
           <Text style={[styles.body, { color: colors.textMuted }]}>
             {usingLocal
-              ? 'Describe a meal in words and get macros back, estimated by a model running on your own machine — no key, no cost, nothing leaves the device. Choose which model in Settings.'
+              ? 'Describe a meal in words or photo to log macros, computed locally on your machine. Choose which model in Settings.'
               : 'Describe what you ate or drank to estimate calories and macros. Add an API key in Settings, or switch to a local model there instead.'}
           </Text>
           <View style={{ height: space.md }} />
@@ -369,7 +369,15 @@ export default function DescribeScreen() {
               {busy && <FoodScanOverlay compact elapsed={elapsed} />}
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Remove photo" variant="subtle" onPress={() => setPhoto(null)} />
+              <Button
+                label="Remove photo"
+                variant="subtle"
+                onPress={() => {
+                  setPhoto(null);
+                  setEstimate(null);
+                  setDrafts([]);
+                }}
+              />
             </View>
           </View>
         ) : (
@@ -453,41 +461,75 @@ export default function DescribeScreen() {
 
           <Card
             title="Estimated items"
-            subtitle="Adjust any portion — the macros move with it. Tap a row to leave it out."
+            subtitle="Adjust any portion — the macros move with it. Tap ✕ Remove to delete an item."
           >
+            <View style={styles.cardActionRow}>
+              <Pressable
+                onPress={() => {
+                  setEstimate(null);
+                  setDrafts([]);
+                }}
+                hitSlop={8}
+                style={[styles.resetEstimateBtn, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.resetEstimateText, { color: colors.textMuted }]}>
+                  ✕ Discard estimate / Reset
+                </Text>
+              </Pressable>
+            </View>
+
+            {drafts.length === 0 && (
+              <Text style={[styles.body, { color: colors.textMuted, marginVertical: space.sm }]}>
+                No items in estimate. Tap 'Discard estimate / Reset' to start over or describe a meal above.
+              </Text>
+            )}
+
             {drafts.map((draft, index) => {
               const scaled = scaleItem(draft.item, draft.grams);
               const adjusted = Math.abs(draft.grams - draft.item.grams) > 0.5;
 
               return (
                 <View key={`${draft.item.name}-${index}`} style={styles.item}>
-                  <Pressable
-                    onPress={() =>
-                      setDrafts((current) =>
-                        current.map((d, i) => (i === index ? { ...d, included: !d.included } : d)),
-                      )
-                    }
-                    style={styles.itemHeader}
-                  >
-                    <Text
-                      style={[
-                        styles.itemName,
-                        {
-                          color: draft.included ? colors.text : colors.textFaint,
-                          textDecorationLine: draft.included ? 'none' : 'line-through',
-                        },
-                      ]}
+                  <View style={styles.itemHeader}>
+                    <Pressable
+                      onPress={() =>
+                        setDrafts((current) =>
+                          current.map((d, i) => (i === index ? { ...d, included: !d.included } : d)),
+                        )
+                      }
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm }}
                     >
-                      {draft.item.name}
-                    </Text>
-                    <View
-                      style={[styles.badge, { borderColor: confidenceColor(draft.item.confidence) }]}
-                    >
-                      <Text style={{ fontFamily: font.ui, fontSize: 10, color: confidenceColor(draft.item.confidence) }}>
-                        {draft.item.confidence}
+                      <Text
+                        style={[
+                          styles.itemName,
+                          {
+                            color: draft.included ? colors.text : colors.textFaint,
+                            textDecorationLine: draft.included ? 'none' : 'line-through',
+                          },
+                        ]}
+                      >
+                        {draft.item.name}
                       </Text>
-                    </View>
-                  </Pressable>
+                      <View
+                        style={[styles.badge, { borderColor: confidenceColor(draft.item.confidence) }]}
+                      >
+                        <Text style={{ fontFamily: font.ui, fontSize: 10, color: confidenceColor(draft.item.confidence) }}>
+                          {draft.item.confidence}
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() =>
+                        setDrafts((current) => current.filter((_, i) => i !== index))
+                      }
+                      hitSlop={10}
+                      style={[styles.removeItemBtn, { borderColor: colors.border }]}
+                      accessibilityLabel={`Remove ${draft.item.name}`}
+                    >
+                      <Text style={[styles.removeItemBtnText, { color: colors.danger }]}>✕ Remove</Text>
+                    </Pressable>
+                  </View>
 
                   {draft.item.assumption.trim().length > 0 && (
                     <Text style={[styles.assumption, { color: colors.textFaint }]}>
@@ -585,4 +627,19 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   cost: { fontFamily: font.ui, fontSize: 11, marginTop: space.sm },
+  cardActionRow: { marginBottom: space.sm, alignItems: 'flex-end' },
+  resetEstimateBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  resetEstimateText: { fontFamily: font.ui, fontSize: 12 },
+  removeItemBtn: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  removeItemBtnText: { fontFamily: font.uiStrong, fontSize: 11 },
 });

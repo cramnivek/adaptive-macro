@@ -20,6 +20,58 @@ interface ExerciseInfoSheetProps {
   onClose: () => void;
 }
 
+const getEffectiveExerciseName = (entry: CatalogueEntry | null): string => {
+  if (!entry) return '';
+  if (entry.recordedName) {
+    const recLower = entry.recordedName.toLowerCase();
+    const canLower = entry.canonicalName.toLowerCase();
+    const variationWords = [
+      'incline',
+      'decline',
+      'close-grip',
+      'close grip',
+      'cgbp',
+      'dumbbell',
+      'db',
+      'barbell',
+      'bb',
+      'machine',
+      'cable',
+      'smith',
+      'deficit',
+      'spoto',
+      'floor',
+      'front',
+      'hack',
+      'zercher',
+      'romanian',
+      'rdl',
+      'sumo',
+      'trap bar',
+      'trap',
+      'hex',
+      'sissy',
+      'split',
+      'bulgarian',
+      'goblet',
+      'overhead',
+      'seated',
+      'standing',
+      'lying',
+      'preacher',
+      'spider',
+      'hammer',
+      'reverse',
+    ];
+    for (const word of variationWords) {
+      if (recLower.includes(word) && !canLower.includes(word)) {
+        return entry.recordedName;
+      }
+    }
+  }
+  return entry.canonicalName;
+};
+
 /**
  * What a movement is, and how to do it.
  *
@@ -30,7 +82,11 @@ interface ExerciseInfoSheetProps {
 export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) => {
   const insets = useSafeAreaInsets();
   const [activeSection, setActiveSection] = useState<'steps' | 'research'>('steps');
-  const research = entry ? researchProfileFor(entry.canonicalName, entry.movementPattern) : null;
+  const effectiveName = getEffectiveExerciseName(entry);
+  const research = entry
+    ? researchProfileFor(effectiveName, entry.movementPattern) ??
+      researchProfileFor(entry.canonicalName, entry.movementPattern)
+    : null;
 
   return (
     <Modal visible={entry !== null} animationType="slide" transparent onRequestClose={onClose}>
@@ -50,7 +106,9 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
             <View style={styles.header}>
               <ExerciseIcon pattern={entry.movementPattern} size={28} color={loud.figure} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.name, { color: loud.figure }]}>{entry.canonicalName}</Text>
+                <Text style={[styles.name, { color: loud.figure }]}>
+                  {effectiveName || entry.canonicalName}
+                </Text>
                 {/*
                   The free-text muscle only appears when there is no diagram.
                   The model answers the two separately and they disagree — a
@@ -72,21 +130,21 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
               - Tier 2: Interactive 60 FPS Kinematic Studio for all 120+ accessory movements.
             */}
             {(() => {
-              const bundle = videoBundleFor(entry.canonicalName);
+              const bundle = videoBundleFor(effectiveName);
               if (bundle !== null) {
                 return (
                   <ExerciseVideoPlayer
                     bundle={bundle}
-                    exerciseName={entry.canonicalName}
+                    exerciseName={effectiveName}
                     equipment={entry.equipment}
                   />
                 );
               }
-              const motion = motionFor(entry.canonicalName);
+              const motion = motionFor(effectiveName) ?? motionFor(entry.canonicalName);
               return motion === null ? null : (
                 <KinematicMotionStudio
                   motion={motion}
-                  exerciseName={entry.canonicalName}
+                  exerciseName={effectiveName}
                   equipment={entry.equipment}
                 />
               );
