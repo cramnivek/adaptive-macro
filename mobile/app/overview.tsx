@@ -19,6 +19,7 @@ import { Screen } from '../src/components/Screen';
 import { SlashPanel } from '../src/components/SlashPanel';
 import { Tappable } from '../src/components/Tappable';
 import { VolumeLandmarksCard } from '../src/components/VolumeLandmarksCard';
+import { WeeklyReviewCard } from '../src/components/WeeklyReviewCard';
 import { WeeklyBars } from '../src/components/WeeklyBars';
 import {
   catalogueRegionsByExerciseName,
@@ -56,7 +57,7 @@ const PERIODS = [
  * looking at.
  */
 export default function OverviewScreen() {
-  const { series, settings, latest, program } = useApp();
+  const { series, settings, latest, program, updateSettings, observations } = useApp();
   const unit = weightUnit(settings.units);
 
   const [periodIndex, setPeriodIndex] = useState(0);
@@ -274,6 +275,34 @@ export default function OverviewScreen() {
                 {summary.exercises.join(' · ')}
               </Text>
             </Card>
+          </FadeIn>
+
+          {/* Weekly AI Coaching Review */}
+          <FadeIn delay={130}>
+            <WeeklyReviewCard
+              series={series}
+              observations={observations}
+              sets={sets}
+              diagnostics={diagnostics.totalWorkingSets > 0 ? diagnostics : null}
+              goalDirection={settings.goal?.direction}
+              targetKcal={program?.calories?.kcal}
+              targetProteinG={program?.macros?.proteinG}
+              units={settings.units}
+              onApplyAdjustment={async (adj) => {
+                if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
+                  const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
+                  // If increasing calories in a deficit, slow rate of loss; if decreasing, steepen
+                  const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
+                  const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
+                  await updateSettings({
+                    goal: {
+                      ...settings.goal,
+                      rateKgPerWeek: newRate,
+                    },
+                  });
+                }
+              }}
+            />
           </FadeIn>
 
           {diagnostics.totalWorkingSets > 0 && (
