@@ -133,6 +133,16 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
     };
   }
 
+  if (norm.includes('leg curl') || norm.includes('hamstring curl')) {
+    return {
+      setupLabel: 'PHASE 1: 180° EXTENSION SETUP',
+      depthLabel: 'PHASE 2: PEAK KNEE FLEXION',
+      transitionLabel: 'HAMSTRING CURL / CONTROLLED ECCENTRIC',
+      scrubberStart: 'SETUP',
+      scrubberEnd: 'CURL PEAK',
+    };
+  }
+
   // Squat family default
   return {
     setupLabel: 'PHASE 1: STARTING SETUP',
@@ -1015,6 +1025,87 @@ export const EXERCISE_VIDEO_REGISTRY: Record<string, ExerciseVideoBundle> = {
       },
     },
   },
+
+  'lying-leg-curl': {
+    canonicalName: 'Lying Leg Curl (Machine)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_contraction_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_contraction_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_contraction_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_curl_contraction_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Pelvic Anchoring & Knee Flexion',
+        focus: 'Zero Hip Rise & Controlled Tempo',
+        checkpoints: [
+          {
+            label: 'Hips Pinned to Angled Pad',
+            cue: 'Keep your pelvic crest pressed firmly into the bench; do not let your hips rise to cheat the curl.',
+            researchBasis: 'Pedrosa et al. (2022): Hip elevation shortens biarticular hamstrings at the origin and increases lumbar extension shear.',
+          },
+          {
+            label: 'Terminal Knee Flexion',
+            cue: 'Curl the pad past 90° toward your glutes, squeezing the hamstrings for 1 second at the peak.',
+            researchBasis: 'Maeo et al. (2021): Active contraction across maximal knee flexion angle maximizes semitendinosus and biceps femoris recruitment.',
+          },
+          {
+            label: 'Controlled Full Extension',
+            cue: 'Lower the weight under 2–3 seconds control until knees reach 180° without clacking the weight stack.',
+            researchBasis: 'Wolf et al. (2023): Lengthened eccentric phase triggers stretch-mediated hypertrophy pathways.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Torso & Grip Stability',
+        focus: 'Firm Handle Brace',
+        checkpoints: [
+          {
+            label: 'Pull Down on Handles',
+            cue: 'Firmly grip the handles to lock your upper torso and pelvis into the bench pad.',
+            researchBasis: 'Increases core stiffness and prevents compensatory spinal extension.',
+          },
+        ],
+      },
+      front: {
+        title: 'Bilateral Leg Alignment',
+        focus: 'Parallel Ankle Tracking',
+        checkpoints: [
+          {
+            label: 'Feet Dorsiflexed & Parallel',
+            cue: 'Keep toes pulled toward shins and feet aligned hip-width apart on the roller.',
+            researchBasis: 'Dorsiflexion engages the gastrocnemius as a synergist knee flexor, stabilizing the posterior knee capsule.',
+          },
+        ],
+      },
+    },
+  },
 };
 
 /**
@@ -1194,6 +1285,17 @@ export const videoBundleFor = (exerciseName: string): ExerciseVideoBundle | null
     norm === 'dumbbell side raise'
   ) {
     return EXERCISE_VIDEO_REGISTRY['lateral-raise'];
+  }
+
+  // 11. Lying Leg Curl Family (Machine)
+  if (
+    norm === 'lying leg curl (machine)' ||
+    norm === 'lying leg curl' ||
+    norm === 'machine lying leg curl' ||
+    norm === 'prone leg curl' ||
+    norm === 'lying hamstring curl'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['lying-leg-curl'];
   }
 
   return null;

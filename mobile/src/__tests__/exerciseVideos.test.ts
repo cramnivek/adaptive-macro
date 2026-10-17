@@ -69,6 +69,12 @@ describe('videoBundleFor Movement Matching', () => {
       expect(videoBundleFor('Lateral Raise (Dumbbell)')?.canonicalName).toBe('Lateral Raise (Dumbbell)');
       expect(videoBundleFor('Dumbbell Lateral Raise')?.canonicalName).toBe('Lateral Raise (Dumbbell)');
     });
+
+    it('matches exact canonical Lying Leg Curl names', () => {
+      expect(videoBundleFor('Lying Leg Curl (Machine)')?.canonicalName).toBe('Lying Leg Curl (Machine)');
+      expect(videoBundleFor('Lying Leg Curl')?.canonicalName).toBe('Lying Leg Curl (Machine)');
+      expect(videoBundleFor('Prone Leg Curl')?.canonicalName).toBe('Lying Leg Curl (Machine)');
+    });
   });
 
   describe('Distinct Variations & Accessory Lifts (Fall Through to 2D Kinematic Studio)', () => {
@@ -195,5 +201,13 @@ describe('getKeyframePhaseConfig Dynamic Telemetry Labels', () => {
     expect(config.depthLabel).toBe('PHASE 2: 90° SHOULDER ABDUCTION');
     expect(config.scrubberStart).toBe('SETUP');
     expect(config.scrubberEnd).toBe('90° PEAK');
+  });
+
+  it('provides accurate phase labels for Lying Leg Curl', () => {
+    const config = getKeyframePhaseConfig('Lying Leg Curl (Machine)');
+    expect(config.setupLabel).toBe('PHASE 1: 180° EXTENSION SETUP');
+    expect(config.depthLabel).toBe('PHASE 2: PEAK KNEE FLEXION');
+    expect(config.scrubberStart).toBe('SETUP');
+    expect(config.scrubberEnd).toBe('CURL PEAK');
   });
 });
