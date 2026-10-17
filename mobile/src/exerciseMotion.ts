@@ -525,10 +525,16 @@ export type MotionId = keyof typeof MOTIONS;
  * standard repetition joint trajectory remain undrawn.
  */
 const NOT_DRAWN =
-  /\b(nordic|wrist|neck|jumps?|sled|battle|sprint|ergometer|rowing machine)\b/;
+  /\b(wrist|neck|jumps?|sled|battle|sprint|ergometer|rowing machine)\b/;
 
 const RULES: [RegExp, MotionId | ((name: string) => MotionId | null)][] = [
   [/\b(pull|chin)[- ]?ups?\b/, 'pull-up'],
+  [/\b(nordic|glute[- ]ham|ghr)\b/, 'leg-curl'],
+  [/\bjm press\b/, 'skullcrusher'],
+  [/\b(back extension|hyperextension)\b/, 'good-morning'],
+  [/\b(hip abduction|abductor)\b/, 'hip-thrust'],
+  [/\bpull[- ]throughs?\b/, 'rdl'],
+  [/\b(pallof|anti[- ]rotation)\b/, 'plank'],
   [/\bab[- ]?wheel|\broll[- ]?outs?\b/, 'ab-wheel'],
   [/\b(cable|kneeling|machine) crunch(es)?\b|\bcrunch(es)?\b.*\b(cable|machine)\b/, 'cable-crunch'],
   [/\blying leg raises?\b/, 'lying-leg-raise'],
@@ -544,7 +550,7 @@ const RULES: [RegExp, MotionId | ((name: string) => MotionId | null)][] = [
   [/\bgood ?mornings?\b/, 'good-morning'],
   [/\b(reverse fly|reverse flye|rear delt (fly|flye|raise)|reverse pec deck)/, 'reverse-fly'],
   [/\b(fly|flye|flyes|pec deck|crossover)\b/, 'chest-fly'],
-  [/\b(lateral|side|lat) raises?\b/, 'lateral-raise'],
+  [/\b(lateral|side|lat|y)[- ]raises?\b|\b(y[- ]raise|cable y[- ]raise)\b/, 'lateral-raise'],
   [/\bfront raises?\b/, 'front-raise'],
   [/\b(skull ?crushers?|lying (triceps?|tricep) extensions?|french press)\b/, 'skullcrusher'],
   [/\b(push|press)[- ]?downs?\b/, 'pushdown'],

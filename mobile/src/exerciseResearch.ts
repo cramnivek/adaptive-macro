@@ -610,7 +610,7 @@ export const researchProfileFor = (
     return BENCH_PRESS_RESEARCH_PROFILE;
   }
 
-  // 2. Squat / Quad Family
+  // 2. Squat / Quad / Hip Abduction Family
   if (
     norm.includes('squat') ||
     norm.includes('leg press') ||
@@ -619,18 +619,25 @@ export const researchProfileFor = (
     norm.includes('split squat') ||
     norm.includes('step-up') ||
     norm.includes('step up') ||
-    norm.includes('leg extension')
+    norm.includes('leg extension') ||
+    norm.includes('abduction') ||
+    norm.includes('abductor') ||
+    norm.includes('sissy')
   ) {
     return SQUAT_RESEARCH_PROFILE;
   }
 
-  // 3. Deadlift / Hinge / Hamstring Family
+  // 3. Deadlift / Hinge / Hamstring / Posterior Chain Family
   if (
     norm.includes('deadlift') ||
     norm.includes('rdl') ||
     norm.includes('good morning') ||
     norm.includes('hip thrust') ||
-    norm.includes('rack pull')
+    norm.includes('rack pull') ||
+    norm.includes('back extension') ||
+    norm.includes('hyperextension') ||
+    norm.includes('pull-through') ||
+    norm.includes('pull through')
   ) {
     return DEADLIFT_RESEARCH_PROFILE;
   }
@@ -647,20 +654,22 @@ export const researchProfileFor = (
     return OVERHEAD_PRESS_RESEARCH_PROFILE;
   }
 
-  // 5. Vertical Pull (Pull-Up, Chin-Up, Lat Pulldown)
+  // 5. Pull (Pull-Up, Chin-Up, Lat Pulldown, Rows)
   if (
     norm.includes('pull-up') ||
     norm.includes('pull up') ||
     norm.includes('chin-up') ||
     norm.includes('chin up') ||
-    norm.includes('lat pulldown')
+    norm.includes('lat pulldown') ||
+    norm.includes('row') ||
+    norm.includes('pullover')
   ) {
     return PULL_UP_RESEARCH_PROFILE;
   }
 
   // 6. Biceps / Elbow Flexion
   if (norm.includes('curl')) {
-    if (norm.includes('leg curl') || norm.includes('hamstring')) {
+    if (norm.includes('leg curl') || norm.includes('hamstring') || norm.includes('nordic')) {
       return LEG_CURL_RESEARCH_PROFILE;
     }
     return BICEP_CURL_RESEARCH_PROFILE;
@@ -672,7 +681,8 @@ export const researchProfileFor = (
     norm.includes('triceps') ||
     norm.includes('tricep') ||
     norm.includes('skullcrusher') ||
-    norm.includes('overhead extension')
+    norm.includes('overhead extension') ||
+    norm.includes('jm press')
   ) {
     return TRICEPS_EXTENSION_RESEARCH_PROFILE;
   }
@@ -680,6 +690,8 @@ export const researchProfileFor = (
   // 8. Lateral Raises & Delts
   if (
     norm.includes('lateral raise') ||
+    norm.includes('y-raise') ||
+    norm.includes('y raise') ||
     norm.includes('face pull') ||
     norm.includes('rear delt') ||
     norm.includes('front raise') ||
