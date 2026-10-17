@@ -20,35 +20,35 @@ const ZONE_COLORS = {
     bg: '#14261C',
     border: '#234430',
     bar: '#6FB58A',
-    friendlyName: 'SWEET SPOT',
+    friendlyName: 'GROWTH RANGE',
   },
   effective: {
     text: '#C8A45C',
     bg: '#241F14',
     border: '#443A22',
     bar: '#C8A45C',
-    friendlyName: 'GROWTH',
+    friendlyName: 'MODERATE VOLUME',
   },
   maintenance: {
     text: '#9C9C96',
     bg: '#1C1C1F',
     border: '#2E2E33',
     bar: '#67676C',
-    friendlyName: 'MAINTAINING',
+    friendlyName: 'MAINTENANCE RANGE',
   },
   untrained: {
     text: '#67676C',
     bg: '#141416',
     border: '#222226',
     bar: '#26262B',
-    friendlyName: 'NOT WORKED',
+    friendlyName: 'NOT LOGGED',
   },
   overreaching: {
     text: '#E8352A',
     bg: '#281414',
     border: '#4D1D1B',
     bar: '#E8352A',
-    friendlyName: 'OVERWORKING',
+    friendlyName: 'HIGH VOLUME — REVIEW RECOVERY',
   },
 };
 
@@ -65,9 +65,9 @@ export const VolumeLandmarksCard = ({
   const { muscleVolumes, pushPullBalance, legBalance, weeklyWorkingSets } = diagnostics;
 
   return (
-    <Card loud title="Muscle Growth Zones">
+    <Card loud title="Weekly Muscle Volume">
       <Text style={styles.subtitle}>
-        How many sets you completed for each muscle, categorized into simple growth zones so you know whether you're doing enough to grow, or doing too much.
+        Weekly working sets completed across muscle groups compared with evidence-based hypertrophy ranges. Individual response varies with training experience, intensity, and recovery.
         {periodDays > 7 ? ' Scaled to a 7-day rate.' : ''}
       </Text>
 
@@ -94,27 +94,27 @@ export const VolumeLandmarksCard = ({
       {showScience && (
         <View style={styles.scienceDetailsBox}>
           <Text style={styles.scienceIntro}>
-            Research in exercise physiology shows that muscles respond to weekly "working sets" (tough sets taken close to failure) in distinct tiers:
+            Research indicates that muscle hypertrophy tends to respond to weekly working sets in broad tiers, though optimal volume varies significantly with individual recovery capacity, proximity to failure, sleep, and nutrition:
           </Text>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#9C9C96' }]}>1. Muscle Maintenance (~6–10 sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#9C9C96' }]}>1. Maintenance Range (~6–10 sets/wk)</Text>
             <Text style={styles.tierDesc}>
-              The minimum sets needed to protect your muscle from atrophy, or make initial beginner gains.
+              General baseline volume shown to preserve existing muscle tissue for most lifters.
             </Text>
           </View>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#6FB58A' }]}>2. Growth Sweet Spot (~12–20 sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#6FB58A' }]}>2. Typical Growth Range (~10–20 sets/wk)</Text>
             <Text style={styles.tierDesc}>
-              The optimal volume zone where you build muscle at the fastest rate with manageable soreness.
+              Common evidence-based range associated with consistent muscle gains across training literature.
             </Text>
           </View>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#E8352A' }]}>3. Recovery Ceiling (~20–25+ sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#E8352A' }]}>3. Higher-Volume Range (~20+ sets/wk)</Text>
             <Text style={styles.tierDesc}>
-              Doing more sets than your body can recover from. Produces excessive fatigue and 'junk volume' without extra muscle growth.
+              Demands high recovery capacity, adequate sleep, and sufficient calories to avoid accumulating non-functional fatigue.
             </Text>
           </View>
 
@@ -142,7 +142,7 @@ export const VolumeLandmarksCard = ({
             </Text>
           </View>
           <Text style={styles.energyBannerBody}>
-            Because you are eating fewer calories to burn fat, your body has less energy to repair muscle after intense workouts. We automatically recommend fewer sets so you keep your muscle without burning out.
+            When eating in a deficit, recovery capacity can be somewhat constrained. Focusing on maintaining lifting intensity with moderate volume helps protect muscle while keeping fatigue manageable.
           </Text>
           <Pressable
             onPress={() => {
@@ -152,12 +152,12 @@ export const VolumeLandmarksCard = ({
             style={styles.deficitSubToggle}
           >
             <Text style={styles.deficitSubToggleText}>
-              {showDeficitScience ? 'Hide deficit science ▴' : 'Why does recovery drop in a deficit? ▾'}
+              {showDeficitScience ? 'Hide deficit science ▴' : 'How does a calorie deficit affect training volume? ▾'}
             </Text>
           </Pressable>
           {showDeficitScience && (
             <Text style={styles.deficitScienceBody}>
-              When daily energy intake is restricted, muscle protein synthesis (MPS) is reduced and recovery bandwidth drops by ~15–25%. Keeping your sets in the 10–14 sets/wk range maximizes muscle retention while preventing chronic cortisol spikes (Helms et al., 2014; Morton et al., 2018).
+              Energy restriction can influence systemic recovery bandwidth and muscle protein synthesis. Prioritizing high-quality working sets and sufficient daily protein (1.6–2.2 g/kg) helps retain muscle without accumulating excessive fatigue (Helms et al., 2014; Morton et al., 2018).
             </Text>
           )}
         </View>
@@ -172,7 +172,7 @@ export const VolumeLandmarksCard = ({
             </Text>
           </View>
           <Text style={styles.energyBannerBody}>
-            With extra calories and full energy stores, your muscles recover much faster. This is your best window to push training into the upper sweet spot for rapid muscle growth!
+            With ample calories and glycogen stores, recovery capacity is typically elevated. This provides good headroom to explore higher training volumes if you are progressing well.
           </Text>
         </View>
       )}
@@ -186,7 +186,7 @@ export const VolumeLandmarksCard = ({
           </Text>
         </View>
         <View style={styles.stripStat}>
-          <Text style={styles.stripLabel}>IN GROWTH SWEET SPOT</Text>
+          <Text style={styles.stripLabel}>IN GROWTH RANGE</Text>
           <Text style={[styles.stripValue, { color: '#6FB58A' }]}>
             {diagnostics.optimalMusclesCount} / {muscleVolumes.length}{' '}
             <Text style={styles.stripUnit}>muscles</Text>
@@ -240,7 +240,7 @@ export const VolumeLandmarksCard = ({
                     },
                   ]}
                 />
-                {/* Visual landmark indicator for sweet spot */}
+                {/* Visual landmark indicator for typical growth range */}
                 <View style={styles.mavZoneMarker} />
               </View>
 
@@ -249,13 +249,13 @@ export const VolumeLandmarksCard = ({
                 <View style={styles.drawer}>
                   <Text style={styles.drawerDesc}>
                     {item.zone === 'optimal'
-                      ? `Great work! Your ${item.label.toLowerCase()} is right in the research sweet spot for fastest gains.`
+                      ? `Your ${item.label.toLowerCase()} is in the typical hypertrophy range (10–20 sets/wk) shown to produce consistent gains for most lifters.`
                       : item.zone === 'effective'
-                        ? `You have crossed the threshold to grow new muscle. Add 2 more sets to hit your sweet spot!`
+                        ? `Moderate volume logged for ${item.label.toLowerCase()}. If your strength is progressing well, this is a solid working range.`
                         : item.zone === 'maintenance'
-                          ? `You are doing enough sets to maintain your muscle, but need ~${Math.max(1, item.mavMin - item.effectiveWeeklySets)} more sets/week to trigger active growth.`
+                          ? `Baseline maintenance volume logged for ${item.label.toLowerCase()}. If this muscle is a growth priority, consider gradually adding sets as recovery permits.`
                           : item.zone === 'overreaching'
-                            ? `You've done a high number of sets for your ${item.label.toLowerCase()}. Take it easy or give it extra rest to avoid burnout.`
+                            ? `High volume logged for ${item.label.toLowerCase()} (~20+ sets/wk). Check recovery, sleep, and joint comfort before adding more sets.`
                             : `No sets logged for ${item.label.toLowerCase()} yet this week.`}
                   </Text>
                   <View style={styles.landmarksRow}>
@@ -263,13 +263,13 @@ export const VolumeLandmarksCard = ({
                       Maintain: <Text style={styles.landmarkVal}>{item.mev}+ sets</Text>
                     </Text>
                     <Text style={styles.landmarkItem}>
-                      Sweet spot:{' '}
+                      Growth range:{' '}
                       <Text style={[styles.landmarkVal, { color: '#6FB58A' }]}>
                         {item.mavMin}–{item.mavMax} sets
                       </Text>
                     </Text>
                     <Text style={styles.landmarkItem}>
-                      Recovery limit: <Text style={styles.landmarkVal}>{item.mrv} sets</Text>
+                      Higher volume: <Text style={styles.landmarkVal}>{item.mrv}+ sets</Text>
                     </Text>
                   </View>
                 </View>
@@ -280,9 +280,9 @@ export const VolumeLandmarksCard = ({
       </View>
 
       {/* Structural Movement Balance Section */}
-      <Text style={styles.balanceHeading}>JOINT & POSTURE BALANCE</Text>
+      <Text style={styles.balanceHeading}>MOVEMENT PATTERN BALANCE</Text>
       <Text style={styles.balanceSubtext}>
-        Balancing opposing muscle groups keeps your joints healthy and your posture upright.
+        Comparing relative weekly volume across opposing movement patterns to identify training emphasis.
       </Text>
       <View style={styles.balanceGrid}>
         {/* Push vs Pull Tile */}
@@ -306,7 +306,7 @@ export const VolumeLandmarksCard = ({
                   },
                 ]}
               >
-                {pushPullBalance.status === 'balanced' ? 'BALANCED' : 'NEEDS ATTENTION'}
+                {pushPullBalance.status === 'balanced' ? 'BALANCED' : 'EMPHASIS VARIES'}
               </Text>
             </View>
           </View>
@@ -321,7 +321,7 @@ export const VolumeLandmarksCard = ({
         {/* Quad vs Posterior Chain Tile */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceTop}>
-            <Text style={styles.balanceTitle}>FRONT LEGS (QUADS) : BACK LEGS (GLUTES/HAMS)</Text>
+            <Text style={styles.balanceTitle}>QUADS : POSTERIOR CHAIN (GLUTES/HAMS)</Text>
             <View
               style={[
                 styles.smallBadge,
@@ -339,7 +339,7 @@ export const VolumeLandmarksCard = ({
                   },
                 ]}
               >
-                {legBalance.status === 'balanced' ? 'BALANCED' : 'NEEDS ATTENTION'}
+                {legBalance.status === 'balanced' ? 'BALANCED' : 'EMPHASIS VARIES'}
               </Text>
             </View>
           </View>

@@ -219,6 +219,40 @@ export const WeeklyReviewModal = ({
                     {review.suggestedAdjustment.rationale}
                   </Text>
 
+                  {/* Explicit Before / After Comparison Preview */}
+                  {review.suggestedAdjustment.hasAdjustment && metrics.nutrition.targetCalories && (
+                    <View style={styles.beforeAfterContainer}>
+                      <View style={styles.beforeAfterCol}>
+                        <Text style={styles.beforeAfterLabel}>CURRENT TARGET</Text>
+                        <Text style={styles.beforeAfterVal}>
+                          {metrics.nutrition.targetCalories.toLocaleString()} kcal
+                        </Text>
+                      </View>
+                      <Ionicons name="arrow-forward" size={16} color="#00E5FF" />
+                      <View style={styles.beforeAfterCol}>
+                        <Text style={styles.beforeAfterLabel}>RECOMMENDED</Text>
+                        <Text style={[styles.beforeAfterVal, { color: '#00E5FF' }]}>
+                          {review.suggestedAdjustment.deltaKcal
+                            ? `${(metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal).toLocaleString()} kcal (${review.suggestedAdjustment.deltaKcal > 0 ? '+' : ''}${review.suggestedAdjustment.deltaKcal})`
+                            : `${metrics.nutrition.targetCalories.toLocaleString()} kcal`}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Safety Guardrail Alert if below 1200 kcal */}
+                  {review.suggestedAdjustment.hasAdjustment &&
+                    metrics.nutrition.targetCalories &&
+                    review.suggestedAdjustment.deltaKcal &&
+                    metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal < 1200 && (
+                      <View style={styles.safetyWarningBox}>
+                        <Ionicons name="warning-outline" size={14} color="#FBBF24" />
+                        <Text style={styles.safetyWarningText}>
+                          Safety floor notice: This target would drop below 1,200 kcal/day. Consider increasing daily steps or taking a maintenance break rather than lowering calories further.
+                        </Text>
+                      </View>
+                    )}
+
                   {review.suggestedAdjustment.hasAdjustment ? (
                     <Tappable
                       onPress={() => {
@@ -560,6 +594,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94A3B8',
     lineHeight: 18,
+  },
+  beforeAfterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#05111B',
+    borderColor: '#11304A',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: space.sm,
+    marginVertical: 4,
+  },
+  beforeAfterCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  beforeAfterLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 1,
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  beforeAfterVal: {
+    fontFamily: font.display,
+    fontSize: 14,
+    color: '#F8FAFC',
+  },
+  safetyWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#2A1F0C',
+    borderColor: '#543F16',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: space.sm,
+    marginTop: 4,
+  },
+  safetyWarningText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: '#FBBF24',
+    lineHeight: 16,
+    flex: 1,
   },
   applyBtn: {
     flexDirection: 'row',

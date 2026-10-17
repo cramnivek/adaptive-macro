@@ -145,19 +145,41 @@ export default function TrendsScreen() {
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, today), [sessionTimes, sets, today]);
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
 
+  // Volume-weighted muscle coverage: weights regions by actual completed working sets
   const coverage = useMemo(() => {
     const counts = new Map<MuscleRegion, number>();
-    for (const name of summary7D.exercises) {
-      const entry = regions[name];
+    let totalSetsInWindow = 0;
+    let cataloguedSetsInWindow = 0;
+
+    for (const s of sets) {
+      if (s.date < weekFrom || s.date > today) continue;
+      if (s.set.reps === null || s.set.reps <= 0) continue;
+      totalSetsInWindow++;
+
+      const entry = regions[s.set.exerciseName];
       if (entry === undefined) continue;
-      counts.set(entry.primary, (counts.get(entry.primary) ?? 0) + 2);
+      cataloguedSetsInWindow++;
+
+      // Direct training gets full weight, secondary gets half weight
+      counts.set(entry.primary, (counts.get(entry.primary) ?? 0) + 1.0);
       for (const region of entry.secondary) {
-        counts.set(region, (counts.get(region) ?? 0) + 1);
+        counts.set(region, (counts.get(region) ?? 0) + 0.5);
       }
     }
+
+    const uncataloguedPct =
+      totalSetsInWindow > 0
+        ? Math.round(((totalSetsInWindow - cataloguedSetsInWindow) / totalSetsInWindow) * 100)
+        : 0;
+
     const ranked = [...counts.entries()].sort(([, a], [, b]) => b - a).map(([region]) => region);
-    return { primary: ranked[0] ?? null, secondary: ranked.slice(1) };
-  }, [summary7D.exercises, regions]);
+    return {
+      primary: ranked[0] ?? null,
+      secondary: ranked.slice(1),
+      uncataloguedPct,
+      totalSets: totalSetsInWindow,
+    };
+  }, [sets, regions, weekFrom, today]);
 
   // Deterministic coaching review metrics
   const coachingMetrics: WeeklyExtractedMetrics = useMemo(
@@ -184,21 +206,37 @@ export default function TrendsScreen() {
     ],
   );
 
+  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}`;
   const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
+  const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
 
   useEffect(() => {
     let alive = true;
-    void AsyncStorage.getItem(coachingCacheKey).then((saved) => {
-      if (alive && saved) {
+    void Promise.all([
+      AsyncStorage.getItem(coachingCacheKey),
+      AsyncStorage.getItem(coachingAppliedKey),
+    ]).then(([savedReview, savedApplied]) => {
+      if (!alive) return;
+      if (savedReview) {
         try {
-          setCoachingReview(JSON.parse(saved) as WeeklyReviewResult);
+          const parsed = JSON.parse(savedReview) as
+            | { review: WeeklyReviewResult; fingerprint: string }
+            | WeeklyReviewResult;
+          if ('review' in parsed && parsed.review) {
+            setCoachingReview(parsed.review);
+          } else {
+            setCoachingReview(parsed as WeeklyReviewResult);
+          }
         } catch {}
+      }
+      if (savedApplied) {
+        setCoachingApplied(true);
       }
     });
     return () => {
       alive = false;
     };
-  }, [coachingCacheKey]);
+  }, [coachingCacheKey, coachingAppliedKey]);
 
   const handleGenerateCoaching = useCallback(async () => {
     setCoachingLoading(true);
@@ -208,7 +246,10 @@ export default function TrendsScreen() {
       const result = await requestWeeklyReview(coachingMetrics, '', settings.goal?.direction);
       setCoachingReview(result);
       setCoachingApplied(false);
-      await AsyncStorage.setItem(coachingCacheKey, JSON.stringify(result));
+      await AsyncStorage.setItem(
+        coachingCacheKey,
+        JSON.stringify({ review: result, fingerprint: coachingFingerprint }),
+      );
       thud('heavy');
       notify('Review ready', 'Your weekly coaching review is ready.');
     } catch (err) {
@@ -218,26 +259,42 @@ export default function TrendsScreen() {
     } finally {
       setCoachingLoading(false);
     }
-  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey]);
+  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey, coachingFingerprint]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
     if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
     thud('heavy');
-    setCoachingApplied(true);
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
+      const currentCal = program.calories.kcal;
+      const proposedCal = Math.max(1200, currentCal + adj.deltaKcal);
+
+      // Adjust rateKgPerWeek proportionally
       const currentRate = settings.goal.rateKgPerWeek ?? 0.5;
       const rateDelta = Math.round((adj.deltaKcal / 1000) * 10) / 10;
       const newRate = Math.max(0.1, Math.min(1.5, currentRate - rateDelta));
+
       await updateSettings({
         goal: {
           ...settings.goal,
           rateKgPerWeek: newRate,
         },
       });
-      notify('Adjustment Applied', `Updated target: ${adj.title}`);
+
+      // Persist exact applied adjustment so app restarts don't lose applied state
+      await AsyncStorage.setItem(
+        coachingAppliedKey,
+        JSON.stringify({
+          appliedAt: Date.now(),
+          deltaKcal: adj.deltaKcal,
+          previousKcal: currentCal,
+          newKcal: proposedCal,
+        }),
+      );
+      setCoachingApplied(true);
+      notify('Adjustment Applied', `Target adjusted by ${adj.deltaKcal > 0 ? '+' : ''}${adj.deltaKcal} kcal/day`);
     }
-  }, [coachingReview, coachingApplied, program?.calories?.kcal, settings.goal, updateSettings]);
+  }, [coachingReview, coachingApplied, program?.calories?.kcal, settings.goal, updateSettings, coachingAppliedKey]);
 
   // 90-day charts calculations
   const window = useMemo(() => series.slice(-WINDOW_DAYS), [series]);
@@ -353,9 +410,9 @@ export default function TrendsScreen() {
       <View style={styles.switcher}>
         {(
           [
-            { key: 'all', label: 'ALL PROGRESS' },
+            { key: 'all', label: 'OVERVIEW' },
             { key: 'body', label: 'BODY & ENERGY' },
-            { key: 'workouts', label: 'WORKOUTS & MUSCLES' },
+            { key: 'workouts', label: 'TRAINING & MUSCLES' },
           ] as const
         ).map((tab) => {
           const active = activeTab === tab.key;
@@ -380,54 +437,126 @@ export default function TrendsScreen() {
         })}
       </View>
 
-      {/* At A Glance 4-Tile Strip */}
+      {/* Contextual Summary Tiles */}
       <View style={styles.atAGlanceGrid}>
-        <View style={styles.glanceTile}>
-          <Text style={styles.glanceTileLabel}>TREND WEIGHT</Text>
-          <Text style={styles.glanceTileValue}>
-            {latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
-          </Text>
-          <Text style={styles.glanceTileSub}>
-            {trend ? formatRate(trend.rateKgPerWeek, settings.units) : 'settling'}
-          </Text>
-        </View>
+        {activeTab === 'all' && (
+          <>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>WEIGHT TREND</Text>
+              <Text style={styles.glanceTileValue}>
+                {latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
+              </Text>
+              <Text style={styles.glanceTileSub}>
+                {trend ? formatRate(trend.rateKgPerWeek, settings.units) : 'settling'}
+              </Text>
+            </View>
 
-        <View style={styles.glanceTile}>
-          <Text style={styles.glanceTileLabel}>CALORIE DEFICIT</Text>
-          <Text style={styles.glanceTileValue}>
-            {program.calories.adjustmentKcal === 0
-              ? 'Maintenance'
-              : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal}`}
-          </Text>
-          <Text style={styles.glanceTileSub}>
-            {latest ? `${Math.round(latest.expenditureKcal)} burn` : 'calculating'}
-          </Text>
-        </View>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>CALORIE PLAN</Text>
+              <Text style={styles.glanceTileValue}>
+                {program.calories.adjustmentKcal === 0
+                  ? 'Maintenance'
+                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`}
+              </Text>
+              <Text style={styles.glanceTileSub}>
+                {program?.calories?.kcal ? `${Math.round(program.calories.kcal)} target` : 'target'}
+              </Text>
+            </View>
 
-        <View style={styles.glanceTile}>
-          <Text style={styles.glanceTileLabel}>7D VOLUME</Text>
-          <Text style={styles.glanceTileValue}>
-            {Math.round(displayWeight(summary7D.volumeKg, settings.units)).toLocaleString()}{' '}
-            <Text style={styles.glanceUnit}>{unit}</Text>
-          </Text>
-          <Text style={styles.glanceTileSub}>{summary7D.sessions} workouts</Text>
-        </View>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>WORKOUTS</Text>
+              <Text style={styles.glanceTileValue}>{summary7D.sessions} sessions</Text>
+              <Text style={styles.glanceTileSub}>past 7 days</Text>
+            </View>
 
-        <View style={styles.glanceTile}>
-          <Text style={styles.glanceTileLabel}>RECORDS (PRS)</Text>
-          <Text style={[styles.glanceTileValue, summary7D.records > 0 && { color: loud.loud }]}>
-            {summary7D.records}
-          </Text>
-          <Text style={styles.glanceTileSub}>{summary7D.workingSets} working sets</Text>
-        </View>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>RECORDS (PRS)</Text>
+              <Text style={[styles.glanceTileValue, summary7D.records > 0 && { color: loud.loud }]}>
+                {summary7D.records}
+              </Text>
+              <Text style={styles.glanceTileSub}>{summary7D.workingSets} working sets</Text>
+            </View>
+          </>
+        )}
+
+        {activeTab === 'body' && (
+          <>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>TREND WEIGHT</Text>
+              <Text style={styles.glanceTileValue}>
+                {latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
+              </Text>
+              <Text style={styles.glanceTileSub}>smoothed trend</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>RATE OF CHANGE</Text>
+              <Text style={styles.glanceTileValue}>
+                {trend ? formatRate(trend.rateKgPerWeek, settings.units) : '—'}
+              </Text>
+              <Text style={styles.glanceTileSub}>per week</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>CALORIE PLAN</Text>
+              <Text style={styles.glanceTileValue}>
+                {program.calories.adjustmentKcal === 0
+                  ? 'Maintenance'
+                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`}
+              </Text>
+              <Text style={styles.glanceTileSub}>daily delta</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>ESTIMATED TDEE</Text>
+              <Text style={styles.glanceTileValue}>
+                {latest ? `${Math.round(latest.expenditureKcal)}` : '—'}{' '}
+                <Text style={styles.glanceUnit}>kcal</Text>
+              </Text>
+              <Text style={styles.glanceTileSub}>daily expenditure</Text>
+            </View>
+          </>
+        )}
+
+        {activeTab === 'workouts' && (
+          <>
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>WORKOUTS</Text>
+              <Text style={styles.glanceTileValue}>{summary7D.sessions} sessions</Text>
+              <Text style={styles.glanceTileSub}>past 7 days</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>WORKING SETS</Text>
+              <Text style={styles.glanceTileValue}>{summary7D.workingSets}</Text>
+              <Text style={styles.glanceTileSub}>total completed</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>NEW BESTS (PRS)</Text>
+              <Text style={[styles.glanceTileValue, summary7D.records > 0 && { color: loud.loud }]}>
+                {summary7D.records}
+              </Text>
+              <Text style={styles.glanceTileSub}>milestone lifts</Text>
+            </View>
+
+            <View style={styles.glanceTile}>
+              <Text style={styles.glanceTileLabel}>GROWTH RANGE</Text>
+              <Text style={[styles.glanceTileValue, { color: '#6FB58A' }]}>
+                {diagnostics7D.optimalMusclesCount} / {diagnostics7D.muscleVolumes.length}
+              </Text>
+              <Text style={styles.glanceTileSub}>muscles in range</Text>
+            </View>
+          </>
+        )}
       </View>
 
       {/* PART 1: BODY & ENERGY CHARTS */}
       {(activeTab === 'all' || activeTab === 'body') && (
         <>
-          <Card title="Energy balance & expenditure">
+          <Card title="Energy balance & estimated expenditure">
             <View style={styles.legend}>
-              <Key color={colors.positive} label="burning (TDEE)" />
+              <Key color={colors.positive} label="ESTIMATED TDEE" />
               <Key color={colors.carbs} label="eaten" dotted />
               <Key color={colors.accent} label="target" dashed />
             </View>
@@ -516,6 +645,36 @@ export default function TrendsScreen() {
             </Card>
           </FadeIn>
 
+          {coachingMetrics.training.progressions.length > 0 && (
+            <FadeIn delay={40}>
+              <Card loud title="Strength Highlights (Overload)">
+                <View style={styles.progressionList}>
+                  {coachingMetrics.training.progressions.slice(0, 3).map((p) => (
+                    <View key={p.exercise} style={styles.progressionRow}>
+                      <View style={styles.progressionLeft}>
+                        <Text style={styles.progressionName}>{p.exercise.toUpperCase()}</Text>
+                        <Text style={styles.progressionPrev}>Prior: {p.previous}</Text>
+                      </View>
+                      <View style={styles.progressionRight}>
+                        <Text style={styles.progressionCurr}>{p.current}</Text>
+                        <Text
+                          style={[
+                            styles.progressionDelta,
+                            {
+                              color: p.delta.startsWith('+') ? '#10B981' : loud.figureMuted,
+                            },
+                          ]}
+                        >
+                          {p.delta}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </Card>
+            </FadeIn>
+          )}
+
           {diagnostics7D.totalWorkingSets > 0 && (
             <FadeIn delay={60}>
               <VolumeLandmarksCard
@@ -564,6 +723,11 @@ export default function TrendsScreen() {
                           .slice(0, 5)
                           .map((r) => REGION_LABELS[r].toLowerCase())
                           .join(', ')}
+                      </Text>
+                    )}
+                    {coverage.uncataloguedPct > 0 && (
+                      <Text style={styles.uncataloguedNote}>
+                        {coverage.uncataloguedPct}% of sets from custom / uncatalogued lifts
                       </Text>
                     )}
                   </View>
@@ -823,4 +987,51 @@ const styles = StyleSheet.create({
   },
   methodLabel: { fontFamily: font.uiStrong, fontSize: 12 },
   unitNote: { fontFamily: font.ui, fontSize: 11, textAlign: 'center', marginTop: space.sm },
+
+  uncataloguedNote: {
+    fontFamily: font.ui,
+    fontSize: 10,
+    color: loud.warn,
+    marginTop: 4,
+  },
+
+  progressionList: {
+    gap: space.xs,
+  },
+  progressionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: loud.rule,
+  },
+  progressionLeft: {
+    flex: 1,
+    gap: 2,
+  },
+  progressionRight: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  progressionName: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
+    color: loud.figure,
+  },
+  progressionPrev: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: loud.figureMuted,
+  },
+  progressionCurr: {
+    fontFamily: font.figure,
+    fontSize: 14,
+    color: loud.figure,
+  },
+  progressionDelta: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
 });
