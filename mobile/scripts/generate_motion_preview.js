@@ -528,6 +528,7 @@ ${engineCode}
   const MOTIONS = exports.MOTIONS;
   const marksFor = exports.marksFor;
   const jointTelemetryFor = exports.jointTelemetryFor;
+  const svgAngleArc = exports.svgAngleArc;
 
   // Flagship Registry with verified Cloud Storage URLs
   const REGISTRY = {
@@ -896,17 +897,69 @@ ${engineCode}
   function renderSvgWithHud(motionId, progress01, telemetry) {
     const load = MOTIONS[motionId].load;
     const marks = marksFor(motionId, progress01, load);
-    let out = '<g opacity="0.22"><line x1="50" y1="6" x2="50" y2="92" stroke="#FF5500" stroke-width="0.7" stroke-dasharray="2,2"/><line x1="10" y1="30" x2="90" y2="30" stroke="#2D3548" stroke-width="0.4"/><line x1="10" y1="60" x2="90" y2="60" stroke="#2D3548" stroke-width="0.4"/></g>';
+    let out = "";
 
-    // Bar Path HUD
-    if (showHud && telemetry.barTrajectory && telemetry.barTrajectory.length > 1) {
-      const lineD = telemetry.barTrajectory.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(2) + " " + p[1].toFixed(2)).join(" ");
-      out += '<path d="' + lineD + '" stroke="#00E5FF" stroke-width="2.5" stroke-dasharray="2,2" fill="none" opacity="0.25"/>';
-      out += '<path d="' + lineD + '" stroke="#00E5FF" stroke-width="1.2" stroke-dasharray="2.5,1.5" fill="none" opacity="0.85"/>';
-      out += '<line x1="' + telemetry.barTrajectory[0][0].toFixed(2) + '" y1="' + telemetry.barTrajectory[0][1].toFixed(2) + '" x2="' + telemetry.barTrajectory[0][0].toFixed(2) + '" y2="90" stroke="#00E5FF" stroke-width="0.65" stroke-dasharray="1.5,3" opacity="0.4"/>';
-      if (telemetry.barCurrent) {
-        out += '<circle cx="' + telemetry.barCurrent[0].toFixed(2) + '" cy="' + telemetry.barCurrent[1].toFixed(2) + '" r="3.2" fill="#00E5FF" opacity="0.4"/>';
-        out += '<circle cx="' + telemetry.barCurrent[0].toFixed(2) + '" cy="' + telemetry.barCurrent[1].toFixed(2) + '" r="1.8" fill="#FFFFFF" stroke="#00E5FF" stroke-width="0.8"/>';
+    // Everything in this block renders ONLY when showHud is TRUE!
+    if (showHud) {
+      // Corner Reticle Brackets
+      out += '<path d="M 4 12 L 4 4 L 12 4" stroke="#00E5FF" stroke-width="0.8" fill="none" opacity="0.65"/>';
+      out += '<path d="M 96 12 L 96 4 L 88 4" stroke="#00E5FF" stroke-width="0.8" fill="none" opacity="0.65"/>';
+      out += '<path d="M 4 88 L 4 96 L 12 96" stroke="#00E5FF" stroke-width="0.8" fill="none" opacity="0.65"/>';
+      out += '<path d="M 96 88 L 96 96 L 88 96" stroke="#00E5FF" stroke-width="0.8" fill="none" opacity="0.65"/>';
+
+      // Biomechanical Plumb Line & Reference Grid
+      out += '<line x1="50" y1="4" x2="50" y2="92" stroke="#00E5FF" stroke-width="0.6" stroke-dasharray="1.5,2.5" opacity="0.35"/>';
+      out += '<line x1="10" y1="30" x2="90" y2="30" stroke="#2D3548" stroke-width="0.4" opacity="0.25"/>';
+      out += '<line x1="10" y1="60" x2="90" y2="60" stroke="#2D3548" stroke-width="0.4" opacity="0.25"/>';
+
+      // Bar / Load Path Trajectory
+      if (telemetry.barTrajectory && telemetry.barTrajectory.length > 1) {
+        const lineD = telemetry.barTrajectory.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(2) + " " + p[1].toFixed(2)).join(" ");
+        out += '<path d="' + lineD + '" stroke="#00E5FF" stroke-width="2.5" stroke-dasharray="2,2" fill="none" opacity="0.25"/>';
+        out += '<path d="' + lineD + '" stroke="#00E5FF" stroke-width="1.2" stroke-dasharray="2.5,1.5" fill="none" opacity="0.85"/>';
+        out += '<line x1="' + telemetry.barTrajectory[0][0].toFixed(2) + '" y1="' + telemetry.barTrajectory[0][1].toFixed(2) + '" x2="' + telemetry.barTrajectory[0][0].toFixed(2) + '" y2="90" stroke="#00E5FF" stroke-width="0.65" stroke-dasharray="1.5,3" opacity="0.4"/>';
+        if (telemetry.barCurrent) {
+          out += '<circle cx="' + telemetry.barCurrent[0].toFixed(2) + '" cy="' + telemetry.barCurrent[1].toFixed(2) + '" r="3.2" fill="#00E5FF" opacity="0.4"/>';
+          out += '<circle cx="' + telemetry.barCurrent[0].toFixed(2) + '" cy="' + telemetry.barCurrent[1].toFixed(2) + '" r="1.8" fill="#FFFFFF" stroke="#00E5FF" stroke-width="0.8"/>';
+        }
+      }
+
+      // Clinical Joint Angle Arcs & Degree Badges on the Figure
+      if (telemetry.joints) {
+        // Knee Flexion Arc
+        if (telemetry.kneeAngle !== undefined) {
+          const arc = svgAngleArc(telemetry.joints.knee, telemetry.joints.hip, telemetry.joints.ankle, 6.0);
+          const strokeCol = telemetry.isParallelReached ? '#10B981' : '#00E5FF';
+          out += '<path d="' + arc.path + '" stroke="' + strokeCol + '" stroke-width="1.4" fill="none" opacity="0.9"/>';
+          out += '<circle cx="' + arc.labelAt[0].toFixed(2) + '" cy="' + arc.labelAt[1].toFixed(2) + '" r="4.5" fill="#090A0D" opacity="0.88" stroke="' + strokeCol + '" stroke-width="0.5"/>';
+          out += '<text x="' + arc.labelAt[0].toFixed(2) + '" y="' + (arc.labelAt[1] + 1.5).toFixed(2) + '" fill="' + strokeCol + '" font-size="4" font-weight="bold" text-anchor="middle" font-family="sans-serif">' + telemetry.kneeAngle + '°</text>';
+          if (telemetry.isParallelReached) {
+            out += '<text x="' + (arc.labelAt[0] + (arc.labelAt[0] < 50 ? -7 : 7)).toFixed(2) + '" y="' + (arc.labelAt[1] - 3.5).toFixed(2) + '" fill="#10B981" font-size="3" font-weight="bold" text-anchor="middle" font-family="sans-serif">PARALLEL</text>';
+          }
+        }
+        // Hip Hinge Arc
+        if (telemetry.hipAngle !== undefined) {
+          const arc = svgAngleArc(telemetry.joints.hip, telemetry.joints.shoulder, telemetry.joints.knee, 6.5);
+          out += '<path d="' + arc.path + '" stroke="#F59E0B" stroke-width="1.3" fill="none" opacity="0.9"/>';
+          out += '<circle cx="' + arc.labelAt[0].toFixed(2) + '" cy="' + arc.labelAt[1].toFixed(2) + '" r="4.5" fill="#090A0D" opacity="0.88" stroke="#F59E0B" stroke-width="0.5"/>';
+          out += '<text x="' + arc.labelAt[0].toFixed(2) + '" y="' + (arc.labelAt[1] + 1.5).toFixed(2) + '" fill="#F59E0B" font-size="4" font-weight="bold" text-anchor="middle" font-family="sans-serif">' + telemetry.hipAngle + '°</text>';
+        }
+        // Elbow Angle Arc
+        if (telemetry.elbowAngle !== undefined) {
+          const arc = svgAngleArc(telemetry.joints.elbow, telemetry.joints.shoulder, telemetry.joints.hand, 5.5);
+          out += '<path d="' + arc.path + '" stroke="#A855F7" stroke-width="1.3" fill="none" opacity="0.9"/>';
+          out += '<circle cx="' + arc.labelAt[0].toFixed(2) + '" cy="' + arc.labelAt[1].toFixed(2) + '" r="4.5" fill="#090A0D" opacity="0.88" stroke="#A855F7" stroke-width="0.5"/>';
+          out += '<text x="' + arc.labelAt[0].toFixed(2) + '" y="' + (arc.labelAt[1] + 1.5).toFixed(2) + '" fill="#A855F7" font-size="4" font-weight="bold" text-anchor="middle" font-family="sans-serif">' + telemetry.elbowAngle + '°</text>';
+        }
+      }
+
+      // Front Abduction Angle Arc
+      if (telemetry.frontJoints && telemetry.abductionAngle !== undefined) {
+        const j = telemetry.frontJoints;
+        const arc = svgAngleArc(j.shoulder, [j.shoulder[0], j.shoulder[1] + 20], j.elbow, 7.0);
+        out += '<path d="' + arc.path + '" stroke="#00E5FF" stroke-width="1.4" fill="none" opacity="0.9"/>';
+        out += '<circle cx="' + arc.labelAt[0].toFixed(2) + '" cy="' + arc.labelAt[1].toFixed(2) + '" r="4.5" fill="#090A0D" opacity="0.88" stroke="#00E5FF" stroke-width="0.5"/>';
+        out += '<text x="' + arc.labelAt[0].toFixed(2) + '" y="' + (arc.labelAt[1] + 1.5).toFixed(2) + '" fill="#00E5FF" font-size="4" font-weight="bold" text-anchor="middle" font-family="sans-serif">' + telemetry.abductionAngle + '°</text>';
       }
     }
 
@@ -919,7 +972,8 @@ ${engineCode}
           out += '<path d="' + dStr + '" stroke="#FF5500" stroke-width="' + (mark.width + 4.5) + '" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.26"/>';
         }
         out += '<path d="' + dStr + '" stroke="' + col + '" stroke-width="' + mark.width + '" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
-        if (mark.tone === "body" && mark.points.length >= 2) {
+        // Joint articulation rings only when HUD is active!
+        if (showHud && mark.tone === "body" && mark.points.length >= 2) {
           mark.points.forEach(pt => {
             out += '<circle cx="' + pt[0].toFixed(2) + '" cy="' + pt[1].toFixed(2) + '" r="1.5" fill="#090A0D" stroke="#00E5FF" stroke-width="0.9"/>';
           });

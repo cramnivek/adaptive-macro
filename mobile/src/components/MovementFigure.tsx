@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, G, Line, Path } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import {
   type Load,
   type MotionId,
@@ -10,6 +10,7 @@ import {
   loadFor,
   marksFor,
   repProgress,
+  svgAngleArc,
 } from '../exerciseMotion';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -87,63 +88,161 @@ export const MovementFigure = ({
 
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`A figure doing ${exerciseName}`}>
-      {/* Subtle Biomechanical Reference Grid & Plumb Line */}
-      <G opacity={0.22}>
-        <Line x1="50" y1="6" x2="50" y2="92" stroke={colours.accent} strokeWidth="0.7" strokeDasharray="2,2" />
-        <Line x1="10" y1="30" x2="90" y2="30" stroke={colours.ground} strokeWidth="0.4" />
-        <Line x1="10" y1="60" x2="90" y2="60" stroke={colours.ground} strokeWidth="0.4" />
-      </G>
-
-      {/* Kinematics Pro HUD: Live Biomechanical Bar Path Trajectory & Plumb Line */}
-      {showHud && telemetry?.barTrajectory && telemetry.barTrajectory.length > 1 && (
+      {/* Kinematics Pro HUD: Viewport Corner Reticles, Reference Grid, Bar Path & Live Joint Angle Arcs */}
+      {showHud && (
         <G>
-          {/* Outer glow for bar trajectory */}
-          <Path
-            d={line(telemetry.barTrajectory)}
-            stroke="#00E5FF"
-            strokeWidth={2.4}
-            strokeDasharray="2,2"
-            fill="none"
-            opacity={0.3}
-          />
-          {/* Core trajectory line */}
-          <Path
-            d={line(telemetry.barTrajectory)}
-            stroke="#00E5FF"
-            strokeWidth={1.2}
-            strokeDasharray="2.5,1.5"
-            fill="none"
-            opacity={0.85}
-          />
-          {/* Vertical plumb reference line from initial bar position to floor */}
-          <Line
-            x1={telemetry.barTrajectory[0][0]}
-            y1={telemetry.barTrajectory[0][1]}
-            x2={telemetry.barTrajectory[0][0]}
-            y2={FLOOR_Y}
-            stroke="#00E5FF"
-            strokeWidth={0.65}
-            strokeDasharray="1.5,3"
-            opacity={0.4}
-          />
-          {/* Live tracking bar bead with dual-layer halo */}
-          {telemetry.barCurrent && (
+          {/* Viewport Corner Brackets */}
+          <Path d="M 4 12 L 4 4 L 12 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.65} />
+          <Path d="M 96 12 L 96 4 L 88 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.65} />
+          <Path d="M 4 88 L 4 96 L 12 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.65} />
+          <Path d="M 96 88 L 96 96 L 88 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.65} />
+
+          {/* Reference Grid & Plumb Line */}
+          <Line x1="50" y1="4" x2="50" y2="92" stroke="#00E5FF" strokeWidth={0.6} strokeDasharray="1.5,2.5" opacity={0.35} />
+          <Line x1="10" y1="30" x2="90" y2="30" stroke={colours.ground} strokeWidth="0.4" opacity={0.25} />
+          <Line x1="10" y1="60" x2="90" y2="60" stroke={colours.ground} strokeWidth="0.4" opacity={0.25} />
+
+          {/* Bar Path Trajectory & Plumb Line */}
+          {telemetry?.barTrajectory && telemetry.barTrajectory.length > 1 && (
             <G>
-              <Circle
-                cx={telemetry.barCurrent[0]}
-                cy={telemetry.barCurrent[1]}
-                r={3.2}
-                fill="#00E5FF"
+              <Path d={line(telemetry.barTrajectory)} stroke="#00E5FF" strokeWidth={2.4} strokeDasharray="2,2" fill="none" opacity={0.25} />
+              <Path d={line(telemetry.barTrajectory)} stroke="#00E5FF" strokeWidth={1.2} strokeDasharray="2.5,1.5" fill="none" opacity={0.85} />
+              <Line
+                x1={telemetry.barTrajectory[0][0]}
+                y1={telemetry.barTrajectory[0][1]}
+                x2={telemetry.barTrajectory[0][0]}
+                y2={FLOOR_Y}
+                stroke="#00E5FF"
+                strokeWidth={0.65}
+                strokeDasharray="1.5,3"
                 opacity={0.4}
               />
-              <Circle
-                cx={telemetry.barCurrent[0]}
-                cy={telemetry.barCurrent[1]}
-                r={1.8}
-                fill="#FFFFFF"
-                stroke="#00E5FF"
-                strokeWidth={0.8}
-              />
+              {telemetry.barCurrent && (
+                <G>
+                  <Circle cx={telemetry.barCurrent[0]} cy={telemetry.barCurrent[1]} r={3.2} fill="#00E5FF" opacity={0.4} />
+                  <Circle cx={telemetry.barCurrent[0]} cy={telemetry.barCurrent[1]} r={1.8} fill="#FFFFFF" stroke="#00E5FF" strokeWidth={0.8} />
+                </G>
+              )}
+            </G>
+          )}
+
+          {/* Clinical Joint Angle Arcs & Degree Badges */}
+          {telemetry?.joints && (
+            <G>
+              {/* Knee Flexion Angle Arc */}
+              {telemetry.kneeAngle !== undefined && (
+                <G>
+                  {(() => {
+                    const arc = svgAngleArc(telemetry.joints.knee, telemetry.joints.hip, telemetry.joints.ankle, 6.0);
+                    const isParallel = telemetry.isParallelReached;
+                    const strokeCol = isParallel ? '#10B981' : '#00E5FF';
+                    return (
+                      <G>
+                        <Path d={arc.path} stroke={strokeCol} strokeWidth={1.4} fill="none" opacity={0.9} />
+                        <Circle cx={arc.labelAt[0]} cy={arc.labelAt[1]} r={4.5} fill="#090A0D" opacity={0.88} stroke={strokeCol} strokeWidth={0.5} />
+                        <SvgText
+                          x={arc.labelAt[0]}
+                          y={arc.labelAt[1] + 1.5}
+                          fill={strokeCol}
+                          fontSize={4.0}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {`${telemetry.kneeAngle}°`}
+                        </SvgText>
+                        {isParallel && (
+                          <SvgText
+                            x={arc.labelAt[0] + (arc.labelAt[0] < 50 ? -6 : 6)}
+                            y={arc.labelAt[1] - 4}
+                            fill="#10B981"
+                            fontSize={3.0}
+                            fontWeight="bold"
+                            textAnchor="middle"
+                          >
+                            PARALLEL
+                          </SvgText>
+                        )}
+                      </G>
+                    );
+                  })()}
+                </G>
+              )}
+
+              {/* Hip Hinge Angle Arc */}
+              {telemetry.hipAngle !== undefined && (
+                <G>
+                  {(() => {
+                    const arc = svgAngleArc(telemetry.joints.hip, telemetry.joints.shoulder, telemetry.joints.knee, 6.5);
+                    return (
+                      <G>
+                        <Path d={arc.path} stroke="#F59E0B" strokeWidth={1.3} fill="none" opacity={0.9} />
+                        <Circle cx={arc.labelAt[0]} cy={arc.labelAt[1]} r={4.5} fill="#090A0D" opacity={0.88} stroke="#F59E0B" strokeWidth={0.5} />
+                        <SvgText
+                          x={arc.labelAt[0]}
+                          y={arc.labelAt[1] + 1.5}
+                          fill="#F59E0B"
+                          fontSize={4.0}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {`${telemetry.hipAngle}°`}
+                        </SvgText>
+                      </G>
+                    );
+                  })()}
+                </G>
+              )}
+
+              {/* Elbow Flexion Angle Arc */}
+              {telemetry.elbowAngle !== undefined && (
+                <G>
+                  {(() => {
+                    const arc = svgAngleArc(telemetry.joints.elbow, telemetry.joints.shoulder, telemetry.joints.hand, 5.5);
+                    return (
+                      <G>
+                        <Path d={arc.path} stroke="#A855F7" strokeWidth={1.3} fill="none" opacity={0.9} />
+                        <Circle cx={arc.labelAt[0]} cy={arc.labelAt[1]} r={4.5} fill="#090A0D" opacity={0.88} stroke="#A855F7" strokeWidth={0.5} />
+                        <SvgText
+                          x={arc.labelAt[0]}
+                          y={arc.labelAt[1] + 1.5}
+                          fill="#A855F7"
+                          fontSize={4.0}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                        >
+                          {`${telemetry.elbowAngle}°`}
+                        </SvgText>
+                      </G>
+                    );
+                  })()}
+                </G>
+              )}
+            </G>
+          )}
+
+          {/* Front Abduction Angle Arc */}
+          {telemetry?.frontJoints && telemetry.abductionAngle !== undefined && (
+            <G>
+              {(() => {
+                const j = telemetry.frontJoints;
+                const arc = svgAngleArc(j.shoulder, [j.shoulder[0], j.shoulder[1] + 20], j.elbow, 7.0);
+                return (
+                  <G>
+                    <Path d={arc.path} stroke="#00E5FF" strokeWidth={1.4} fill="none" opacity={0.9} />
+                    <Circle cx={arc.labelAt[0]} cy={arc.labelAt[1]} r={4.5} fill="#090A0D" opacity={0.88} stroke="#00E5FF" strokeWidth={0.5} />
+                    <SvgText
+                      x={arc.labelAt[0]}
+                      y={arc.labelAt[1] + 1.5}
+                      fill="#00E5FF"
+                      fontSize={4.0}
+                      fontWeight="bold"
+                      textAnchor="middle"
+                    >
+                      {`${telemetry.abductionAngle}°`}
+                    </SvgText>
+                  </G>
+                );
+              })()}
             </G>
           )}
         </G>
@@ -192,17 +291,18 @@ export const MovementFigure = ({
                 fill="none"
                 opacity={isFar ? 0.38 : 1}
               />
-              {/* Joint articulation pivot rings on primary body limbs */}
-              {isBody &&
+              {/* Joint articulation pivot rings on primary body limbs only when HUD is active */}
+              {showHud &&
+                isBody &&
                 mark.points.length >= 2 &&
                 mark.points.map(([jx, jy], jIdx) => (
                   <Circle
                     key={`joint-${jIdx}`}
                     cx={jx}
                     cy={jy}
-                    r={mark.width >= 5.5 ? 1.9 : 1.4}
+                    r={mark.width >= 5.5 ? 2.0 : 1.5}
                     fill="#090A0D"
-                    stroke={isActiveLimb ? colours.accent : colours.body}
+                    stroke="#00E5FF"
                     strokeWidth={0.95}
                   />
                 ))}

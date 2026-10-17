@@ -833,30 +833,44 @@ const sideMarks = (motion: SideMotion, j: Joints, load: Load): Mark[] => {
   return marks;
 };
 
+export const frontArmPoints = (
+  motion: FrontMotion,
+  k: number,
+  shoulderY = 27,
+): { shoulder: Point; elbow: Point; hand: Point }[] => {
+  const arms: { shoulder: Point; elbow: Point; hand: Point }[] = [];
+  for (const side of [-1, 1]) {
+    const shoulder: Point = [50 + side * 10, shoulderY];
+    if (motion.raise) {
+      const a = (lerp(motion.raise.from, motion.raise.to, k) * Math.PI) / 180;
+      const elbow: Point = [
+        shoulder[0] + side * LENGTH.upperArm * Math.sin(a),
+        shoulder[1] + LENGTH.upperArm * Math.cos(a),
+      ];
+      const b = a - (10 * Math.PI) / 180;
+      const hand: Point = [
+        elbow[0] + side * LENGTH.forearm * Math.sin(b),
+        elbow[1] + LENGTH.forearm * Math.cos(b),
+      ];
+      arms.push({ shoulder, elbow, hand });
+    } else if (motion.open) {
+      const h = (lerp(motion.open.from, motion.open.to, k) * Math.PI) / 180;
+      const elbow: Point = [shoulder[0] + side * LENGTH.upperArm * Math.sin(h), shoulderY + 1];
+      const hand: Point = [
+        shoulder[0] + side * (LENGTH.upperArm + LENGTH.forearm) * Math.sin(h),
+        shoulderY + 2,
+      ];
+      arms.push({ shoulder, elbow, hand });
+    }
+  }
+  return arms;
+};
+
 /** A figure facing the viewer, arms out to the sides; for what a side view cannot show. */
 const frontMarks = (motion: FrontMotion, k: number, load: Load): Mark[] => {
   const marks: Mark[] = [{ kind: 'path', points: [[20, FLOOR_Y + 2.5], [80, FLOOR_Y + 2.5]], width: 1.5, tone: 'ground' }];
   const shoulderY = 27;
-  const arms: { shoulder: Point; elbow: Point; hand: Point }[] = [];
-
-  for (const side of [-1, 1]) {
-    const shoulder: Point = [50 + side * 10, shoulderY];
-    if (motion.raise) {
-      // Out to the side in the frontal plane, elbow a little soft.
-      const a = (lerp(motion.raise.from, motion.raise.to, k) * Math.PI) / 180;
-      const elbow: Point = [shoulder[0] + side * LENGTH.upperArm * Math.sin(a), shoulder[1] + LENGTH.upperArm * Math.cos(a)];
-      const b = a - (10 * Math.PI) / 180;
-      const hand: Point = [elbow[0] + side * LENGTH.forearm * Math.sin(b), elbow[1] + LENGTH.forearm * Math.cos(b)];
-      arms.push({ shoulder, elbow, hand });
-    } else if (motion.open) {
-      // At shoulder height, swinging between pointing at the viewer and
-      // straight out: seen from the front, only the sideways part shows.
-      const h = (lerp(motion.open.from, motion.open.to, k) * Math.PI) / 180;
-      const elbow: Point = [shoulder[0] + side * LENGTH.upperArm * Math.sin(h), shoulderY + 1];
-      const hand: Point = [shoulder[0] + side * (LENGTH.upperArm + LENGTH.forearm) * Math.sin(h), shoulderY + 2];
-      arms.push({ shoulder, elbow, hand });
-    }
-  }
+  const arms = frontArmPoints(motion, k, shoulderY);
 
   if (motion.cables) {
     for (const arm of arms) {
@@ -898,7 +912,55 @@ export interface JointTelemetry {
   barTrajectory?: Point[];
   phaseLabel: string;
   isParallelReached?: boolean;
+  joints?: {
+    knee: Point;
+    hip: Point;
+    elbow: Point;
+    shoulder: Point;
+    hand: Point;
+    ankle: Point;
+  };
+  frontJoints?: {
+    shoulder: Point;
+    elbow: Point;
+    hand: Point;
+  };
 }
+
+/**
+ * Computes a smooth SVG arc and label positioning around a joint center C
+ * between vectors (p1 - C) and (p2 - C).
+ */
+export const svgAngleArc = (
+  center: Point,
+  p1: Point,
+  p2: Point,
+  r = 6.5,
+): { path: string; labelAt: Point } => {
+  const ang1 = Math.atan2(p1[1] - center[1], p1[0] - center[0]);
+  const ang2 = Math.atan2(p2[1] - center[1], p2[0] - center[0]);
+  let diff = ang2 - ang1;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+
+  const startX = center[0] + r * Math.cos(ang1);
+  const startY = center[1] + r * Math.sin(ang1);
+  const endX = center[0] + r * Math.cos(ang1 + diff);
+  const endY = center[1] + r * Math.sin(ang1 + diff);
+  const sweep = diff > 0 ? 1 : 0;
+
+  const midAng = ang1 + diff / 2;
+  const labelDist = r + 4.5;
+  const labelAt: Point = [
+    center[0] + labelDist * Math.cos(midAng),
+    center[1] + labelDist * Math.sin(midAng),
+  ];
+
+  return {
+    path: `M ${startX.toFixed(2)} ${startY.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 0 ${sweep} ${endX.toFixed(2)} ${endY.toFixed(2)}`,
+    labelAt,
+  };
+};
 
 const angleBetween = (v1: Point, v2: Point): number => {
   const dot = v1[0] * v2[0] + v1[1] * v2[1];
@@ -943,10 +1005,14 @@ export const jointTelemetryFor = (motionId: MotionId, progress: number): JointTe
     const phaseLabel =
       k < 0.25 ? 'STARTING EXTENSION' : k > 0.75 ? 'PEAK CONTRACTION' : 'CONCENTRIC ABDUCTION';
 
+    const arms = frontArmPoints(motion, k);
+    const arm = arms[0];
+
     return {
       view: 'front',
       abductionAngle,
       phaseLabel,
+      frontJoints: arm ? { shoulder: arm.shoulder, elbow: arm.elbow, hand: arm.hand } : undefined,
     };
   }
 
@@ -995,6 +1061,14 @@ export const jointTelemetryFor = (motionId: MotionId, progress: number): JointTe
     barTrajectory,
     phaseLabel,
     isParallelReached,
+    joints: {
+      knee: joints.frontKnee,
+      hip: joints.hip,
+      elbow: joints.elbow,
+      shoulder: joints.shoulder,
+      hand: joints.hand,
+      ankle: joints.frontAnkle,
+    },
   };
 };
 
