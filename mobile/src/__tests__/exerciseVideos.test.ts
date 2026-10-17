@@ -58,6 +58,17 @@ describe('videoBundleFor Movement Matching', () => {
       expect(videoBundleFor('Leg Extension')?.canonicalName).toBe('Leg Extension (Machine)');
       expect(videoBundleFor('Seated Leg Extension')?.canonicalName).toBe('Leg Extension (Machine)');
     });
+
+    it('matches exact canonical Bicep Curl names', () => {
+      expect(videoBundleFor('Bicep Curl (Dumbbell)')?.canonicalName).toBe('Bicep Curl (Dumbbell)');
+      expect(videoBundleFor('Dumbbell Bicep Curl')?.canonicalName).toBe('Bicep Curl (Dumbbell)');
+      expect(videoBundleFor('Dumbbell Curl')?.canonicalName).toBe('Bicep Curl (Dumbbell)');
+    });
+
+    it('matches exact canonical Lateral Raise names', () => {
+      expect(videoBundleFor('Lateral Raise (Dumbbell)')?.canonicalName).toBe('Lateral Raise (Dumbbell)');
+      expect(videoBundleFor('Dumbbell Lateral Raise')?.canonicalName).toBe('Lateral Raise (Dumbbell)');
+    });
   });
 
   describe('Distinct Variations & Accessory Lifts (Fall Through to 2D Kinematic Studio)', () => {
@@ -168,5 +179,21 @@ describe('getKeyframePhaseConfig Dynamic Telemetry Labels', () => {
     expect(config.depthLabel).toBe('PHASE 2: FULL KNEE EXTENSION (180°)');
     expect(config.scrubberStart).toBe('SETUP');
     expect(config.scrubberEnd).toBe('LOCKOUT');
+  });
+
+  it('provides accurate phase labels for Bicep Curl', () => {
+    const config = getKeyframePhaseConfig('Bicep Curl (Dumbbell)');
+    expect(config.setupLabel).toBe('PHASE 1: FULL EXTENSION HANG');
+    expect(config.depthLabel).toBe('PHASE 2: PEAK BICEP CONTRACTION');
+    expect(config.scrubberStart).toBe('HANG');
+    expect(config.scrubberEnd).toBe('CURL PEAK');
+  });
+
+  it('provides accurate phase labels for Lateral Raise', () => {
+    const config = getKeyframePhaseConfig('Lateral Raise (Dumbbell)');
+    expect(config.setupLabel).toBe('PHASE 1: BOTTOM HANG SETUP');
+    expect(config.depthLabel).toBe('PHASE 2: 90° SHOULDER ABDUCTION');
+    expect(config.scrubberStart).toBe('SETUP');
+    expect(config.scrubberEnd).toBe('90° PEAK');
   });
 });

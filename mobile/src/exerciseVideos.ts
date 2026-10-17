@@ -113,6 +113,26 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
     };
   }
 
+  if (norm.includes('bicep curl') || norm.includes('biceps curl')) {
+    return {
+      setupLabel: 'PHASE 1: FULL EXTENSION HANG',
+      depthLabel: 'PHASE 2: PEAK BICEP CONTRACTION',
+      transitionLabel: 'CONCENTRIC CURL / CONTROLLED ECCENTRIC',
+      scrubberStart: 'HANG',
+      scrubberEnd: 'CURL PEAK',
+    };
+  }
+
+  if (norm.includes('lateral raise')) {
+    return {
+      setupLabel: 'PHASE 1: BOTTOM HANG SETUP',
+      depthLabel: 'PHASE 2: 90° SHOULDER ABDUCTION',
+      transitionLabel: 'DELTOID DRIVE / CONTROLLED ECCENTRIC',
+      scrubberStart: 'SETUP',
+      scrubberEnd: '90° PEAK',
+    };
+  }
+
   // Squat family default
   return {
     setupLabel: 'PHASE 1: STARTING SETUP',
@@ -833,6 +853,168 @@ export const EXERCISE_VIDEO_REGISTRY: Record<string, ExerciseVideoBundle> = {
       },
     },
   },
+
+  'bicep-curl': {
+    canonicalName: 'Bicep Curl (Dumbbell)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_lockout_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_lockout_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_lockout_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/bicep_curl_lockout_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Elbow Pinning & Supination',
+        focus: 'Fixed Elbow Axis & Strict Curl',
+        checkpoints: [
+          {
+            label: 'Elbows Pinned to Ribcage',
+            cue: 'Keep elbows locked against your sides without swinging them forward to recruit anterior deltoid.',
+            researchBasis: 'Staudenmann et al. (2015): Forward elbow drift unloads the biceps brachii peak contraction.',
+          },
+          {
+            label: 'Full Supination at Peak',
+            cue: 'Turn palms toward shoulders at the top and squeeze the biceps hard for 1 second.',
+            researchBasis: 'The biceps brachii is the primary forearm supinator; full supination maximizes motor unit recruitment.',
+          },
+          {
+            label: 'Controlled Full Extension',
+            cue: 'Lower weights fully to straight arms (180°) under 2–3 seconds control before initiating next rep.',
+            researchBasis: 'Wolf et al. (2023): Long muscle length eccentric stretch enhances hypertrophy signaling.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Arm Path & Torso Rigidity',
+        focus: 'Zero Torso Sway',
+        checkpoints: [
+          {
+            label: 'Zero Torso Momentum',
+            cue: 'Maintain rigid core and glute bracing; avoid leaning back to swing dumbbells up.',
+            researchBasis: 'Momentum transfers load to lumbar spine and reduces tension on biceps.',
+          },
+        ],
+      },
+      front: {
+        title: 'Bilateral Balance',
+        focus: 'Symmetrical Curl Path',
+        checkpoints: [
+          {
+            label: 'Simultaneous Lift',
+            cue: 'Both dumbbells curl and descend at identical rates without shoulder dipping.',
+            researchBasis: 'Prevents unilateral spinal lateral flexion under load.',
+          },
+        ],
+      },
+    },
+  },
+
+  'lateral-raise': {
+    canonicalName: 'Lateral Raise (Dumbbell)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_peak_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_peak_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_peak_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/lateral_raise_peak_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Scapular Plane Abduction',
+        focus: 'Lead with Elbows & Control Swing',
+        checkpoints: [
+          {
+            label: 'Raise in Scapular Plane (~30° Forward)',
+            cue: 'Lift dumbbells slightly forward of pure lateral to allow free subacromial clearance.',
+            researchBasis: 'Escamilla et al. (2009): Scapular plane motion protects rotator cuff tendons from impingement.',
+          },
+          {
+            label: 'Raise to Parallel (90°)',
+            cue: 'Stop at shoulder height; going above 90° transfers primary tension to upper trapezius.',
+            researchBasis: 'Inman et al. (1944): Deltoid moment arm peaks at 90°; trapezius takes over above 100°.',
+          },
+          {
+            label: 'Lead with Elbows',
+            cue: 'Keep elbows slightly higher than or level with wrists; never let wrists lead above elbows.',
+            researchBasis: 'Prevents excessive internal rotation and subacromial spur compression.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Torso Bracing',
+        focus: 'Anti-Heaving Stability',
+        checkpoints: [
+          {
+            label: 'Slight Forward Torso Hinge (10°)',
+            cue: 'Slightly lean forward from hips to better align lateral deltoid fibers vertically against gravity.',
+            researchBasis: 'Optimizes gravity vector orientation relative to the middle deltoid origin and insertion.',
+          },
+        ],
+      },
+      front: {
+        title: 'Symmetrical Arm Arc',
+        focus: 'Even Deltoid Drive',
+        checkpoints: [
+          {
+            label: 'Even Bilateral Height',
+            cue: 'Both dumbbells reach exactly 90° simultaneously without neck shrugging.',
+            researchBasis: 'Prevents upper trapezius dominance and neck strain.',
+          },
+        ],
+      },
+    },
+  },
 };
 
 /**
@@ -989,6 +1171,29 @@ export const videoBundleFor = (exerciseName: string): ExerciseVideoBundle | null
     norm === 'leg extensions'
   ) {
     return EXERCISE_VIDEO_REGISTRY['leg-extension'];
+  }
+
+  // 9. Bicep Curl Family (Dumbbell Bicep Curl)
+  if (
+    norm === 'bicep curl (dumbbell)' ||
+    norm === 'dumbbell bicep curl' ||
+    norm === 'dumbbell curl' ||
+    norm === 'db bicep curl' ||
+    norm === 'bicep curl'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['bicep-curl'];
+  }
+
+  // 10. Lateral Raise Family (Dumbbell Lateral Raise)
+  if (
+    norm === 'lateral raise (dumbbell)' ||
+    norm === 'dumbbell lateral raise' ||
+    norm === 'db lateral raise' ||
+    norm === 'lateral raise' ||
+    norm === 'side raise' ||
+    norm === 'dumbbell side raise'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['lateral-raise'];
   }
 
   return null;
