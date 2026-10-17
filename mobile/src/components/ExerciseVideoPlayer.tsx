@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { motionFor } from '../exerciseMotion';
+import Svg, { Line, Path } from 'react-native-svg';
+import { jointTelemetryFor, motionFor } from '../exerciseMotion';
 import {
   type ExerciseCameraAngle,
   type ExerciseVideoBundle,
@@ -24,6 +25,7 @@ interface ExerciseVideoPlayerProps {
  * Standard video player for angles backed by mp4 video assets.
  */
 const StandardVideoPlayer = ({ url }: { url: string }) => {
+  const [showHud, setShowHud] = useState(true);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const player = useVideoPlayer(url, (p) => {
     p.loop = true;
@@ -74,10 +76,34 @@ const StandardVideoPlayer = ({ url }: { url: string }) => {
           nativeControls={false}
         />
       )}
+      {/* Corner Brackets Reticle HUD */}
+      {showHud && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg width="100%" height="100%" viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+            <Path d="M 4 12 L 4 4 L 12 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+            <Path d="M 96 12 L 96 4 L 88 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+            <Path d="M 4 88 L 4 96 L 12 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+            <Path d="M 96 88 L 96 96 L 88 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+            <Line x1="50" y1="4" x2="50" y2="96" stroke="#00E5FF" strokeWidth={0.5} strokeDasharray="1.5,2.5" opacity={0.25} />
+            <Line x1="10" y1="50" x2="90" y2="50" stroke="#00E5FF" strokeWidth={0.4} strokeDasharray="1.5,3" opacity={0.2} />
+          </Svg>
+        </View>
+      )}
       <View style={styles.badge}>
         <View style={styles.badgePulse} />
         <Text style={styles.badgeText}>VIDEO STREAM • 30 FPS</Text>
       </View>
+      <Pressable
+        onPress={() => setShowHud((h) => !h)}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel="Toggle Biomechanical Telemetry HUD"
+        style={[styles.hudPill, showHud && styles.hudPillActive]}
+      >
+        <Text style={[styles.hudPillText, showHud && styles.hudPillTextActive]}>
+          {showHud ? '⚡ HUD ON' : '⚡ HUD OFF'}
+        </Text>
+      </Pressable>
     </View>
   );
 };
@@ -99,8 +125,11 @@ const KeyframeMotionPlayer = ({
   const [progress, setProgress] = useState(0); // 0 (setup) to 100 (depth)
   const [isPlaying, setIsPlaying] = useState(true);
   const [speed, setSpeed] = useState(1.0);
+  const [showHud, setShowHud] = useState(true);
 
   const phaseConfig = getKeyframePhaseConfig(canonicalName);
+  const motionId = canonicalName ? motionFor(canonicalName) : null;
+  const telemetry = motionId ? jointTelemetryFor(motionId, progress / 100) : null;
 
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
@@ -212,14 +241,41 @@ const KeyframeMotionPlayer = ({
           />
         )}
 
+        {/* Corner Brackets Reticle HUD */}
+        {showHud && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Svg width="100%" height="100%" viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+              <Path d="M 4 12 L 4 4 L 12 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+              <Path d="M 96 12 L 96 4 L 88 4" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+              <Path d="M 4 88 L 4 96 L 12 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+              <Path d="M 96 88 L 96 96 L 88 96" stroke="#00E5FF" strokeWidth={0.8} fill="none" opacity={0.7} />
+              <Line x1="50" y1="4" x2="50" y2="96" stroke="#00E5FF" strokeWidth={0.5} strokeDasharray="1.5,2.5" opacity={0.25} />
+              <Line x1="10" y1="50" x2="90" y2="50" stroke="#00E5FF" strokeWidth={0.4} strokeDasharray="1.5,3" opacity={0.2} />
+            </Svg>
+          </View>
+        )}
+
         {/* Live Telemetry Badge */}
         <View style={styles.badge}>
           <View style={[styles.badgePulse, { backgroundColor: dotColor }]} />
           <Text style={styles.badgeText}>{phaseLabel}</Text>
         </View>
 
+        {/* HUD Toggle Button */}
+        <Pressable
+          onPress={() => setShowHud((h) => !h)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle Biomechanical Telemetry HUD"
+          style={[styles.hudPill, showHud && styles.hudPillActive]}
+        >
+          <Text style={[styles.hudPillText, showHud && styles.hudPillTextActive]}>
+            {showHud ? '⚡ HUD ON' : '⚡ HUD OFF'}
+          </Text>
+        </Pressable>
+
         <View style={styles.engineBadge}>
-          <Text style={styles.engineBadgeText}>ANATOMICAL ENGINE • 60 FPS</Text>
+          <Text style={styles.engineBadgeText}>8K ANATOMICAL STUDIO • 60 FPS</Text>
         </View>
       </View>
 
@@ -315,6 +371,62 @@ const KeyframeMotionPlayer = ({
             </Pressable>
           </View>
         </View>
+
+        {/* Live Biomechanical Telemetry Cards */}
+        {showHud && telemetry && (
+          <View style={styles.telemetryBar}>
+            <View style={styles.telemetryGrid}>
+              {telemetry.kneeAngle !== undefined && (
+                <View style={styles.telemetryCard}>
+                  <Text style={styles.telemetryMetricLabel}>KNEE ANGLE</Text>
+                  <View style={styles.telemetryValueRow}>
+                    <Text
+                      style={[
+                        styles.telemetryMetricValue,
+                        telemetry.isParallelReached && styles.telemetrySuccess,
+                      ]}
+                    >
+                      {telemetry.kneeAngle}°
+                    </Text>
+                    {telemetry.isParallelReached && (
+                      <View style={styles.successBadge}>
+                        <Text style={styles.successBadgeText}>PARALLEL ✓</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {telemetry.hipAngle !== undefined && (
+                <View style={styles.telemetryCard}>
+                  <Text style={styles.telemetryMetricLabel}>HIP HINGE</Text>
+                  <Text style={styles.telemetryMetricValue}>{telemetry.hipAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.elbowAngle !== undefined && (
+                <View style={styles.telemetryCard}>
+                  <Text style={styles.telemetryMetricLabel}>ELBOW EXT</Text>
+                  <Text style={styles.telemetryMetricValue}>{telemetry.elbowAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.torsoAngle !== undefined && (
+                <View style={styles.telemetryCard}>
+                  <Text style={styles.telemetryMetricLabel}>TORSO</Text>
+                  <Text style={styles.telemetryMetricValue}>{telemetry.torsoAngle}°</Text>
+                </View>
+              )}
+
+              {telemetry.abductionAngle !== undefined && (
+                <View style={styles.telemetryCard}>
+                  <Text style={styles.telemetryMetricLabel}>ABDUCTION</Text>
+                  <Text style={styles.telemetryMetricValue}>{telemetry.abductionAngle}°</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -547,7 +659,7 @@ export const ExerciseVideoPlayer = ({
         <KeyframeMotionPlayer
           key={`${angle}_${gender}_${activeKeyframes.standing}`}
           keyframes={activeKeyframes}
-          canonicalName={bundle.canonicalName}
+          canonicalName={exerciseName ?? bundle.canonicalName}
         />
       ) : (
         <StandardVideoPlayer
@@ -795,6 +907,87 @@ const styles = StyleSheet.create({
   },
   speedBtnTextActive: {
     color: loud.loud,
+    fontWeight: '700',
+  },
+  hudPill: {
+    position: 'absolute',
+    top: space.xs,
+    right: space.xs,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(9, 10, 13, 0.75)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 229, 255, 0.35)',
+  },
+  hudPillActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderColor: '#00E5FF',
+  },
+  hudPillText: {
+    fontFamily: font.display,
+    fontSize: 8,
+    letterSpacing: 0.6,
+    color: 'rgba(0, 229, 255, 0.6)',
+  },
+  hudPillTextActive: {
+    color: '#00E5FF',
+    fontWeight: '700',
+  },
+  telemetryBar: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: loud.rule,
+  },
+  telemetryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  telemetryCard: {
+    flex: 1,
+    minWidth: 80,
+    backgroundColor: 'rgba(9, 10, 13, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
+  telemetryMetricLabel: {
+    fontFamily: font.display,
+    fontSize: 7.5,
+    letterSpacing: 0.7,
+    color: loud.figureFaint,
+    marginBottom: 2,
+  },
+  telemetryValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  telemetryMetricValue: {
+    fontFamily: font.figure,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#00E5FF',
+  },
+  telemetrySuccess: {
+    color: '#10B981',
+  },
+  successBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#10B981',
+  },
+  successBadgeText: {
+    fontFamily: font.display,
+    fontSize: 7,
+    color: '#10B981',
     fontWeight: '700',
   },
   checklistCard: {

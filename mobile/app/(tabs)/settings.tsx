@@ -2,23 +2,16 @@ import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine'
 import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   describeBackup,
   exportBackup,
-  linkExerciseToCatalogue,
-  backfillCatalogueRegions,
-  listCatalogueNamesNeedingRegions,
-  listUnlinkedExerciseNames,
   parseBackup,
   restoreBackup,
-  upsertCatalogueEntry,
 } from '../../src/db';
 import { pickTextFile, saveTextFile } from '../../src/platform/files';
 import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
-import { BATCH_SIZE, EnrichmentParseError, batchNames } from '../../src/ai/exercises';
-import { GeminiAccessError, enrichExercises } from '../../src/api/gemini';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
@@ -127,8 +120,6 @@ export default function SettingsScreen() {
   // hundreds of inserts, long enough that an unchanged button reads as a
   // no-op and invites a second tap.
   const [busy, setBusy] = useState<string | null>(null);
-  /** Guards the window between the first tap and `busy` being set. */
-  const building = useRef(false);
 
   const runBulk = async (label: string, work: () => Promise<void>) => {
     setBusy(label);
@@ -216,147 +207,6 @@ export default function SettingsScreen() {
     } catch (error) {
       notify('Restore failed', (error as Error).message);
     }
-  };
-
-  const buildCatalogue = async () => {
-    // The button is disabled on `busy`, but `busy` is only set once the two
-    // work queues have been read, and a second tap inside that window starts a
-    // second run against the same database. Two concurrent builds put
-    // expo-sqlite's OPFS worker into "Invalid VFS state", after which every
-    // screen renders empty until the app is reopened. Same latch, and the same
-    // reason, as the one on the barcode scanner.
-    if (building.current) return;
-    building.current = true;
-    try {
-      await runCatalogueBuild();
-    } finally {
-      building.current = false;
-    }
-  };
-
-  const runCatalogueBuild = async () => {
-    const list = (items: string[]) =>
-      items.length > 10
-        ? `${items.slice(0, 10).join(', ')} and ${items.length - 10} more`
-        : items.join(', ');
-
-    const missed: string[] = [];
-    const unreadable: string[] = [];
-    const failed: string[] = [];
-    let stoppedEarly: string | null = null;
-    let total = 0;
-    let linked = 0;
-    let backfilled = 0;
-
-    try {
-      // Two sources of work, and the second is the one that matters on a device
-      // that has run this before: entries catalogued before muscles and steps
-      // existed. Without it this reports "0 of 0" on exactly the devices the
-      // feature was added for.
-      const unlinked = await listUnlinkedExerciseNames();
-      const needRegions = await listCatalogueNamesNeedingRegions();
-      // Backfill rows are written by id, never by the name that comes back:
-      // ask about `Pull Up` and the model may answer `Pull-Up`, which would
-      // miss the row and insert an orphan holding the regions while the real
-      // entry stayed empty and was asked about again every run.
-      const backfillIds = new Map(needRegions.map((t) => [t.canonicalName, t.id]));
-      const names = [...unlinked, ...needRegions.map((t) => t.canonicalName)];
-      if (names.length === 0) {
-        notify('Nothing to do', 'Every exercise on record is catalogued, with its muscles and steps.');
-        return;
-      }
-      // Only the first source can link an exercise; the second is filling in
-      // rows that are already linked, and counting those as links would report
-      // more than were ever asked for.
-      const linkable = new Set(unlinked);
-      total = unlinked.length;
-
-      const batches = batchNames(names);
-      for (const [index, batch] of batches.entries()) {
-        setBusy(`Batch ${index + 1} of ${batches.length}…`);
-        try {
-          const { entries, missing } = await enrichExercises(
-            batch,
-            settings.foodLookup.geminiApiKey,
-          );
-          for (const entry of entries) {
-            const target = backfillIds.get(entry.requestedName);
-            if (target !== undefined) {
-              // Counted on the write, not on the queue: a batch that failed
-              // before reaching the database must not report rows as filled.
-              if (await backfillCatalogueRegions(target, entry)) backfilled += 1;
-              continue;
-            }
-            const id = await upsertCatalogueEntry(entry);
-            if (linkable.has(entry.requestedName)) {
-              await linkExerciseToCatalogue(entry.requestedName, id);
-              linked += 1;
-            }
-          }
-          missed.push(...missing);
-        } catch (error) {
-          // A rejected key or an exhausted quota answers every remaining batch
-          // the same way, so spending them to find that out is pure waste.
-          if (error instanceof GeminiAccessError) {
-            stoppedEarly = error.message;
-            break;
-          }
-          if (error instanceof EnrichmentParseError) {
-            // A response with no readable shape at all fails the same way every
-            // run. Carrying on means the rest of the history still gets
-            // catalogued instead of being starved behind it.
-            unreadable.push(...batch);
-            continue;
-          }
-          // Everything else — a timeout, a truncated body, a dropped
-          // connection — is about this batch and this moment, not about the
-          // next batch. Breaking here starved every run at the same place,
-          // because the queue is ordered deterministically and nothing linked,
-          // so batch 1 came up first every time and the other 58 lifts were
-          // never asked about.
-          failed.push(...batch);
-          continue;
-        }
-      }
-    } catch (error) {
-      notify('Catalogue failed', (error as Error).message);
-      return;
-    } finally {
-      setBusy(null);
-    }
-
-    // Each batch commits as it completes, so what already linked stays linked.
-    const parts: string[] = [];
-    if (total > 0) parts.push(`${linked} of ${total} catalogued.`);
-    if (backfilled > 0) {
-      parts.push(`Muscles and steps filled in for ${backfilled} already catalogued.`);
-    }
-    if (missed.length > 0) {
-      parts.push(`Not recognised: ${list(missed)}. Running it again may pick these up.`);
-    }
-    if (unreadable.length > 0) {
-      parts.push(
-        `Could not be read: ${list(unreadable)}. Running it again will not help these — rename them or add them by hand.`,
-      );
-    }
-    if (failed.length > 0) {
-      parts.push(
-        `The lookup failed for: ${list(failed)}. Running it again retries just these.`,
-      );
-    }
-    if (stoppedEarly !== null) {
-      parts.push(
-        `Stopped early: ${stoppedEarly.replace(/[.\s]+$/, '')}. Running it again resumes from where it got to.`,
-      );
-    }
-    notify(
-      stoppedEarly !== null
-        ? 'Stopped partway'
-        : unreadable.length + failed.length > 0
-          ? 'Catalogue partly built'
-          : 'Catalogue built',
-      parts.join(' '),
-    );
   };
 
   return (
@@ -600,17 +450,6 @@ export default function SettingsScreen() {
               backup now, and again after anything you would mind losing.
             </Text>
           )}
-          <View style={{ height: space.sm }} />
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
-            Gives every exercise you have on record a movement pattern, a primary muscle
-            and instructions. Runs {BATCH_SIZE} at a time, so a long history costs a few
-            calls rather than one per exercise. Safe to run again — it skips what is done.
-          </Text>
-          <Button
-            label={busy ?? 'Build the exercise catalogue'}
-            disabled={busy !== null}
-            onPress={() => void buildCatalogue()}
-          />
         </Card>
 
         <Card title="Lifting history">
@@ -623,38 +462,6 @@ export default function SettingsScreen() {
           <Text style={[styles.note, { color: colors.textFaint }]}>
             Logging, routines and progression live on the Train tab.
           </Text>
-        </Card>
-      </Section>
-
-      <Section title="Advanced">
-        <Card
-          title="Model tuning"
-          subtitle="Defaults are sensible. Change these only if you know why you are changing them."
-        >
-          <NumberSetting
-            label="Scale noise"
-            value={settings.scaleNoiseKg}
-            suffix="kg"
-            decimals={2}
-            onCommit={(scaleNoiseKg) => void updateSettings({ scaleNoiseKg })}
-            hint="How much a single reading swings around your true trend. Raise it if you weigh inconsistently."
-          />
-          <NumberSetting
-            label="Expenditure volatility"
-            value={settings.expenditureVolatilityKcal}
-            suffix="kcal/day"
-            decimals={0}
-            onCommit={(expenditureVolatilityKcal) => void updateSettings({ expenditureVolatilityKcal })}
-            hint="How fast the estimate is allowed to chase new evidence. Higher adapts sooner but wobbles more."
-          />
-          <NumberSetting
-            label="Energy per kg of tissue"
-            value={settings.kcalPerKgTissue}
-            suffix="kcal/kg"
-            decimals={0}
-            onCommit={(kcalPerKgTissue) => void updateSettings({ kcalPerKgTissue })}
-            hint="7700 assumes the weight you lose or gain is mostly fat."
-          />
         </Card>
       </Section>
 

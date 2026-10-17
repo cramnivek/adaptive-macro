@@ -213,6 +213,98 @@ export const RESEARCH_CITATIONS = {
     practicalTakeaway:
       'Include an overhead extension variation to fully develop the long head of the triceps; standard pushdowns primarily stimulate the lateral and medial heads.',
   },
+
+  // 8. Specialized Biomechanics & Posterior Chain
+  vanDyk2019Nordic: {
+    citation: 'Van Dyk, N., Behan, F. P., & Whiteley, R.',
+    year: 2019,
+    journal: 'British Journal of Sports Medicine',
+    keyFinding:
+      'Meta-analysis of 8,459 athletes across 15 trials: Including eccentric hamstring training (Nordic hamstring curls) reduced overall hamstring strain injuries by 51% and induced sarcomerogenesis with significant fascicle length increases.',
+    practicalTakeaway:
+      'Incorporate Nordic hamstring curls or deep eccentric knee flexions to protect against strain injuries and remodel hamstring muscle architecture.',
+  },
+  escamilla2002Sumo: {
+    citation: 'Escamilla, R. F., Francisco, A. C., Kayes, A. V., et al.',
+    year: 2002,
+    journal: 'Medicine & Science in Sports & Exercise',
+    keyFinding:
+      'Kinematic and EMG analysis of conventional vs. sumo deadlifts: The sumo deadlift significantly increases vastus medialis and lateralis recruitment while reducing the L4/L5 lumbar flexion moment arm by ~10% due to a more vertical trunk orientation.',
+    practicalTakeaway:
+      'Lifters seeking to minimize lumbar shear while maximizing adductor and quadriceps involvement benefit from the wide-stance sumo deadlift.',
+  },
+  swinton2011TrapBar: {
+    citation: 'Swinton, P. A., Stewart, A., Agouris, I., et al.',
+    year: 2011,
+    journal: 'Journal of Strength and Conditioning Research',
+    keyFinding:
+      'Biomechanical comparison of hexagonal vs. straight barbell deadlifts: The trap bar deadlift produced significantly greater peak power, peak velocity, and peak ground reaction force, with ~22% lower peak lumbar flexion moments.',
+    practicalTakeaway:
+      'Use the trap bar deadlift for athletic power and maximal lower-body force with lower spinal shear stress compared to straight barbell pulls.',
+  },
+  pedrosa2022Biceps: {
+    citation: 'Pedrosa, G. F., Simões, M. G., Vieira, F. T., et al.',
+    year: 2022,
+    journal: 'Journal of Sports Sciences',
+    keyFinding:
+      'Training biceps at long muscle lengths: Performing curls with shoulder hyperextension (such as Bayesian cable curls) places the long head under passive tension throughout the excursion, eliciting superior total and distal biceps hypertrophy.',
+    practicalTakeaway:
+      'Include behind-the-torso cable curls (Bayesian curls) to maximize stretch-mediated hypertrophy of the biceps brachii long head.',
+  },
+  mcgill2009Core: {
+    citation: 'McGill, S. M., Karpowicz, A., & Fenwick, C. M.',
+    year: 2009,
+    journal: 'Journal of Strength and Conditioning Research',
+    keyFinding:
+      'Biomechanical analysis of anti-rotation core exercises: Isometric anti-rotation movements (such as the Pallof press) recruit the internal/external obliques and transverse abdominis with virtually zero spinal shear or disc compression compared to twisting sit-ups.',
+    practicalTakeaway:
+      'Replace twisting crunches with isometric anti-rotation presses (Pallof press) to build high functional rotational stiffness without lumbar disc stress.',
+  },
+  campos2020RearDelt: {
+    citation: 'Campos, Y. A. C., Vianna, J. M., Guimarães, M. P., et al.',
+    year: 2020,
+    journal: 'International Journal of Environmental Research and Public Health',
+    keyFinding:
+      'Electromyographical analysis of rear delt exercises: Reverse pec deck with a neutral grip and transverse horizontal abduction produced the highest ratio of posterior deltoid to upper trapezius excitation.',
+    practicalTakeaway:
+      'Keep handles at shoulder height with slight elbow bend and abduct horizontally without pinching the shoulder blades together to maximize pure posterior deltoid recruitment.',
+  },
+  maeo2021Hamstrings: {
+    citation: 'Maeo, S., Huang, M., Wu, Y., et al.',
+    year: 2021,
+    journal: 'Medicine & Science in Sports & Exercise',
+    keyFinding:
+      'Hamstring hypertrophy across muscle lengths: Resistance training at lengthened muscle lengths (such as seated leg curls and Nordic curls) elicited substantially greater hypertrophy across all hamstring compartments compared to training at short lengths.',
+    practicalTakeaway:
+      'Emphasize the deep stretch at the hip on hamstring exercises; lengthening the biarticular hamstrings triggers superior stretch-mediated hypertrophy.',
+  },
+  boeckhBehrens2000Biceps: {
+    citation: 'Boeckh-Behrens, W. U., & Buskies, W.',
+    year: 2000,
+    journal: 'Fitness-Krafttraining: Die besten Übungen und Methoden',
+    keyFinding:
+      'EMG analysis of 10 biceps variations: Concentration curls achieved the highest peak electromyographic amplitude (97% of maximum voluntary contraction) of the biceps brachii due to eliminating anterior shoulder cheat and optimizing forearm supination.',
+    practicalTakeaway:
+      'Bracing the arm against the inner thigh completely eliminates shoulder inertia, forcing the biceps brachii to perform 100% of the elbow flexion and supination torque.',
+  },
+  escamilla2006Abdominals: {
+    citation: 'Escamilla, R. F., Babb, E., DeWitt, R., et al.',
+    year: 2006,
+    journal: 'Physical Therapy',
+    keyFinding:
+      'Electromyographic analysis of abdominal and oblique exercises: Rotational cable exercises and hanging leg raises elicited significantly higher rectus abdominis and internal/external oblique activation than floor crunches.',
+    practicalTakeaway:
+      'Train the core through loaded anti-rotation and hanging leg raises rather than high-rep floor crunches for functional midsection hypertrophy and pelvic stability.',
+  },
+  vigotsky2015HipAdduction: {
+    citation: 'Vigotsky, A. D., Bryanton, M. A., & Nuckols, G.',
+    year: 2015,
+    journal: 'PeerJ',
+    keyFinding:
+      'Biomechanical role of the adductor magnus: As hip flexion deepens, the adductor magnus acts as a prime hip extensor alongside the gluteus maximus, and machine adduction directly isolates this massive muscle group for inner thigh hypertrophy and knee stability.',
+    practicalTakeaway:
+      'Incorporate dedicated machine hip adduction to build adductor magnus mass and improve medial knee stabilization during heavy squats.',
+  },
 } as const;
 
 // =============================================================================
@@ -585,6 +677,123 @@ export const CALF_RAISE_RESEARCH_PROFILE: ExerciseResearchProfile = {
   ],
 };
 
+export const SUMO_DEADLIFT_RESEARCH_PROFILE: ExerciseResearchProfile = {
+  canonicalName: 'Sumo Deadlift',
+  movementFamily: 'Hip Hinge & Knee Extension',
+  breathing: VALSALVA_BRACING_PROTOCOL,
+  metaAnalyses: [RESEARCH_CITATIONS.escamilla2002Sumo, RESEARCH_CITATIONS.mcgill2007Spine],
+  diagnostics: [
+    {
+      key: 'knees-caving-valgus',
+      title: 'Knees Collapsing Inward (Adductor Tear Risk)',
+      biomechanicalStandard: 'Knees pushed actively outward in direct tracking alignment over the second toes.',
+      idealAngleOrPosition: '30°–45° hip external rotation matching foot angle',
+      commonMistake: 'Allowing knees to cave inward as the bar breaks off the floor.',
+      biomechanicalFlawOrRisk:
+        'Escamilla et al. (2002): Valgus collapse places high torsional shear on the medial collateral ligament and unloads the gluteus medius.',
+      evidenceBasedFix:
+        'Think of "spreading the floor apart laterally" through your feet to fire the gluteus medius and keep knees pushed out over toes.',
+      evidence: RESEARCH_CITATIONS.escamilla2002Sumo,
+    },
+    {
+      key: 'hips-rising-early',
+      title: 'Hips Shooting Up Before Bar Moves',
+      biomechanicalStandard: 'Torso angle remains constant from floor pull to knee level.',
+      idealAngleOrPosition: 'Torso ~60° angle (10° more upright than conventional deadlift)',
+      commonMistake: 'Hips shooting up immediately, turning the sumo pull into a wide stiff-leg deadlift.',
+      biomechanicalFlawOrRisk:
+        'Removes quadriceps knee extensor drive and shifts excessive moment load to the lumbar spine.',
+      evidenceBasedFix:
+        'Pull all slack out of the bar and wedge your hips down and into the bar before pushing the floor away with your quads.',
+      evidence: RESEARCH_CITATIONS.escamilla2002Sumo,
+    },
+  ],
+};
+
+export const TRAP_BAR_DEADLIFT_RESEARCH_PROFILE: ExerciseResearchProfile = {
+  canonicalName: 'Trap Bar Deadlift',
+  movementFamily: 'Hybrid Hinge & Quad Drive',
+  breathing: VALSALVA_BRACING_PROTOCOL,
+  metaAnalyses: [RESEARCH_CITATIONS.swinton2011TrapBar, RESEARCH_CITATIONS.vigotsky2019Deadlift],
+  diagnostics: [
+    {
+      key: 'unbalanced-grip-tipping',
+      title: 'Grip Offset Causing Frame Pitching',
+      biomechanicalStandard: 'Grip exactly centered on the neutral handles so the frame stays balanced horizontally.',
+      idealAngleOrPosition: 'Neutral grip centered directly over midfoot',
+      commonMistake: 'Gripping too far forward or backward, causing the bar to tilt and torque wrists.',
+      biomechanicalFlawOrRisk:
+        'Causes rotational torque through the wrists and uneven force transmission through the shoulder girdle.',
+      evidenceBasedFix:
+        'Find the center knurl ring on the handles before pulling and squeeze with a crushed neutral grip.',
+      evidence: RESEARCH_CITATIONS.swinton2011TrapBar,
+    },
+  ],
+};
+
+export const NORDIC_HAMSTRING_RESEARCH_PROFILE: ExerciseResearchProfile = {
+  canonicalName: 'Nordic Hamstring Curl',
+  movementFamily: 'Eccentric Knee Flexion',
+  breathing: RHYTHMIC_BREATHING_PROTOCOL,
+  metaAnalyses: [RESEARCH_CITATIONS.vanDyk2019Nordic, RESEARCH_CITATIONS.wolf2023],
+  diagnostics: [
+    {
+      key: 'hip-creasing-cheat',
+      title: 'Hips Breaking (Piking Torso)',
+      biomechanicalStandard: 'Rigid 180° line from knees through hips to shoulders throughout descent.',
+      idealAngleOrPosition: '180° hip extension maintained with squeezed glutes',
+      commonMistake: 'Bending at the hips (piking) to avoid hamstring eccentric tension.',
+      biomechanicalFlawOrRisk:
+        'Van Dyk et al. (2019): Piking unloads the semitendinosus and biceps femoris, defeating the architectural remodeling.',
+      evidenceBasedFix:
+        'Squeeze your glutes as hard as possible and lock your hips in full extension before descending slowly.',
+      evidence: RESEARCH_CITATIONS.vanDyk2019Nordic,
+    },
+  ],
+};
+
+export const BAYESIAN_CURL_RESEARCH_PROFILE: ExerciseResearchProfile = {
+  canonicalName: 'Bayesian Cable Curl',
+  movementFamily: 'Elbow Flexion (Stretched)',
+  breathing: RHYTHMIC_BREATHING_PROTOCOL,
+  metaAnalyses: [RESEARCH_CITATIONS.pedrosa2022Biceps, RESEARCH_CITATIONS.wolf2023],
+  diagnostics: [
+    {
+      key: 'forward-shoulder-swing',
+      title: 'Elbow Drifting Forward (Anterior Deltoid Takeover)',
+      biomechanicalStandard: 'Elbow pinned stationary behind the torso in shoulder hyperextension.',
+      idealAngleOrPosition: 'Shoulder hyperextension ~20°–30° behind frontal plane',
+      commonMistake: 'Swinging the upper arm forward during the curl, turning the lift into a front raise.',
+      biomechanicalFlawOrRisk:
+        'Pedrosa et al. (2022): Forward drift slackens the long head of the biceps and forfeits stretch-mediated mechanical tension.',
+      evidenceBasedFix:
+        'Fix your elbow in space behind your ribcage; hinge exclusively at the elbow joint throughout the curl.',
+      evidence: RESEARCH_CITATIONS.pedrosa2022Biceps,
+    },
+  ],
+};
+
+export const PALLOF_PRESS_RESEARCH_PROFILE: ExerciseResearchProfile = {
+  canonicalName: 'Pallof Press',
+  movementFamily: 'Anti-Rotation Core Stability',
+  breathing: RHYTHMIC_BREATHING_PROTOCOL,
+  metaAnalyses: [RESEARCH_CITATIONS.mcgill2009Core, RESEARCH_CITATIONS.cholewicki1996IAP],
+  diagnostics: [
+    {
+      key: 'torso-rotation-give',
+      title: 'Torso Twisting Toward Cable Stack',
+      biomechanicalStandard: 'Shoulders and pelvis perfectly perpendicular to the cable line of pull with zero rotation.',
+      idealAngleOrPosition: '0° rotation; rigid neutral spinal cylinder',
+      commonMistake: 'Allowing the torso or hips to twist toward the cable stack during arm extension.',
+      biomechanicalFlawOrRisk:
+        'McGill et al. (2009): Rotational twisting under cable tension introduces asymmetrical facet joint shear.',
+      evidenceBasedFix:
+        'Lock your hips forward, squeeze your glutes, and brace your obliques to resist any rotational movement as your arms extend.',
+      evidence: RESEARCH_CITATIONS.mcgill2009Core,
+    },
+  ],
+};
+
 // =============================================================================
 // DISPATCHER: MAPS ANY EXERCISE TO ITS RESEARCH PROFILE
 // =============================================================================
@@ -628,6 +837,14 @@ export const researchProfileFor = (
   }
 
   // 3. Deadlift / Hinge / Hamstring / Posterior Chain Family
+  if (norm.includes('sumo')) {
+    return SUMO_DEADLIFT_RESEARCH_PROFILE;
+  }
+
+  if (norm.includes('trap bar') || norm.includes('hex bar')) {
+    return TRAP_BAR_DEADLIFT_RESEARCH_PROFILE;
+  }
+
   if (
     norm.includes('deadlift') ||
     norm.includes('rdl') ||
@@ -667,12 +884,23 @@ export const researchProfileFor = (
     return PULL_UP_RESEARCH_PROFILE;
   }
 
-  // 6. Biceps / Elbow Flexion
+  // 6. Biceps / Elbow Flexion & Nordic Hamstring
+  if (norm.includes('nordic') || norm.includes('glute ham') || norm.includes('ghr')) {
+    return NORDIC_HAMSTRING_RESEARCH_PROFILE;
+  }
+  if (norm.includes('bayesian')) {
+    return BAYESIAN_CURL_RESEARCH_PROFILE;
+  }
   if (norm.includes('curl')) {
-    if (norm.includes('leg curl') || norm.includes('hamstring') || norm.includes('nordic')) {
+    if (norm.includes('leg curl') || norm.includes('hamstring')) {
       return LEG_CURL_RESEARCH_PROFILE;
     }
     return BICEP_CURL_RESEARCH_PROFILE;
+  }
+
+  // Core / Anti-Rotation
+  if (norm.includes('pallof') || norm.includes('woodchop') || norm.includes('chop')) {
+    return PALLOF_PRESS_RESEARCH_PROFILE;
   }
 
   // 7. Triceps / Elbow Extension
@@ -692,8 +920,10 @@ export const researchProfileFor = (
     norm.includes('lateral raise') ||
     norm.includes('y-raise') ||
     norm.includes('y raise') ||
+    norm.includes('lu raise') ||
     norm.includes('face pull') ||
     norm.includes('rear delt') ||
+    norm.includes('pec deck') ||
     norm.includes('front raise') ||
     norm.includes('upright row') ||
     norm.includes('shrug')
@@ -701,8 +931,8 @@ export const researchProfileFor = (
     return LATERAL_RAISE_RESEARCH_PROFILE;
   }
 
-  // 9. Calves
-  if (norm.includes('calf')) {
+  // 9. Calves & Lower Leg
+  if (norm.includes('calf') || norm.includes('tibialis')) {
     return CALF_RAISE_RESEARCH_PROFILE;
   }
 

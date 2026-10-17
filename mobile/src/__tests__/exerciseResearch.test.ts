@@ -50,6 +50,38 @@ describe('exerciseResearch module', () => {
     expect(RESEARCH_CITATIONS.hartmann2013Squats.journal).toBe('Sports Medicine');
     expect(RESEARCH_CITATIONS.mcgill2007Spine.citation).toContain('McGill');
     expect(RESEARCH_CITATIONS.mclaughlin1984Bench.citation).toContain('McLaughlin');
+    expect(RESEARCH_CITATIONS.vanDyk2019Nordic.journal).toBe('British Journal of Sports Medicine');
+    expect(RESEARCH_CITATIONS.escamilla2002Sumo.journal).toBe('Medicine & Science in Sports & Exercise');
+    expect(RESEARCH_CITATIONS.swinton2011TrapBar.journal).toBe('Journal of Strength and Conditioning Research');
+  });
+
+  it('resolves dedicated sports science profiles for specialized movements', () => {
+    const sumo = researchProfileFor('Sumo Deadlift (Barbell)', 'hinge');
+    expect(sumo.canonicalName).toBe('Sumo Deadlift');
+    expect(sumo.diagnostics.some((d) => d.key === 'knees-caving-valgus')).toBe(true);
+
+    const trap = researchProfileFor('Trap Bar Deadlift', 'hinge');
+    expect(trap.canonicalName).toBe('Trap Bar Deadlift');
+
+    const nordic = researchProfileFor('Nordic Hamstring Curl', 'hinge');
+    expect(nordic.canonicalName).toBe('Nordic Hamstring Curl');
+    expect(nordic.diagnostics.some((d) => d.key === 'hip-creasing-cheat')).toBe(true);
+
+    const bayesian = researchProfileFor('Bayesian Cable Curl', 'pull');
+    expect(bayesian.canonicalName).toBe('Bayesian Cable Curl');
+
+    const pallof = researchProfileFor('Pallof Press (Cable)', 'push');
+    expect(pallof.canonicalName).toBe('Pallof Press');
+  });
+
+  it('resolves valid research profiles with meta-analyses for 100% of the built-in catalogue', () => {
+    for (const spec of RAW_BUILTIN_CATALOGUE) {
+      const profile = researchProfileFor(spec.canonicalName, spec.movementPattern);
+      expect(profile, `Profile for ${spec.canonicalName}`).toBeDefined();
+      expect(profile.breathing, `Breathing for ${spec.canonicalName}`).toBeDefined();
+      expect(profile.diagnostics.length, `Diagnostics for ${spec.canonicalName}`).toBeGreaterThan(0);
+      expect(profile.metaAnalyses.length, `Meta-analyses for ${spec.canonicalName}`).toBeGreaterThan(0);
+    }
   });
 });
 
