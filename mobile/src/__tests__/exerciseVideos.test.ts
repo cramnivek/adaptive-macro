@@ -46,6 +46,18 @@ describe('videoBundleFor Movement Matching', () => {
       expect(videoBundleFor('Bodyweight Pull-Up')?.canonicalName).toBe('Pull-Up');
       expect(videoBundleFor('Strict Pull-Up')?.canonicalName).toBe('Pull-Up');
     });
+
+    it('matches exact canonical Triceps Pushdown names', () => {
+      expect(videoBundleFor('Triceps Pushdown')?.canonicalName).toBe('Triceps Pushdown');
+      expect(videoBundleFor('Cable Triceps Pushdown')?.canonicalName).toBe('Triceps Pushdown');
+      expect(videoBundleFor('Tricep Pushdown')?.canonicalName).toBe('Triceps Pushdown');
+    });
+
+    it('matches exact canonical Leg Extension names', () => {
+      expect(videoBundleFor('Leg Extension (Machine)')?.canonicalName).toBe('Leg Extension (Machine)');
+      expect(videoBundleFor('Leg Extension')?.canonicalName).toBe('Leg Extension (Machine)');
+      expect(videoBundleFor('Seated Leg Extension')?.canonicalName).toBe('Leg Extension (Machine)');
+    });
   });
 
   describe('Distinct Variations & Accessory Lifts (Fall Through to 2D Kinematic Studio)', () => {
@@ -140,5 +152,21 @@ describe('getKeyframePhaseConfig Dynamic Telemetry Labels', () => {
     expect(config.depthLabel).toBe('PHASE 2: PARALLEL DEPTH');
     expect(config.scrubberStart).toBe('SETUP');
     expect(config.scrubberEnd).toBe('DEPTH');
+  });
+
+  it('provides accurate phase labels for Triceps Pushdown', () => {
+    const config = getKeyframePhaseConfig('Triceps Pushdown');
+    expect(config.setupLabel).toBe('PHASE 1: 90° ELBOW SETUP');
+    expect(config.depthLabel).toBe('PHASE 2: FULL LOCKOUT & ROPE FLARE');
+    expect(config.scrubberStart).toBe('SETUP');
+    expect(config.scrubberEnd).toBe('LOCKOUT');
+  });
+
+  it('provides accurate phase labels for Leg Extension', () => {
+    const config = getKeyframePhaseConfig('Leg Extension (Machine)');
+    expect(config.setupLabel).toBe('PHASE 1: 90° KNEE SETUP');
+    expect(config.depthLabel).toBe('PHASE 2: FULL KNEE EXTENSION (180°)');
+    expect(config.scrubberStart).toBe('SETUP');
+    expect(config.scrubberEnd).toBe('LOCKOUT');
   });
 });

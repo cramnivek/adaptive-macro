@@ -78,13 +78,38 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
     };
   }
 
-  if (norm.includes('pull-up') || norm.includes('pull up') || norm.includes('chin')) {
+  if (
+    norm.includes('pull-up') ||
+    norm.includes('pull up') ||
+    norm.includes('chin-up') ||
+    norm.includes('chin up')
+  ) {
     return {
       setupLabel: 'PHASE 1: ACTIVE HANG / SETUP',
       depthLabel: 'PHASE 2: CHIN OVER BAR',
       transitionLabel: 'VERTICAL PULL / SCAPULAR DEPRESSION',
       scrubberStart: 'HANG',
       scrubberEnd: 'TOP CHIN',
+    };
+  }
+
+  if (norm.includes('pushdown')) {
+    return {
+      setupLabel: 'PHASE 1: 90° ELBOW SETUP',
+      depthLabel: 'PHASE 2: FULL LOCKOUT & ROPE FLARE',
+      transitionLabel: 'CONCENTRIC PUSH / CONTROLLED EXTENSION',
+      scrubberStart: 'SETUP',
+      scrubberEnd: 'LOCKOUT',
+    };
+  }
+
+  if (norm.includes('leg extension')) {
+    return {
+      setupLabel: 'PHASE 1: 90° KNEE SETUP',
+      depthLabel: 'PHASE 2: FULL KNEE EXTENSION (180°)',
+      transitionLabel: 'QUAD CONTRACTION / CONTROLLED DESCENT',
+      scrubberStart: 'SETUP',
+      scrubberEnd: 'LOCKOUT',
     };
   }
 
@@ -646,6 +671,168 @@ export const EXERCISE_VIDEO_REGISTRY: Record<string, ExerciseVideoBundle> = {
       },
     },
   },
+
+  'triceps-pushdown': {
+    canonicalName: 'Triceps Pushdown',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_lockout_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_lockout_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_lockout_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/tricep_pushdown_lockout_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Elbow Pinning & Lockout',
+        focus: 'Fixed Elbows & Terminal Extension',
+        checkpoints: [
+          {
+            label: 'Elbows Pinned to Ribs',
+            cue: 'Keep upper arms strictly vertical and motionless against sides; zero shoulder swinging.',
+            researchBasis: 'Prevents anterior deltoid takeover and isolates lateral and long heads.',
+          },
+          {
+            label: 'Full Terminal Lockout (180°)',
+            cue: 'Extend forearms fully straight down and flare the rope tips slightly outward at the bottom.',
+            researchBasis: 'Achieves peak sarcomere shortening and maximal EMG activation in the lateral head.',
+          },
+          {
+            label: 'Controlled Eccentric (~90° Return)',
+            cue: 'Allow forearms to rise only to chest level before pushing down again.',
+            researchBasis: 'Maintains continuous mechanical tension without shoulder joint strain.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Rope Flare & Forearm Arc',
+        focus: 'Peak Contraction Squeeze',
+        checkpoints: [
+          {
+            label: 'Pronated Flare at Bottom',
+            cue: 'Turn wrists slightly outward at terminal extension to maximize peak contraction.',
+            researchBasis: 'Aligns pull vector with the lateral triceps head for superior peak torque.',
+          },
+        ],
+      },
+      front: {
+        title: 'Bilateral Symmetry',
+        focus: 'Even Arm Drive',
+        checkpoints: [
+          {
+            label: 'Balanced Cable Path',
+            cue: 'Both hands reach peak extension simultaneously without leaning or torso shifting.',
+            researchBasis: 'Ensures equal bilateral load distribution across both arms.',
+          },
+        ],
+      },
+    },
+  },
+
+  'leg-extension': {
+    canonicalName: 'Leg Extension (Machine)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_lockout_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_lockout_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_lockout_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_extension_lockout_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Full Knee Lockout & Quad Squeeze',
+        focus: 'Terminal Knee Extension & Tibial Alignment',
+        checkpoints: [
+          {
+            label: 'Full 180° Knee Extension',
+            cue: 'Straighten legs fully until parallel to the floor, holding for a distinct 1-second pause at the peak.',
+            researchBasis: 'Maximizes recruitment of the rectus femoris in its shortened position.',
+          },
+          {
+            label: 'Back Flat Against Support',
+            cue: 'Keep glutes and lower back pinned to the backrest; grip the side handles firmly.',
+            researchBasis: 'Anchors the pelvis and prevents compensatory lumbar extension.',
+          },
+          {
+            label: 'Pad Stacked on Lower Shins',
+            cue: 'Position the roller pad just above the ankle joint, not across the mid-shin or toes.',
+            researchBasis: 'Optimizes mechanical leverage and protects the patellofemoral joint.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Quad Vastus Contraction',
+        focus: 'Peak Shortened Position',
+        checkpoints: [
+          {
+            label: 'Toes Pointed Upwards',
+            cue: 'Keep feet in neutral dorsiflexion, toes pointing straight up throughout the movement.',
+            researchBasis: 'Maintains optimal tension across the patellar tendon and active tibialis anterior.',
+          },
+        ],
+      },
+      front: {
+        title: 'Knee & Shin Tracking',
+        focus: 'Symmetrical Leg Drive',
+        checkpoints: [
+          {
+            label: 'Parallel Leg Path',
+            cue: 'Keep knees and shins moving in a straight vertical plane with zero inward or outward rotation.',
+            researchBasis: 'Prevents torsional strain on the cruciate and collateral knee ligaments.',
+          },
+        ],
+      },
+    },
+  },
 };
 
 /**
@@ -778,6 +965,30 @@ export const videoBundleFor = (exerciseName: string): ExerciseVideoBundle | null
     ) {
       return EXERCISE_VIDEO_REGISTRY['pull-up'];
     }
+  }
+
+  // 7. Triceps Pushdown Family (Cable Pushdown with Rope)
+  if (
+    norm === 'triceps pushdown' ||
+    norm === 'tricep pushdown' ||
+    norm === 'triceps pushdown (cable)' ||
+    norm === 'tricep pushdown (cable)' ||
+    norm === 'cable triceps pushdown' ||
+    norm === 'cable tricep pushdown' ||
+    norm === 'cable pushdown'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['triceps-pushdown'];
+  }
+
+  // 8. Leg Extension Family (Seated Machine Leg Extension)
+  if (
+    norm === 'leg extension' ||
+    norm === 'leg extension (machine)' ||
+    norm === 'seated leg extension' ||
+    norm === 'machine leg extension' ||
+    norm === 'leg extensions'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['leg-extension'];
   }
 
   return null;
