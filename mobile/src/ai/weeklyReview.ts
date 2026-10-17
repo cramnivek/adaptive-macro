@@ -362,7 +362,7 @@ export const requestWeeklyReview = async (
         systemInstruction: {
           parts: [
             {
-              text: 'You are an evidence-based sports science coach. Output only valid JSON matching the schema.',
+              text: 'You are a warm, encouraging personal fitness coach for everyday lifters. Speak in simple, friendly, motivating language. CRITICAL INSTRUCTION: NEVER use the acronyms MAV, MEV, MRV, RPE, or RIR in any field! The user does not know what they mean. Instead of MAV, say "growth sweet spot". Instead of MEV, say "muscle maintenance sets". Instead of MRV, say "fatigue limit". Output only valid JSON matching the schema.',
             },
           ],
         },
@@ -387,7 +387,33 @@ export const requestWeeklyReview = async (
     const payload = await response.json();
     const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const parsed = JSON.parse(rawText);
-    return WeeklyReviewSchema.parse(parsed);
+
+    const sanitizeJargon = (str: string): string =>
+      str
+        .replace(/\bMAV\b/g, 'growth sweet spot')
+        .replace(/\bMEV\b/g, 'muscle maintenance sets')
+        .replace(/\bMRV\b/g, 'fatigue limit')
+        .replace(/\bRPE\s*([0-9.]+)/gi, 'effort level $1')
+        .replace(/\bRIR\b/gi, 'reps in reserve');
+
+    const sanitized = {
+      ...parsed,
+      headline: sanitizeJargon(parsed.headline || ''),
+      synthesis: sanitizeJargon(parsed.synthesis || ''),
+      plainSummary: parsed.plainSummary ? sanitizeJargon(parsed.plainSummary) : undefined,
+      trainingInsight: sanitizeJargon(parsed.trainingInsight || ''),
+      nutritionInsight: sanitizeJargon(parsed.nutritionInsight || ''),
+      keyWins: (parsed.keyWins || []).map((w: string) => sanitizeJargon(w)),
+      suggestedAdjustment: parsed.suggestedAdjustment
+        ? {
+            ...parsed.suggestedAdjustment,
+            title: sanitizeJargon(parsed.suggestedAdjustment.title || ''),
+            rationale: sanitizeJargon(parsed.suggestedAdjustment.rationale || ''),
+          }
+        : parsed.suggestedAdjustment,
+    };
+
+    return WeeklyReviewSchema.parse(sanitized);
   } catch (err) {
     if ((err as Error)?.name === 'AbortError') {
       throw new Error('The review took too long to generate. Please check your connection and retry.');

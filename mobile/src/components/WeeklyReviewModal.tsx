@@ -286,7 +286,7 @@ export const WeeklyReviewModal = ({
                       • <Text style={styles.refAuthor}>Schoenfeld, B. J. et al. (2017)</Text>: Dose-response relationship between weekly resistance training volume and increases in muscle mass. <Text style={styles.refJournal}>J Sports Sci</Text>.
                     </Text>
                     <Text style={styles.refItem}>
-                      • <Text style={styles.refAuthor}>Israetel, M. A. et al. (2020)</Text>: Hypertrophy Volume Landmarks (MEV, MAV, MRV). <Text style={styles.refJournal}>Renaissance Periodization</Text>.
+                      • <Text style={styles.refAuthor}>Israetel, M. A. et al. (2020)</Text>: Hypertrophy Training Volume Framework. <Text style={styles.refJournal}>Renaissance Periodization</Text>.
                     </Text>
                     <Text style={styles.refItem}>
                       • <Text style={styles.refAuthor}>Helms, E. R. et al. (2014)</Text>: Evidence-based recommendations for natural bodybuilding contest preparation: nutrition and supplementation. <Text style={styles.refJournal}>JISSN</Text>.

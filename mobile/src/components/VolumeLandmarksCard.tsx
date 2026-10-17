@@ -98,21 +98,21 @@ export const VolumeLandmarksCard = ({
           </Text>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#9C9C96' }]}>1. Maintenance (MEV ~6–10 sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#9C9C96' }]}>1. Muscle Maintenance (~6–10 sets/wk)</Text>
             <Text style={styles.tierDesc}>
               The minimum sets needed to protect your muscle from atrophy, or make initial beginner gains.
             </Text>
           </View>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#6FB58A' }]}>2. Growth Sweet Spot (MAV ~12–20 sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#6FB58A' }]}>2. Growth Sweet Spot (~12–20 sets/wk)</Text>
             <Text style={styles.tierDesc}>
               The optimal volume zone where you build muscle at the fastest rate with manageable soreness.
             </Text>
           </View>
 
           <View style={styles.scienceTier}>
-            <Text style={[styles.tierTitle, { color: '#E8352A' }]}>3. Recovery Ceiling (MRV ~20–25+ sets/wk)</Text>
+            <Text style={[styles.tierTitle, { color: '#E8352A' }]}>3. Recovery Ceiling (~20–25+ sets/wk)</Text>
             <Text style={styles.tierDesc}>
               Doing more sets than your body can recover from. Produces excessive fatigue and 'junk volume' without extra muscle growth.
             </Text>
@@ -124,7 +124,7 @@ export const VolumeLandmarksCard = ({
             • <Text style={styles.scienceAuthor}>Schoenfeld, B. J. et al. (2017)</Text>. Dose-response relationship between weekly resistance training volume and increases in muscle mass. <Text style={styles.scienceJournal}>J Sports Sci</Text>.
           </Text>
           <Text style={styles.scienceCitation}>
-            • <Text style={styles.scienceAuthor}>Israetel, M. A. et al. (2020)</Text>. Hypertrophy Volume Landmarks: MEV, MAV, and MRV. <Text style={styles.scienceJournal}>Renaissance Periodization</Text>.
+            • <Text style={styles.scienceAuthor}>Israetel, M. A. et al. (2020)</Text>. Hypertrophy Training Volume Framework. <Text style={styles.scienceJournal}>Renaissance Periodization</Text>.
           </Text>
           <Text style={styles.scienceCitation}>
             • <Text style={styles.scienceAuthor}>Helms, E. R. et al. (2014)</Text>. Evidence-based recommendations for natural bodybuilding. <Text style={styles.scienceJournal}>JISSN</Text>.
