@@ -1,4 +1,4 @@
-import { useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { EnrichmentParseError } from '../ai/exercises';
 import type { MovementPattern } from '../ai/exercises';
@@ -92,7 +92,6 @@ export const ExercisePicker = ({
   initialMode = 'exercise',
 }: ExercisePickerProps) => {
   const [search, setSearch] = useState('');
-  const deferredSearch = useDeferredValue(search);
 
   const [catalogue, setCatalogue] = useState<CatalogueEntry[]>(
     () => getCachedCatalogue() ?? BUILTIN_CATALOGUE,
@@ -134,21 +133,21 @@ export const ExercisePicker = ({
     }
   };
 
-  // Instant in-memory search results
+  // Instant in-memory search results (computed synchronously on keystroke)
   const searchResults = useMemo<ExerciseSearchResult[]>(() => {
     return searchExercisesFast({
-      query: deferredSearch,
+      query: search,
       catalogue,
       known,
       isCardio,
       muscleFilter,
       limit: 30,
     });
-  }, [deferredSearch, catalogue, known, isCardio, muscleFilter]);
+  }, [search, catalogue, known, isCardio, muscleFilter]);
 
   // Only enrich strength training exercises with Gemini if not in cardio mode and no results
   useEffect(() => {
-    const term = deferredSearch.trim();
+    const term = search.trim();
     latestTerm.current = term;
     setEnrichNote(null);
 
@@ -184,7 +183,8 @@ export const ExercisePicker = ({
           };
 
           updateCatalogueCache(newEntry);
-          setCatalogue((prev) => [...prev.filter((p) => p.id !== id), newEntry]);
+          const cached = getCachedCatalogue();
+          setCatalogue(cached ? [...cached] : (prev) => [...prev.filter((p) => p.id !== id), newEntry]);
         })
         .catch((error) => {
           if (latestTerm.current === term) setEnrichNote(couldNotLookUp);
@@ -195,7 +195,7 @@ export const ExercisePicker = ({
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [deferredSearch, enriching, searchResults.length, known, geminiApiKey, isCardio]);
+  }, [search, enriching, searchResults.length, known, geminiApiKey, isCardio]);
 
   const rawTerm = search.trim();
   const lowerTerm = rawTerm.toLowerCase();

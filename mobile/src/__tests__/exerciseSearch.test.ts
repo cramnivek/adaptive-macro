@@ -395,6 +395,73 @@ describe('exerciseSearch - new users without existing workout history', () => {
     expect(tBar.length).toBeGreaterThanOrEqual(1);
     expect(tBar[0].canonicalName).toBe('Chest-Supported Row (Dumbbell)');
   });
+
+  it('never returns duplicate exercises when known history uses aliases or reordered words', () => {
+    const overlappingKnown = [
+      { name: 'Barbell Bench Press', bodyweightBased: false },
+      { name: 'Bench Press (Barbell)', bodyweightBased: false },
+      { name: 'DB Lateral Raise', bodyweightBased: false },
+      { name: 'Pull Up', bodyweightBased: true },
+      { name: 'Pull-Up', bodyweightBased: true },
+      { name: 'Back Squat', bodyweightBased: false },
+    ];
+
+    // Also simulate duplicate SQLite row + Builtin row in catalogue
+    const messyCatalogue: CatalogueEntry[] = [
+      {
+        id: 'sqlite-bench-1',
+        canonicalName: 'Barbell Bench Press',
+        recordedName: 'Barbell Bench Press',
+        movementPattern: 'push',
+        primaryMuscle: 'Chest',
+        equipment: 'Barbell',
+        bodyweightBased: false,
+        instructions: 'Press bar.',
+        primaryRegion: 'chest',
+        secondaryRegions: ['triceps'],
+        steps: [],
+      },
+      ...BUILTIN_CATALOGUE,
+    ];
+
+    for (const q of ['bench', 'lateral', 'pull', 'squat', '']) {
+      const results = searchExercisesFast({
+        query: q,
+        catalogue: messyCatalogue,
+        known: overlappingKnown,
+        muscleFilter: q === '' ? 'chest' : 'all',
+      });
+
+      const seenIds = new Set<string>();
+      const seenCanon = new Set<string>();
+      for (const r of results) {
+        expect(seenIds.has(r.id), `duplicate id ${r.id} for query "${q}"`).toBe(false);
+        expect(
+          seenCanon.has(r.canonicalName.toLowerCase()),
+          `duplicate canonicalName ${r.canonicalName} for query "${q}"`,
+        ).toBe(false);
+        seenIds.add(r.id);
+        seenCanon.add(r.canonicalName.toLowerCase());
+      }
+    }
+
+    const benchResults = searchExercisesFast({
+      query: 'barbell bench press',
+      catalogue: messyCatalogue,
+      known: overlappingKnown,
+    });
+    // Should only have ONE Barbell Bench Press (not both "Barbell Bench Press" and "Bench Press (Barbell)")
+    const flatBarbellBenches = benchResults.filter(
+      (r) =>
+        r.name.toLowerCase().includes('bench press') &&
+        !r.name.toLowerCase().includes('incline') &&
+        !r.name.toLowerCase().includes('decline') &&
+        !r.name.toLowerCase().includes('close'),
+    );
+    expect(flatBarbellBenches.length).toBe(1);
+    expect(flatBarbellBenches[0].name).toBe('Barbell Bench Press');
+    expect(flatBarbellBenches[0].isHistory).toBe(true);
+  });
 });
 
 

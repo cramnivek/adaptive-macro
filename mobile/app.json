@@ -52,7 +52,8 @@
           "cameraPermission": "Scan barcodes on food packaging, and photograph a meal or a printed programme so the app can estimate it or read it.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

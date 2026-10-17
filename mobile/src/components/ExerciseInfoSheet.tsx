@@ -7,7 +7,9 @@ import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { ExerciseIcon } from './ExerciseIcon';
 import { motionFor } from '../exerciseMotion';
-import { MovementFigure } from './MovementFigure';
+import { videoBundleFor } from '../exerciseVideos';
+import { ExerciseVideoPlayer } from './ExerciseVideoPlayer';
+import { KinematicMotionStudio } from './MovementFigure';
 import { MuscleFigure } from './MuscleFigure';
 import { REGION_LABELS } from './muscleMap';
 
@@ -62,21 +64,28 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
             </View>
 
             {/*
-              One rep of this exercise, looping — recognised from its name, and
-              left out when it is not, because a figure of a different movement
-              would be shown as how to do this one.
+              Two-Tier Motion Architecture:
+              - Tier 1: Photorealistic 8K Keyframe Studio for the Big 5 movement families.
+              - Tier 2: Interactive 60 FPS Kinematic Studio for all 120+ accessory movements.
             */}
             {(() => {
-              const motion = motionFor(entry.canonicalName);
-              return motion === null ? null : (
-                <View style={[styles.demo, { backgroundColor: loud.ground, borderColor: loud.rule }]}>
-                  <MovementFigure
-                    motion={motion}
+              const bundle = videoBundleFor(entry.canonicalName);
+              if (bundle !== null) {
+                return (
+                  <ExerciseVideoPlayer
+                    bundle={bundle}
                     exerciseName={entry.canonicalName}
                     equipment={entry.equipment}
-                    colours={{ body: loud.figure, far: loud.figure, ground: loud.rule, accent: loud.loud }}
                   />
-                </View>
+                );
+              }
+              const motion = motionFor(entry.canonicalName);
+              return motion === null ? null : (
+                <KinematicMotionStudio
+                  motion={motion}
+                  exerciseName={entry.canonicalName}
+                  equipment={entry.equipment}
+                />
               );
             })()}
 

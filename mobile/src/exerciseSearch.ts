@@ -1,5 +1,10 @@
 import type { MovementPattern } from './ai/exercises';
-import { BUILTIN_ALIASES_BY_CANONICAL, findBuiltinCatalogueEntry } from './builtinCatalogue';
+import {
+  BUILTIN_ALIASES_BY_CANONICAL,
+  exerciseIdentityKey,
+  findBuiltinByIdentity,
+  findBuiltinCatalogueEntry,
+} from './builtinCatalogue';
 import { type CardioMode, detectCardio, detectCardioMode } from './cardio';
 import type { MuscleRegion } from './components/muscleMap';
 import type { CatalogueEntry } from './db';
@@ -142,6 +147,8 @@ const GYM_ACRONYMS: Record<string, string[][]> = {
   sldl: [['stiff'], ['leg', 'legs'], ['deadlift']],
   bp: [['bench'], ['press']],
   sm: [['smith'], ['machine']],
+  cgbp: [['close'], ['grip'], ['bench'], ['press']],
+  rfess: [['split'], ['squat']],
 };
 
 /**
@@ -154,6 +161,27 @@ export const tokenize = (text: string): string[] => {
     .replace(/-/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length > 0);
+};
+
+interface PreparedString {
+  lower: string;
+  words: string[];
+  acronym: string;
+}
+
+const preparedStringCache = new Map<string, PreparedString>();
+
+const prepareString = (text: string): PreparedString => {
+  let cached = preparedStringCache.get(text);
+  if (cached) return cached;
+  const lower = text.toLowerCase();
+  const words = tokenize(text);
+  const acronym = words.map((w) => w[0]).join('');
+  cached = { lower, words, acronym };
+  if (preparedStringCache.size < 4000) {
+    preparedStringCache.set(text, cached);
+  }
+  return cached;
 };
 
 /**
@@ -175,24 +203,20 @@ export const expandQueryTokens = (tokens: string[]): string[][] => {
 };
 
 const scoreSingleTarget = (
-  query: string,
+  trimmedQuery: string,
   expandedTokenGroups: string[][],
   name: string,
   canonicalName: string,
-  primaryMuscle?: string,
-  equipment?: string,
+  normMuscle: string,
+  normEquipment: string,
   isHistory = false,
 ): number => {
-  const normName = name.toLowerCase();
-  const normCanonical = canonicalName.toLowerCase();
-  const normMuscle = (primaryMuscle ?? '').toLowerCase();
-  const normEquipment = (equipment ?? '').toLowerCase();
+  const prepName = prepareString(name);
+  const prepCanonical =
+    canonicalName === name ? prepName : prepareString(canonicalName);
 
-  const nameWords = tokenize(name);
-  const canonicalWords = tokenize(canonicalName);
-  const allTargetWords = [...nameWords, ...canonicalWords];
-
-  const trimmedQuery = query.trim().toLowerCase();
+  const normName = prepName.lower;
+  const normCanonical = prepCanonical.lower;
 
   // 1. Exact match on either recorded or canonical name
   if (normName === trimmedQuery || normCanonical === trimmedQuery) {
@@ -207,20 +231,40 @@ const scoreSingleTarget = (
 
   // 3. Acronym match: e.g. "ohp" for "Overhead Press", "rdl" for "Romanian Deadlift"
   let acronymBonus = 0;
-  const acronym = allTargetWords.map((w) => w[0]).join('');
-  if (trimmedQuery.length >= 2 && acronym.includes(trimmedQuery)) {
+  if (
+    trimmedQuery.length >= 2 &&
+    (prepName.acronym.includes(trimmedQuery) ||
+      prepCanonical.acronym.includes(trimmedQuery))
+  ) {
     acronymBonus = 350;
   }
 
   // 4. Token group matching (every token group must have at least one token match)
   let tokenScore = 0;
+  const nameWords = prepName.words;
+  const canonicalWords = prepCanonical.words;
+
   for (const group of expandedTokenGroups) {
     let groupMatched = false;
     let groupBestScore = 0;
 
     for (const token of group) {
       // Word prefix match in name (e.g. token "bench" matches "Bench" or "Benchpress")
-      const wordPrefixMatch = allTargetWords.some((word) => word.startsWith(token));
+      let wordPrefixMatch = false;
+      for (let i = 0; i < nameWords.length; i++) {
+        if (nameWords[i].startsWith(token)) {
+          wordPrefixMatch = true;
+          break;
+        }
+      }
+      if (!wordPrefixMatch && prepCanonical !== prepName) {
+        for (let i = 0; i < canonicalWords.length; i++) {
+          if (canonicalWords[i].startsWith(token)) {
+            wordPrefixMatch = true;
+            break;
+          }
+        }
+      }
       if (wordPrefixMatch) {
         groupMatched = true;
         groupBestScore = Math.max(groupBestScore, 120);
@@ -235,14 +279,14 @@ const scoreSingleTarget = (
       }
 
       // Equipment match (e.g. "dumbbell", "barbell", "cable")
-      if (normEquipment.includes(token)) {
+      if (normEquipment && normEquipment.includes(token)) {
         groupMatched = true;
         groupBestScore = Math.max(groupBestScore, 45);
         continue;
       }
 
       // Muscle match (e.g. "chest", "biceps", "quads")
-      if (normMuscle.includes(token)) {
+      if (normMuscle && normMuscle.includes(token)) {
         groupMatched = true;
         groupBestScore = Math.max(groupBestScore, 35);
         continue;
@@ -281,26 +325,30 @@ export const scoreCandidate = (
   equipment?: string,
   isHistory = false,
 ): number => {
+  const trimmedQuery = query.trim().toLowerCase();
+  const normMuscle = (primaryMuscle ?? '').toLowerCase();
+  const normEquipment = (equipment ?? '').toLowerCase();
+
   let best = scoreSingleTarget(
-    query,
+    trimmedQuery,
     expandedTokenGroups,
     name,
     canonicalName,
-    primaryMuscle,
-    equipment,
+    normMuscle,
+    normEquipment,
     isHistory,
   );
 
   const aliases = BUILTIN_ALIASES_BY_CANONICAL[canonicalName.toLowerCase()];
   if (aliases && best < 1000) {
-    for (const alias of aliases) {
+    for (let i = 0; i < aliases.length; i++) {
       const aliasScore = scoreSingleTarget(
-        query,
+        trimmedQuery,
         expandedTokenGroups,
-        alias,
+        aliases[i],
         canonicalName,
-        primaryMuscle,
-        equipment,
+        normMuscle,
+        normEquipment,
         isHistory,
       );
       if (aliasScore > best) {
@@ -313,7 +361,7 @@ export const scoreCandidate = (
 };
 
 /**
- * Searches and ranks exercises from catalogue and history.
+ * Searches and ranks exercises from catalogue and history with zero duplicates.
  */
 export const searchExercisesFast = ({
   query,
@@ -332,9 +380,20 @@ export const searchExercisesFast = ({
 }): ExerciseSearchResult[] => {
   const trimmed = query.trim();
 
+  // Build O(1) lookup of user history by canonical exercise identity (first/most-logged wins)
+  const knownByIdentity = new Map<string, KnownExercise>();
+  for (let i = 0; i < known.length; i++) {
+    const item = known[i];
+    const idKey = exerciseIdentityKey(item.name);
+    if (!knownByIdentity.has(idKey)) {
+      knownByIdentity.set(idKey, item);
+    }
+  }
+
   // --- Empty query: Return top suggestions ---
   if (!trimmed) {
     const results: ExerciseSearchResult[] = [];
+    const seenIdentity = new Set<string>();
     const seenNames = new Set<string>();
     const seenCanonical = new Set<string>();
 
@@ -342,7 +401,11 @@ export const searchExercisesFast = ({
       // Cardio mode empty query: user cardio history first
       for (const item of known) {
         if (item.isCardio) {
-          seenNames.add(item.name.toLowerCase());
+          const idKey = exerciseIdentityKey(item.name);
+          const lower = item.name.toLowerCase();
+          if (seenIdentity.has(idKey) || seenNames.has(lower)) continue;
+          seenIdentity.add(idKey);
+          seenNames.add(lower);
           results.push({
             id: `known:${item.name}`,
             name: item.name,
@@ -358,19 +421,28 @@ export const searchExercisesFast = ({
       return results.slice(0, limit);
     }
 
+    // Build O(1) lookup of catalogue entries by identity for empty-query enrichment
+    const catalogueByIdentity = new Map<string, CatalogueEntry>();
+    for (let i = 0; i < catalogue.length; i++) {
+      const c = catalogue[i];
+      const idKey = exerciseIdentityKey(c.recordedName ?? c.canonicalName, c.canonicalName);
+      if (!catalogueByIdentity.has(idKey)) {
+        catalogueByIdentity.set(idKey, c);
+      }
+    }
+
     // Strength mode empty query:
     // 1. Check user history first (filtered by muscleFilter if active)
     for (const item of known) {
       if (item.isCardio) continue;
       const lower = item.name.toLowerCase();
-      if (seenNames.has(lower)) continue;
+      const idKey = exerciseIdentityKey(item.name);
+      if (seenIdentity.has(idKey) || seenNames.has(lower)) continue;
 
       const catEntry =
-        catalogue.find(
-          (c) =>
-            c.canonicalName.toLowerCase() === lower ||
-            c.recordedName?.toLowerCase() === lower,
-        ) ?? findBuiltinCatalogueEntry(item.name);
+        catalogueByIdentity.get(idKey) ??
+        findBuiltinByIdentity(item.name) ??
+        findBuiltinCatalogueEntry(item.name);
 
       if (
         muscleFilter !== 'all' &&
@@ -386,15 +458,22 @@ export const searchExercisesFast = ({
         continue;
       }
 
+      seenIdentity.add(idKey);
       seenNames.add(lower);
       if (catEntry) {
         seenCanonical.add(catEntry.canonicalName.toLowerCase());
       }
 
+      const strictBuiltin = findBuiltinByIdentity(item.name);
+      const resolvedCanonical =
+        catalogueByIdentity.get(idKey)?.canonicalName ??
+        strictBuiltin?.canonicalName ??
+        item.name;
+
       results.push({
-        id: catEntry ? catEntry.id : `known:${item.name}`,
+        id: catalogueByIdentity.get(idKey)?.id ?? strictBuiltin?.id ?? `known:${item.name}`,
         name: item.name,
-        canonicalName: catEntry ? catEntry.canonicalName : item.name,
+        canonicalName: resolvedCanonical,
         recordedName: item.name,
         movementPattern: catEntry?.movementPattern,
         primaryMuscle: catEntry?.primaryMuscle,
@@ -420,7 +499,9 @@ export const searchExercisesFast = ({
     for (const entry of catalogue) {
       const effectiveName = entry.recordedName ?? entry.canonicalName;
       if (detectCardio(effectiveName)) continue;
+      const idKey = exerciseIdentityKey(effectiveName, entry.canonicalName);
       if (
+        seenIdentity.has(idKey) ||
         seenNames.has(effectiveName.toLowerCase()) ||
         seenCanonical.has(entry.canonicalName.toLowerCase())
       ) {
@@ -429,6 +510,7 @@ export const searchExercisesFast = ({
       if (!matchesMuscleFilter(entry, muscleFilter)) {
         continue;
       }
+      seenIdentity.add(idKey);
       catalogueCandidates.push(entry);
     }
 
@@ -471,21 +553,33 @@ export const searchExercisesFast = ({
   const expandedGroups = expandQueryTokens(queryTokens);
 
   const candidates: ExerciseSearchResult[] = [];
+  const seenIdentity = new Set<string>();
   const seenCanonical = new Set<string>();
   const seenNames = new Set<string>();
 
-  // 1. Process catalogue entries
-  for (const entry of catalogue) {
-    const effectiveName = entry.recordedName ?? entry.canonicalName;
-    const historyItem = known.find(
-      (k) =>
-        k.name.toLowerCase() === effectiveName.toLowerCase() ||
-        k.name.toLowerCase() === entry.canonicalName.toLowerCase(),
+  // 1. Process catalogue entries (merging matching user history in O(1))
+  for (let i = 0; i < catalogue.length; i++) {
+    const entry = catalogue[i];
+    const idKey = exerciseIdentityKey(
+      entry.recordedName ?? entry.canonicalName,
+      entry.canonicalName,
     );
+    if (
+      seenIdentity.has(idKey) ||
+      seenCanonical.has(entry.canonicalName.toLowerCase())
+    ) {
+      continue;
+    }
+
+    const historyItem = knownByIdentity.get(idKey);
+    const effectiveName =
+      entry.recordedName ?? historyItem?.name ?? entry.canonicalName;
+    if (seenNames.has(effectiveName.toLowerCase())) {
+      continue;
+    }
 
     const isEntryCardio = historyItem?.isCardio ?? detectCardio(effectiveName);
     if (isCardio !== isEntryCardio) {
-      // If user is searching cardio tab, filter out non-cardio, and vice versa
       continue;
     }
 
@@ -493,25 +587,31 @@ export const searchExercisesFast = ({
       continue;
     }
 
+    // Mark identity as processed so Loop 2 never re-emits the same exercise from `known`
+    seenIdentity.add(idKey);
+    seenCanonical.add(entry.canonicalName.toLowerCase());
+    seenNames.add(effectiveName.toLowerCase());
+
+    const builtinCanon =
+      findBuiltinByIdentity(entry.canonicalName)?.canonicalName ?? entry.canonicalName;
+
     const score = scoreCandidate(
       trimmed,
       queryTokens,
       expandedGroups,
       effectiveName,
-      entry.canonicalName,
+      builtinCanon,
       entry.primaryMuscle,
       entry.equipment,
       Boolean(historyItem),
     );
 
     if (score > 0) {
-      seenCanonical.add(entry.canonicalName.toLowerCase());
-      seenNames.add(effectiveName.toLowerCase());
       candidates.push({
         id: entry.id,
         name: effectiveName,
         canonicalName: entry.canonicalName,
-        recordedName: entry.recordedName,
+        recordedName: entry.recordedName ?? historyItem?.name ?? null,
         movementPattern: entry.movementPattern,
         primaryMuscle: entry.primaryMuscle,
         equipment: entry.equipment,
@@ -525,9 +625,15 @@ export const searchExercisesFast = ({
   }
 
   // 2. Process known history exercises that are not yet in catalogue
-  for (const item of known) {
+  for (let i = 0; i < known.length; i++) {
+    const item = known[i];
     const lowerName = item.name.toLowerCase();
-    if (seenNames.has(lowerName) || seenCanonical.has(lowerName)) {
+    const idKey = exerciseIdentityKey(item.name);
+    if (
+      seenIdentity.has(idKey) ||
+      seenNames.has(lowerName) ||
+      seenCanonical.has(lowerName)
+    ) {
       continue;
     }
 
@@ -536,15 +642,16 @@ export const searchExercisesFast = ({
       continue;
     }
 
-    const builtin = findBuiltinCatalogueEntry(item.name);
+    const strictBuiltin = findBuiltinByIdentity(item.name);
+    const fallbackBuiltin = strictBuiltin ?? findBuiltinCatalogueEntry(item.name);
     if (
       !isCardio &&
       muscleFilter !== 'all' &&
       !matchesMuscleFilter(
         {
-          primaryMuscle: builtin?.primaryMuscle,
-          primaryRegion: builtin?.primaryRegion,
-          secondaryRegions: builtin?.secondaryRegions,
+          primaryMuscle: fallbackBuiltin?.primaryMuscle,
+          primaryRegion: fallbackBuiltin?.primaryRegion,
+          secondaryRegions: fallbackBuiltin?.secondaryRegions,
         },
         muscleFilter,
       )
@@ -552,27 +659,30 @@ export const searchExercisesFast = ({
       continue;
     }
 
+    seenIdentity.add(idKey);
+    seenNames.add(lowerName);
+
+    const resolvedCanonical = strictBuiltin?.canonicalName ?? item.name;
     const score = scoreCandidate(
       trimmed,
       queryTokens,
       expandedGroups,
       item.name,
-      builtin?.canonicalName ?? item.name,
-      builtin?.primaryMuscle,
-      builtin?.equipment,
+      resolvedCanonical,
+      fallbackBuiltin?.primaryMuscle,
+      fallbackBuiltin?.equipment,
       true,
     );
 
     if (score > 0) {
-      seenNames.add(lowerName);
       candidates.push({
-        id: `known:${item.name}`,
+        id: strictBuiltin?.id ?? `known:${item.name}`,
         name: item.name,
-        canonicalName: builtin?.canonicalName ?? item.name,
+        canonicalName: resolvedCanonical,
         recordedName: item.name,
-        movementPattern: builtin?.movementPattern,
-        primaryMuscle: builtin?.primaryMuscle,
-        equipment: builtin?.equipment,
+        movementPattern: fallbackBuiltin?.movementPattern,
+        primaryMuscle: fallbackBuiltin?.primaryMuscle,
+        equipment: fallbackBuiltin?.equipment,
         bodyweightBased: item.bodyweightBased,
         isCardio: itemIsCardio,
         cardioMode: item.cardioMode ?? detectCardioMode(item.name),
@@ -625,14 +735,22 @@ export const warmCatalogueCache = async (
 /** Returns the synchronous in-memory catalogue if ready. */
 export const getCachedCatalogue = (): CatalogueEntry[] | null => inMemoryCatalogue;
 
-/** Adds or updates an entry in the in-memory catalogue. */
+/** Adds or updates an entry in the in-memory catalogue, deduplicating by identity. */
 export const updateCatalogueCache = (entry: CatalogueEntry): void => {
   if (!inMemoryCatalogue) {
     inMemoryCatalogue = [entry];
     return;
   }
+  const entryIdentity = exerciseIdentityKey(
+    entry.recordedName ?? entry.canonicalName,
+    entry.canonicalName,
+  );
   const idx = inMemoryCatalogue.findIndex(
-    (c) => c.id === entry.id || c.canonicalName.toLowerCase() === entry.canonicalName.toLowerCase(),
+    (c) =>
+      c.id === entry.id ||
+      c.canonicalName.toLowerCase() === entry.canonicalName.toLowerCase() ||
+      exerciseIdentityKey(c.recordedName ?? c.canonicalName, c.canonicalName) ===
+        entryIdentity,
   );
   if (idx >= 0) {
     inMemoryCatalogue[idx] = entry;

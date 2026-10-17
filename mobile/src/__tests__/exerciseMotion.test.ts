@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RAW_BUILTIN_CATALOGUE } from '../builtinCatalogue';
 import {
   FLOOR_Y,
   lengthsFor,
@@ -36,15 +37,20 @@ describe('motionFor: the exercise, not its family', () => {
     ['Cable Rear Delt Reverse Fly', 'reverse-fly'],
     ['Bench Press (Barbell)', 'bench-press'],
     ['Dumbbell Bench Press', 'bench-press'],
+    ['Flat Dumbbell Press', 'bench-press'],
+    ['CGBP', 'bench-press'],
     ['Pull Up', 'pull-up'],
     ['Chin-Up', 'pull-up'],
     ['Lat Pulldown (Cable)', 'pulldown'],
     ['Straight Arm Lat Pulldown (Cable)', 'straight-arm-pulldown'],
+    ['Lat Prayer', 'straight-arm-pulldown'],
     ['Seated Cable Row - V Grip (Cable)', 'seated-row'],
     ['Lateral Raise (Dumbbell)', 'lateral-raise'],
     ['Pullover (Dumbbell)', 'pullover'],
     ['Chest Supported Incline Row (Dumbbell)', 'chest-supported-row'],
+    ['Incline Bench Dumbbell Row', 'chest-supported-row'],
     ['Bulgarian Split Squat (Dumbbell)', 'lunge'],
+    ['RFESS', 'lunge'],
     ['Seated Incline Curl (Dumbbell)', 'incline-curl'],
     ['Bicep Curl (Barbell)', 'curl'],
     ['Triceps Pushdown', 'pushdown'],
@@ -60,41 +66,53 @@ describe('motionFor: the exercise, not its family', () => {
     ['Leg Extension (Machine)', 'leg-extension'],
     ['Lying Leg Curl (Machine)', 'leg-curl'],
     ['Standing Calf Raise', 'calf-raise'],
+    ['Leg Press Calf Raise', 'calf-raise'],
+    ['Seated Calf Raise', 'seated-calf-raise'],
     ['Hanging Leg Raise', 'hanging-leg-raise'],
+    ['Toes to Bar', 'hanging-leg-raise'],
     ['Hanging Knee Raise', 'hanging-knee-raise'],
     ['Crunch', 'crunch'],
+    ['Cable Crunch', 'cable-crunch'],
+    ['Ab Wheel Rollout', 'ab-wheel'],
     ['Plank', 'plank'],
     ["Farmer's Walk", 'carry'],
     ['Cable Fly', 'chest-fly'],
     ['Pec Deck (Machine)', 'chest-fly'],
+    ['Incline Dumbbell Fly', 'chest-fly'],
+    ['Rear Delt Reverse Fly (Dumbbell)', 'reverse-fly'],
     ['Front Raise (Dumbbell)', 'front-raise'],
+    ['Decline Bench Press (Barbell)', 'decline-press'],
+    ['Hip Thrust (Barbell)', 'hip-thrust'],
+    ['Glute Bridge', 'hip-thrust'],
+    ['Leg Press', 'leg-press'],
+    ['Hack Squat', 'hack-squat'],
+    ['Seated Leg Curl (Machine)', 'seated-leg-curl'],
+    ['Preacher Curl', 'preacher-curl'],
+    ['Upright Row', 'upright-row'],
+    ['Face Pull', 'face-pull'],
+    ['Shrug (Dumbbell)', 'shrug'],
+    ['Lying Leg Raise', 'lying-leg-raise'],
+    ['Step-Up', 'step-up'],
+    ['Good Morning', 'good-morning'],
   ] as const)('%s → %s', (name, motion) => {
     expect(motionFor(name)).toBe(motion);
   });
 
-  // Each of these looks like a known motion by name and moves differently.
-  it.each([
-    'Decline Bench Press (Barbell)',
-    'Hip Thrust (Barbell)',
-    'Leg Press',
-    'Hack Squat',
-    'Seated Leg Curl (Machine)',
-    'Preacher Curl',
-    'Upright Row',
-    'Face Pull',
-    'Shrug (Dumbbell)',
-    'Rear Delt Reverse Fly (Dumbbell)',
-    'Incline Dumbbell Fly',
-    'Lying Leg Raise',
-    'Step-Up',
-    'Good Morning',
-  ])('draws nothing for %s rather than a near miss', (name) => {
-    expect(motionFor(name)).toBeNull();
+  it('provides a valid 2D kinematic animation for 100% of built-in catalogue exercises and aliases', () => {
+    for (const spec of RAW_BUILTIN_CATALOGUE) {
+      const motion = motionFor(spec.canonicalName);
+      expect(motion, `canonical: ${spec.canonicalName}`).not.toBeNull();
+      for (const alias of spec.aliases ?? []) {
+        const aliasMotion = motionFor(alias);
+        expect(aliasMotion, `alias: ${alias} (of ${spec.canonicalName})`).not.toBeNull();
+      }
+    }
   });
 
-  it('draws nothing for a name it does not know', () => {
+  it('draws nothing for a name it does not know or non-rep conditioning', () => {
     expect(motionFor('Turkish Get-Up')).toBeNull();
     expect(motionFor('Sled Push')).toBeNull();
+    expect(motionFor('Box Jump')).toBeNull();
   });
 });
 

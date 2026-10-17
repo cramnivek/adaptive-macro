@@ -30,6 +30,7 @@ import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 import {
   BUILTIN_CATALOGUE,
   RAW_BUILTIN_CATALOGUE,
+  exerciseIdentityKey,
   findBuiltinCatalogueEntry,
 } from '../builtinCatalogue';
 
@@ -1137,40 +1138,81 @@ export const listUnlinkedExerciseNames = async (): Promise<string[]> => {
 export const searchCatalogue = async (term: string, limit = 30): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(SEARCH_CATALOGUE, `%${term}%`, limit);
-  const fromDb = rows.map(toCatalogueEntry);
-  const seen = new Set(fromDb.map((e) => e.canonicalName.toLowerCase()));
+  const out: CatalogueEntry[] = [];
+  const seenIdentity = new Set<string>();
+  const seenCanonical = new Set<string>();
+
+  for (const row of rows) {
+    const entry = enrichWithBuiltinFallback(
+      toCatalogueEntry(row),
+      row.recorded_name ?? row.canonical_name,
+    );
+    const idKey = exerciseIdentityKey(
+      entry.recordedName ?? entry.canonicalName,
+      entry.canonicalName,
+    );
+    const canonLower = entry.canonicalName.toLowerCase();
+    if (seenIdentity.has(idKey) || seenCanonical.has(canonLower)) continue;
+    seenIdentity.add(idKey);
+    seenCanonical.add(canonLower);
+    out.push(entry);
+  }
+
   const q = term.trim().toLowerCase();
   for (const builtin of BUILTIN_CATALOGUE) {
-    if (fromDb.length >= limit) break;
-    if (seen.has(builtin.canonicalName.toLowerCase())) continue;
+    if (out.length >= limit) break;
+    const canonLower = builtin.canonicalName.toLowerCase();
+    if (seenIdentity.has(builtin.id) || seenCanonical.has(canonLower)) continue;
     if (
       !q ||
-      builtin.canonicalName.toLowerCase().includes(q) ||
+      canonLower.includes(q) ||
       builtin.primaryMuscle.toLowerCase().includes(q) ||
       builtin.equipment.toLowerCase().includes(q)
     ) {
-      fromDb.push(builtin);
-      seen.add(builtin.canonicalName.toLowerCase());
+      out.push(builtin);
+      seenIdentity.add(builtin.id);
+      seenCanonical.add(canonLower);
     }
   }
-  return fromDb;
+  return out;
 };
 
 /**
- * Loads all catalogue entries with their most-logged recorded names for in-memory indexing.
+ * Loads all catalogue entries with their most-logged recorded names for in-memory indexing,
+ * deduplicating any SQLite rows that collide with each other or with BUILTIN_CATALOGUE.
  */
 export const loadAllCatalogueEntries = async (): Promise<CatalogueEntry[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<CatalogueRow>(ALL_CATALOGUE_ENTRIES);
-  const fromDb = rows.map(toCatalogueEntry);
-  const seen = new Set(fromDb.map((e) => e.canonicalName.toLowerCase()));
+  const out: CatalogueEntry[] = [];
+  const seenIdentity = new Set<string>();
+  const seenCanonical = new Set<string>();
+
+  for (const row of rows) {
+    const entry = enrichWithBuiltinFallback(
+      toCatalogueEntry(row),
+      row.recorded_name ?? row.canonical_name,
+    );
+    const idKey = exerciseIdentityKey(
+      entry.recordedName ?? entry.canonicalName,
+      entry.canonicalName,
+    );
+    const canonLower = entry.canonicalName.toLowerCase();
+    if (seenIdentity.has(idKey) || seenCanonical.has(canonLower)) continue;
+    seenIdentity.add(idKey);
+    seenCanonical.add(canonLower);
+    out.push(entry);
+  }
+
   for (const builtin of BUILTIN_CATALOGUE) {
-    if (!seen.has(builtin.canonicalName.toLowerCase())) {
-      fromDb.push(builtin);
-      seen.add(builtin.canonicalName.toLowerCase());
+    const canonLower = builtin.canonicalName.toLowerCase();
+    if (!seenIdentity.has(builtin.id) && !seenCanonical.has(canonLower)) {
+      out.push(builtin);
+      seenIdentity.add(builtin.id);
+      seenCanonical.add(canonLower);
     }
   }
-  return fromDb;
+  return out;
 };
 
 const enrichWithBuiltinFallback = (entry: CatalogueEntry, queryName: string): CatalogueEntry => {

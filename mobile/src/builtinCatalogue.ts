@@ -1026,6 +1026,142 @@ export const RAW_BUILTIN_CATALOGUE: BuiltinExerciseSpec[] = [
       'Brace your abs and lats to pull the wheel back under your shoulders.',
     ],
   },
+  {
+    id: 'builtin:decline-bench-press-barbell',
+    canonicalName: 'Decline Bench Press (Barbell)',
+    aliases: ['Decline Bench Press', 'Decline Barbell Bench Press', 'Decline Dumbbell Bench Press'],
+    movementPattern: 'push',
+    primaryMuscle: 'Chest',
+    equipment: 'Barbell',
+    bodyweightBased: false,
+    primaryRegion: 'chest',
+    secondaryRegions: ['triceps', 'shoulders'],
+    instructions: 'Secure your legs at the end of a decline bench, lower the bar to your lower sternum, and press straight up to lockout.',
+    steps: [
+      'Lie back on a 15°–30° decline bench with your feet hooked securely under the leg pads and shoulder blades retracted.',
+      'Unrack the bar and lower it under control to your lower chest.',
+      'Press forcefully back to full elbow extension over your shoulders.',
+    ],
+  },
+  {
+    id: 'builtin:dumbbell-pullover',
+    canonicalName: 'Dumbbell Pullover',
+    aliases: ['Pullover (Dumbbell)', 'Straight-Arm Dumbbell Pullover'],
+    movementPattern: 'pull',
+    primaryMuscle: 'Lats',
+    equipment: 'Dumbbell',
+    bodyweightBased: false,
+    primaryRegion: 'lats',
+    secondaryRegions: ['chest', 'triceps'],
+    instructions: 'Lie on a flat bench holding one dumbbell with both hands over your chest, lower it in an arc behind your head, and pull back over your sternum.',
+    steps: [
+      'Lie flat on a bench and cup the top plate of a single dumbbell with both hands above your chest.',
+      'Keep a slight, fixed bend in your elbows and lower the dumbbell backward past your head until you feel a deep stretch in your lats.',
+      'Contract your lats and chest to sweep the weight back over your chest.',
+    ],
+  },
+  {
+    id: 'builtin:front-raise-dumbbell',
+    canonicalName: 'Front Raise (Dumbbell)',
+    aliases: ['Front Raise', 'Dumbbell Front Raise', 'Cable Front Raise', 'Plate Front Raise'],
+    movementPattern: 'isolation',
+    primaryMuscle: 'Shoulders',
+    equipment: 'Dumbbell',
+    bodyweightBased: false,
+    primaryRegion: 'shoulders',
+    secondaryRegions: ['chest'],
+    instructions: 'Stand tall holding weights in front of your thighs and raise your arms forward to shoulder height with a controlled tempo.',
+    steps: [
+      'Stand upright with dumbbells resting in front of your thighs and a soft bend in the elbows.',
+      'Raise the weights forward and upward until your hands reach shoulder level without swinging your torso.',
+      'Lower slowly for 2 seconds back to the starting position.',
+    ],
+  },
+  {
+    id: 'builtin:upright-row-barbell',
+    canonicalName: 'Upright Row (Barbell)',
+    aliases: ['Upright Row', 'Dumbbell Upright Row', 'Cable Upright Row', 'EZ-Bar Upright Row'],
+    movementPattern: 'pull',
+    primaryMuscle: 'Shoulders',
+    equipment: 'Barbell',
+    bodyweightBased: false,
+    primaryRegion: 'shoulders',
+    secondaryRegions: ['traps', 'biceps'],
+    instructions: 'Hold a barbell or dumbbells at hip level with a shoulder-width grip and pull upward by leading with your elbows to shoulder height.',
+    steps: [
+      'Stand tall holding a bar or dumbbells at shoulder width in front of your thighs.',
+      'Lead with your elbows out and up until your upper arms reach parallel with the floor.',
+      'Lower the weight smoothly under control.',
+    ],
+  },
+  {
+    id: 'builtin:good-morning-barbell',
+    canonicalName: 'Good Morning (Barbell)',
+    aliases: ['Good Morning', 'Barbell Good Morning'],
+    movementPattern: 'hinge',
+    primaryMuscle: 'Hamstrings',
+    equipment: 'Barbell',
+    bodyweightBased: false,
+    primaryRegion: 'hamstrings',
+    secondaryRegions: ['glutes', 'lower_back'],
+    instructions: 'Rest a barbell across your upper back, unlock your knees slightly, hinge your hips straight back keeping a flat spine, and drive hips forward.',
+    steps: [
+      'Set the barbell across your upper traps as in a back squat and stand with feet hip-width apart.',
+      'Brace your core 360°, keep a soft bend in the knees, and push your hips straight back until your torso is nearly parallel to the floor.',
+      'Drive your hips forward to return to standing lockout.',
+    ],
+  },
+  {
+    id: 'builtin:step-up-dumbbell',
+    canonicalName: 'Step-Up (Dumbbell)',
+    aliases: ['Step-Up', 'Step Up', 'Dumbbell Step-Up', 'Box Squat'],
+    movementPattern: 'squat',
+    primaryMuscle: 'Quadriceps',
+    equipment: 'Dumbbell',
+    bodyweightBased: false,
+    primaryRegion: 'quads',
+    secondaryRegions: ['glutes', 'hamstrings'],
+    instructions: 'Place one foot flat on a box or bench, lean slightly over your front leg, drive through that heel to stand tall on the box, and step down slowly.',
+    steps: [
+      'Stand facing a knee-height box or bench holding dumbbells at your sides and place one foot flat on the surface.',
+      'Drive through your elevated heel without pushing off your trailing foot to stand all the way up.',
+      'Lower yourself back to the floor over 2–3 seconds under control.',
+    ],
+  },
+  {
+    id: 'builtin:lying-leg-raise',
+    canonicalName: 'Lying Leg Raise',
+    aliases: ['Flat Bench Leg Raise', 'Floor Leg Raise', 'Reverse Crunch'],
+    movementPattern: 'core',
+    primaryMuscle: 'Core',
+    equipment: 'Bodyweight',
+    bodyweightBased: true,
+    primaryRegion: 'abs',
+    secondaryRegions: [],
+    instructions: 'Lie flat on your back with lower back pressed into the floor, raise your legs to vertical, and lower slowly without overarching.',
+    steps: [
+      'Lie flat on a mat or bench, press your lower back firmly into the pad, and extend your legs straight out.',
+      'Contract your abs to raise your legs in an arc until they are perpendicular to the floor, curling your pelvis slightly at the top.',
+      'Lower your legs slowly while keeping your lower back anchored.',
+    ],
+  },
+  {
+    id: 'builtin:farmers-walk',
+    canonicalName: "Farmer's Walk",
+    aliases: ['Farmers Walk', 'Farmer Carry', 'Suitcase Carry', 'Loaded Carry'],
+    movementPattern: 'carry',
+    primaryMuscle: 'Forearms',
+    equipment: 'Dumbbell',
+    bodyweightBased: false,
+    primaryRegion: 'forearms',
+    secondaryRegions: ['traps', 'abs', 'glutes'],
+    instructions: 'Hold heavy dumbbells or kettlebells at your sides with proud posture, braced abs, and walk with controlled, even steps.',
+    steps: [
+      'Deadlift a pair of heavy dumbbells or farmer handles to standing lockout with shoulders pulled back and down.',
+      'Brace your core and glutes to keep your torso upright without leaning or swaying.',
+      'Walk forward with controlled, steady steps for the target distance or time.',
+    ],
+  },
 ];
 
 export const BUILTIN_CATALOGUE: CatalogueEntry[] = RAW_BUILTIN_CATALOGUE.map(
@@ -1039,48 +1175,136 @@ export const BUILTIN_ALIASES_BY_CANONICAL: Record<string, string[]> = Object.fro
   RAW_BUILTIN_CATALOGUE.map((spec) => [spec.canonicalName.toLowerCase(), spec.aliases ?? []]),
 );
 
-const normalizeKey = (s: string): string =>
-  s
+const TOKEN_SYNONYM: Record<string, string> = {
+  db: 'dumbbell',
+  dumbbells: 'dumbbell',
+  bb: 'barbell',
+  barbells: 'barbell',
+  kb: 'kettlebell',
+  kettlebells: 'kettlebell',
+  cables: 'cable',
+  machines: 'machine',
+  curls: 'curl',
+  rows: 'row',
+  squats: 'squat',
+  deadlifts: 'deadlift',
+  lunges: 'lunge',
+  dips: 'dip',
+  raises: 'raise',
+  extensions: 'extension',
+  pulldowns: 'pulldown',
+  pushdowns: 'pushdown',
+  pressdowns: 'pushdown',
+  shrugs: 'shrug',
+  flyes: 'fly',
+  flies: 'fly',
+  flys: 'fly',
+  pullups: 'pull up',
+  chinups: 'chin up',
+  pushups: 'push up',
+  tricep: 'triceps',
+  bicep: 'biceps',
+  glute: 'glutes',
+};
+
+/**
+ * Normalizes an exercise name into a canonical sorted token bag (expanding
+ * common equipment abbreviations and singularizing plurals) so that
+ * "Barbell Bench Press", "BB Bench Press", and "Bench Press (Barbell)"
+ * produce the exact same key.
+ */
+export const normalizeExerciseKey = (s: string): string => {
+  const rawTokens = s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .split(/\s+/)
-    .sort()
-    .join(' ');
+    .filter(Boolean);
+
+  const normalized: string[] = [];
+  for (const t of rawTokens) {
+    const mapped = TOKEN_SYNONYM[t] ?? t;
+    for (const part of mapped.split(' ')) {
+      if (part) normalized.push(part);
+    }
+  }
+  return Array.from(new Set(normalized)).sort().join(' ');
+};
+
+// Precomputed O(1) lookup maps for built-in exercises
+const BUILTIN_ENTRY_BY_ID = new Map<string, CatalogueEntry>();
+const BUILTIN_BY_LOWER_NAME = new Map<string, CatalogueEntry>();
+const BUILTIN_BY_NORM_KEY = new Map<string, CatalogueEntry>();
+
+for (const spec of RAW_BUILTIN_CATALOGUE) {
+  const { aliases, ...rest } = spec;
+  const entry: CatalogueEntry = { ...rest, recordedName: null };
+  BUILTIN_ENTRY_BY_ID.set(spec.id, entry);
+
+  const canonLower = spec.canonicalName.toLowerCase();
+  BUILTIN_BY_LOWER_NAME.set(canonLower, entry);
+  BUILTIN_BY_NORM_KEY.set(normalizeExerciseKey(spec.canonicalName), entry);
+
+  if (aliases) {
+    for (const alias of aliases) {
+      const aliasLower = alias.toLowerCase();
+      if (!BUILTIN_BY_LOWER_NAME.has(aliasLower)) {
+        BUILTIN_BY_LOWER_NAME.set(aliasLower, entry);
+      }
+      const aliasNorm = normalizeExerciseKey(alias);
+      if (!BUILTIN_BY_NORM_KEY.has(aliasNorm)) {
+        BUILTIN_BY_NORM_KEY.set(aliasNorm, entry);
+      }
+    }
+  }
+}
+
+/**
+ * Fast O(1) strict identity match against the built-in catalogue (exact name,
+ * exact alias, or normalized token-bag match). Never uses loose stem guessing,
+ * making it safe for deduplicating search results and database entries.
+ */
+export const findBuiltinByIdentity = (name: string | null | undefined): CatalogueEntry | null => {
+  if (!name) return null;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const byLower = BUILTIN_BY_LOWER_NAME.get(trimmed.toLowerCase());
+  if (byLower) return { ...byLower, recordedName: trimmed };
+
+  const byNorm = BUILTIN_BY_NORM_KEY.get(normalizeExerciseKey(trimmed));
+  if (byNorm) return { ...byNorm, recordedName: trimmed };
+
+  return null;
+};
+
+/**
+ * Returns a canonical deduplication key for any exercise name / canonicalName pair.
+ * Exercises that map to the same built-in exercise share its `builtin:...` ID;
+ * custom exercises share their normalized token-bag key.
+ */
+export const exerciseIdentityKey = (
+  name: string,
+  canonicalName?: string | null,
+): string => {
+  const builtin =
+    (canonicalName ? findBuiltinByIdentity(canonicalName) : null) ??
+    findBuiltinByIdentity(name);
+  if (builtin) return builtin.id;
+  return `custom:${normalizeExerciseKey(canonicalName || name)}`;
+};
 
 /**
  * Finds a built-in catalogue entry matching the given exercise name (exact,
- * alias, or normalized word-set match like "Barbell Bench Press" <-> "Bench Press (Barbell)").
+ * alias, or normalized word-set match like "Barbell Bench Press" <-> "Bench Press (Barbell)"),
+ * falling back to stem keywords for how-to modal enrichment.
  */
 export const findBuiltinCatalogueEntry = (name: string): CatalogueEntry | null => {
+  const strict = findBuiltinByIdentity(name);
+  if (strict) return strict;
+
   const trimmed = name.trim();
   if (!trimmed) return null;
   const lower = trimmed.toLowerCase();
-  const norm = normalizeKey(trimmed);
-
-  // 1. Exact or alias match
-  for (const spec of RAW_BUILTIN_CATALOGUE) {
-    if (spec.canonicalName.toLowerCase() === lower) {
-      const { aliases: _a, ...rest } = spec;
-      return { ...rest, recordedName: trimmed };
-    }
-    if (spec.aliases?.some((a) => a.toLowerCase() === lower)) {
-      const { aliases: _a, ...rest } = spec;
-      return { ...rest, recordedName: trimmed };
-    }
-  }
-
-  // 2. Normalized token bag match (e.g. "Bench Press (Barbell)" <-> "Barbell Bench Press")
-  for (const spec of RAW_BUILTIN_CATALOGUE) {
-    if (normalizeKey(spec.canonicalName) === norm) {
-      const { aliases: _a, ...rest } = spec;
-      return { ...rest, recordedName: trimmed };
-    }
-    if (spec.aliases?.some((a) => normalizeKey(a) === norm)) {
-      const { aliases: _a, ...rest } = spec;
-      return { ...rest, recordedName: trimmed };
-    }
-  }
 
   // 3. Keyword fallback for common exercise stems so details are never blank
   const words = lower.replace(/[^a-z0-9]+/g, ' ');

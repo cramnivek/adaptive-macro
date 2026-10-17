@@ -396,8 +396,124 @@ export const MOTIONS = {
     props: [],
   },
   'lateral-raise': { view: 'front', raise: { from: 10, to: 84 }, load: 'dumbbell' },
+  'upright-row': { view: 'front', raise: { from: 12, to: 74 }, load: 'plate' },
   'reverse-fly': { view: 'front', open: { from: 14, to: 88 }, load: 'handle', cables: true },
   'chest-fly': { view: 'front', open: { from: 88, to: 14 }, load: 'handle', cables: true },
+  'decline-press': {
+    view: 'side',
+    from: { torso: -12, upperArm: 238, forearm: 82, ...legs(196, 270) },
+    to: { torso: -12, upperArm: 90, forearm: 90, ...legs(196, 270) },
+    anchor: { joint: 'hip', at: BENCH_HIP },
+    load: 'plate',
+    props: [{ kind: 'bench' }],
+  },
+  'hip-thrust': {
+    view: 'side',
+    from: { torso: 158, upperArm: 270, forearm: 0, ...legs(28, 256) },
+    to: { torso: 180, upperArm: 270, forearm: 0, ...legs(0, 270) },
+    anchor: { joint: 'frontAnkle', at: [68, FLOOR_Y] },
+    load: 'plate',
+    props: [{ kind: 'bench' }],
+  },
+  'good-morning': {
+    view: 'side',
+    from: { ...standing, upperArm: 235, forearm: 100 },
+    to: { torso: 22, upperArm: 167, forearm: 32, ...legs(288, 265) },
+    anchor: { joint: 'frontAnkle', at: [52, FLOOR_Y] },
+    load: 'plate',
+    props: [],
+  },
+  shrug: {
+    view: 'side',
+    from: { ...standing, upperArm: 274, forearm: 276 },
+    to: { ...standing, upperArm: 256, forearm: 294 },
+    anchor: { joint: 'frontAnkle', at: [48, FLOOR_Y] },
+    load: 'dumbbell',
+    props: [],
+  },
+  'face-pull': {
+    view: 'side',
+    from: { ...standing, torso: 94, upperArm: 356, forearm: 356 },
+    to: { ...standing, torso: 94, upperArm: 195, forearm: 80 },
+    anchor: { joint: 'frontAnkle', at: [42, FLOOR_Y] },
+    load: 'handle',
+    props: [{ kind: 'cable', from: [92, 26] }],
+  },
+  'preacher-curl': {
+    view: 'side',
+    from: { ...seated(86), upperArm: 322, forearm: 322 },
+    to: { ...seated(86), upperArm: 322, forearm: 455 },
+    anchor: { joint: 'hip', at: [36, 69] },
+    load: 'dumbbell',
+    props: [{ kind: 'seat' }, { kind: 'pad' }],
+  },
+  'seated-leg-curl': {
+    view: 'side',
+    from: { torso: 100, upperArm: 275, forearm: 280, ...legs(4, 358) },
+    to: { torso: 100, upperArm: 275, forearm: 280, ...legs(4, 268) },
+    anchor: { joint: 'hip', at: [36, 69] },
+    load: 'pad',
+    loadAt: 'ankle',
+    props: [{ kind: 'seat', back: true }],
+  },
+  'lying-leg-raise': {
+    view: 'side',
+    from: { torso: 180, upperArm: 0, forearm: 0, ...legs(10, 10) },
+    to: { torso: 180, upperArm: 0, forearm: 0, ...legs(86, 86) },
+    anchor: { joint: 'hip', at: [48, 86] },
+    load: 'none',
+    props: [],
+  },
+  'leg-press': {
+    view: 'side',
+    from: { torso: 135, upperArm: 290, forearm: 340, ...legs(105, 350) },
+    to: { torso: 135, upperArm: 290, forearm: 340, ...legs(42, 38) },
+    anchor: { joint: 'hip', at: [38, 72] },
+    load: 'plate',
+    loadAt: 'ankle',
+    props: [{ kind: 'seat', back: true }],
+  },
+  'hack-squat': {
+    view: 'side',
+    from: { torso: 104, upperArm: 250, forearm: 110, ...legs(282, 265) },
+    to: { torso: 104, upperArm: 250, forearm: 110, ...legs(356, 250) },
+    anchor: { joint: 'frontAnkle', at: [54, FLOOR_Y] },
+    load: 'plate',
+    props: [{ kind: 'pad' }],
+  },
+  'step-up': {
+    view: 'side',
+    from: { ...standing, ...hanging },
+    to: { torso: 72, ...hanging, ...legs(346, 254) },
+    anchor: { joint: 'frontAnkle', at: [50, FLOOR_Y] },
+    load: 'dumbbell',
+    props: [{ kind: 'seat' }],
+  },
+  'ab-wheel': {
+    view: 'side',
+    from: { torso: 50, upperArm: 282, forearm: 282, ...legs(260, 180) },
+    to: { torso: 14, upperArm: 340, forearm: 340, ...legs(216, 180) },
+    anchor: { joint: 'hip', at: [28, 71.6], to: [42, 79.0] },
+    scale: 0.85,
+    load: 'plate',
+    props: [],
+  },
+  'cable-crunch': {
+    view: 'side',
+    from: { torso: 78, upperArm: 35, forearm: 135, ...legs(262, 180) },
+    to: { torso: 28, upperArm: -15, forearm: 85, ...legs(262, 180) },
+    anchor: { joint: 'hip', at: [38, 69] },
+    load: 'handle',
+    props: [{ kind: 'cable', from: [76, 6] }],
+  },
+  'seated-calf-raise': {
+    view: 'side',
+    from: { torso: 90, upperArm: 305, forearm: 350, ...legs(-2, 270) },
+    to: { torso: 90, upperArm: 305, forearm: 350, ...legs(10, 270) },
+    anchor: { joint: 'hip', at: [32, 69] },
+    load: 'pad',
+    props: [{ kind: 'seat' }, { kind: 'toes' }],
+  },
 } satisfies Record<string, Motion>;
 
 export type MotionId = keyof typeof MOTIONS;
@@ -405,46 +521,58 @@ export type MotionId = keyof typeof MOTIONS;
 // --- recognising the exercise ------------------------------------------------
 
 /**
- * Exercises that look like a known motion by name but move differently enough
- * that its figure would mislead. Checked first, so "decline bench press" is
- * not a flat press and a seated leg curl is not a lying one.
+ * Only non-strength conditioning / neck / wrist / plyometric movements without a
+ * standard repetition joint trajectory remain undrawn.
  */
 const NOT_DRAWN =
-  /\b(decline|hip thrust|glute bridge|good ?morning|shrugs?|upright row|face pull|step-?ups?|leg press|hack squat|nordic|seated leg curl|preacher|concentration|wrist|neck|jumps?|box|sled|battle|sprint|ergometer|rowing machine|lying leg raise)\b/;
+  /\b(nordic|wrist|neck|jumps?|sled|battle|sprint|ergometer|rowing machine)\b/;
 
 const RULES: [RegExp, MotionId | ((name: string) => MotionId | null)][] = [
   [/\b(pull|chin)[- ]?ups?\b/, 'pull-up'],
-  [/\bknee raise/, 'hanging-knee-raise'],
-  [/\bleg raise/, 'hanging-leg-raise'],
-  [/\bstraight[- ]arm/, 'straight-arm-pulldown'],
+  [/\bab[- ]?wheel|\broll[- ]?outs?\b/, 'ab-wheel'],
+  [/\b(cable|kneeling|machine) crunch(es)?\b|\bcrunch(es)?\b.*\b(cable|machine)\b/, 'cable-crunch'],
+  [/\blying leg raises?\b/, 'lying-leg-raise'],
+  [/\bknee raises?\b/, 'hanging-knee-raise'],
+  [/\b(leg raises?|toes[- ]to[- ]bar|captain'?s chair)\b/, 'hanging-leg-raise'],
+  [/\b(straight[- ]arm|lat prayers?)\b/, 'straight-arm-pulldown'],
   [/\bpull[- ]?downs?\b/, 'pulldown'],
   [/\bpullovers?\b/, 'pullover'],
-  // Standing, at a cable or a machine; bent-over and incline versions move
-  // the same arms through a different body, and are left undrawn.
-  [/\b(reverse fly|reverse flye|rear delt (fly|flye|raise)|reverse pec deck)/, (n) => (/\b(cable|machine|pec deck|standing)\b/.test(n) ? 'reverse-fly' : null)],
-  [/\b(fly|flye|flyes|pec deck|crossover)\b/, (n) => (/\b(cable|machine|pec deck|crossover|standing)\b/.test(n) ? 'chest-fly' : null)],
+  [/\bface[- ]?pulls?\b/, 'face-pull'],
+  [/\bupright rows?\b/, 'upright-row'],
+  [/\bshrugs?\b/, 'shrug'],
+  [/\b(hip thrusts?|glute bridges?)\b/, 'hip-thrust'],
+  [/\bgood ?mornings?\b/, 'good-morning'],
+  [/\b(reverse fly|reverse flye|rear delt (fly|flye|raise)|reverse pec deck)/, 'reverse-fly'],
+  [/\b(fly|flye|flyes|pec deck|crossover)\b/, 'chest-fly'],
   [/\b(lateral|side|lat) raises?\b/, 'lateral-raise'],
   [/\bfront raises?\b/, 'front-raise'],
   [/\b(skull ?crushers?|lying (triceps?|tricep) extensions?|french press)\b/, 'skullcrusher'],
   [/\b(push|press)[- ]?downs?\b/, 'pushdown'],
   [/\b(triceps?|tricep)\b.*\bextensions?\b|\boverhead extensions?\b/, 'overhead-extension'],
+  [/\bseated calf raises?\b/, 'seated-calf-raise'],
+  [/\bcalf raises?\b/, 'calf-raise'],
+  [/\bseated leg curls?\b/, 'seated-leg-curl'],
   [/\b(leg|hamstring) curls?\b/, 'leg-curl'],
   [/\bleg extensions?\b/, 'leg-extension'],
+  [/\bleg press\b/, 'leg-press'],
+  [/\b(hack|pendulum) squats?\b/, 'hack-squat'],
+  [/\b(step[- ]?ups?|box squats?)\b/, 'step-up'],
+  [/\b(preacher|concentration)\b.*\bcurls?\b|\bcurls?\b.*\b(preacher|concentration)\b/, 'preacher-curl'],
   [/\bcurls?\b/, (n) => (/\bincline\b/.test(n) ? 'incline-curl' : 'curl')],
+  [/\bchest[- ]supported\b.*\brows?\b|\bincline\b.*\brows?\b|\brows?\b.*\bincline\b|\bt[- ]?bar rows?\b/, 'chest-supported-row'],
+  [/\bseated\b.*\brows?\b|\bcable rows?\b|\brows?\b.*\b(seated|cable)\b|\bmachine rows?\b|\blow rows?\b/, 'seated-row'],
+  [/\brows?\b/, 'bent-row'],
+  [/\bdecline\b.*\b(press|bench)\b|\b(press|bench)\b.*\bdecline\b/, 'decline-press'],
   [/\bincline\b.*\b(press|bench)\b|\b(press|bench)\b.*\bincline\b/, 'incline-press'],
-  [/\b(bench press|floor press)\b/, 'bench-press'],
+  [/\b(bench press|floor press|chest press|flat dumbbell press|dumbbell press|cgbp)\b/, 'bench-press'],
   [/\b(overhead|shoulder|military|arnold|push) press\b|\bohp\b/, 'overhead-press'],
   [/\bpush[- ]?ups?\b/, 'push-up'],
   [/\bdips?\b/, 'dip'],
-  [/\bchest[- ]supported\b.*\brows?\b/, 'chest-supported-row'],
-  [/\bseated\b.*\brows?\b|\bcable rows?\b|\brows?\b.*\b(seated|cable)\b|\bmachine rows?\b/, 'seated-row'],
-  [/\brows?\b/, 'bent-row'],
   [/\b(romanian|rdl|stiff[- ]legg?ed)\b/, 'rdl'],
   [/\bdeadlifts?\b/, 'deadlift'],
-  [/\b(split squats?|lunges?|bulgarian)\b/, 'lunge'],
+  [/\b(split squats?|lunges?|bulgarian|rfess)\b/, 'lunge'],
   [/\b(goblet|front squats?|dumbbell squats?)\b/, 'goblet-squat'],
   [/\bsquats?\b/, 'squat'],
-  [/\bcalf raises?\b/, 'calf-raise'],
   [/\b(crunch(es)?|sit[- ]?ups?)\b/, 'crunch'],
   [/\bplanks?\b/, 'plank'],
   [/\b(farmers?|carry|carries|suitcase)\b/, 'carry'],
@@ -467,6 +595,7 @@ export const motionFor = (exerciseName: string): MotionId | null => {
 export const loadFor = (motion: MotionId, exerciseName: string, equipment = ''): Load => {
   const drawn = MOTIONS[motion].load;
   if (drawn === 'none' || drawn === 'pad') return drawn;
+  if (motion === 'ab-wheel' || motion === 'leg-press' || motion === 'hack-squat') return 'plate';
   const text = `${exerciseName} ${equipment}`.toLowerCase();
   if (/\b(dumbbells?|db|goblet|kettlebells?)\b/.test(text)) return 'dumbbell';
   if (/\b(cables?|machine|pull[- ]?down|push[- ]?down|bands?)\b/.test(text)) return 'handle';
