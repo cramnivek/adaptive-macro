@@ -31,7 +31,6 @@ import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
 import {
   catalogueRegionsByExerciseName,
   dailyIntakeBetween,
-  dailyKcalBetween,
   finishedSessionTimes,
   listAllSets,
 } from '../../src/db';
@@ -210,7 +209,7 @@ export default function TrendsScreen() {
     ],
   );
 
-  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.totalVolumeKg}_${summary7D.totalWorkingSets}`;
+  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.volumeKg}_${summary7D.workingSets}`;
   const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
   const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
 

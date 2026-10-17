@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
   },
   beforeAfterSub: {
-    fontFamily: font.mono,
+    fontFamily: font.figure,
     fontSize: 10,
     color: '#94A3B8',
     marginTop: 2,
