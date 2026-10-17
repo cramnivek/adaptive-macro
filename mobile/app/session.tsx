@@ -27,6 +27,7 @@ import { createPost } from '../src/social/api';
 import { persistCustomCard } from '../src/social/customCard';
 import { type FinishedWorkout, postPayload } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
+import { recordSquadWorkoutSession } from '../src/social/squads';
 import { ExercisePicker } from '../src/components/ExercisePicker';
 import { FadeIn } from '../src/components/FadeIn';
 import { CountUp } from '../src/components/CountUp';
@@ -1566,6 +1567,16 @@ export default function SessionScreen() {
         milestone: reached[0] ?? null,
       };
       setFinished({ workout, summary: shareSummary({ ...workout, units: settings.units }) });
+      void recordSquadWorkoutSession({
+        title: session.name || 'Workout',
+        prHighlight: reached[0] ? (reached[0].exercise ? `${reached[0].exercise} ${reached[0].value}kg` : `${reached[0].value} ${reached[0].kind}`) : null,
+        durationMin: session.startedAt ? Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000)) : undefined,
+        user: {
+          id: social.profile?.id ?? 'me',
+          username: social.profile?.username ?? 'lifter',
+          displayName: social.profile?.display_name ?? 'Lifter',
+        },
+      }).catch(() => {});
       return;
     } catch {
       // Nothing to say, and nothing worth blocking the exit for.
@@ -1578,6 +1589,15 @@ export default function SessionScreen() {
         ? `${strengthLogged} ${strengthLogged === 1 ? 'set' : 'sets'} logged${cardioLogged > 0 ? ` + ${cardioLogged} cardio` : ''}.`
         : `${cardioLogged} cardio logged.`;
     notify('Workout saved', message);
+    void recordSquadWorkoutSession({
+      title: session.name || 'Workout',
+      durationMin: session.startedAt ? Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000)) : undefined,
+      user: {
+        id: social.profile?.id ?? 'me',
+        username: social.profile?.username ?? 'lifter',
+        displayName: social.profile?.display_name ?? 'Lifter',
+      },
+    }).catch(() => {});
     router.back();
   };
 

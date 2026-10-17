@@ -6,6 +6,7 @@ import { Card } from '../../src/components/Card';
 import { Button, TOUCH_TARGET } from '../../src/components/Controls';
 import { PostCard } from '../../src/components/PostCard';
 import { Screen } from '../../src/components/Screen';
+import { SquadHub } from '../../src/components/SquadHub';
 import { Tappable } from '../../src/components/Tappable';
 import { confirm, notify } from '../../src/dialog';
 import { deletePost } from '../../src/social/api';
@@ -27,7 +28,7 @@ import type { FeedPost } from '../../src/social/types';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 
-type FeedTab = 'following' | 'explore' | 'my-posts';
+type FeedTab = 'following' | 'squad' | 'explore' | 'my-posts';
 
 const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
 
@@ -61,11 +62,13 @@ export default function SocialScreen() {
   const [activeTab, setActiveTab] = useState<FeedTab>('following');
   const [postsByTab, setPostsByTab] = useState<Record<FeedTab, FeedPost[] | null>>({
     following: null,
+    squad: [],
     explore: null,
     'my-posts': null,
   });
   const [moreByTab, setMoreByTab] = useState<Record<FeedTab, boolean>>({
     following: true,
+    squad: false,
     explore: true,
     'my-posts': true,
   });
@@ -83,6 +86,7 @@ export default function SocialScreen() {
 
   const fetchPage = useCallback(
     async (tab: FeedTab, cursor: FeedCursor | null = null) => {
+      if (tab === 'squad') return [];
       if (tab === 'following') return feedPage(cursor);
       if (tab === 'explore') return explorePage(cursor);
       return profile ? postsBy(profile.id, cursor) : [];
@@ -92,6 +96,7 @@ export default function SocialScreen() {
 
   const load = useCallback(
     async (tab: FeedTab = activeTab) => {
+      if (tab === 'squad') return;
       setProblem(null);
       try {
         const [page, pending, theirCounts] = await Promise.all([
@@ -162,6 +167,7 @@ export default function SocialScreen() {
       p.id === post.id ? { ...p, liked: !p.liked, like_count: p.like_count + (p.liked ? -1 : 1) } : p;
 
     setPostsByTab((prev) => ({
+      ...prev,
       following: prev.following?.map(flip) ?? null,
       explore: prev.explore?.map(flip) ?? null,
       'my-posts': prev['my-posts']?.map(flip) ?? null,
@@ -171,6 +177,7 @@ export default function SocialScreen() {
       await (post.liked ? unlike(post.id) : like(post.id));
     } catch (error) {
       setPostsByTab((prev) => ({
+        ...prev,
         following: prev.following?.map(flip) ?? null,
         explore: prev.explore?.map(flip) ?? null,
         'my-posts': prev['my-posts']?.map(flip) ?? null,
@@ -192,6 +199,7 @@ export default function SocialScreen() {
     try {
       await deletePost(post.id);
       setPostsByTab((prev) => ({
+        ...prev,
         following: prev.following?.filter((p) => p.id !== post.id) ?? null,
         explore: prev.explore?.filter((p) => p.id !== post.id) ?? null,
         'my-posts': prev['my-posts']?.filter((p) => p.id !== post.id) ?? null,
@@ -322,10 +330,24 @@ export default function SocialScreen() {
 
       {/* Segmented Feed Tabs Bar */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-        {(['following', 'explore', 'my-posts'] as const).map((tab) => {
+        {(['following', 'squad', 'explore', 'my-posts'] as const).map((tab) => {
           const isSelected = activeTab === tab;
-          const label = tab === 'following' ? 'Friends' : tab === 'explore' ? 'Community' : 'My Posts';
-          const iconName = tab === 'following' ? 'people' : tab === 'explore' ? 'globe-outline' : 'barbell-outline';
+          const label =
+            tab === 'following'
+              ? 'Friends'
+              : tab === 'squad'
+                ? 'Squad'
+                : tab === 'explore'
+                  ? 'Community'
+                  : 'My Posts';
+          const iconName =
+            tab === 'following'
+              ? 'people'
+              : tab === 'squad'
+                ? 'shield-checkmark'
+                : tab === 'explore'
+                  ? 'globe-outline'
+                  : 'barbell-outline';
           return (
             <Pressable
               key={tab}
@@ -342,6 +364,7 @@ export default function SocialScreen() {
                 style={{ marginRight: 4 }}
               />
               <Text
+                numberOfLines={1}
                 style={[
                   styles.tabItemText,
                   { color: isSelected ? colors.onFill : colors.textMuted },
@@ -355,7 +378,15 @@ export default function SocialScreen() {
       </View>
 
       {/* Feed Content */}
-      {problem !== null ? (
+      {activeTab === 'squad' ? (
+        <SquadHub
+          user={{
+            id: profile?.id ?? 'me',
+            username: profile?.username ?? 'lifter',
+            displayName: profile?.display_name ?? 'Lifter',
+          }}
+        />
+      ) : problem !== null ? (
         <>
           {say(problem)}
           <Button label="Try again" onPress={() => void load(activeTab)} />
@@ -541,7 +572,7 @@ const styles = StyleSheet.create({
   },
   tabItemText: {
     fontFamily: font.uiStrong,
-    fontSize: 12,
+    fontSize: 11,
   },
 
   spinner: {
