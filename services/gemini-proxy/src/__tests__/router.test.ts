@@ -574,7 +574,7 @@ describe('per-user limits', () => {
     });
 
     it('refuses unauthenticated upload attempts with 401', async () => {
-      const router = createRouter({ env, webRoot });
+      const router = createRouter({ env: userEnv, webRoot });
       const res = await router(
         new Request('https://x.test/api/upload-card?sessionId=sess1', {
           method: 'POST',
@@ -582,14 +582,46 @@ describe('per-user limits', () => {
         }),
       );
       expect(res.status).toBe(401);
+      expect((await res.json()).error).toMatch(/Authentication required/);
+    });
+
+    it('refuses proxy-token alone with 401 (no proxy-token bypass allowed)', async () => {
+      const router = createRouter({ env: userEnv, webRoot });
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          headers: { 'x-proxy-token': 'shared-token' },
+          body: validJpeg,
+        }),
+      );
+      expect(res.status).toBe(401);
+      expect((await res.json()).error).toMatch(/signed-in user required/);
+    });
+
+    it('refuses expired user token with 401 and x-auth: expired', async () => {
+      const router = createRouter({ env: userEnv, webRoot });
+      const expired = await keys.sign(
+        supabaseClaims(NOW, { sub: 'bob', exp: Math.floor(NOW / 1000) - 100 }),
+      );
+      const res = await router(
+        new Request('https://x.test/api/upload-card?sessionId=sess1', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${expired}` },
+          body: validJpeg,
+        }),
+      );
+      expect(res.status).toBe(401);
+      expect(res.headers.get('x-auth')).toBe('expired');
+      expect(await res.json()).toEqual({ error: 'Session expired' });
     });
 
     it('refuses request missing sessionId with 400', async () => {
-      const router = createRouter({ env, webRoot });
+      const router = createRouter({ env: userEnv, webRoot });
+      const alice = await tokenFor('alice');
       const res = await router(
         new Request('https://x.test/api/upload-card', {
           method: 'POST',
-          headers: { 'x-proxy-token': 'shared-token' },
+          headers: { authorization: `Bearer ${alice}` },
           body: validJpeg,
         }),
       );
@@ -598,11 +630,12 @@ describe('per-user limits', () => {
     });
 
     it('refuses empty body with 400', async () => {
-      const router = createRouter({ env, webRoot });
+      const router = createRouter({ env: userEnv, webRoot });
+      const alice = await tokenFor('alice');
       const res = await router(
         new Request('https://x.test/api/upload-card?sessionId=sess1', {
           method: 'POST',
-          headers: { 'x-proxy-token': 'shared-token' },
+          headers: { authorization: `Bearer ${alice}` },
           body: new Uint8Array([]),
         }),
       );
@@ -611,11 +644,12 @@ describe('per-user limits', () => {
     });
 
     it('refuses non-image magic bytes with 400', async () => {
-      const router = createRouter({ env, webRoot });
+      const router = createRouter({ env: userEnv, webRoot });
+      const alice = await tokenFor('alice');
       const res = await router(
         new Request('https://x.test/api/upload-card?sessionId=sess1', {
           method: 'POST',
-          headers: { 'x-proxy-token': 'shared-token' },
+          headers: { authorization: `Bearer ${alice}` },
           body: invalidFile,
         }),
       );
@@ -624,7 +658,8 @@ describe('per-user limits', () => {
     });
 
     it('refuses images exceeding 5MB ceiling with 413', async () => {
-      const router = createRouter({ env, webRoot });
+      const router = createRouter({ env: userEnv, webRoot });
+      const alice = await tokenFor('alice');
       const oversized = new Uint8Array(5 * 1024 * 1024 + 10);
       oversized[0] = 0xff;
       oversized[1] = 0xd8;
@@ -632,7 +667,7 @@ describe('per-user limits', () => {
       const res = await router(
         new Request('https://x.test/api/upload-card?sessionId=sess1', {
           method: 'POST',
-          headers: { 'x-proxy-token': 'shared-token' },
+          headers: { authorization: `Bearer ${alice}` },
           body: oversized,
         }),
       );
@@ -671,30 +706,31 @@ describe('per-user limits', () => {
       });
     });
 
-    it('enforces upload rate limiting', async () => {
+    it('enforces upload rate limiting per user', async () => {
       const mockUploader = vi.fn(async (filename: string) => `https://test/${filename}`);
       const router = createRouter({
-        env,
+        env: userEnv,
         webRoot,
         uploadCardImpl: mockUploader,
       });
+      const alice = await tokenFor('alice');
 
       for (let i = 0; i < 15; i++) {
         const res = await router(
           new Request(`https://x.test/api/upload-card?sessionId=sess_${i}`, {
             method: 'POST',
-            headers: { 'x-proxy-token': 'shared-token' },
+            headers: { authorization: `Bearer ${alice}` },
             body: validJpeg,
           }),
         );
         expect(res.status).toBe(200);
       }
 
-      // 16th upload exceeds rate limit
+      // 16th upload exceeds per-user rate limit
       const resExceeded = await router(
         new Request('https://x.test/api/upload-card?sessionId=sess_16', {
           method: 'POST',
-          headers: { 'x-proxy-token': 'shared-token' },
+          headers: { authorization: `Bearer ${alice}` },
           body: validJpeg,
         }),
       );

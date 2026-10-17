@@ -220,32 +220,33 @@ export const createRouter = (opts: {
         return new Response('Method not allowed', { status: 405 });
       }
 
-      // 1. Authentication check
+      // 1. Authentication check: Cloud uploads require verified user identity.
+      // Shared proxy-token is NOT allowed as an upload authorization bypass.
       const authHeader = request.headers.get('authorization');
-      const proxyTokenHeader = request.headers.get('x-proxy-token');
-      let userId: string | null = null;
+      if (!verifier) {
+        return Response.json(
+          { error: 'Authentication required: auth service not configured' },
+          { status: 401 },
+        );
+      }
 
-      if (verifier) {
-        const who = await verifier.check(authHeader);
-        if (who && 'userId' in who) {
-          userId = who.userId;
-        } else if (who && 'problem' in who && who.problem === 'expired') {
+      const who = await verifier.check(authHeader);
+      if (!who || !('userId' in who)) {
+        if (who && 'problem' in who && who.problem === 'expired') {
           return Response.json(
             { error: 'Session expired' },
             { status: 401, headers: { 'x-auth': 'expired' } },
           );
-        } else if (!proxyTokenHeader || proxyTokenHeader !== opts.env.proxyToken) {
-          return Response.json({ error: 'Authentication required' }, { status: 401 });
         }
-      } else {
-        if (!proxyTokenHeader || proxyTokenHeader !== opts.env.proxyToken) {
-          return Response.json({ error: 'Authentication required' }, { status: 401 });
-        }
+        return Response.json(
+          { error: 'Authentication required: signed-in user required for cloud uploads' },
+          { status: 401 },
+        );
       }
+      const userId = who.userId;
 
-      // 2. Rate limiting (per-user or per-caller IP)
-      const rateLimitKey = userId ? `upload:user:${userId}` : `upload:ip:${callerKey(request)}`;
-      const verdict = uploadLimiter.check(rateLimitKey);
+      // 2. Per-user rate limiting
+      const verdict = uploadLimiter.check(`upload:user:${userId}`);
       if (!verdict.allowed) {
         return tooMany(verdict.retryAfterSeconds);
       }
@@ -274,8 +275,8 @@ export const createRouter = (opts: {
         );
       }
 
-      // 5. Scoped object name: prevent cross-user overwrite
-      const filename = userId ? `${userId}/${safeId}.jpg` : `${safeId}.jpg`;
+      // 5. Scoped object name: strictly scoped by userId to prevent cross-user overwrite
+      const filename = `${userId}/${safeId}.jpg`;
       const publicUrl = await uploadCard(filename, body, detected.contentType);
       if (!publicUrl) {
         return Response.json({ error: 'Failed to upload' }, { status: 500 });

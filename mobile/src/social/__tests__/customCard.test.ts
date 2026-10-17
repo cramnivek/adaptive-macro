@@ -4,12 +4,15 @@ vi.mock('../api', () => ({
   currentAccessToken: vi.fn().mockResolvedValue('jwt-mock'),
 }));
 
+import { currentAccessToken } from '../api';
 import {
   dataUrlToArrayBuffer,
   getCustomCardStatus,
   getLocalCustomCard,
   getPublicCardUrl,
   persistCustomCard,
+  removeLocalCustomCard,
+  resolveDurableDataUrl,
   retryCustomCardUpload,
   sanitizeSessionId,
 } from '../customCard';
@@ -18,6 +21,7 @@ describe('customCard persistence & sync', () => {
   const mockStorage: Record<string, string> = {};
 
   beforeEach(() => {
+    vi.mocked(currentAccessToken).mockResolvedValue('jwt-mock');
     for (const key of Object.keys(mockStorage)) {
       delete mockStorage[key];
     }
@@ -58,7 +62,44 @@ describe('customCard persistence & sync', () => {
     expect(bytes[2]).toBe(0xff);
   });
 
-  it('saves durable data URL and returns confirmed cloud URL on success', async () => {
+  it('resolves durable data URLs and never returns raw ephemeral blob URLs', async () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const fromData = await resolveDurableDataUrl({ dataUrl });
+    expect(fromData).toBe(dataUrl);
+
+    // If conversion of a blob URL fails, returns null (never the raw blob: URL)
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('Blob fetch failed');
+    });
+    const fromFailedBlob = await resolveDurableDataUrl({ url: 'blob:http://localhost:8081/abc-123' });
+    expect(fromFailedBlob).toBeNull();
+  });
+
+  it('preserves cards locally with local_only status for signed-out users (no upload call)', async () => {
+    vi.mocked(currentAccessToken).mockResolvedValue(null);
+    const sampleDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const result = await persistCustomCard('sess-signed-out', {
+      url: sampleDataUrl,
+      dataUrl: sampleDataUrl,
+    });
+
+    // Cloud URL is null for signed out
+    expect(result).toBeNull();
+    // But fetch to upload endpoint was NEVER called
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // Local card is 100% saved and available for local export/preview
+    const local = await getLocalCustomCard('sess-signed-out');
+    expect(local).toBe(sampleDataUrl);
+
+    const status = await getCustomCardStatus('sess-signed-out');
+    expect(status?.status).toBe('local_only');
+  });
+
+  it('saves durable data URL and returns confirmed cloud URL on success when signed in', async () => {
     const sampleDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
     const cloudUrl = 'https://storage.googleapis.com/adaptive-macro-card-images/user/sess-1.jpg';
 
@@ -125,5 +166,15 @@ describe('customCard persistence & sync', () => {
     const retryResult = await retryCustomCardUpload('sess-retry');
     expect(retryResult).toBe(cloudUrl);
     expect((await getCustomCardStatus('sess-retry'))?.status).toBe('synced');
+  });
+
+  it('supports deleting local card and cleaning up metadata', async () => {
+    const sampleDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    await persistCustomCard('sess-del', { url: sampleDataUrl, dataUrl: sampleDataUrl });
+    expect(await getLocalCustomCard('sess-del')).toBe(sampleDataUrl);
+
+    await removeLocalCustomCard('sess-del');
+    expect(await getLocalCustomCard('sess-del')).toBeNull();
+    expect(await getCustomCardStatus('sess-del')).toBeNull();
   });
 });

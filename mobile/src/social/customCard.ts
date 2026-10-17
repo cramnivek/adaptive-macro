@@ -7,7 +7,7 @@ const GCS_BASE_URL = 'https://storage.googleapis.com/adaptive-macro-card-images'
 
 export interface CardSyncStatus {
   sessionId: string;
-  status: 'synced' | 'failed' | 'pending';
+  status: 'synced' | 'failed' | 'pending' | 'local_only';
   cloudUrl?: string;
   error?: string;
   updatedAt: number;
@@ -56,6 +56,77 @@ export const dataUrlToArrayBuffer = (dataUrl: string): ArrayBuffer => {
   return bytes.buffer;
 };
 
+/**
+ * Resolves a card file/URL into a durable data URL.
+ * NEVER returns a temporary blob: URL. If conversion fails, returns null.
+ */
+export const resolveDurableDataUrl = async (
+  cardFile: { file?: File | Blob | null; url?: string | null; dataUrl?: string | null },
+): Promise<string | null> => {
+  if (cardFile.dataUrl && cardFile.dataUrl.startsWith('data:')) {
+    return cardFile.dataUrl;
+  }
+  if (cardFile.file) {
+    try {
+      return await fileToDataUrl(cardFile.file);
+    } catch {
+      return null;
+    }
+  }
+  if (cardFile.url) {
+    if (cardFile.url.startsWith('data:') || cardFile.url.startsWith('http')) {
+      return cardFile.url;
+    }
+    if (cardFile.url.startsWith('blob:') && typeof fetch !== 'undefined') {
+      try {
+        const resp = await fetch(cardFile.url);
+        const blob = await resp.blob();
+        return await fileToDataUrl(blob);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+};
+
+/* ---------------------------------------------------------------------------
+ * Durable Media Storage:
+ * - Web: IndexedDB ('ascend_media' / 'card_images') gives hundreds of MBs of
+ *   reliable quota, avoiding localStorage 5MB quota exhaustion.
+ * - Native: FileSystem.documentDirectory ('ascend_cards/') persists across
+ *   app updates and reboots.
+ * - Key-value metadata & sync status are preserved in AsyncStorage / localStorage.
+ * ------------------------------------------------------------------------ */
+
+const IDB_NAME = 'ascend_media';
+const IDB_STORE = 'card_images';
+const IDB_VERSION = 1;
+
+let idbPromise: Promise<IDBDatabase | null> | null = null;
+
+const getIndexedDb = (): Promise<IDBDatabase | null> => {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (!idbPromise) {
+    idbPromise = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  return idbPromise;
+};
+
 const storeItem = async (key: string, value: string): Promise<void> => {
   try {
     if (typeof localStorage !== 'undefined') {
@@ -78,12 +149,110 @@ const getItem = async (key: string): Promise<string | null> => {
   }
 };
 
+const getFileSystem = async () => {
+  if (typeof navigator !== 'undefined' && (navigator as { product?: string }).product === 'ReactNative') {
+    try {
+      return await import('expo-file-system/legacy');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+/** Save a card image permanently into durable media storage */
+export const putDurableImage = async (key: string, dataUrl: string): Promise<void> => {
+  // 1. IndexedDB on Web
+  if (typeof indexedDB !== 'undefined') {
+    try {
+      const db = await getIndexedDb();
+      if (db) {
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.put(dataUrl, key);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+        return;
+      }
+    } catch {
+      // Fall through to key-value storage if IDB fails
+    }
+  }
+
+  // 2. Native FileSystem in documentDirectory
+  const fs = await getFileSystem();
+  if (fs && fs.documentDirectory) {
+    try {
+      const dir = `${fs.documentDirectory}ascend_cards/`;
+      const dirInfo = await fs.getInfoAsync(dir);
+      if (!dirInfo.exists) {
+        await fs.makeDirectoryAsync(dir, { intermediates: true });
+      }
+      const target = `${dir}${key}.jpg`;
+      const base64Data = dataUrl.split(',')[1] ?? dataUrl;
+      await fs.writeAsStringAsync(target, base64Data, {
+        encoding: fs.EncodingType.Base64,
+      });
+      await storeItem(`${STORAGE_PREFIX}${key}`, target);
+      return;
+    } catch {
+      // Fall through to key-value storage
+    }
+  }
+
+  // 3. Key-value fallback
+  await storeItem(`${STORAGE_PREFIX}${key}`, dataUrl);
+};
+
+/** Retrieve durable card image (IndexedDB, FileSystem, or fallback) */
+export const getDurableImage = async (key: string): Promise<string | null> => {
+  // 1. IndexedDB on Web
+  if (typeof indexedDB !== 'undefined') {
+    try {
+      const db = await getIndexedDb();
+      if (db) {
+        const result = await new Promise<string | null>((resolve) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.get(key);
+          req.onsuccess = () => resolve((req.result as string) || null);
+          req.onerror = () => resolve(null);
+        });
+        if (result && !result.startsWith('blob:')) return result;
+      }
+    } catch {}
+  }
+
+  // 2. Native FileSystem
+  const fs = await getFileSystem();
+  if (fs && fs.documentDirectory) {
+    try {
+      const target = `${fs.documentDirectory}ascend_cards/${key}.jpg`;
+      const info = await fs.getInfoAsync(target);
+      if (info.exists) {
+        return target;
+      }
+    } catch {}
+  }
+
+  // 3. Key-value fallback
+  const direct = await getItem(`${STORAGE_PREFIX}${key}`);
+  if (direct && !direct.startsWith('blob:')) return direct;
+  const legacy = await getItem(`adaptive_card_${key}`);
+  if (legacy && !legacy.startsWith('blob:')) return legacy;
+  return null;
+};
+
 /**
- * Saves the customized card locally as a durable data URL (permanent on author's device)
- * and uploads it to Cloud Run -> GCS.
+ * Saves the customized card locally in durable media storage (permanent on author's device)
+ * and uploads it to Cloud Run -> GCS if signed in.
  *
- * If upload succeeds, records status 'synced' and returns confirmed public URL.
- * If upload fails, preserves local image, records status 'failed', and returns null (never a fake 404 URL).
+ * - Signed-out users: Card is saved locally in durable media storage and marked 'local_only'.
+ *   Returns null for cloud URL, but local card is 100% available for viewing, export, and local sharing.
+ * - Signed-in users: Card is uploaded to Cloud Run proxy with user JWT and scoped under user ID.
+ *   Returns confirmed cloud URL on success; on network failure returns null (never a fake 404 URL).
  */
 export const persistCustomCard = async (
   sessionId: string,
@@ -92,21 +261,27 @@ export const persistCustomCard = async (
   if (!sessionId) return null;
   const safeId = sanitizeSessionId(sessionId);
 
-  // 1. Create and store durable base64 DataURL (NOT temporary blob URL)
-  let durableDataUrl: string | null = cardFile.dataUrl ?? null;
-  if (!durableDataUrl && cardFile.file) {
-    try {
-      durableDataUrl = await fileToDataUrl(cardFile.file);
-    } catch {
-      // Fallback: if dataURL generation fails, keep whatever URL was provided
-      durableDataUrl = cardFile.url;
-    }
-  } else if (!durableDataUrl) {
-    durableDataUrl = cardFile.url;
+  // 1. Resolve and persist durable data (NEVER temporary blob URLs)
+  const durableDataUrl = await resolveDurableDataUrl(cardFile);
+  if (durableDataUrl) {
+    await putDurableImage(safeId, durableDataUrl);
   }
 
-  if (durableDataUrl) {
-    await storeItem(`${STORAGE_PREFIX}${safeId}`, durableDataUrl);
+  // 2. Check user authentication
+  const token = await currentAccessToken();
+  if (!token) {
+    // Signed-out user:
+    // Card is preserved locally in durable storage so the author can preview,
+    // export, and share it on their device. Cloud sync requires sign in.
+    await storeItem(
+      `${STATUS_PREFIX}${safeId}`,
+      JSON.stringify({
+        sessionId: safeId,
+        status: 'local_only',
+        updatedAt: Date.now(),
+      } satisfies CardSyncStatus),
+    );
+    return null;
   }
 
   // Record pending upload
@@ -119,7 +294,7 @@ export const persistCustomCard = async (
     } satisfies CardSyncStatus),
   );
 
-  // 2. Upload to Cloud Run proxy -> GCS
+  // 3. Upload to Cloud Run proxy -> GCS with verified user token
   try {
     let arrayBuffer: ArrayBuffer | null = null;
     if (cardFile.file) {
@@ -129,14 +304,11 @@ export const persistCustomCard = async (
     }
 
     if (arrayBuffer && arrayBuffer.byteLength > 0) {
-      const token = await currentAccessToken();
-      const proxyToken = process.env.EXPO_PUBLIC_PROXY_TOKEN;
       const headers: Record<string, string> = {
         'Content-Type': 'image/jpeg',
         'x-session-id': safeId,
+        'Authorization': `Bearer ${token}`,
       };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      if (proxyToken) headers['x-proxy-token'] = proxyToken;
 
       const res = await fetch(`/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
         method: 'POST',
@@ -147,7 +319,6 @@ export const persistCustomCard = async (
       if (res.ok) {
         const data = (await res.json()) as { ok: boolean; url: string };
         if (data.ok && data.url) {
-          // Success: save confirmed status
           await storeItem(
             `${STATUS_PREFIX}${safeId}`,
             JSON.stringify({
@@ -160,9 +331,10 @@ export const persistCustomCard = async (
           return data.url;
         }
       }
+      const errData = await res.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
   } catch (err) {
-    // Record failure
     await storeItem(
       `${STATUS_PREFIX}${safeId}`,
       JSON.stringify({
@@ -175,7 +347,6 @@ export const persistCustomCard = async (
     return null;
   }
 
-  // If upload failed, record failed status and return null (never a speculative 404 URL)
   await storeItem(
     `${STATUS_PREFIX}${safeId}`,
     JSON.stringify({
@@ -192,17 +363,7 @@ export const persistCustomCard = async (
 export const getLocalCustomCard = async (sessionId?: string | null): Promise<string | null> => {
   if (!sessionId) return null;
   const safeId = sanitizeSessionId(sessionId);
-  // Check new durable storage prefix first
-  const durable = await getItem(`${STORAGE_PREFIX}${safeId}`);
-  if (durable && (durable.startsWith('data:') || durable.startsWith('http'))) {
-    return durable;
-  }
-  // Check legacy prefix (adaptive_card_)
-  const legacy = await getItem(`adaptive_card_${safeId}`);
-  if (legacy && (legacy.startsWith('data:') || legacy.startsWith('http'))) {
-    return legacy;
-  }
-  return null;
+  return getDurableImage(safeId);
 };
 
 /** Get card upload synchronization status */
@@ -220,10 +381,24 @@ export const getCustomCardStatus = async (sessionId?: string | null): Promise<Ca
 
 /** Retry failed card upload using cached durable image */
 export const retryCustomCardUpload = async (sessionId: string): Promise<string | null> => {
-  const localImage = await getLocalCustomCard(sessionId);
+  const safeId = sanitizeSessionId(sessionId);
+  const localImage = await getLocalCustomCard(safeId);
   if (!localImage) return null;
 
-  const safeId = sanitizeSessionId(sessionId);
+  const token = await currentAccessToken();
+  if (!token) {
+    await storeItem(
+      `${STATUS_PREFIX}${safeId}`,
+      JSON.stringify({
+        sessionId: safeId,
+        status: 'local_only',
+        error: 'Sign in required for cloud sync',
+        updatedAt: Date.now(),
+      } satisfies CardSyncStatus),
+    );
+    return null;
+  }
+
   try {
     let arrayBuffer: ArrayBuffer;
     if (localImage.startsWith('data:')) {
@@ -233,14 +408,11 @@ export const retryCustomCardUpload = async (sessionId: string): Promise<string |
       arrayBuffer = await resp.arrayBuffer();
     }
 
-    const token = await currentAccessToken();
-    const proxyToken = process.env.EXPO_PUBLIC_PROXY_TOKEN;
     const headers: Record<string, string> = {
       'Content-Type': 'image/jpeg',
       'x-session-id': safeId,
+      'Authorization': `Bearer ${token}`,
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (proxyToken) headers['x-proxy-token'] = proxyToken;
 
     const res = await fetch(`/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
       method: 'POST',
@@ -275,4 +447,33 @@ export const retryCustomCardUpload = async (sessionId: string): Promise<string |
     );
   }
   return null;
+};
+
+/** Delete local card image from durable media storage */
+export const removeLocalCustomCard = async (sessionId: string): Promise<void> => {
+  const safeId = sanitizeSessionId(sessionId);
+  if (typeof indexedDB !== 'undefined') {
+    try {
+      const db = await getIndexedDb();
+      if (db) {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(safeId);
+      }
+    } catch {}
+  }
+  const fs = await getFileSystem();
+  if (fs && fs.documentDirectory) {
+    try {
+      const target = `${fs.documentDirectory}ascend_cards/${safeId}.jpg`;
+      await fs.deleteAsync(target, { idempotent: true });
+    } catch {}
+  }
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(`${STORAGE_PREFIX}${safeId}`);
+      localStorage.removeItem(`${STATUS_PREFIX}${safeId}`);
+    }
+    await AsyncStorage.removeItem(`${STORAGE_PREFIX}${safeId}`);
+    await AsyncStorage.removeItem(`${STATUS_PREFIX}${safeId}`);
+  } catch {}
 };

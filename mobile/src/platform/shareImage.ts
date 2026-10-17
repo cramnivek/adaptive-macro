@@ -634,7 +634,9 @@ export const shareWorkout = async (
           let localUri = card.url;
           const targetPath = `${FileSystem.cacheDirectory ?? ''}ascend-workout-card.jpg`;
 
-          if (card.url.startsWith('data:')) {
+          if (card.url.startsWith('file:')) {
+            localUri = card.url;
+          } else if (card.url.startsWith('data:')) {
             const base64Data = card.url.split(',')[1] ?? card.url;
             await FileSystem.writeAsStringAsync(targetPath, base64Data, {
               encoding: FileSystem.EncodingType.Base64,
