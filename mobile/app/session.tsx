@@ -38,6 +38,7 @@ import { ImpactFrame } from '../src/components/ImpactFrame';
 import { PRCelebration, type PRCelebrationData } from '../src/components/PRCelebration';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { SessionOptionsSheet } from '../src/components/SessionOptionsSheet';
+import { ReorderSheet } from '../src/components/ReorderSheet';
 import { RestBar } from '../src/components/RestBar';
 import { RpeSheet } from '../src/components/RpeSheet';
 import { SwapExerciseSheet, type SwapMode } from '../src/components/SwapExerciseSheet';
@@ -236,6 +237,8 @@ export default function SessionScreen() {
   const [rating, setRating] = useState<{ blockIndex: number; rowIndex: number } | null>(null);
   /** Whether the session options (units, alert chime) sheet is open. */
   const [optionsOpen, setOptionsOpen] = useState(false);
+  /** Whether the bird's-eye exercise reorder sheet is open. */
+  const [reorderOpen, setReorderOpen] = useState(false);
   /** Active target for the barbell plate calculator; null when closed. */
   const [calcTarget, setCalcTarget] = useState<{
     blockIndex: number | null;
@@ -1545,6 +1548,27 @@ export default function SessionScreen() {
     editRow(blockIndex, rowIndex, { rpe });
   };
 
+  const moveExercise = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= blocks.length) return;
+    thud('light');
+    setBlocks((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const reorderExercises = (fromIndex: number, toIndex: number) => {
+    if (fromIndex < 0 || fromIndex >= blocks.length || toIndex < 0 || toIndex >= blocks.length) return;
+    thud('light');
+    setBlocks((current) => {
+      const next = [...current];
+      [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+      return next;
+    });
+  };
+
   const removeExercise = async (blockIndex: number) => {
     const block = blocks[blockIndex];
     const sure = await confirm({
@@ -2023,15 +2047,53 @@ export default function SessionScreen() {
                   </View>
                 </Tappable>
 
-                <Tappable
-                  onPress={() => void removeExercise(blockIndex)}
-                  style={styles.iconBtn}
-                  scaleTo={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${block.name}`}
-                >
-                  <Text style={styles.remove}>✕</Text>
-                </Tappable>
+                <View style={styles.blockHeaderControls}>
+                  {blocks.length > 1 && (
+                    <>
+                      <Tappable
+                        onPress={() => moveExercise(blockIndex, -1)}
+                        style={[styles.reorderBtn, blockIndex === 0 && styles.reorderBtnDisabled]}
+                        disabled={blockIndex === 0}
+                        scaleTo={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Move ${block.name} up`}
+                      >
+                        <Ionicons
+                          name="chevron-up"
+                          size={18}
+                          color={blockIndex === 0 ? loud.rule : loud.figureMuted}
+                        />
+                      </Tappable>
+                      <Tappable
+                        onPress={() => moveExercise(blockIndex, 1)}
+                        style={[
+                          styles.reorderBtn,
+                          blockIndex === blocks.length - 1 && styles.reorderBtnDisabled,
+                        ]}
+                        disabled={blockIndex === blocks.length - 1}
+                        scaleTo={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Move ${block.name} down`}
+                      >
+                        <Ionicons
+                          name="chevron-down"
+                          size={18}
+                          color={blockIndex === blocks.length - 1 ? loud.rule : loud.figureMuted}
+                        />
+                      </Tappable>
+                    </>
+                  )}
+
+                  <Tappable
+                    onPress={() => void removeExercise(blockIndex)}
+                    style={styles.reorderBtn}
+                    scaleTo={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${block.name}`}
+                  >
+                    <Text style={styles.remove}>✕</Text>
+                  </Tappable>
+                </View>
               </View>
 
               {/* Compact exercise action bar: How-To, Warm-up, Plates, Swap, Superset */}
@@ -2630,32 +2692,79 @@ export default function SessionScreen() {
           onCancel={() => setPicking(false)}
         />
       ) : (
-        <View style={styles.addButtonsRow}>
-          <Tappable
-            onPress={() => {
-              setPickerMode('exercise');
-              setPicking(true);
-            }}
-            style={{ flex: 1 }}
-            scaleTo={0.97}
-          >
-            <View style={[styles.slab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
-              <Text style={[styles.slabLabel, { color: loud.figure }]}>+ ADD EXERCISE</Text>
-            </View>
-          </Tappable>
-          <Tappable
-            onPress={() => {
-              setPickerMode('cardio');
-              setPicking(true);
-            }}
-            style={{ flex: 1 }}
-            scaleTo={0.97}
-          >
-            <View style={[styles.slab, { backgroundColor: loud.loud }]}>
-              <Text style={[styles.slabLabel, { color: loud.onLoud }]}>+ ADD CARDIO</Text>
-            </View>
-          </Tappable>
-        </View>
+        <>
+          <View style={styles.addButtonsRow}>
+            <Tappable
+              onPress={() => {
+                setPickerMode('exercise');
+                setPicking(true);
+              }}
+              style={{ flex: 1 }}
+              scaleTo={0.97}
+            >
+              <View style={[styles.slab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
+                <Text style={[styles.slabLabel, { color: loud.figure }]}>+ ADD EXERCISE</Text>
+              </View>
+            </Tappable>
+            <Tappable
+              onPress={() => {
+                setPickerMode('cardio');
+                setPicking(true);
+              }}
+              style={{ flex: 1 }}
+              scaleTo={0.97}
+            >
+              <View style={[styles.slab, { backgroundColor: loud.loud }]}>
+                <Text style={[styles.slabLabel, { color: loud.onLoud }]}>+ ADD CARDIO</Text>
+              </View>
+            </Tappable>
+          </View>
+
+          {blocks.length > 1 && (
+            <Tappable
+              onPress={() => setReorderOpen(true)}
+              style={{ width: '100%', marginBottom: space.sm }}
+              scaleTo={0.97}
+              accessibilityRole="button"
+              accessibilityLabel="Reorder exercises"
+            >
+              <View
+                style={[
+                  styles.slab,
+                  {
+                    backgroundColor: loud.panel,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: loud.rule,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: space.xs,
+                  },
+                ]}
+              >
+                <Ionicons name="swap-vertical" size={15} color={loud.figureMuted} />
+                <Text style={[styles.slabLabel, { color: loud.figureMuted }]}>REORDER EXERCISES</Text>
+              </View>
+            </Tappable>
+          )}
+
+          {blocks.length > 0 && (
+            <Tappable
+              onPress={() => void finish()}
+              scaleTo={0.96}
+              style={styles.bottomFinishWrapper}
+              accessibilityRole="button"
+              accessibilityLabel="Finish workout"
+            >
+              <View style={styles.bottomFinishBtn}>
+                <Ionicons name="checkmark-done-circle" size={22} color={loud.onLoud} />
+                <Text style={styles.bottomFinishLabel}>
+                  {getEventCopy('workout.finish_btn', { personality: settings.personality })}
+                </Text>
+              </View>
+            </Tappable>
+          )}
+        </>
       )}
 
       <ExerciseInfoSheet entry={info} onClose={() => setInfo(null)} />
@@ -2744,6 +2853,19 @@ export default function SessionScreen() {
         restSeconds={settings.restSeconds}
         onChangeRestSeconds={changeRestSeconds}
         onStepRestSeconds={stepRestSeconds}
+        onOpenReorder={blocks.length > 1 ? () => setReorderOpen(true) : undefined}
+      />
+
+      <ReorderSheet
+        open={reorderOpen}
+        items={blocks.map((b) => ({
+          name: b.name,
+          isCardio: b.isCardio,
+          supersetGroup: b.supersetGroup,
+          setCount: b.rows.length,
+        }))}
+        onMove={reorderExercises}
+        onClose={() => setReorderOpen(false)}
       />
 
       <Text style={[styles.note, { marginBottom: space.xxl }]}>
@@ -3241,6 +3363,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(235, 87, 87, 0.08)',
   },
   removeSetLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 1.2, color: loud.warn },
+  blockHeaderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  reorderBtn: {
+    width: 32,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reorderBtnDisabled: {
+    opacity: 0.25,
+  },
+  bottomFinishWrapper: {
+    width: '100%',
+    marginTop: space.xs,
+    marginBottom: space.lg,
+  },
+  bottomFinishBtn: {
+    minHeight: 52,
+    backgroundColor: loud.loud,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.xs,
+    paddingHorizontal: space.lg,
+    shadowColor: loud.loud,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  bottomFinishLabel: {
+    fontFamily: font.display,
+    fontSize: 15,
+    letterSpacing: 1.6,
+    color: loud.onLoud,
+  },
 
   slab: {
     minHeight: TOUCH_TARGET,

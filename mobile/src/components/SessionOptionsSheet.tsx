@@ -34,6 +34,7 @@ interface SessionOptionsSheetProps {
   restSeconds: number;
   onChangeRestSeconds: (seconds: number) => void;
   onStepRestSeconds: (steps: number) => void;
+  onOpenReorder?: () => void;
 }
 
 /** Standard lifting rest intervals for 1-tap selection. */
@@ -69,6 +70,7 @@ export const SessionOptionsSheet = ({
   restSeconds,
   onChangeRestSeconds,
   onStepRestSeconds,
+  onOpenReorder,
 }: SessionOptionsSheetProps) => {
   const insets = useSafeAreaInsets();
   const canStepDown = restSeconds > MIN_REST_SECONDS;
@@ -323,6 +325,44 @@ export const SessionOptionsSheet = ({
               </View>
             </View>
           </View>
+
+          {/* Exercise Order Section */}
+          {onOpenReorder && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>EXERCISE ORDER</Text>
+              <Tappable
+                onPress={() => {
+                  thud('light');
+                  onClose();
+                  onOpenReorder();
+                }}
+                scaleTo={0.96}
+                accessibilityRole="button"
+                accessibilityLabel="Reorder exercises in workout"
+              >
+                <View
+                  style={[
+                    styles.panel,
+                    {
+                      backgroundColor: loud.panel,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: loud.rule,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: space.xs,
+                      paddingVertical: space.md,
+                    },
+                  ]}
+                >
+                  <Ionicons name="swap-vertical" size={16} color={loud.loud} />
+                  <Text style={[styles.toggleText, { color: loud.figure }]}>
+                    REORDER EXERCISES
+                  </Text>
+                </View>
+              </Tappable>
+            </View>
+          )}
 
           {/* Units Section */}
           {showWeightSwitcher && (
