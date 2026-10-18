@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -16,10 +16,12 @@ import { Tappable } from './Tappable';
 import { Button } from './Controls';
 import { thud } from '../platform/haptics';
 import type { WeeklyExtractedMetrics, WeeklyReviewResult } from '../ai/weeklyReview';
+import type { MonthlyExtractedMetrics, MonthlyReviewResult } from '../ai/monthlyReview';
 import type { Goal } from '@adaptive-macros/engine';
 import { calculateCoachingGoalAdjustment } from '../ai/coachingAdjustment';
-import type { AppPersonality } from '../state/settings';
+import type { AppPersonality, UnitSystem } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
+import { displayWeight, formatWeight, weightUnit } from '../format';
 
 interface WeeklyReviewModalProps {
   open: boolean;
@@ -34,6 +36,16 @@ interface WeeklyReviewModalProps {
   goal?: Goal;
   expenditureKcal?: number;
   personality?: AppPersonality;
+  // Monthly Review additions
+  monthlyReview?: MonthlyReviewResult | null;
+  monthlyMetrics?: MonthlyExtractedMetrics | null;
+  monthlyLoading?: boolean;
+  monthlyError?: string | null;
+  monthlyApplied?: boolean;
+  onGenerateMonthly?: () => void;
+  onApplyMonthlyAdjustment?: () => void;
+  initialMode?: 'weekly' | 'monthly';
+  units?: UnitSystem;
 }
 
 const CONFIDENCE_COLORS = {
@@ -54,16 +66,36 @@ export const WeeklyReviewModal = ({
   onApplyAdjustment,
   goal,
   expenditureKcal,
-  personality,
+  personality = 'ascend',
+  monthlyReview,
+  monthlyMetrics,
+  monthlyLoading = false,
+  monthlyError = null,
+  monthlyApplied = false,
+  onGenerateMonthly,
+  onApplyMonthlyAdjustment,
+  initialMode = 'weekly',
+  units = 'metric',
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [reviewMode, setReviewMode] = useState<'weekly' | 'monthly'>(initialMode);
   const [showScience, setShowScience] = useState(false);
+  const [showMonthlyScience, setShowMonthlyScience] = useState(false);
 
-  const conf = review?.dataConfidence ?? metrics.confidence;
-  const confColor = CONFIDENCE_COLORS[conf];
+  useEffect(() => {
+    if (open) {
+      setReviewMode(initialMode);
+    }
+  }, [open, initialMode]);
 
-  const adjustmentPreview = useMemo(() => {
+  const hasMonthlySupport = Boolean(monthlyMetrics && onGenerateMonthly);
+
+  // Weekly review calculations
+  const weeklyConf = review?.dataConfidence ?? metrics.confidence;
+  const weeklyConfColor = CONFIDENCE_COLORS[weeklyConf];
+
+  const weeklyAdjustmentPreview = useMemo(() => {
     if (!review?.suggestedAdjustment?.hasAdjustment || !review.suggestedAdjustment.deltaKcal) {
       return null;
     }
@@ -76,12 +108,38 @@ export const WeeklyReviewModal = ({
     });
   }, [review?.suggestedAdjustment, expenditureKcal, metrics.nutrition.avgExpenditure, goal]);
 
-  const confLabel =
-    conf === 'high'
+  const weeklyConfLabel =
+    weeklyConf === 'high'
       ? 'High Confidence · Great logging this week'
-      : conf === 'moderate'
+      : weeklyConf === 'moderate'
         ? 'Moderate Confidence · Partial logging'
         : 'Early Data · Log more days for best precision';
+
+  // Monthly review calculations
+  const monthlyConf = monthlyReview?.dataConfidence ?? monthlyMetrics?.confidence ?? 'low';
+  const monthlyConfColor = CONFIDENCE_COLORS[monthlyConf];
+
+  const monthlyAdjustmentPreview = useMemo(() => {
+    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || !monthlyReview.suggestedAdjustment.deltaKcal) {
+      return null;
+    }
+    const exp = expenditureKcal ?? monthlyMetrics?.nutrition.avgExpenditure ?? 2200;
+    const currentGoal: Goal = goal ?? { direction: 'maintain', rateKgPerWeek: 0 };
+    return calculateCoachingGoalAdjustment({
+      currentGoal,
+      expenditureKcal: exp,
+      deltaKcal: monthlyReview.suggestedAdjustment.deltaKcal,
+    });
+  }, [monthlyReview?.suggestedAdjustment, expenditureKcal, monthlyMetrics?.nutrition.avgExpenditure, goal]);
+
+  const monthlyConfLabel =
+    monthlyConf === 'high'
+      ? 'High Confidence · 4 weeks of consistent data'
+      : monthlyConf === 'moderate'
+        ? 'Moderate Confidence · Partial 30-day logs'
+        : 'Early Data · Log more days for monthly precision';
+
+  const unit = weightUnit(units);
 
   return (
     <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
@@ -103,11 +161,17 @@ export const WeeklyReviewModal = ({
             <View style={styles.badgeRow}>
               <Ionicons name="sparkles" size={15} color={colors.accent} />
               <Text style={[styles.headerBadge, { color: colors.textMuted }]}>
-                {getEventCopy('trends.weekly_recap_tag', { personality }) || 'WEEKLY COACH'}
+                {reviewMode === 'weekly'
+                  ? getEventCopy('trends.weekly_recap_tag', { personality }) || 'WEEKLY COACH'
+                  : 'MONTHLY COACH REVIEW'}
               </Text>
             </View>
             <Text style={[styles.headerPeriod, { color: colors.textMuted }]}>
-              {metrics.period.from} to {metrics.period.to}
+              {reviewMode === 'weekly'
+                ? `${metrics.period.from} to ${metrics.period.to} (7 Days)`
+                : monthlyMetrics
+                  ? `${monthlyMetrics.period.from} to ${monthlyMetrics.period.to} (4 Weeks)`
+                  : '30-Day Period'}
             </Text>
           </View>
 
@@ -115,297 +179,769 @@ export const WeeklyReviewModal = ({
             hitSlop={12}
             onPress={onClose}
             style={[styles.closeButton, { backgroundColor: colors.surfaceRaised }]}
+            accessibilityRole="button"
+            accessibilityLabel="Close review modal"
           >
             <Ionicons name="close" size={20} color={colors.text} />
           </Pressable>
         </View>
+
+        {/* Mode Switcher Tabs (Weekly vs Monthly) */}
+        {hasMonthlySupport && (
+          <View style={[styles.modeTabs, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => {
+                thud('light');
+                setReviewMode('weekly');
+              }}
+              style={[
+                styles.modeTab,
+                reviewMode === 'weekly' && [styles.modeTabActive, { backgroundColor: colors.surface }],
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: reviewMode === 'weekly' }}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={13}
+                color={reviewMode === 'weekly' ? colors.accent : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.modeTabText,
+                  { color: reviewMode === 'weekly' ? colors.text : colors.textMuted },
+                ]}
+              >
+                WEEKLY RECAP (7D)
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                thud('light');
+                setReviewMode('monthly');
+              }}
+              style={[
+                styles.modeTab,
+                reviewMode === 'monthly' && [styles.modeTabActive, { backgroundColor: colors.surface }],
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: reviewMode === 'monthly' }}
+            >
+              <Ionicons
+                name="sparkles"
+                size={13}
+                color={reviewMode === 'monthly' ? colors.accent : colors.textMuted}
+              />
+              <Text
+                style={[
+                  styles.modeTabText,
+                  { color: reviewMode === 'monthly' ? colors.text : colors.textMuted },
+                ]}
+              >
+                MONTHLY REVIEW (30D)
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         <ScrollView
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Data Confidence Banner */}
-          <View
-            style={[
-              styles.confBanner,
-              { backgroundColor: confColor.bg, borderColor: confColor.border },
-            ]}
-          >
-            <View style={[styles.confDot, { backgroundColor: confColor.text }]} />
-            <Text style={[styles.confText, { color: confColor.text }]}>{confLabel}</Text>
-          </View>
-
-          {/* Error Message */}
-          {error && (
-            <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle" size={16} color={loud.warn} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
-          {/* Loading Indicator */}
-          {loading && (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color={colors.accent} />
-              <Text style={styles.loadingTitle}>
-                {personality === 'gymrat'
-                  ? 'COOKING UP YOUR WEEKLY RECAP... 🔥'
-                  : personality === 'classic'
-                    ? 'Preparing your weekly summary...'
-                    : 'Reviewing your week...'}
-              </Text>
-              <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
-                Synthesizing your workouts, weight trends, and energy balance to tune your plan.
-              </Text>
-            </View>
-          )}
-
-          {/* No Review Yet State */}
-          {!review && !loading && (
-            <View style={styles.emptyState}>
-              <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-                <Ionicons name="analytics" size={32} color={colors.accent} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                {getEventCopy('trends.weekly_recap_ready', { personality }) || 'Ready for your 7-day coaching check-in'}
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                Connect what you lifted in the gym with your scale trends and calorie balance to keep your progress on track.
-              </Text>
-              <View style={styles.btnWrap}>
-                <Button
-                  label={getEventCopy('trends.weekly_recap_action', { personality }) || 'CHECK IN WITH COACH'}
-                  onPress={onGenerate}
-                  tone="loud"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Review Loaded Content */}
-          {review && !loading && (
+          {/* ========================================================= */}
+          {/* 1. WEEKLY REVIEW MODE                                    */}
+          {/* ========================================================= */}
+          {reviewMode === 'weekly' && (
             <>
-              {/* Headline */}
-              <View style={[styles.headlineBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-                <Text style={[styles.headlineText, { color: colors.text }]}>"{review.headline}"</Text>
+              {/* Data Confidence Banner */}
+              <View
+                style={[
+                  styles.confBanner,
+                  { backgroundColor: weeklyConfColor.bg, borderColor: weeklyConfColor.border },
+                ]}
+              >
+                <View style={[styles.confDot, { backgroundColor: weeklyConfColor.text }]} />
+                <Text style={[styles.confText, { color: weeklyConfColor.text }]}>{weeklyConfLabel}</Text>
               </View>
 
-              {/* Friendly Summary */}
-              <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  {personality === 'gymrat' ? 'THE RECAP SCRIPT 👀' : 'THE BIG PICTURE'}
-                </Text>
-                <Text style={[styles.plainSummary, { color: colors.text }]}>
-                  {review.plainSummary ?? review.synthesis}
-                </Text>
-              </View>
-
-              {/* Key Wins */}
-              {review.keyWins?.length > 0 && (
-                <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
-                  <Text style={[styles.sectionTitle, { color: colors.positive }]}>
-                    {personality === 'gymrat' ? "THIS WEEK'S W'S 🗣️🔥" : 'WINS THIS WEEK'}
-                  </Text>
-                  {review.keyWins.map((win, idx) => (
-                    <View key={idx} style={styles.winRow}>
-                      <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
-                      <Text style={[styles.winText, { color: colors.text }]}>{win}</Text>
-                    </View>
-                  ))}
+              {/* Error Message */}
+              {error && (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={16} color={loud.warn} />
+                  <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
 
-              {/* Two Column Breakdown */}
-              <View style={styles.cardsGrid}>
-                {/* Workout Card */}
-                <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
-                  <View style={styles.cardHeaderRow}>
-                    <Ionicons name="barbell" size={16} color={colors.accent} />
-                    <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>
-                      {personality === 'gymrat' ? 'GYM ARC & LIFTS ⚡' : 'WORKOUTS & STRENGTH'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.cardBody, { color: colors.textMuted }]}>
-                    {review.trainingInsight}
+              {/* Loading Indicator */}
+              {loading && (
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator size="large" color={colors.accent} />
+                  <Text style={styles.loadingTitle}>
+                    {personality === 'gymrat'
+                      ? 'COOKING UP YOUR WEEKLY RECAP... 🔥'
+                      : personality === 'classic'
+                        ? 'Preparing your weekly summary...'
+                        : 'Reviewing your week...'}
+                  </Text>
+                  <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
+                    Synthesizing your workouts, weight trends, and energy balance to tune your plan.
                   </Text>
                 </View>
+              )}
 
-                {/* Nutrition Card */}
-                <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
-                  <View style={styles.cardHeaderRow}>
-                    <Ionicons name="restaurant" size={16} color={colors.warning} />
-                    <Text style={[styles.cardHeaderTitle, { color: colors.warning }]}>
-                      {personality === 'gymrat' ? 'MACROS & FUEL 🍽️' : 'NUTRITION & SCALE'}
+              {/* No Review Yet State */}
+              {!review && !loading && (
+                <View style={styles.emptyState}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                    <Ionicons name="analytics" size={32} color={colors.accent} />
+                  </View>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                    {getEventCopy('trends.weekly_recap_ready', { personality }) || 'Ready for your 7-day coaching check-in'}
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                    Connect what you lifted in the gym with your scale trends and calorie balance to keep your progress on track.
+                  </Text>
+                  <View style={styles.btnWrap}>
+                    <Button
+                      label={getEventCopy('trends.weekly_recap_action', { personality }) || 'CHECK IN WITH COACH'}
+                      onPress={onGenerate}
+                      tone="loud"
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Review Loaded Content */}
+              {review && !loading && (
+                <>
+                  {/* Headline */}
+                  <View style={[styles.headlineBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                    <Text style={[styles.headlineText, { color: colors.text }]}>"{review.headline}"</Text>
+                  </View>
+
+                  {/* Friendly Summary */}
+                  <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      {personality === 'gymrat' ? 'THE RECAP SCRIPT 👀' : 'THE BIG PICTURE'}
+                    </Text>
+                    <Text style={[styles.plainSummary, { color: colors.text }]}>
+                      {review.plainSummary ?? review.synthesis}
                     </Text>
                   </View>
-                  <Text style={[styles.cardBody, { color: colors.textMuted }]}>
-                    {review.nutritionInsight}
-                  </Text>
-                </View>
-              </View>
 
-              {/* Recommended Target Adjustment */}
-              {review.suggestedAdjustment && (
-                <View style={[styles.adjustBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-                  <View style={styles.adjustTop}>
-                    <View style={styles.adjustBadge}>
-                      <Ionicons name="flash" size={14} color={colors.warning} />
-                      <Text style={[styles.adjustBadgeText, { color: colors.warning }]}>
-                        {personality === 'gymrat' ? 'THE GAMEPLAN FOR NEXT WEEK 🎯' : 'RECOMMENDED ADJUSTMENT'}
+                  {/* Key Wins */}
+                  {review.keyWins.length > 0 && (
+                    <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                        {personality === 'gymrat' ? 'THE WINS OF THE WEEK 🏆' : 'HIGHLIGHTS & WINS'}
                       </Text>
-                    </View>
-                    <Text style={[styles.adjustTitle, { color: colors.text }]}>{review.suggestedAdjustment.title}</Text>
-                  </View>
-
-                  <Text style={[styles.adjustRationale, { color: colors.textMuted }]}>
-                    {review.suggestedAdjustment.rationale}
-                  </Text>
-
-                  {/* Explicit Before / After Comparison Preview */}
-                  {review.suggestedAdjustment.hasAdjustment && (
-                    <View style={[styles.beforeAfterContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <View style={styles.beforeAfterCol}>
-                        <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>CURRENT TARGET</Text>
-                        <Text style={[styles.beforeAfterVal, { color: colors.text }]}>
-                          {adjustmentPreview
-                            ? `${Math.round(adjustmentPreview.currentKcal).toLocaleString()} kcal`
-                            : (metrics.nutrition.targetCalories
-                                ? `${metrics.nutrition.targetCalories.toLocaleString()} kcal`
-                                : '—')}
-                        </Text>
-                        {adjustmentPreview && (
-                          <Text style={[styles.beforeAfterSub, { color: colors.textMuted }]}>
-                            {adjustmentPreview.currentGoal.direction === 'maintain'
-                              ? 'Maintenance'
-                              : adjustmentPreview.currentGoal.direction === 'lose'
-                                ? `Lose ${adjustmentPreview.currentGoal.rateKgPerWeek} kg/wk`
-                                : `Gain +${adjustmentPreview.currentGoal.rateKgPerWeek} kg/wk`}
-                          </Text>
-                        )}
-                      </View>
-                      <Ionicons name="arrow-forward" size={16} color={colors.textMuted} />
-                      <View style={styles.beforeAfterCol}>
-                        <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>RECALCULATED</Text>
-                        <Text style={[styles.beforeAfterVal, { color: colors.accent }]}>
-                          {adjustmentPreview
-                            ? `${Math.round(adjustmentPreview.achievableKcal).toLocaleString()} kcal`
-                            : review.suggestedAdjustment.deltaKcal && metrics.nutrition.targetCalories
-                              ? `${(metrics.nutrition.targetCalories + review.suggestedAdjustment.deltaKcal).toLocaleString()} kcal`
-                              : '—'}
-                        </Text>
-                        {adjustmentPreview && (
-                          <Text style={[styles.beforeAfterSub, { color: colors.positive }]}>
-                            {adjustmentPreview.rateChangeDescription}
-                          </Text>
-                        )}
-                      </View>
+                      {review.keyWins.map((win, idx) => (
+                        <View key={idx} style={styles.winRow}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.positive} />
+                          <Text style={[styles.winText, { color: colors.text }]}>{win}</Text>
+                        </View>
+                      ))}
                     </View>
                   )}
 
-                  {/* Safety Guardrail Alert if below 1200 kcal */}
-                  {adjustmentPreview?.isSafetyFloorTriggered && (
-                    <View style={styles.safetyWarningBox}>
-                      <Ionicons name="warning-outline" size={14} color={colors.warning} />
-                      <Text style={styles.safetyWarningText}>
-                        Safety floor notice: This target reaches the 1,200 kcal/day lower bound. To protect metabolism and lean tissue, Ascend will not program targets below 1,200 kcal/day. Consider increasing daily activity or taking a maintenance break.
-                      </Text>
+                  {/* Dual Cards: Gym & Kitchen Insights */}
+                  <View style={styles.cardsGrid}>
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="barbell-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>WORKOUT INSIGHT</Text>
+                      </View>
+                      <Text style={[styles.cardBody, { color: colors.textMuted }]}>{review.trainingInsight}</Text>
                     </View>
-                  )}
 
-                  {review.suggestedAdjustment.hasAdjustment ? (
-                    <Tappable
-                      onPress={() => {
-                        thud('heavy');
-                        onApplyAdjustment?.();
-                      }}
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="nutrition-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>NUTRITION INSIGHT</Text>
+                      </View>
+                      <Text style={[styles.cardBody, { color: colors.textMuted }]}>{review.nutritionInsight}</Text>
+                    </View>
+                  </View>
+
+                  {/* Suggested Adjustment */}
+                  {review.suggestedAdjustment && (
+                    <View
                       style={[
-                        styles.applyBtn,
-                        { backgroundColor: colors.accent },
-                        applied && { backgroundColor: colors.positive + '20', borderColor: colors.positive, borderWidth: 1 },
+                        styles.adjustBox,
+                        {
+                          backgroundColor: colors.surfaceRaised,
+                          borderColor: review.suggestedAdjustment.hasAdjustment ? colors.accent : colors.border,
+                        },
                       ]}
                     >
-                      <Ionicons
-                        name={applied ? 'checkmark-circle' : 'arrow-forward-circle'}
-                        size={18}
-                        color={applied ? colors.positive : colors.onFill}
-                      />
-                      <Text
-                        style={[
-                          styles.applyBtnText,
-                          { color: applied ? colors.positive : colors.onFill },
-                        ]}
-                      >
-                        {applied ? 'ADJUSTMENT APPLIED' : 'APPLY THIS ADJUSTMENT'}
+                      <View style={styles.adjustTop}>
+                        <View style={styles.adjustBadge}>
+                          <Ionicons
+                            name={review.suggestedAdjustment.hasAdjustment ? 'trending-up' : 'checkmark-done'}
+                            size={14}
+                            color={review.suggestedAdjustment.hasAdjustment ? colors.accent : colors.positive}
+                          />
+                          <Text
+                            style={[
+                              styles.adjustBadgeText,
+                              {
+                                color: review.suggestedAdjustment.hasAdjustment ? colors.accent : colors.positive,
+                              },
+                            ]}
+                          >
+                            {review.suggestedAdjustment.hasAdjustment
+                              ? 'PROPOSED PLAN TUNING'
+                              : 'TARGETS ON POINT'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.adjustTitle, { color: colors.text }]}>
+                          {review.suggestedAdjustment.title}
+                        </Text>
+                      </View>
+
+                      <Text style={[styles.adjustRationale, { color: colors.textMuted }]}>
+                        {review.suggestedAdjustment.rationale}
                       </Text>
-                    </Tappable>
-                  ) : (
-                    <View style={styles.onTrackPill}>
-                      <Ionicons name="checkmark-done" size={16} color={colors.positive} />
-                      <Text style={[styles.onTrackText, { color: colors.positive }]}>Targets are dialed in · Keep going</Text>
+
+                      {/* Before / After Preview */}
+                      {weeklyAdjustmentPreview && !applied && (
+                        <View
+                          style={[
+                            styles.beforeAfterContainer,
+                            { backgroundColor: colors.surface, borderColor: colors.border },
+                          ]}
+                        >
+                          <View style={styles.beforeAfterItem}>
+                            <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>CURRENT</Text>
+                            <Text style={[styles.beforeAfterVal, { color: colors.textMuted }]}>
+                              {Math.round(weeklyAdjustmentPreview.currentKcal)} kcal
+                            </Text>
+                          </View>
+                          <Ionicons name="arrow-forward" size={16} color={colors.textFaint} />
+                          <View style={styles.beforeAfterItem}>
+                            <Text style={[styles.beforeAfterLabel, { color: colors.accent }]}>PROPOSED</Text>
+                            <Text style={[styles.beforeAfterVal, { color: colors.text, fontWeight: '700' }]}>
+                              {Math.round(weeklyAdjustmentPreview.achievableKcal)} kcal
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Action buttons */}
+                      {review.suggestedAdjustment.hasAdjustment && onApplyAdjustment && (
+                        <View style={styles.actionRow}>
+                          {applied ? (
+                            <View style={styles.appliedPill}>
+                              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                              <Text style={styles.appliedText}>ADJUSTMENT APPLIED TO GOAL</Text>
+                            </View>
+                          ) : (
+                            <Tappable
+                              onPress={onApplyAdjustment}
+                              scaleTo={0.97}
+                              style={[styles.applyBtn, { backgroundColor: colors.accent }]}
+                            >
+                              <Text style={[styles.applyBtnText, { color: colors.onFill }]}>
+                                APPLY {review.suggestedAdjustment.title.toUpperCase()}
+                              </Text>
+                            </Tappable>
+                          )}
+                        </View>
+                      )}
                     </View>
                   )}
+
+                  {/* Deep Science Toggle */}
+                  {review.scienceExplanation && (
+                    <View style={[styles.scienceBox, { borderColor: colors.border, backgroundColor: colors.surfaceRaised }]}>
+                      <Pressable
+                        onPress={() => {
+                          thud('light');
+                          setShowScience(!showScience);
+                        }}
+                        style={styles.scienceHeader}
+                      >
+                        <View style={styles.scienceTitleGroup}>
+                          <Ionicons name="flask-outline" size={16} color={colors.accent} />
+                          <Text style={[styles.scienceTitle, { color: colors.text }]}>THE DEEP PHYSIOLOGY</Text>
+                        </View>
+                        <Ionicons
+                          name={showScience ? 'chevron-up' : 'chevron-down'}
+                          size={18}
+                          color={colors.textMuted}
+                        />
+                      </Pressable>
+                      {showScience && (
+                        <View style={styles.scienceBody}>
+                          <Text style={[styles.scienceText, { color: colors.textMuted }]}>
+                            {review.scienceExplanation}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Recalculate button */}
+                  <Tappable onPress={onGenerate} style={styles.regenBtn} scaleTo={0.98}>
+                    <Ionicons name="refresh" size={14} color={colors.textMuted} />
+                    <Text style={[styles.regenText, { color: colors.textMuted }]}>Recalculate weekly check-in</Text>
+                  </Tappable>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ========================================================= */}
+          {/* 2. MONTHLY REVIEW MODE                                    */}
+          {/* ========================================================= */}
+          {reviewMode === 'monthly' && monthlyMetrics && (
+            <>
+              {/* Data Confidence Banner */}
+              <View
+                style={[
+                  styles.confBanner,
+                  { backgroundColor: monthlyConfColor.bg, borderColor: monthlyConfColor.border },
+                ]}
+              >
+                <View style={[styles.confDot, { backgroundColor: monthlyConfColor.text }]} />
+                <Text style={[styles.confText, { color: monthlyConfColor.text }]}>{monthlyConfLabel}</Text>
+              </View>
+
+              {/* Error Message */}
+              {monthlyError && (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={16} color={loud.warn} />
+                  <Text style={styles.errorText}>{monthlyError}</Text>
                 </View>
               )}
 
-              {/* Expandable Science & References Drawer */}
-              <View style={[styles.scienceBox, { borderColor: colors.border }]}>
-                <Pressable
-                  style={[styles.scienceHeader, { backgroundColor: colors.surfaceRaised }]}
-                  onPress={() => {
-                    thud('light');
-                    setShowScience((prev) => !prev);
-                  }}
-                >
-                  <View style={styles.scienceTitleGroup}>
-                    <Ionicons name="school-outline" size={18} color={colors.accent} />
-                    <Text style={[styles.scienceTitle, { color: colors.text }]}>Learn the Science & Evidence</Text>
+              {/* Loading Indicator */}
+              {monthlyLoading && (
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator size="large" color={colors.accent} />
+                  <Text style={styles.loadingTitle}>
+                    {personality === 'gymrat'
+                      ? 'REVIEWING YOUR 4-WEEK MESOCYCLE & GAINS... 🔥'
+                      : personality === 'classic'
+                        ? 'Analyzing 30-day trends and weekly adherence...'
+                        : 'Reviewing your past 30 days...'}
+                  </Text>
+                  <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
+                    Evaluating adherence to weekly calorie adjustments, metabolic adaptation, and progressive overload.
+                  </Text>
+                </View>
+              )}
+
+              {/* No Review Yet State */}
+              {!monthlyReview && !monthlyLoading && (
+                <View style={styles.emptyState}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                    <Ionicons name="pie-chart-outline" size={32} color={colors.accent} />
                   </View>
-                  <Ionicons
-                    name={showScience ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </Pressable>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                    Ready for your 30-Day Monthly Review
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                    Get deep feedback on how strictly you adhered to weekly calorie adjustments and how that shaped your scale weight and strength.
+                  </Text>
+                  <View style={styles.btnWrap}>
+                    <Button
+                      label="CHECK IN FOR MONTHLY REVIEW"
+                      onPress={onGenerateMonthly ?? (() => {})}
+                      tone="loud"
+                    />
+                  </View>
+                </View>
+              )}
 
-                {showScience && (
-                  <View style={[styles.scienceBody, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.scienceText, { color: colors.textMuted }]}>
-                      {review.scienceExplanation ??
-                        'Ascend uses evidence-based exercise physiology to interpret your week. By comparing working sets against research-proven volume landmarks and tracking progressive overload, we ensure you stay in your muscle-building sweet spot without overreaching.'}
+              {/* Monthly Review Content */}
+              {monthlyReview && !monthlyLoading && (
+                <>
+                  {/* Headline */}
+                  <View style={[styles.headlineBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                    <Text style={[styles.headlineText, { color: colors.text }]}>"{monthlyReview.headline}"</Text>
+                  </View>
+
+                  {/* 4-Week Adherence & Verdict Card */}
+                  <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
+                    <View style={styles.adherenceScoreHeader}>
+                      <View>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                          WEEKLY ADJUSTMENT ADHERENCE
+                        </Text>
+                        <Text style={[styles.adherenceSummaryText, { color: colors.textMuted }]}>
+                          {monthlyMetrics.overallAdherence.adherenceSummary}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.adherenceScorePill,
+                          {
+                            backgroundColor:
+                              monthlyMetrics.overallAdherence.score >= 80
+                                ? colors.positive + '25'
+                                : colors.warning + '25',
+                            borderColor:
+                              monthlyMetrics.overallAdherence.score >= 80 ? colors.positive : colors.warning,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.adherenceScoreNum,
+                            {
+                              color:
+                                monthlyMetrics.overallAdherence.score >= 80 ? colors.positive : colors.warning,
+                            },
+                          ]}
+                        >
+                          {monthlyMetrics.overallAdherence.score}%
+                        </Text>
+                        <Text
+                          style={[
+                            styles.adherenceScoreLabel,
+                            {
+                              color:
+                                monthlyMetrics.overallAdherence.score >= 80 ? colors.positive : colors.warning,
+                            },
+                          ]}
+                        >
+                          {monthlyMetrics.overallAdherence.rating.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={[styles.adherenceVerdictText, { color: colors.text }]}>
+                      {monthlyReview.adherenceVerdict}
                     </Text>
 
-                    <View style={styles.refDivider} />
-                    <Text style={styles.refHeading}>KEY SCIENTIFIC REFERENCES:</Text>
-                    <Text style={styles.refItem}>
-                      • <Text style={styles.refAuthor}>Schoenfeld, B. J. et al. (2017)</Text>: Dose-response relationship between weekly resistance training volume and increases in muscle mass. <Text style={styles.refJournal}>J Sports Sci</Text>.
+                    {/* 4-Week Adherence Breakdown Grid */}
+                    <View style={styles.weeklyAdherenceList}>
+                      {monthlyMetrics.weeklyAdherence.map((w) => {
+                        const isGood = w.status === 'on_target';
+                        const badgeColor = isGood ? colors.positive : colors.warning;
+
+                        return (
+                          <View
+                            key={w.weekNumber}
+                            style={[
+                              styles.adherenceWeekRow,
+                              { backgroundColor: colors.surface, borderColor: colors.border },
+                            ]}
+                          >
+                            <View style={styles.adherenceWeekLeft}>
+                              <Text style={[styles.adherenceWeekTag, { color: colors.text }]}>
+                                WEEK {w.weekNumber}
+                              </Text>
+                              <Text style={[styles.adherenceWeekPeriod, { color: colors.textFaint }]}>
+                                {w.period.from.slice(5)} to {w.period.to.slice(5)}
+                              </Text>
+                            </View>
+
+                            <View style={styles.adherenceWeekCenter}>
+                              <Text style={[styles.adherenceWeekKcal, { color: colors.text }]}>
+                                {w.avgActualKcal > 0 ? `${w.avgActualKcal} kcal` : 'No logs'}
+                                <Text style={{ color: colors.textMuted, fontSize: 11 }}>
+                                  {' '}/ {w.targetKcal} target
+                                </Text>
+                              </Text>
+                              <Text style={[styles.adherenceWeekMeta, { color: colors.textFaint }]}>
+                                {w.deltaKcal !== 0
+                                  ? `${w.deltaKcal >= 0 ? '+' : ''}${w.deltaKcal} kcal/day · `
+                                  : ''}
+                                {w.loggedDays}/7 days
+                              </Text>
+                            </View>
+
+                            <View
+                              style={[
+                                styles.adherenceWeekBadge,
+                                { backgroundColor: badgeColor + '20', borderColor: badgeColor },
+                              ]}
+                            >
+                              <Text style={[styles.adherenceWeekBadgeText, { color: badgeColor }]}>
+                                {w.adherencePct}% {isGood ? 'TARGET' : w.status.toUpperCase()}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* 30-Day Physiological & Training Vitals */}
+                  <View style={styles.cardsGrid}>
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="body-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
+                          30-DAY BODY COMPOSITION
+                        </Text>
+                      </View>
+                      <View style={styles.vitalStatRow}>
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>START</Text>
+                          <Text style={[styles.vitalStatValue, { color: colors.text }]}>
+                            {monthlyMetrics.weight.startWeightKg !== null
+                              ? formatWeight(monthlyMetrics.weight.startWeightKg, units)
+                              : '—'}
+                          </Text>
+                        </View>
+                        <Ionicons name="arrow-forward" size={14} color={colors.textFaint} />
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>END</Text>
+                          <Text style={[styles.vitalStatValue, { color: colors.text }]}>
+                            {monthlyMetrics.weight.endWeightKg !== null
+                              ? formatWeight(monthlyMetrics.weight.endWeightKg, units)
+                              : '—'}
+                          </Text>
+                        </View>
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>NET DELTA</Text>
+                          <Text
+                            style={[
+                              styles.vitalStatValue,
+                              {
+                                color:
+                                  monthlyMetrics.weight.deltaKg !== null && monthlyMetrics.weight.deltaKg < 0
+                                    ? colors.positive
+                                    : colors.text,
+                              },
+                            ]}
+                          >
+                            {monthlyMetrics.weight.deltaKg !== null
+                              ? `${monthlyMetrics.weight.deltaKg >= 0 ? '+' : ''}${displayWeight(monthlyMetrics.weight.deltaKg, units).toFixed(1)} ${unit}`
+                              : '—'}
+                          </Text>
+                        </View>
+                      </View>
+                      {monthlyMetrics.nutrition.expenditureChangeKcal !== null && (
+                        <Text style={[styles.metabolicNote, { color: colors.textMuted }]}>
+                          TDEE adaptation shift: {monthlyMetrics.nutrition.expenditureChangeKcal >= 0 ? '+' : ''}
+                          {monthlyMetrics.nutrition.expenditureChangeKcal} kcal/day across the month.
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="barbell-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
+                          30-DAY TRAINING VOLUME
+                        </Text>
+                      </View>
+                      <View style={styles.vitalStatRow}>
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>WORKOUTS</Text>
+                          <Text style={[styles.vitalStatValue, { color: colors.text }]}>
+                            {monthlyMetrics.training.totalSessions}
+                          </Text>
+                        </View>
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>AVG/WEEK</Text>
+                          <Text style={[styles.vitalStatValue, { color: colors.text }]}>
+                            {monthlyMetrics.training.avgSessionsPerWeek}
+                          </Text>
+                        </View>
+                        <View style={styles.vitalStatItem}>
+                          <Text style={[styles.vitalStatLabel, { color: colors.textFaint }]}>TOTAL VOLUME</Text>
+                          <Text style={[styles.vitalStatValue, { color: colors.text }]}>
+                            {Math.round(displayWeight(monthlyMetrics.training.totalVolumeKg, units)).toLocaleString()}{' '}
+                            <Text style={{ fontSize: 11 }}>{unit}</Text>
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Monthly Wins */}
+                  {monthlyReview.keyWins.length > 0 && (
+                    <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                        MONTHLY MILESTONE WINS 🏆
+                      </Text>
+                      {monthlyReview.keyWins.map((win, idx) => (
+                        <View key={idx} style={styles.winRow}>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.positive} />
+                          <Text style={[styles.winText, { color: colors.text }]}>{win}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Monthly Big Picture */}
+                  <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                      MONTHLY SYNTHESIS & ANALYSIS
                     </Text>
-                    <Text style={styles.refItem}>
-                      • <Text style={styles.refAuthor}>Israetel, M. A. et al. (2020)</Text>: Hypertrophy Training Volume Framework. <Text style={styles.refJournal}>Renaissance Periodization</Text>.
-                    </Text>
-                    <Text style={styles.refItem}>
-                      • <Text style={styles.refAuthor}>Helms, E. R. et al. (2014)</Text>: Evidence-based recommendations for natural bodybuilding contest preparation: nutrition and supplementation. <Text style={styles.refJournal}>JISSN</Text>.
-                    </Text>
-                    <Text style={styles.refItem}>
-                      • <Text style={styles.refAuthor}>Morton, R. W. et al. (2018)</Text>: Systematic review & meta-analysis on dietary protein and resistance training gains. <Text style={styles.refJournal}>Br J Sports Med</Text>.
+                    <Text style={[styles.plainSummary, { color: colors.text }]}>
+                      {monthlyReview.plainSummary ?? monthlyReview.synthesis}
                     </Text>
                   </View>
-                )}
-              </View>
 
-              {/* Regenerate Action */}
-              <Pressable
-                onPress={() => {
-                  thud('light');
-                  onGenerate();
-                }}
-                style={styles.regenBtn}
-              >
-                <Ionicons name="refresh" size={14} color={colors.textMuted} />
-                <Text style={[styles.regenText, { color: colors.textMuted }]}>
-                  Re-analyze with latest logs
-                </Text>
-              </Pressable>
+                  {/* Month-Ahead Strategic Plan */}
+                  <View style={[styles.strategyBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.accent }]}>
+                    <View style={styles.cardHeaderRow}>
+                      <Ionicons name="compass-outline" size={18} color={colors.accent} />
+                      <Text style={[styles.strategyTitle, { color: colors.accent }]}>
+                        STRATEGY FOR NEXT 30 DAYS
+                      </Text>
+                    </View>
+                    <Text style={[styles.strategyText, { color: colors.text }]}>
+                      {monthlyReview.monthAheadStrategy}
+                    </Text>
+                  </View>
+
+                  {/* Training & Nutrition Insights */}
+                  <View style={styles.cardsGrid}>
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="barbell-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>MESOCYCLE INSIGHT</Text>
+                      </View>
+                      <Text style={[styles.cardBody, { color: colors.textMuted }]}>
+                        {monthlyReview.trainingInsight}
+                      </Text>
+                    </View>
+
+                    <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
+                      <View style={styles.cardHeaderRow}>
+                        <Ionicons name="nutrition-outline" size={16} color={colors.accent} />
+                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>NUTRITION INSIGHT</Text>
+                      </View>
+                      <Text style={[styles.cardBody, { color: colors.textMuted }]}>
+                        {monthlyReview.nutritionInsight}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Suggested Monthly Adjustment */}
+                  {monthlyReview.suggestedAdjustment && (
+                    <View
+                      style={[
+                        styles.adjustBox,
+                        {
+                          backgroundColor: colors.surfaceRaised,
+                          borderColor: monthlyReview.suggestedAdjustment.hasAdjustment ? colors.accent : colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.adjustTop}>
+                        <View style={styles.adjustBadge}>
+                          <Ionicons
+                            name={monthlyReview.suggestedAdjustment.hasAdjustment ? 'trending-up' : 'checkmark-done'}
+                            size={14}
+                            color={monthlyReview.suggestedAdjustment.hasAdjustment ? colors.accent : colors.positive}
+                          />
+                          <Text
+                            style={[
+                              styles.adjustBadgeText,
+                              {
+                                color: monthlyReview.suggestedAdjustment.hasAdjustment ? colors.accent : colors.positive,
+                              },
+                            ]}
+                          >
+                            {monthlyReview.suggestedAdjustment.hasAdjustment
+                              ? 'RECOMMENDED MONTHLY ADJUSTMENT'
+                              : 'MONTHLY TARGETS ON TRACK'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.adjustTitle, { color: colors.text }]}>
+                          {monthlyReview.suggestedAdjustment.title}
+                        </Text>
+                      </View>
+
+                      <Text style={[styles.adjustRationale, { color: colors.textMuted }]}>
+                        {monthlyReview.suggestedAdjustment.rationale}
+                      </Text>
+
+                      {/* Before / After Preview */}
+                      {monthlyAdjustmentPreview && !monthlyApplied && (
+                        <View
+                          style={[
+                            styles.beforeAfterContainer,
+                            { backgroundColor: colors.surface, borderColor: colors.border },
+                          ]}
+                        >
+                          <View style={styles.beforeAfterItem}>
+                            <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>CURRENT</Text>
+                            <Text style={[styles.beforeAfterVal, { color: colors.textMuted }]}>
+                              {Math.round(monthlyAdjustmentPreview.currentKcal)} kcal
+                            </Text>
+                          </View>
+                          <Ionicons name="arrow-forward" size={16} color={colors.textFaint} />
+                          <View style={styles.beforeAfterItem}>
+                            <Text style={[styles.beforeAfterLabel, { color: colors.accent }]}>PROPOSED</Text>
+                            <Text style={[styles.beforeAfterVal, { color: colors.text, fontWeight: '700' }]}>
+                              {Math.round(monthlyAdjustmentPreview.achievableKcal)} kcal
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Action buttons */}
+                      {monthlyReview.suggestedAdjustment.hasAdjustment && onApplyMonthlyAdjustment && (
+                        <View style={styles.actionRow}>
+                          {monthlyApplied ? (
+                            <View style={styles.appliedPill}>
+                              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                              <Text style={styles.appliedText}>MONTHLY ADJUSTMENT APPLIED</Text>
+                            </View>
+                          ) : (
+                            <Tappable
+                              onPress={onApplyMonthlyAdjustment}
+                              scaleTo={0.97}
+                              style={[styles.applyBtn, { backgroundColor: colors.accent }]}
+                            >
+                              <Text style={[styles.applyBtnText, { color: colors.onFill }]}>
+                                APPLY {monthlyReview.suggestedAdjustment.title.toUpperCase()}
+                              </Text>
+                            </Tappable>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Deep Science Toggle */}
+                  {monthlyReview.scienceExplanation && (
+                    <View style={[styles.scienceBox, { borderColor: colors.border, backgroundColor: colors.surfaceRaised }]}>
+                      <Pressable
+                        onPress={() => {
+                          thud('light');
+                          setShowMonthlyScience(!showMonthlyScience);
+                        }}
+                        style={styles.scienceHeader}
+                      >
+                        <View style={styles.scienceTitleGroup}>
+                          <Ionicons name="flask-outline" size={16} color={colors.accent} />
+                          <Text style={[styles.scienceTitle, { color: colors.text }]}>THE DEEP PHYSIOLOGY</Text>
+                        </View>
+                        <Ionicons
+                          name={showMonthlyScience ? 'chevron-up' : 'chevron-down'}
+                          size={18}
+                          color={colors.textMuted}
+                        />
+                      </Pressable>
+                      {showMonthlyScience && (
+                        <View style={styles.scienceBody}>
+                          <Text style={[styles.scienceText, { color: colors.textMuted }]}>
+                            {monthlyReview.scienceExplanation}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Recalculate button */}
+                  <Tappable onPress={onGenerateMonthly} style={styles.regenBtn} scaleTo={0.98}>
+                    <Ionicons name="refresh" size={14} color={colors.textMuted} />
+                    <Text style={[styles.regenText, { color: colors.textMuted }]}>Recalculate monthly review</Text>
+                  </Tappable>
+                </>
+              )}
             </>
           )}
         </ScrollView>
@@ -424,21 +960,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
   },
   sheet: {
-    marginTop: 40,
-    flex: 1,
-    borderTopLeftRadius: radius['3xl'],
-    borderTopRightRadius: radius['3xl'],
-    borderTopWidth: 1,
-    overflow: 'hidden',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '92%',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    borderWidth: 1,
+    borderBottomWidth: 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1E2530',
+    paddingBottom: space.sm,
   },
   headerTitleWrap: {
     gap: 2,
@@ -451,51 +988,83 @@ const styles = StyleSheet.create({
   headerBadge: {
     fontFamily: font.uiStrong,
     fontSize: 12,
-    letterSpacing: 1.2,
+    letterSpacing: 1.5,
   },
   headerPeriod: {
-    fontFamily: font.figure,
+    fontFamily: font.ui,
     fontSize: 12,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modeTabs: {
+    flexDirection: 'row',
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
+    padding: 3,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: space.xs + 2,
+    borderRadius: radius.sm,
+  },
+  modeTabActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modeTabText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.6,
   },
   scrollArea: {
     flex: 1,
   },
   scrollContent: {
-    padding: space.lg,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.xxl,
     gap: space.md,
   },
   confBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: space.sm,
+    paddingVertical: 6,
     paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
   },
   confDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   confText: {
     fontFamily: font.uiStrong,
-    fontSize: 12,
+    fontSize: 11,
+    letterSpacing: 0.4,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: space.md,
-    backgroundColor: '#281414',
-    borderColor: '#4D1D1B',
+    backgroundColor: '#2A1818',
+    borderColor: loud.warn,
     borderWidth: 1,
     borderRadius: radius.md,
   },
@@ -513,9 +1082,10 @@ const styles = StyleSheet.create({
   },
   loadingTitle: {
     fontFamily: font.uiStrong,
-    fontSize: 17,
+    fontSize: 16,
     color: '#FFFFFF',
     marginTop: space.sm,
+    textAlign: 'center',
   },
   loadingDesc: {
     fontFamily: font.ui,
@@ -648,55 +1218,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: radius.sm,
     padding: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
     marginVertical: 4,
   },
-  beforeAfterCol: {
-    flex: 1,
+  beforeAfterItem: {
     alignItems: 'center',
+    flex: 1,
   },
   beforeAfterLabel: {
     fontFamily: font.uiStrong,
-    fontSize: 11,
+    fontSize: 9,
     letterSpacing: 1,
-    marginBottom: 2,
   },
   beforeAfterVal: {
-    fontFamily: font.display,
-    fontSize: 15,
-  },
-  beforeAfterSub: {
-    fontFamily: font.figure,
-    fontSize: 11.5,
+    fontFamily: font.ui,
+    fontSize: 14,
     marginTop: 2,
   },
-  safetyWarningBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    backgroundColor: '#2A1F0C',
-    borderColor: '#543F16',
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    padding: space.sm,
+  actionRow: {
     marginTop: 4,
   },
-  safetyWarningText: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    color: '#FBBF24',
-    lineHeight: 16,
-    flex: 1,
-  },
-  applyBtn: {
+  appliedPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingVertical: space.sm,
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: space.md,
+  },
+  appliedText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    color: '#10B981',
+    letterSpacing: 0.8,
+  },
+  applyBtn: {
+    paddingVertical: space.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radius.sm,
   },
   applyBtnText: {
@@ -704,15 +1264,127 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.8,
   },
-  onTrackPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
+  strategyBox: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: space.md,
+    gap: space.xs,
   },
-  onTrackText: {
+  strategyTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  strategyText: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  // Monthly adherence specific styles
+  adherenceScoreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: space.xs,
+  },
+  adherenceSummaryText: {
     fontFamily: font.ui,
     fontSize: 12,
+    marginTop: 2,
+  },
+  adherenceScorePill: {
+    paddingVertical: 4,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  adherenceScoreNum: {
+    fontFamily: font.display,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  adherenceScoreLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  adherenceVerdictText: {
+    fontFamily: font.ui,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: space.sm,
+  },
+  weeklyAdherenceList: {
+    gap: space.xs,
+  },
+  adherenceWeekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  adherenceWeekLeft: {
+    width: 68,
+  },
+  adherenceWeekTag: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  adherenceWeekPeriod: {
+    fontFamily: font.ui,
+    fontSize: 10,
+  },
+  adherenceWeekCenter: {
+    flex: 1,
+    paddingHorizontal: space.sm,
+  },
+  adherenceWeekKcal: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+  },
+  adherenceWeekMeta: {
+    fontFamily: font.ui,
+    fontSize: 10,
+  },
+  adherenceWeekBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: space.xs + 2,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  adherenceWeekBadgeText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 0.4,
+  },
+  vitalStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.xs,
+  },
+  vitalStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  vitalStatLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 1,
+  },
+  vitalStatValue: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  metabolicNote: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    marginTop: 2,
   },
   scienceBox: {
     borderWidth: 1,
@@ -742,31 +1414,6 @@ const styles = StyleSheet.create({
     fontFamily: font.ui,
     fontSize: 12,
     lineHeight: 18,
-  },
-  refDivider: {
-    height: 1,
-    backgroundColor: '#1E2530',
-    marginVertical: 4,
-  },
-  refHeading: {
-    fontFamily: font.uiStrong,
-    fontSize: 10,
-    letterSpacing: 1.1,
-    color: '#64748B',
-  },
-  refItem: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    color: '#94A3B8',
-    lineHeight: 16,
-  },
-  refAuthor: {
-    fontFamily: font.uiStrong,
-    color: '#CBD5E1',
-  },
-  refJournal: {
-    fontStyle: 'italic',
-    color: '#64748B',
   },
   regenBtn: {
     flexDirection: 'row',

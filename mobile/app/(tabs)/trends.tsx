@@ -57,11 +57,23 @@ import {
   type WeeklyExtractedMetrics,
   type WeeklyReviewResult,
 } from '../../src/ai/weeklyReview';
+import {
+  extractMonthlyMetrics,
+  requestMonthlyReview,
+  type MonthlyExtractedMetrics,
+  type MonthlyReviewResult,
+} from '../../src/ai/monthlyReview';
 import { notify } from '../../src/dialog';
 import { thud } from '../../src/platform/haptics';
 import { getEventCopy } from '../../src/copy/personality';
 
-const WINDOW_DAYS = 90;
+export type Timeframe = 'week' | 'month' | 'year';
+
+export const TIMEFRAME_DAYS: Record<Timeframe, number> = {
+  week: 7,
+  month: 30,
+  year: 365,
+};
 
 type TrendTab = 'all' | 'body' | 'workouts';
 
@@ -83,6 +95,7 @@ export default function TrendsScreen() {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
+  const [timeframe, setTimeframe] = useState<Timeframe>('month');
   const [intake, setIntake] = useState<{ date: string; kcal: number; proteinG?: number }[]>([]);
   const [method, setMethod] = useState(false);
   const [sets, setSets] = useState<DatedSet[]>([]);
@@ -91,25 +104,32 @@ export default function TrendsScreen() {
   >({});
   const [sessionTimes, setSessionTimes] = useState<SessionTimes[]>([]);
 
-  // Coaching review state
+  // Coaching review state (weekly)
   const [coachingModalOpen, setCoachingModalOpen] = useState(false);
   const [coachingReview, setCoachingReview] = useState<WeeklyReviewResult | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [coachingError, setCoachingError] = useState<string | null>(null);
   const [coachingApplied, setCoachingApplied] = useState(false);
 
+  // Coaching review state (monthly)
+  const [monthlyReview, setMonthlyReview] = useState<MonthlyReviewResult | null>(null);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [monthlyError, setMonthlyError] = useState<string | null>(null);
+  const [monthlyApplied, setMonthlyApplied] = useState(false);
+
   const unit = weightUnit(settings.units);
   const today = todayISO();
-  const from = addDays(today, -(WINDOW_DAYS - 1));
+  // Fetch up to 365 days of data so switching between Week, Month, and Year is instantaneous
+  const maxHistoryFrom = addDays(today, -365);
 
   useFocusEffect(
     useCallback(() => {
       let current = true;
       void Promise.all([
-        dailyIntakeBetween(from, today),
+        dailyIntakeBetween(maxHistoryFrom, today),
         listAllSets(),
         catalogueRegionsByExerciseName(),
-        finishedSessionTimes(addDays(today, -84)),
+        finishedSessionTimes(maxHistoryFrom),
       ]).then(([intakeRows, allSets, byName, times]) => {
         if (!current) return;
         setIntake(intakeRows);
@@ -120,11 +140,15 @@ export default function TrendsScreen() {
       return () => {
         current = false;
       };
-    }, [from, today]),
+    }, [maxHistoryFrom, today]),
   );
 
-  // Rolling 7-day window for workouts and coaching
+  // Windows
+  const windowDays = TIMEFRAME_DAYS[timeframe];
+  const timeframeFrom = addDays(today, -(windowDays - 1));
   const weekFrom = addDays(today, -6);
+  const monthFrom = addDays(today, -27); // 4 full 7-day weeks = 28 days
+
   const bodyweightByDate = useMemo(
     () => bodyweightForDates(series, sets.map((s) => s.date), { extend: true }),
     [series, sets],
@@ -133,6 +157,11 @@ export default function TrendsScreen() {
   const summary7D: PeriodSummary = useMemo(
     () => summarisePeriod(sets, bodyweightByDate, weekFrom, today),
     [sets, bodyweightByDate, weekFrom, today],
+  );
+
+  const summaryPeriod: PeriodSummary = useMemo(
+    () => summarisePeriod(sets, bodyweightByDate, timeframeFrom, today),
+    [sets, bodyweightByDate, timeframeFrom, today],
   );
 
   const diagnostics7D: VolumeDiagnostics = useMemo(
@@ -147,17 +176,41 @@ export default function TrendsScreen() {
     [sets, regions, weekFrom, today],
   );
 
+  const diagnosticsPeriod: VolumeDiagnostics = useMemo(
+    () =>
+      computeVolumeDiagnostics({
+        sets,
+        exerciseRegions: regions,
+        from: timeframeFrom,
+        to: today,
+        periodDays: windowDays,
+      }),
+    [sets, regions, timeframeFrom, today, windowDays],
+  );
+
+  const diagnosticsMonth: VolumeDiagnostics = useMemo(
+    () =>
+      computeVolumeDiagnostics({
+        sets,
+        exerciseRegions: regions,
+        from: monthFrom,
+        to: today,
+        periodDays: 28,
+      }),
+    [sets, regions, monthFrom, today],
+  );
+
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, today), [sessionTimes, sets, today]);
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
 
-  // Volume-weighted muscle coverage: weights regions by actual completed working sets
+  // Volume-weighted muscle coverage: weights regions by actual completed working sets in the selected timeframe
   const coverage = useMemo(() => {
     const counts = new Map<MuscleRegion, number>();
     let totalSetsInWindow = 0;
     let cataloguedSetsInWindow = 0;
 
     for (const s of sets) {
-      if (s.date < weekFrom || s.date > today) continue;
+      if (s.date < timeframeFrom || s.date > today) continue;
       if (s.set.reps === null || s.set.reps <= 0) continue;
       totalSetsInWindow++;
 
@@ -184,9 +237,9 @@ export default function TrendsScreen() {
       uncataloguedPct,
       totalSets: totalSetsInWindow,
     };
-  }, [sets, regions, weekFrom, today]);
+  }, [sets, regions, timeframeFrom, today]);
 
-  // Deterministic coaching review metrics
+  // Deterministic coaching review metrics (weekly)
   const coachingMetrics: WeeklyExtractedMetrics = useMemo(
     () =>
       extractWeeklyMetrics({
@@ -213,10 +266,44 @@ export default function TrendsScreen() {
     ],
   );
 
+  // Deterministic coaching review metrics (monthly, 4-week adherence breakdown)
+  const monthlyMetrics: MonthlyExtractedMetrics = useMemo(
+    () =>
+      extractMonthlyMetrics({
+        series,
+        observations,
+        intake,
+        sets,
+        diagnostics: diagnosticsMonth.totalWorkingSets > 0 ? diagnosticsMonth : null,
+        goal: settings.goal,
+        targetKcal: program?.calories?.kcal,
+        targetProteinG: program?.macros?.proteinG,
+        units: settings.units,
+        endDate: today,
+      }),
+    [
+      series,
+      observations,
+      intake,
+      sets,
+      diagnosticsMonth,
+      settings.goal,
+      program?.calories?.kcal,
+      program?.macros?.proteinG,
+      settings.units,
+      today,
+    ],
+  );
+
   const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.volumeKg}_${summary7D.workingSets}`;
   const coachingCacheKey = `ascend_weekly_review_${settings.personality}_${coachingMetrics.period.to}`;
   const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
 
+  const monthlyFingerprint = `${monthlyMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${monthlyMetrics.overallAdherence.score}`;
+  const monthlyCacheKey = `ascend_monthly_review_${settings.personality}_${monthlyMetrics.period.to}`;
+  const monthlyAppliedKey = `ascend_applied_monthly_${monthlyMetrics.period.to}`;
+
+  // Weekly review cache persistence
   useEffect(() => {
     let alive = true;
     void Promise.all([
@@ -230,7 +317,6 @@ export default function TrendsScreen() {
             | { review: WeeklyReviewResult; fingerprint: string }
             | WeeklyReviewResult;
           if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
-            // Discard stale review if underlying logs, targets, or workouts have changed
             if (parsed.fingerprint === coachingFingerprint) {
               setCoachingReview(parsed.review);
             } else {
@@ -253,6 +339,43 @@ export default function TrendsScreen() {
       alive = false;
     };
   }, [coachingCacheKey, coachingAppliedKey, coachingFingerprint]);
+
+  // Monthly review cache persistence
+  useEffect(() => {
+    let alive = true;
+    void Promise.all([
+      AsyncStorage.getItem(monthlyCacheKey),
+      AsyncStorage.getItem(monthlyAppliedKey),
+    ]).then(([savedReview, savedApplied]) => {
+      if (!alive) return;
+      if (savedReview) {
+        try {
+          const parsed = JSON.parse(savedReview) as
+            | { review: MonthlyReviewResult; fingerprint: string }
+            | MonthlyReviewResult;
+          if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
+            if (parsed.fingerprint === monthlyFingerprint) {
+              setMonthlyReview(parsed.review);
+            } else {
+              setMonthlyReview(null);
+            }
+          } else {
+            setMonthlyReview(null);
+          }
+        } catch {
+          setMonthlyReview(null);
+        }
+      } else {
+        setMonthlyReview(null);
+      }
+      if (savedApplied) {
+        setMonthlyApplied(true);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [monthlyCacheKey, monthlyAppliedKey, monthlyFingerprint]);
 
   const handleGenerateCoaching = useCallback(async () => {
     setCoachingLoading(true);
@@ -281,6 +404,34 @@ export default function TrendsScreen() {
       setCoachingLoading(false);
     }
   }, [coachingMetrics, settings.goal?.direction, settings.personality, coachingCacheKey, coachingFingerprint]);
+
+  const handleGenerateMonthlyCoaching = useCallback(async () => {
+    setMonthlyLoading(true);
+    setMonthlyError(null);
+    try {
+      thud('light');
+      const result = await requestMonthlyReview(
+        monthlyMetrics,
+        '',
+        settings.goal,
+        settings.personality,
+      );
+      setMonthlyReview(result);
+      setMonthlyApplied(false);
+      await AsyncStorage.setItem(
+        monthlyCacheKey,
+        JSON.stringify({ review: result, fingerprint: monthlyFingerprint }),
+      );
+      thud('heavy');
+      notify('Monthly Review ready', 'Your 30-day comprehensive monthly review is ready.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate monthly review';
+      setMonthlyError(msg);
+      notify('Monthly Review', msg);
+    } finally {
+      setMonthlyLoading(false);
+    }
+  }, [monthlyMetrics, settings.goal, settings.personality, monthlyCacheKey, monthlyFingerprint]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
     if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
@@ -317,8 +468,42 @@ export default function TrendsScreen() {
     }
   }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, coachingAppliedKey]);
 
-  // 90-day charts calculations
-  const window = useMemo(() => series.slice(-WINDOW_DAYS), [series]);
+  const handleApplyMonthlyAdjustment = useCallback(async () => {
+    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || monthlyApplied) return;
+    thud('heavy');
+    const adj = monthlyReview.suggestedAdjustment;
+    if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
+      const exp = latest?.expenditureKcal ?? program.expenditureKcal ?? 2200;
+      const result = calculateCoachingGoalAdjustment({
+        currentGoal: settings.goal,
+        expenditureKcal: exp,
+        deltaKcal: adj.deltaKcal,
+      });
+
+      await updateSettings({
+        goal: result.proposedGoal,
+      });
+
+      await AsyncStorage.setItem(
+        monthlyAppliedKey,
+        JSON.stringify({
+          appliedAt: Date.now(),
+          deltaKcal: adj.deltaKcal,
+          previousKcal: result.currentKcal,
+          newKcal: result.achievableKcal,
+          proposedGoal: result.proposedGoal,
+        }),
+      );
+      setMonthlyApplied(true);
+      notify(
+        'Monthly Adjustment Applied',
+        `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
+      );
+    }
+  }, [monthlyReview, monthlyApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, monthlyAppliedKey]);
+
+  // Dynamic timeframe-sliced charts calculations
+  const window = useMemo(() => series.slice(-windowDays), [series, windowDays]);
   const origin = window[0]?.date ?? null;
 
   const energy = useMemo(() => {
@@ -378,11 +563,13 @@ export default function TrendsScreen() {
   const dayLabel = (x: number) =>
     origin === null ? '' : formatDayMonth(addDays(origin, x));
 
-  const comparison = volumeComparison(summary7D.volumeKg);
+  const timeframeLabel =
+    timeframe === 'week' ? 'past 7 days' : timeframe === 'month' ? 'past 30 days' : 'past year';
+  const comparison = volumeComparison(summaryPeriod.volumeKg);
 
   return (
     <Screen title="Trends & Progress">
-      {/* Top High-Visibility Weekly Coaching Banner */}
+      {/* Top High-Visibility Coaching Banner */}
       <FadeIn>
         <Tappable
           onPress={() => {
@@ -394,7 +581,9 @@ export default function TrendsScreen() {
             { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Open Weekly Coach Review"
+          accessibilityLabel={
+            timeframe === 'month' ? 'Open Monthly Coaching Review' : 'Open Weekly Coach Review'
+          }
         >
           <View style={styles.coachingBannerLeft}>
             <View
@@ -403,20 +592,28 @@ export default function TrendsScreen() {
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
-              <Ionicons name="sparkles" size={18} color={colors.accent} />
+              <Ionicons
+                name={timeframe === 'month' ? 'calendar' : 'sparkles'}
+                size={18}
+                color={colors.accent}
+              />
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
                 <Text style={[styles.coachingTag, { color: colors.textMuted }]}>
-                  {getEventCopy('trends.weekly_recap_tag', {
-                    personality: settings.personality,
-                    seed: 'weekly_tag',
-                  })}
+                  {timeframe === 'month'
+                    ? 'MONTHLY REVIEW (30D)'
+                    : timeframe === 'year'
+                      ? 'YEARLY OVERVIEW (1Y)'
+                      : getEventCopy('trends.weekly_recap_tag', {
+                          personality: settings.personality,
+                          seed: 'weekly_tag',
+                        })}
                 </Text>
                 <View
                   style={[
                     styles.readyPill,
-                    coachingReview
+                    (timeframe === 'month' ? monthlyReview : coachingReview)
                       ? { backgroundColor: colors.positive + '20', borderColor: colors.positive }
                       : { backgroundColor: colors.warning + '20', borderColor: colors.warning },
                   ]}
@@ -424,20 +621,34 @@ export default function TrendsScreen() {
                   <Text
                     style={[
                       styles.readyPillText,
-                      { color: coachingReview ? colors.positive : colors.warning },
+                      {
+                        color: (timeframe === 'month' ? monthlyReview : coachingReview)
+                          ? colors.positive
+                          : colors.warning,
+                      },
                     ]}
                   >
-                    {coachingReview
-                      ? getEventCopy('trends.weekly_recap_action', {
-                          personality: settings.personality,
-                          seed: 'recap_action',
-                        })
-                      : 'TAP TO CHECK IN'}
+                    {timeframe === 'month'
+                      ? monthlyReview
+                        ? '30D READY'
+                        : 'TAP TO REVIEW'
+                      : coachingReview
+                        ? getEventCopy('trends.weekly_recap_action', {
+                            personality: settings.personality,
+                            seed: 'recap_action',
+                          })
+                        : 'TAP TO CHECK IN'}
                   </Text>
                 </View>
               </View>
               <Text style={[styles.coachingHeadline, { color: colors.text }]} numberOfLines={1}>
-                {coachingReview ? `"${coachingReview.headline}"` : 'See how your workouts, scale weight, and calories connected this week'}
+                {timeframe === 'month'
+                  ? monthlyReview
+                    ? `"${monthlyReview.headline}"`
+                    : 'Evaluate 4-week adherence, metabolic shift, and training over 30 days'
+                  : coachingReview
+                    ? `"${coachingReview.headline}"`
+                    : 'See how your workouts, scale weight, and calories connected this week'}
               </Text>
             </View>
           </View>
@@ -446,6 +657,51 @@ export default function TrendsScreen() {
           </View>
         </Tappable>
       </FadeIn>
+
+      {/* Timeframe Selector (Week / Month / Year) */}
+      <View style={styles.timeframeRow}>
+        <View
+          style={[
+            styles.timeframePillContainer,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+          ]}
+        >
+          {(
+            [
+              { key: 'week', label: 'Week (7D)' },
+              { key: 'month', label: 'Month (30D)' },
+              { key: 'year', label: 'Year (1Y)' },
+            ] as const
+          ).map((tf) => {
+            const active = timeframe === tf.key;
+            return (
+              <Tappable
+                key={tf.key}
+                onPress={() => {
+                  thud('light');
+                  setTimeframe(tf.key);
+                }}
+                scaleTo={0.96}
+                style={[
+                  styles.timeframePill,
+                  active && [styles.timeframePillActive, { backgroundColor: colors.surface }],
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[
+                    styles.timeframePillText,
+                    { color: active ? colors.text : colors.textMuted },
+                  ]}
+                >
+                  {tf.label}
+                </Text>
+              </Tappable>
+            );
+          })}
+        </View>
+      </View>
 
       {/* Unified Tab Switcher */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
@@ -509,15 +765,15 @@ export default function TrendsScreen() {
             />
             <GlanceTile
               label="WORKOUTS"
-              value={`${summary7D.sessions} sessions`}
-              sub="past 7 days"
+              value={`${summaryPeriod.sessions} sessions`}
+              sub={timeframeLabel}
               colors={colors}
             />
             <GlanceTile
               label="RECORDS (PRS)"
-              value={summary7D.records}
-              sub={`${summary7D.workingSets} working sets`}
-              highlight={summary7D.records > 0}
+              value={summaryPeriod.records}
+              sub={`${summaryPeriod.workingSets} working sets`}
+              highlight={summaryPeriod.records > 0}
               colors={colors}
             />
           </>
@@ -569,28 +825,28 @@ export default function TrendsScreen() {
           <>
             <GlanceTile
               label="WORKOUTS"
-              value={`${summary7D.sessions} sessions`}
-              sub="past 7 days"
+              value={`${summaryPeriod.sessions} sessions`}
+              sub={timeframeLabel}
               colors={colors}
             />
             <GlanceTile
               label="WORKING SETS"
-              value={summary7D.workingSets}
+              value={summaryPeriod.workingSets}
               sub="total completed"
               colors={colors}
             />
             <GlanceTile
               label="NEW BESTS (PRS)"
-              value={summary7D.records}
+              value={summaryPeriod.records}
               sub="milestone lifts"
-              highlight={summary7D.records > 0}
+              highlight={summaryPeriod.records > 0}
               colors={colors}
             />
             <GlanceTile
               label="GROWTH RANGE"
               value={
                 <Text style={{ color: colors.positive }}>
-                  {diagnostics7D.optimalMusclesCount} / {diagnostics7D.muscleVolumes.length}
+                  {diagnosticsPeriod.optimalMusclesCount} / {diagnosticsPeriod.muscleVolumes.length}
                 </Text>
               }
               sub="muscles in range"
@@ -687,10 +943,10 @@ export default function TrendsScreen() {
       {(activeTab === 'all' || activeTab === 'workouts') && (
         <>
           <FadeIn>
-            <Card loud title="You moved (past 7 days)">
+            <Card loud title={`You moved (${timeframeLabel})`}>
               <View style={styles.volumeRow}>
                 <CountUp
-                  value={Math.round(displayWeight(summary7D.volumeKg, settings.units))}
+                  value={Math.round(displayWeight(summaryPeriod.volumeKg, settings.units))}
                   format={(value) => Math.round(value).toLocaleString()}
                   style={styles.volumeFigure}
                 />
@@ -700,11 +956,17 @@ export default function TrendsScreen() {
             </Card>
           </FadeIn>
 
-          {coachingMetrics.training.progressions.length > 0 && (
+          {(timeframe === 'month' && monthlyMetrics.training.progressions.length > 0
+            ? monthlyMetrics.training.progressions
+            : coachingMetrics.training.progressions
+          ).length > 0 && (
             <FadeIn delay={40}>
               <Card loud title="Strength Highlights (Overload)">
                 <View style={styles.progressionList}>
-                  {coachingMetrics.training.progressions.slice(0, 3).map((p) => (
+                  {(timeframe === 'month' && monthlyMetrics.training.progressions.length > 0
+                    ? monthlyMetrics.training.progressions
+                    : coachingMetrics.training.progressions
+                  ).slice(0, 3).map((p) => (
                     <View key={p.exercise} style={styles.progressionRow}>
                       <View style={styles.progressionLeft}>
                         <Text style={styles.progressionName}>{p.exercise.toUpperCase()}</Text>
@@ -730,11 +992,11 @@ export default function TrendsScreen() {
             </FadeIn>
           )}
 
-          {diagnostics7D.totalWorkingSets > 0 && (
+          {diagnosticsPeriod.totalWorkingSets > 0 && (
             <FadeIn delay={60}>
               <VolumeLandmarksCard
-                diagnostics={diagnostics7D}
-                periodDays={7}
+                diagnostics={diagnosticsPeriod}
+                periodDays={windowDays}
                 goal={settings.goal?.direction}
                 targetKcalDelta={
                   latest?.expenditureKcal != null && program?.calories?.kcal != null
@@ -746,10 +1008,10 @@ export default function TrendsScreen() {
           )}
 
           <FadeIn delay={100}>
-            <Card loud title="What you trained">
+            <Card loud title={`What you trained (${timeframeLabel})`}>
               {coverage.primary === null ? (
                 <Text style={styles.note}>
-                  No catalogued exercises logged in the past 7 days.
+                  No catalogued exercises logged in the {timeframeLabel}.
                 </Text>
               ) : (
                 <View style={styles.map}>
@@ -788,9 +1050,9 @@ export default function TrendsScreen() {
                   </View>
                 </View>
               )}
-              {summary7D.exercises.length > 0 && (
+              {summaryPeriod.exercises.length > 0 && (
                 <Text style={styles.exercises} numberOfLines={3}>
-                  {summary7D.exercises.join(' · ')}
+                  {summaryPeriod.exercises.join(' · ')}
                 </Text>
               )}
             </Card>
@@ -819,7 +1081,7 @@ export default function TrendsScreen() {
       <MethodSheet open={method} onClose={() => setMethod(false)} />
       <Text style={[styles.unitNote, { color: colors.textFaint }]}>Weights in {unit}.</Text>
 
-      {/* Weekly Coaching Review Modal Popup */}
+      {/* Weekly & Monthly Coaching Review Modal Popup */}
       <WeeklyReviewModal
         open={coachingModalOpen}
         onClose={() => setCoachingModalOpen(false)}
@@ -833,6 +1095,15 @@ export default function TrendsScreen() {
         goal={settings.goal}
         expenditureKcal={latest?.expenditureKcal ?? program.expenditureKcal}
         personality={settings.personality}
+        monthlyReview={monthlyReview}
+        monthlyMetrics={monthlyMetrics}
+        monthlyLoading={monthlyLoading}
+        monthlyError={monthlyError}
+        monthlyApplied={monthlyApplied}
+        onGenerateMonthly={handleGenerateMonthlyCoaching}
+        onApplyMonthlyAdjustment={handleApplyMonthlyAdjustment}
+        initialMode={timeframe === 'month' ? 'monthly' : 'weekly'}
+        units={settings.units}
       />
     </Screen>
   );
@@ -937,6 +1208,37 @@ const styles = StyleSheet.create({
   },
   coachingArrowWrap: {
     marginLeft: space.sm,
+  },
+  timeframeRow: {
+    marginBottom: space.sm,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  timeframePillContainer: {
+    flexDirection: 'row',
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 3,
+    gap: 4,
+  },
+  timeframePill: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeframePillActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  timeframePillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
 
   tabsContainer: {
