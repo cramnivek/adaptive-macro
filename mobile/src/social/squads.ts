@@ -37,8 +37,8 @@ export const createDefaultDemoSquad = (user: {
       displayName: user.displayName || 'You',
       role: 'owner',
       joinedAt: new Date().toISOString(),
-      weeklySessions: 3,
-      bestPrThisWeek: 'Bench Press 95 kg × 6',
+      weeklySessions: 0,
+      bestPrThisWeek: null,
     },
     {
       userId: 'mock-u2',

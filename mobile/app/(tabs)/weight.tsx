@@ -15,16 +15,31 @@ import {
   parseWeight,
   weightUnit,
 } from '../../src/format';
+import { thud } from '../../src/platform/haptics';
+import type { UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
-import { font, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
 
 export default function WeightScreen() {
   const { colors } = useTheme();
-  const { settings, weights, recordWeight, removeWeight, series, latest, trend } = useApp();
+  const { settings, updateSettings, weights, recordWeight, removeWeight, series, latest, trend } = useApp();
   const [input, setInput] = useState('');
   const [seededFrom, setSeededFrom] = useState<string | null>(null);
 
   const units = settings.units;
+
+  const toggleUnits = (nextUnits: UnitSystem) => {
+    if (nextUnits === units) return;
+    thud('light');
+    if (input.trim()) {
+      const val = Number.parseFloat(input.replace(',', '.'));
+      if (Number.isFinite(val) && val > 0) {
+        const converted = nextUnits === 'imperial' ? val * 2.20462 : val / 2.20462;
+        setInput(converted.toFixed(1));
+      }
+    }
+    void updateSettings({ units: nextUnits });
+  };
 
   // Start from the current trend rather than an empty box. Tomorrow's weight is
   // almost always within a kilo of today's, so the common case becomes a couple
@@ -87,7 +102,54 @@ export default function WeightScreen() {
   };
 
   return (
-    <Screen title="Weight" subtitle="Daily readings, smoothed into a trend">
+    <Screen
+      title="Weight"
+      subtitle="Daily readings, smoothed into a trend"
+      action={
+        <View style={styles.unitToggleWrap}>
+          <Pressable
+            onPress={() => toggleUnits('metric')}
+            style={[
+              styles.unitPill,
+              units === 'metric'
+                ? { backgroundColor: colors.accent, borderColor: colors.accent }
+                : { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Switch to kilograms"
+          >
+            <Text
+              style={[
+                styles.unitPillText,
+                { color: units === 'metric' ? colors.onFill : colors.textMuted },
+              ]}
+            >
+              KG
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => toggleUnits('imperial')}
+            style={[
+              styles.unitPill,
+              units === 'imperial'
+                ? { backgroundColor: colors.accent, borderColor: colors.accent }
+                : { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Switch to pounds"
+          >
+            <Text
+              style={[
+                styles.unitPillText,
+                { color: units === 'imperial' ? colors.onFill : colors.textMuted },
+              ]}
+            >
+              LB
+            </Text>
+          </Pressable>
+        </View>
+      }
+    >
       <Card title="Log today's weight">
         <Stepper
           label={`Weight (${weightUnit(units)})`}
@@ -180,4 +242,25 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   rowValue: { fontFamily: font.figure, fontSize: 14, fontVariant: ['tabular-nums'] },
+  unitToggleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    padding: 2,
+    borderRadius: radius.md,
+  },
+  unitPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitPillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
 });

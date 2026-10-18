@@ -187,7 +187,8 @@ const elapsed = (startedAt: string, now: number): string => {
 export default function SessionScreen() {
   const router = useRouter();
   const { series, settings, updateSettings } = useApp();
-  const unit = weightUnit(settings.units);
+  const workoutUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
+  const unit = weightUnit(workoutUnits);
   const currentBodyweightKg = useMemo(
     () => series[series.length - 1]?.trendWeightKg ?? settings.goalWeightKg ?? null,
     [series, settings.goalWeightKg],
@@ -376,8 +377,9 @@ export default function SessionScreen() {
    * converting displayed weights in active rows so what the user typed adapts.
    */
   const toggleWeightUnits = () => {
-    const nextUnits: UnitSystem = settings.units === 'metric' ? 'imperial' : 'metric';
-    const fromUnits = settings.units;
+    const currentUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
+    const nextUnits: UnitSystem = currentUnits === 'metric' ? 'imperial' : 'metric';
+    const fromUnits = currentUnits;
 
     setBlocks((current) =>
       current.map((block) => ({
@@ -398,8 +400,8 @@ export default function SessionScreen() {
       })),
     );
 
-    void updateSettings({ units: nextUnits });
-    notify('Weight unit updated', `Switched to ${nextUnits === 'metric' ? 'kg' : 'lbs'}.`);
+    void updateSettings({ workoutUnits: nextUnits });
+    notify('Lifting unit updated', `Switched workouts to ${nextUnits === 'metric' ? 'kg' : 'lbs'}. (Scale weight remains independent)`);
   };
 
   /**
@@ -464,6 +466,24 @@ export default function SessionScreen() {
 
   const renderControls = () => (
     <View style={styles.headerControls}>
+      {showWeightSwitcher && (
+        <Tappable
+          onPress={() => {
+            thud('light');
+            toggleWeightUnits();
+          }}
+          scaleTo={0.92}
+          style={styles.unitQuickToggle}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch lifting units. Currently ${workoutUnits.toUpperCase()}`}
+        >
+          <View style={[styles.unitQuickPill, { borderColor: loud.rule, backgroundColor: loud.panel }]}>
+            <Text style={[styles.unitQuickText, { color: loud.loud }]}>
+              {workoutUnits === 'metric' ? 'KG' : 'LBS'}
+            </Text>
+          </View>
+        </Tappable>
+      )}
       <Tappable
         onPress={() => setOptionsOpen(true)}
         scaleTo={0.9}
@@ -526,9 +546,9 @@ export default function SessionScreen() {
               cardioMode: block.cardioMode,
               speed:
                 previous?.speedKph != null
-                  ? String(displaySpeed(previous.speedKph, settings.units)?.toFixed(1))
+                  ? String(displaySpeed(previous.speedKph, speedUnit)?.toFixed(1))
                   : target?.targetSpeed != null
-                    ? String(displaySpeed(target.targetSpeed, settings.units)?.toFixed(1))
+                    ? String(displaySpeed(target.targetSpeed, speedUnit)?.toFixed(1))
                     : '',
               incline:
                 previous?.inclinePct != null
@@ -544,9 +564,9 @@ export default function SessionScreen() {
                     : '',
               distance:
                 previous?.distanceKm != null
-                  ? String(displayDistance(previous.distanceKm, settings.units)?.toFixed(1))
+                  ? String(displayDistance(previous.distanceKm, speedUnit === 'mph' ? 'imperial' : 'metric')?.toFixed(1))
                   : target?.targetDistance != null
-                    ? String(displayDistance(target.targetDistance, settings.units)?.toFixed(1))
+                    ? String(displayDistance(target.targetDistance, speedUnit === 'mph' ? 'imperial' : 'metric')?.toFixed(1))
                     : '',
             },
           ],
@@ -563,7 +583,7 @@ export default function SessionScreen() {
           weight:
             previous?.weightKg == null
               ? ''
-              : String(displayWeight(previous.weightKg, settings.units).toFixed(1)),
+              : String(displayWeight(previous.weightKg, workoutUnits).toFixed(1)),
           reps: repsPrefill(previous?.reps, target.reps),
           setType: 'normal',
           rpe: null,
@@ -572,7 +592,7 @@ export default function SessionScreen() {
       });
       return { ...block, rows: [...block.rows, ...drafts] };
     },
-    [settings.units],
+    [workoutUnits, speedUnit],
   );
 
   /** Rebuilds the on-screen blocks from what is already written. */
@@ -597,7 +617,7 @@ export default function SessionScreen() {
               key: s.id,
               id: s.id,
               weight:
-                s.weightKg === null ? '' : String(displayWeight(s.weightKg, settings.units).toFixed(1)),
+                s.weightKg === null ? '' : String(displayWeight(s.weightKg, workoutUnits).toFixed(1)),
               reps: String(s.reps),
               setType: s.setType,
               rpe: s.rpe,
@@ -629,7 +649,7 @@ export default function SessionScreen() {
         }),
       );
     },
-    [blockFor, withTargetRows, settings.units, speedUnit],
+    [blockFor, withTargetRows, workoutUnits, speedUnit],
   );
 
   /**
@@ -755,7 +775,7 @@ export default function SessionScreen() {
                 last?.weight ??
                 (previous?.weightKg == null
                   ? ''
-                  : String(displayWeight(previous.weightKg, settings.units).toFixed(1))),
+                  : String(displayWeight(previous.weightKg, workoutUnits).toFixed(1))),
               reps: last?.reps ?? (previous ? String(previous.reps) : ''),
               setType: 'normal',
               rpe: null,
@@ -840,7 +860,7 @@ export default function SessionScreen() {
         if (row.done && row.id) {
           const reps = Number(row.reps);
           if (Number.isFinite(reps) && reps > 0) {
-            const kg = parseWeight(String(w), settings.units);
+            const kg = parseWeight(String(w), workoutUnits);
             await updateSetValues(row.id, kg, reps);
             setSession(await activeSession());
           }
@@ -900,9 +920,9 @@ export default function SessionScreen() {
     const isBb = usesBarbell(block.name);
     const ramp = generateWarmupRamp(
       targetWeight,
-      settings.units,
+      workoutUnits,
       settings.barbell,
-      settings.customPlates?.[settings.units],
+      settings.customPlates?.[workoutUnits],
       isBb,
     );
     if (ramp.length === 0) {
@@ -935,19 +955,19 @@ export default function SessionScreen() {
   };
 
   const addCustomPlate = async (plate: number) => {
-    const current = settings.customPlates?.[settings.units] ?? [];
+    const current = settings.customPlates?.[workoutUnits] ?? [];
     if (current.includes(plate)) return;
     const updated = [...current, plate].sort((a, b) => b - a);
     await updateSettings({
-      customPlates: { ...settings.customPlates, [settings.units]: updated },
+      customPlates: { ...settings.customPlates, [workoutUnits]: updated },
     });
   };
 
   const removeCustomPlate = async (plate: number) => {
-    const current = settings.customPlates?.[settings.units] ?? [];
+    const current = settings.customPlates?.[workoutUnits] ?? [];
     const updated = current.filter((p) => p !== plate);
     await updateSettings({
-      customPlates: { ...settings.customPlates, [settings.units]: updated },
+      customPlates: { ...settings.customPlates, [workoutUnits]: updated },
     });
   };
 
@@ -1039,12 +1059,12 @@ export default function SessionScreen() {
         if (!Number.isFinite(reps) || reps <= 0) continue;
         let kg: number | null = null;
         if (block.bodyweightBased) {
-          const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+          const added = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : 0;
           if (currentBodyweightKg !== null) {
             kg = currentBodyweightKg + (added ?? 0);
           }
         } else {
-          kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+          kg = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : null;
         }
         if (kg === null || kg <= 0) continue;
         const e1rm = estimate1RM(kg, reps);
@@ -1054,7 +1074,7 @@ export default function SessionScreen() {
       }
       return best;
     },
-    [currentBodyweightKg, settings.units],
+    [currentBodyweightKg, workoutUnits],
   );
 
   /** Ticking writes the set; unticking removes it. */
@@ -1160,7 +1180,7 @@ export default function SessionScreen() {
       notify('How many reps?', 'Enter a rep count above zero before ticking the set.');
       return;
     }
-    const kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+    const kg = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : null;
     if (row.weight.trim() && kg === null) {
       notify('That weight did not parse', `Enter a number in ${unit}, or leave it blank.`);
       return;
@@ -1199,8 +1219,8 @@ export default function SessionScreen() {
       const delta = targetE1rm > 0 ? Math.max(0, e1rm - targetE1rm) : 0;
       const isFirstLog = !currentBestPR;
       const loadText = block.bodyweightBased
-        ? (kg !== null && kg > 0 ? `+${displayWeight(kg, settings.units).toFixed(1)} ${unit}` : 'BW')
-        : `${displayWeight(kg ?? 0, settings.units).toFixed(1)} ${unit}`;
+        ? (kg !== null && kg > 0 ? `+${displayWeight(kg, workoutUnits).toFixed(1)} ${unit}` : 'BW')
+        : `${displayWeight(kg ?? 0, workoutUnits).toFixed(1)} ${unit}`;
       setCelebrationPR({
         exerciseName: block.name,
         figure: `${loadText} × ${reps}`,
@@ -1215,7 +1235,7 @@ export default function SessionScreen() {
     setLanded({
       rowKey: row.key,
       content: impactContent(
-        kg === null ? null : displayWeight(kg, settings.units),
+        kg === null ? null : displayWeight(kg, workoutUnits),
         reps,
         row.setType,
         isNewPR,
@@ -1279,7 +1299,7 @@ export default function SessionScreen() {
 
     const reps = Number(row.reps);
     if (!Number.isFinite(reps) || reps <= 0) return;
-    const kg = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+    const kg = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : null;
 
     await updateSetValues(row.id, kg, reps);
     setSession(await activeSession());
@@ -1439,7 +1459,7 @@ export default function SessionScreen() {
           ...row,
           weight:
             prev?.weightKg != null
-              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              ? String(displayWeight(prev.weightKg, workoutUnits).toFixed(1))
               : row.weight,
           reps: prev?.reps != null ? String(prev.reps) : row.reps || targetBlock.target?.reps || '8',
           isCardio,
@@ -1480,7 +1500,7 @@ export default function SessionScreen() {
           id: null,
           weight:
             prev?.weightKg != null
-              ? String(displayWeight(prev.weightKg, settings.units).toFixed(1))
+              ? String(displayWeight(prev.weightKg, workoutUnits).toFixed(1))
               : '',
           reps: repsPrefill(prev?.reps, targetBlock.target?.reps ?? null),
           setType: 'normal',
@@ -1559,7 +1579,7 @@ export default function SessionScreen() {
         allSets,
         bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true }),
         session.date,
-        laddersFor(settings.units),
+        laddersFor(workoutUnits),
       );
       if (reached[0] !== undefined) setMilestone(reached[0]);
       // The milestone's celebration comes first; the share sheet waits behind it.
@@ -1572,7 +1592,7 @@ export default function SessionScreen() {
         sets: await sessionSets(session.id),
         milestone: reached[0] ?? null,
       };
-      setFinished({ workout, summary: shareSummary({ ...workout, units: settings.units }) });
+      setFinished({ workout, summary: shareSummary({ ...workout, units: workoutUnits }) });
       void recordSquadWorkoutSession({
         title: session.name || 'Workout',
         prHighlight: reached[0] ? (reached[0].exercise ? `${reached[0].exercise} ${reached[0].value}kg` : `${reached[0].value} ${reached[0].kind}`) : null,
@@ -1644,7 +1664,7 @@ export default function SessionScreen() {
         <SessionOptionsSheet
           open={optionsOpen}
           onClose={() => setOptionsOpen(false)}
-          units={settings.units}
+          units={workoutUnits}
           onToggleUnits={toggleWeightUnits}
           speedUnit={speedUnit}
           onToggleSpeedUnits={toggleSpeedUnits}
@@ -1983,7 +2003,7 @@ export default function SessionScreen() {
                     <View style={styles.prHeaderBadge}>
                       <Text style={styles.prHeaderLabel}>PR</Text>
                       <Text style={styles.prHeaderValue}>
-                        {displayWeight(best.weight, settings.units).toFixed(1)} {unit.toUpperCase()} × {best.reps}
+                        {displayWeight(best.weight, workoutUnits).toFixed(1)} {unit.toUpperCase()} × {best.reps}
                       </Text>
                     </View>
                   )}
@@ -2041,7 +2061,7 @@ export default function SessionScreen() {
                     : `${
                         previous.weightKg === null
                           ? 'BW'
-                          : displayWeight(previous.weightKg, settings.units).toFixed(1)
+                          : displayWeight(previous.weightKg, workoutUnits).toFixed(1)
                       } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
                   : '—';
                 const on = row.done ? loud.onLoud : loud.figure;
@@ -2266,10 +2286,10 @@ export default function SessionScreen() {
                     {!block.isCardio && (() => {
                       const rowWeightNum = parseFloat(row.weight);
                       const isBb = usesBarbell(block.name);
-                      if (!isBb || !Number.isFinite(rowWeightNum) || rowWeightNum < BAR_WEIGHT[settings.units][settings.barbell]) {
+                      if (!isBb || !Number.isFinite(rowWeightNum) || rowWeightNum < BAR_WEIGHT[workoutUnits][settings.barbell]) {
                         return null;
                       }
-                      const p = platesFor(rowWeightNum, settings.units, settings.barbell, settings.customPlates?.[settings.units]);
+                      const p = platesFor(rowWeightNum, workoutUnits, settings.barbell, settings.customPlates?.[workoutUnits]);
                       if (!p || p.perSide.length === 0 || row.done) return null;
                       return (
                         <Tappable
@@ -2296,12 +2316,12 @@ export default function SessionScreen() {
                       const currentBest = effectiveBestPRFor(block);
                       let parsedWeight: number | null = null;
                       if (block.bodyweightBased) {
-                        const added = row.weight.trim() ? parseWeight(row.weight, settings.units) : 0;
+                        const added = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : 0;
                         if (currentBodyweightKg !== null) {
                           parsedWeight = currentBodyweightKg + (added ?? 0);
                         }
                       } else {
-                        parsedWeight = row.weight.trim() ? parseWeight(row.weight, settings.units) : null;
+                        parsedWeight = row.weight.trim() ? parseWeight(row.weight, workoutUnits) : null;
                       }
                       const parsedReps = Number(row.reps);
                       const validReps = Number.isFinite(parsedReps) && parsedReps > 0 ? parsedReps : 0;
@@ -2312,7 +2332,7 @@ export default function SessionScreen() {
                         weight: parsedWeight,
                         reps: validReps,
                         bestPR: currentBest,
-                        stepKg: settings.units === 'metric' ? 2.5 : lbToKg(5),
+                        stepKg: workoutUnits === 'metric' ? 2.5 : lbToKg(5),
                       });
 
                       if (evalResult.status !== 'pr') return null;
@@ -2321,8 +2341,8 @@ export default function SessionScreen() {
                         <View style={[styles.prRowBadge, styles.prRowBadgePR]}>
                           <Text style={styles.prRowTextPR}>
                             {evalResult.isFirstLog
-                              ? `⭐ BASELINE PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM`
-                              : `🔥 ALL-TIME PR · ${displayWeight(evalResult.e1rm, settings.units).toFixed(1)} ${unit.toUpperCase()} EST. 1RM (+${displayWeight(evalResult.delta, settings.units).toFixed(1)} ${unit.toUpperCase()})`}
+                              ? `⭐ BASELINE PR · ${displayWeight(evalResult.e1rm, workoutUnits).toFixed(1)} ${unit.toUpperCase()} EST. 1RM`
+                              : `🔥 ALL-TIME PR · ${displayWeight(evalResult.e1rm, workoutUnits).toFixed(1)} ${unit.toUpperCase()} EST. 1RM (+${displayWeight(evalResult.delta, workoutUnits).toFixed(1)} ${unit.toUpperCase()})`}
                           </Text>
                         </View>
                       );
@@ -2383,7 +2403,7 @@ export default function SessionScreen() {
           is what leaves the screen. */}
       <MilestoneSheet
         milestone={milestone}
-        units={settings.units}
+        units={workoutUnits}
         personality={settings.personality}
         onDismiss={() => {
           setMilestone(null);
@@ -2450,7 +2470,7 @@ export default function SessionScreen() {
       <SessionOptionsSheet
         open={optionsOpen}
         onClose={() => setOptionsOpen(false)}
-        units={settings.units}
+        units={workoutUnits}
         onToggleUnits={toggleWeightUnits}
         speedUnit={speedUnit}
         onToggleSpeedUnits={toggleSpeedUnits}
@@ -2477,9 +2497,9 @@ export default function SessionScreen() {
       isBarbell={calcTarget?.isBarbell ?? true}
       weight={calcTarget?.initialWeight ?? null}
       exerciseName={calcTarget?.exerciseName ?? null}
-      units={settings.units}
+      units={workoutUnits}
       bar={settings.barbell}
-      customPlates={settings.customPlates?.[settings.units] ?? []}
+      customPlates={settings.customPlates?.[workoutUnits] ?? []}
       onAddCustomPlate={addCustomPlate}
       onRemoveCustomPlate={removeCustomPlate}
       onBarChange={(barbell) => void updateSettings({ barbell })}
@@ -2525,7 +2545,7 @@ export default function SessionScreen() {
     {celebrationPR && (
       <PRCelebration
         data={celebrationPR}
-        units={settings.units}
+        units={workoutUnits}
         personality={settings.personality}
         onDone={() => setCelebrationPR(null)}
       />
@@ -2578,6 +2598,24 @@ const styles = StyleSheet.create({
     borderColor: loud.rule,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  unitQuickToggle: {
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  unitQuickPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitQuickText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    letterSpacing: 0.6,
   },
   note: {
     fontFamily: font.ui,

@@ -42,7 +42,10 @@ export interface AppSettings {
   featureOnboardingDismissed: boolean;
   /** Optional target weight in kg, used only for the goal projection. */
   goalWeightKg: number | null;
+  /** Primary body weight & general unit system: 'metric' (kg, cm) or 'imperial' (lbs, in). */
   units: UnitSystem;
+  /** Primary workout weight unit (barbells, plates, dumbbells): 'metric' (kg) or 'imperial' (lbs). Independent of scale body weight. */
+  workoutUnits: UnitSystem;
   /** Controls weight unit display and session switcher visibility ('switchable' | 'kg' | 'lbs'). */
   weightUnitSetting: WeightUnitSetting;
   /** Controls speed unit display and session switcher visibility ('switchable' | 'kph' | 'mph'). */
@@ -140,6 +143,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   goal: { direction: 'lose', rateKgPerWeek: 0.5 },
   goalWeightKg: null,
   units: 'metric',
+  workoutUnits: 'metric',
   weightUnitSetting: 'switchable',
   speedUnitSetting: 'switchable',
   activeSpeedUnit: 'kph',
@@ -193,6 +197,8 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
   ...DEFAULT_SETTINGS,
   ...stored,
   personality: stored?.personality ?? DEFAULT_SETTINGS.personality,
+  units: stored?.units ?? DEFAULT_SETTINGS.units,
+  workoutUnits: stored?.workoutUnits ?? stored?.units ?? DEFAULT_SETTINGS.workoutUnits,
   userMission: stored?.userMission ?? DEFAULT_SETTINGS.userMission,
   dashboardSpotlight: stored?.dashboardSpotlight ?? DEFAULT_SETTINGS.dashboardSpotlight,
   missionOnboardingDismissed:

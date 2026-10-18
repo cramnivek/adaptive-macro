@@ -12,6 +12,7 @@ import { TOUCH_TARGET } from '../src/components/Controls';
 import { cataloguePatternsByExerciseName, listSetsForExercise, listTrainedExercises } from '../src/db';
 import { displayWeight, formatDate, weightUnit } from '../src/format';
 import { useApp } from '../src/state/AppStore';
+import type { UnitSystem } from '../src/state/settings';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
@@ -98,7 +99,8 @@ export default function ProgressionScreen() {
     };
   }, [points]);
 
-  const unit = weightUnit(settings.units);
+  const workoutUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
+  const unit = weightUnit(workoutUnits);
   const best = points?.length ? points[points.length - 1] : null;
   const heaviestEver = points?.reduce((max, p) => Math.max(max, p.heaviestWorkingSetKg), 0) ?? 0;
 
@@ -175,13 +177,13 @@ export default function ProgressionScreen() {
           <View style={styles.tiles}>
             <StatTile
               label="Heaviest set"
-              value={displayWeight(heaviestEver, settings.units).toFixed(1)}
+              value={displayWeight(heaviestEver, workoutUnits).toFixed(1)}
               unit={unit}
               hint="best working set"
             />
             <StatTile
               label="Last session"
-              value={displayWeight(best.heaviestWorkingSetKg, settings.units).toFixed(1)}
+              value={displayWeight(best.heaviestWorkingSetKg, workoutUnits).toFixed(1)}
               unit={unit}
               hint={formatDate(best.date)}
             />
@@ -191,7 +193,7 @@ export default function ProgressionScreen() {
             <LineChart
               series={[{ points: chart.load, color: loud.loud, strokeWidth: 2.5 }]}
               scatter={[{ points: chart.records, color: loud.loud, radius: 3.5 }]}
-              formatY={(value) => displayWeight(value, settings.units).toFixed(0)}
+              formatY={(value) => displayWeight(value, workoutUnits).toFixed(0)}
               formatX={(value) => formatDate(shiftDate(chart.origin, value))}
             />
             <Text style={[styles.note, { color: loud.figureFaint }]}>
@@ -218,7 +220,7 @@ export default function ProgressionScreen() {
           <Card loud title="Working volume">
             <LineChart
               series={[{ points: chart.volume, color: loud.figureMuted, strokeWidth: 2 }]}
-              formatY={(value) => `${Math.round(displayWeight(value, settings.units) / 1000)}k`}
+              formatY={(value) => `${Math.round(displayWeight(value, workoutUnits) / 1000)}k`}
               formatX={(value) => formatDate(shiftDate(chart.origin, value))}
             />
             <Text style={[styles.note, { color: loud.figureFaint }]}>

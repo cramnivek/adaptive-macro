@@ -21,6 +21,7 @@ import { postPayload } from '../src/social/postPayload';
 import type { FinishedWorkout } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
 import { useApp } from '../src/state/AppStore';
+import type { UnitSystem } from '../src/state/settings';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
@@ -64,6 +65,7 @@ export default function WorkoutScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { settings } = useApp();
   const social = useSocial();
+  const workoutUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   /** The share and post sheet is open. */
@@ -136,10 +138,10 @@ export default function WorkoutScreen() {
             startedAt: workout.startedAt,
             finishedAt: workout.finishedAt,
             sets: workout.sets,
-            units: settings.units,
+            units: workoutUnits,
             milestone: null,
           }),
-    [workout, settings.units],
+    [workout, workoutUnits],
   );
 
   const groups = useMemo(() => groupByExercise(sets), [sets]);
@@ -205,12 +207,12 @@ export default function WorkoutScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={
                   isCardio
-                    ? `${group.name}, ${setLine(set, settings.units)}`
+                    ? `${group.name}, ${setLine(set, workoutUnits)}`
                     : `Edit set ${
                         set.setType === 'warmup'
                           ? 'warm-up'
                           : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length
-                      }, ${setLine(set, settings.units)}`
+                      }, ${setLine(set, workoutUnits)}`
                 }
                 style={[styles.row, { borderColor: loud.rule }]}
               >
@@ -222,7 +224,7 @@ export default function WorkoutScreen() {
                     ? 'W'
                     : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
                 </Text>
-                <Text style={styles.line}>{setLine(set, settings.units)}</Text>
+                <Text style={styles.line}>{setLine(set, workoutUnits)}</Text>
               </Tappable>
             ))}
           </Card>
@@ -246,7 +248,7 @@ export default function WorkoutScreen() {
 
       <EditSetSheet
         set={editing}
-        units={settings.units}
+        units={workoutUnits}
         isLastSet={sets.length === 1}
         onCancel={() => setEditing(null)}
         onSave={async (weightKg, reps) => {

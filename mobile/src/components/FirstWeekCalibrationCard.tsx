@@ -8,6 +8,7 @@ import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
 import type { DashboardSpotlight, UnitSystem, UserMission } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
+import { notify } from '../dialog';
 import { Card } from './Card';
 import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
@@ -46,12 +47,8 @@ export const FirstWeekCalibrationCard = () => {
   const [units, setUnits] = useState<UnitSystem>(settings.units);
   const [sex, setSex] = useState<Sex>(settings.profile.sex);
   const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
-  const [heightStr, setHeightStr] = useState(String(settings.profile.heightCm));
-  const [weightStr, setWeightStr] = useState(
-    settings.units === 'imperial'
-      ? '165'
-      : '75',
-  );
+  const [heightStr, setHeightStr] = useState('');
+  const [weightStr, setWeightStr] = useState('');
 
   // Calibration days logged in the last 14 days
   const calibratedDays = useMemo(() => {
@@ -74,9 +71,13 @@ export const FirstWeekCalibrationCard = () => {
   // State 1: Brand new user has not completed initial onboarding
   if (!settings.onboarded) {
     const handleSaveProfile = async () => {
+      const heightNum = Number.parseFloat(heightStr);
+      const weightNum = Number.parseFloat(weightStr);
+      if (!Number.isFinite(heightNum) || heightNum <= 0 || !Number.isFinite(weightNum) || weightNum <= 0) {
+        notify('Baseline required', 'Please enter your height and weight to establish your starting baseline.');
+        return;
+      }
       thud('heavy');
-      const heightNum = Number.parseFloat(heightStr) || 178;
-      const weightNum = Number.parseFloat(weightStr) || (units === 'imperial' ? 165 : 75);
       const weightKg = units === 'imperial' ? weightNum / 2.20462 : weightNum;
       const heightCm = units === 'imperial' ? heightNum * 2.54 : heightNum;
 
@@ -87,6 +88,7 @@ export const FirstWeekCalibrationCard = () => {
         missionOnboardingDismissed: true,
         featureOnboardingDismissed: true,
         units,
+        workoutUnits: units,
         profile: {
           ...settings.profile,
           sex,
@@ -192,13 +194,27 @@ export const FirstWeekCalibrationCard = () => {
               value={units}
               onChange={(u) => {
                 thud('light');
+                const prev = units;
                 setUnits(u);
-                if (u === 'imperial' && units === 'metric') {
-                  setWeightStr('165');
-                  setHeightStr('70');
-                } else if (u === 'metric' && units === 'imperial') {
-                  setWeightStr('75');
-                  setHeightStr('178');
+                if (heightStr.trim()) {
+                  const h = Number.parseFloat(heightStr);
+                  if (Number.isFinite(h) && h > 0) {
+                    if (u === 'imperial' && prev === 'metric') {
+                      setHeightStr(String(Math.round(h / 2.54)));
+                    } else if (u === 'metric' && prev === 'imperial') {
+                      setHeightStr(String(Math.round(h * 2.54)));
+                    }
+                  }
+                }
+                if (weightStr.trim()) {
+                  const w = Number.parseFloat(weightStr);
+                  if (Number.isFinite(w) && w > 0) {
+                    if (u === 'imperial' && prev === 'metric') {
+                      setWeightStr((w * 2.20462).toFixed(1));
+                    } else if (u === 'metric' && prev === 'imperial') {
+                      setWeightStr((w / 2.20462).toFixed(1));
+                    }
+                  }
                 }
               }}
               options={[
@@ -241,7 +257,7 @@ export const FirstWeekCalibrationCard = () => {
                   value={heightStr}
                   onChangeText={setHeightStr}
                   keyboardType="numeric"
-                  placeholder={units === 'imperial' ? '70' : '178'}
+                  placeholder={units === 'imperial' ? 'e.g. 68' : 'e.g. 175'}
                 />
               </View>
               <View style={styles.col}>
@@ -250,7 +266,7 @@ export const FirstWeekCalibrationCard = () => {
                   value={weightStr}
                   onChangeText={setWeightStr}
                   keyboardType="numeric"
-                  placeholder={units === 'imperial' ? '165' : '75'}
+                  placeholder={units === 'imperial' ? 'e.g. 155' : 'e.g. 70'}
                 />
               </View>
             </View>

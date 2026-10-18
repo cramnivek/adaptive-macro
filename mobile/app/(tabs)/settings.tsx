@@ -19,7 +19,7 @@ import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useSocial } from '../../src/social/session';
 import { playChime, primeChime } from '../../src/platform/chime';
-import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality } from '../../src/state/settings';
+import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality, UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -458,25 +458,46 @@ export default function SettingsScreen() {
         </Section>
       )}
 
-      <Section title="Units & Training">
+      <Section title="Units & Training" initiallyOpen>
         <Card title="Units">
-          <Segmented<WeightUnitSetting>
-            label="Weight unit"
-            value={settings.weightUnitSetting ?? 'switchable'}
-            onChange={(val) => {
-              const patch: Partial<AppSettings> = { weightUnitSetting: val };
-              if (val === 'kg') patch.units = 'metric';
-              if (val === 'lbs') patch.units = 'imperial';
-              void updateSettings(patch);
-            }}
+          <Segmented<UnitSystem>
+            label="Scale Weight Unit"
+            value={settings.units}
+            onChange={(units) => void updateSettings({ units })}
             options={[
-              { value: 'switchable', label: 'Switchable' },
-              { value: 'kg', label: 'kg' },
-              { value: 'lbs', label: 'lbs' },
+              { value: 'metric', label: 'kg (Metric)' },
+              { value: 'imperial', label: 'lb (Imperial)' },
             ]}
           />
           <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
-            When set to Switchable, a KG / LBS toggle is available in your active workout sessions. Selecting kg or lbs locks the unit and hides the switcher.
+            Used for your daily weigh-ins, body weight trends, rate of weight change, and calorie calculations.
+          </Text>
+
+          <Segmented<UnitSystem>
+            label="Workout Lifting Unit"
+            value={settings.workoutUnits ?? 'metric'}
+            onChange={(workoutUnits) => void updateSettings({ workoutUnits })}
+            options={[
+              { value: 'metric', label: 'kg (Kilograms)' },
+              { value: 'imperial', label: 'lb (Pounds)' },
+            ]}
+          />
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+            Independent from scale weight. Used for barbells, dumbbells, plate calculations, personal records, and exercise volume.
+          </Text>
+
+          <Segmented<WeightUnitSetting>
+            label="In-Workout Unit Switcher"
+            value={settings.weightUnitSetting ?? 'switchable'}
+            onChange={(weightUnitSetting) => void updateSettings({ weightUnitSetting })}
+            options={[
+              { value: 'switchable', label: 'Show Switcher' },
+              { value: 'kg', label: 'Lock kg' },
+              { value: 'lbs', label: 'Lock lbs' },
+            ]}
+          />
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+            When set to Show Switcher, a 1-tap KG / LB pill is shown in active workouts and on the Train tab.
           </Text>
 
           <Segmented<SpeedUnitSetting>

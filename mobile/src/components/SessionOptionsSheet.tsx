@@ -321,7 +321,7 @@ export const SessionOptionsSheet = ({
           {/* Units Section */}
           {showWeightSwitcher && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>WEIGHT UNIT</Text>
+              <Text style={styles.sectionLabel}>LIFTING UNIT (WORKOUT)</Text>
               <View style={styles.toggleRow}>
                 <Tappable
                   onPress={() => {
