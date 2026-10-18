@@ -23,6 +23,8 @@ import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
+import { FeatureInterestOnboardingBanner } from '../../src/components/FeatureInterestOnboardingBanner';
+import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -53,6 +55,7 @@ export default function TodayScreen() {
   // The meal being copied, so a second tap before the diary reloads cannot
   // copy it twice.
   const [repeating, setRepeating] = useState<Meal | null>(null);
+  const [showStickerModal, setShowStickerModal] = useState(false);
 
   const renderMealActions = (meal: Meal, style?: ViewStyle) => (
     <View style={[styles.mealActions, style]}>
@@ -152,6 +155,7 @@ export default function TodayScreen() {
       <HomeScreenNotice />
       <ActiveWorkoutBanner />
       <FirstWeekCalibrationCard />
+      <FeatureInterestOnboardingBanner />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
@@ -183,13 +187,72 @@ export default function TodayScreen() {
         </Pressable>
       </View>
 
+      {/* Strength & Workout Shortcut if Strength feature enabled */}
+      {(settings.featureInterests?.includes('strength') ?? true) && (
+        <Pressable
+          onPress={() => router.push('/train')}
+          style={({ pressed }) => [
+            styles.trainingShortcut,
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderColor: colors.border,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Open workout routines"
+        >
+          <View style={styles.trainingShortcutLeft}>
+            <View style={[styles.trainingIconBubble, { backgroundColor: '#FF6B4A22', borderColor: '#FF6B4A55' }]}>
+              <Ionicons name="barbell-outline" size={18} color="#FF6B4A" />
+            </View>
+            <View style={{ gap: 2, flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
+                  Workout & Routines
+                </Text>
+                <View style={[styles.trainingTag, { backgroundColor: '#FF6B4A20' }]}>
+                  <Text style={styles.trainingTagText}>TRAIN</Text>
+                </View>
+              </View>
+              <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
+                Track session, log reps & crush your PRs →
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
+
       <Card>
         <MacroSummary consumed={totals} target={program.macros} />
-        <Text style={[styles.targetLine, { color: colors.textMuted }]}>
-          Target {program.calories.kcal} kcal
-          {program.calories.adjustmentKcal !== 0 &&
-            ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
-        </Text>
+        <View style={styles.macroCardFooter}>
+          <Text style={[styles.targetLine, { color: colors.textMuted }]}>
+            Target {program.calories.kcal} kcal
+            {program.calories.adjustmentKcal !== 0 &&
+              ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
+          </Text>
+          {(settings.featureInterests?.includes('story_stickers') ?? true) && (
+            <Pressable
+              onPress={() => setShowStickerModal(true)}
+              style={({ pressed }) => [
+                styles.stickerPill,
+                {
+                  backgroundColor: colors.surfaceRaised,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Export nutrition sticker for stories"
+            >
+              <Ionicons name="sparkles" size={12} color="#F59E0B" />
+              <Text style={[styles.stickerPillText, { color: colors.text }]}>
+                Story Sticker ✨
+              </Text>
+            </Pressable>
+          )}
+        </View>
         {/*
           A day missing a meal reads to the estimator as a deficit the scale
           never showed, and the target drops to explain it. This takes the day
@@ -210,13 +273,15 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      <NutritionQualityCard
-        consumed={totals}
-        entries={entries}
-        profile={settings.profile}
-      />
+      {(settings.featureInterests?.includes('nutrition') ?? true) && (
+        <NutritionQualityCard
+          consumed={totals}
+          entries={entries}
+          profile={settings.profile}
+        />
+      )}
 
-      {isToday && <CheckInCard />}
+      {isToday && (settings.featureInterests?.includes('body_comp') ?? true) && <CheckInCard />}
 
       {askAboutYesterday && yesterdayKcal !== undefined && (
         <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
@@ -346,6 +411,15 @@ export default function TodayScreen() {
           void removeEntry(entry.id);
         }}
       />
+      <TransparentStickerModal
+        visible={showStickerModal}
+        onClose={() => setShowStickerModal(false)}
+        mode="nutrition"
+        nutritionData={{
+          consumed: totals,
+          profile: settings.profile,
+        }}
+      />
     </Screen>
   );
 }
@@ -364,7 +438,68 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navToday: { flex: 1 },
-  targetLine: { fontFamily: font.ui, fontSize: 12, marginTop: space.lg, textAlign: 'center' },
+  targetLine: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },
+  trainingShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: space.md,
+  },
+  trainingShortcutLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    flex: 1,
+  },
+  trainingIconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trainingShortcutTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+  },
+  trainingTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+  },
+  trainingTagText: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    color: '#FF6B4A',
+    letterSpacing: 1,
+  },
+  trainingShortcutSubtitle: {
+    fontFamily: font.ui,
+    fontSize: 11,
+  },
+  macroCardFooter: {
+    marginTop: space.sm,
+    gap: space.xs,
+    alignItems: 'center',
+  },
+  stickerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+  },
+  stickerPillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+  },
   banner: {
     flexDirection: 'row',
     gap: space.sm,

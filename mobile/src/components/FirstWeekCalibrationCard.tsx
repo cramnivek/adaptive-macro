@@ -6,11 +6,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { GoalDirection, Sex } from '@adaptive-macros/engine';
 import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
-import type { UnitSystem } from '../state/settings';
+import { ALL_FEATURE_INTERESTS, type FeatureInterest, type UnitSystem } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
 import { Card } from './Card';
 import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
+import { FeatureInterestPicker } from './FeatureInterestPicker';
 
 const CALIBRATION_DISMISSED_KEY = 'ascend_first_week_calibration_dismissed';
 
@@ -35,6 +36,10 @@ export const FirstWeekCalibrationCard = () => {
   };
 
   // Local state for initial onboarding fields
+  const [onboardingStep, setOnboardingStep] = useState<'interests' | 'baseline'>('interests');
+  const [selectedInterests, setSelectedInterests] = useState<FeatureInterest[]>(
+    settings.featureInterests ?? [...ALL_FEATURE_INTERESTS],
+  );
   const [units, setUnits] = useState<UnitSystem>(settings.units);
   const [sex, setSex] = useState<Sex>(settings.profile.sex);
   const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
@@ -74,6 +79,8 @@ export const FirstWeekCalibrationCard = () => {
 
       await updateSettings({
         onboarded: true,
+        featureInterests: selectedInterests,
+        featureOnboardingDismissed: true,
         units,
         profile: {
           ...settings.profile,
@@ -88,12 +95,82 @@ export const FirstWeekCalibrationCard = () => {
       });
     };
 
+    if (onboardingStep === 'interests') {
+      return (
+        <FadeIn>
+          <Card variant="featured" style={styles.card}>
+            <View style={styles.badgeRowBetween}>
+              <View style={styles.badgeLeft}>
+                <Ionicons name="sparkles" size={14} color={colors.accent} />
+                <Text style={[styles.badgeText, { color: colors.accent }]}>
+                  STEP 1 OF 2 · WHAT EXCITES YOU?
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  thud('light');
+                  setOnboardingStep('baseline');
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Skip to baseline metrics"
+              >
+                <Text style={[styles.skipLink, { color: colors.textMuted }]}>
+                  SKIP TO STATS →
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.title, { color: colors.text }]}>
+              Pick the features you want to see
+            </Text>
+            <Text style={[styles.desc, { color: colors.textMuted }]}>
+              Choose your superpowers. We'll tailor your daily dashboard, workouts, and AI coaching to what matters to you.
+            </Text>
+
+            <FeatureInterestPicker
+              selectedInterests={selectedInterests}
+              onChange={setSelectedInterests}
+              showPresets={true}
+            />
+
+            <View style={{ marginTop: space.sm }}>
+              <Button
+                label="NEXT: SET BASELINE STATS →"
+                onPress={() => {
+                  thud('heavy');
+                  setOnboardingStep('baseline');
+                }}
+              />
+            </View>
+          </Card>
+        </FadeIn>
+      );
+    }
+
     return (
       <FadeIn>
         <Card variant="featured" style={styles.card}>
-          <View style={styles.badgeRow}>
-            <Ionicons name="sparkles" size={14} color={colors.accent} />
-            <Text style={[styles.badgeText, { color: colors.accent }]}>WELCOME TO ASCEND</Text>
+          <View style={styles.badgeRowBetween}>
+            <View style={styles.badgeLeft}>
+              <Ionicons name="speedometer-outline" size={14} color={colors.accent} />
+              <Text style={[styles.badgeText, { color: colors.accent }]}>
+                STEP 2 OF 2 · DAY 1 BASELINE
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => {
+                thud('light');
+                setOnboardingStep('interests');
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back to feature preferences"
+            >
+              <Text style={[styles.skipLink, { color: colors.accent }]}>
+                ← EDIT FOCUS
+              </Text>
+            </Pressable>
           </View>
 
           <Text style={[styles.title, { color: colors.text }]}>
@@ -173,7 +250,7 @@ export const FirstWeekCalibrationCard = () => {
             </View>
 
             <Button
-              label="SAVE & START FIRST WEEK"
+              label="START ASCEND JOURNEY 🚀"
               onPress={handleSaveProfile}
             />
           </View>
@@ -352,6 +429,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  skipLink: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
   calibHeader: {
     flexDirection: 'row',

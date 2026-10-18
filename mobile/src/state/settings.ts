@@ -1,12 +1,15 @@
-import { ALL_BLOCKS, type CardBlocks } from '../shareCardPlacement';
-import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
+import { ALL_BLOCKS } from '../shareCardPlacement';
+import type { CardBlocks } from '../shareCardPlacement';
+import { DEFAULT_TEMPLATE } from '../shareCardTemplate';
+import type { TemplateId } from '../shareCardTemplate';
 import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
 import { defaultOllamaHost } from '../ai/ollama';
 import { DEFAULT_FOOD_COUNTRY } from '../api/openfoodfacts';
 import { USDA_DEMO_KEY } from '../api/usda';
 import type { BarChoice } from '../plates';
-import { EQUIPMENT_ITEMS, type EquipmentItem, type TrainingLevel } from '../ai/routineBuild';
+import { EQUIPMENT_ITEMS } from '../ai/routineBuild';
+import type { EquipmentItem, TrainingLevel } from '../ai/routineBuild';
 import type { ChimeChoice } from '../platform/chimeSound';
 
 export type UnitSystem = 'metric' | 'imperial';
@@ -15,12 +18,21 @@ export type SpeedUnitSetting = 'switchable' | 'kph' | 'mph';
 export type SpeedUnit = 'kph' | 'mph';
 export type AppPersonality = 'classic' | 'ascend' | 'gymrat';
 
+import { ALL_FEATURE_INTERESTS } from '../features/featureInterests';
+import type { FeatureInterest } from '../features/featureInterests';
+export { ALL_FEATURE_INTERESTS };
+export type { FeatureInterest };
+
 export interface AppSettings {
   profile: UserProfile;
   activity: ActivityLevel;
   goal: Goal;
   /** App personality voice preference ('classic' | 'ascend' | 'gymrat'). Defaults to 'ascend'. */
   personality: AppPersonality;
+  /** Features the user is interested in seeing. Configurable during onboarding and in Settings. */
+  featureInterests: FeatureInterest[];
+  /** Whether the user has completed or dismissed the feature interest onboarding prompt. */
+  featureOnboardingDismissed: boolean;
   /** Optional target weight in kg, used only for the goal projection. */
   goalWeightKg: number | null;
   units: UnitSystem;
@@ -150,6 +162,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restChimeChoice: 'chime',
   postWorkouts: false,
   personality: 'ascend',
+  featureInterests: [...ALL_FEATURE_INTERESTS],
+  featureOnboardingDismissed: false,
   cardBlocks: ALL_BLOCKS,
   cardTemplate: DEFAULT_TEMPLATE,
   cardDepth: false,
@@ -169,6 +183,12 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
   ...DEFAULT_SETTINGS,
   ...stored,
   personality: stored?.personality ?? DEFAULT_SETTINGS.personality,
+  featureInterests:
+    Array.isArray(stored?.featureInterests) && stored!.featureInterests.length > 0
+      ? stored!.featureInterests
+      : DEFAULT_SETTINGS.featureInterests,
+  featureOnboardingDismissed:
+    stored?.featureOnboardingDismissed ?? DEFAULT_SETTINGS.featureOnboardingDismissed,
   profile: { ...DEFAULT_SETTINGS.profile, ...stored?.profile },
   goal: { ...DEFAULT_SETTINGS.goal, ...stored?.goal },
   foodLookup: { ...DEFAULT_SETTINGS.foodLookup, ...stored?.foodLookup },

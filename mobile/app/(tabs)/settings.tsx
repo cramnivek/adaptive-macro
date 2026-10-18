@@ -25,6 +25,8 @@ import { font, radius, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { isPersonalityV2Enabled } from '../../src/flags';
 import { getEventCopy } from '../../src/copy/personality';
+import { FeatureInterestModal } from '../../src/components/FeatureInterestModal';
+import { FEATURE_LIST } from '../../src/features/featureInterests';
 
 /**
  * A numeric setting that edits as free text and only commits on blur.
@@ -122,6 +124,7 @@ export default function SettingsScreen() {
   // hundreds of inserts, long enough that an unchanged button reads as a
   // no-op and invites a second tap.
   const [busy, setBusy] = useState<string | null>(null);
+  const [featureModalOpen, setFeatureModalOpen] = useState(false);
 
   const runBulk = async (label: string, work: () => Promise<void>) => {
     setBusy(label);
@@ -319,6 +322,58 @@ export default function SettingsScreen() {
             suffix="g per kg bodyweight"
             decimals={2}
             onCommit={(minFatGPerKg) => void updateSettings({ minFatGPerKg })}
+          />
+        </Card>
+      </Section>
+
+      <Section title="Feature Focus & Dashboard" initiallyOpen>
+        <Card subtitle="Personalize which tools, widgets, and daily coaching features are prioritized.">
+          <View style={styles.featureChipsContainer}>
+            {FEATURE_LIST.map((feat) => {
+              const active = settings.featureInterests?.includes(feat.id) ?? true;
+              return (
+                <View
+                  key={feat.id}
+                  style={[
+                    styles.featureChip,
+                    {
+                      backgroundColor: active ? `${feat.accentColor}18` : colors.surfaceRaised,
+                      borderColor: active ? feat.accentColor : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={styles.featureChipEmoji}>{feat.emoji}</Text>
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <Text
+                      style={[
+                        styles.featureChipText,
+                        { color: active ? colors.text : colors.textFaint },
+                      ]}
+                    >
+                      {feat.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.featureChipTagline,
+                        { color: active ? colors.textMuted : colors.textFaint },
+                      ]}
+                    >
+                      {feat.tagline}
+                    </Text>
+                  </View>
+                  {active ? (
+                    <Ionicons name="checkmark-circle" size={16} color={feat.accentColor} />
+                  ) : (
+                    <Ionicons name="ellipse-outline" size={16} color={colors.textFaint} />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+          <View style={{ height: space.sm }} />
+          <Button
+            label="CUSTOMIZE FEATURE FOCUS 🎯"
+            onPress={() => setFeatureModalOpen(true)}
           />
         </Card>
       </Section>
@@ -569,6 +624,11 @@ export default function SettingsScreen() {
           </Card>
         </Section>
       )}
+
+      <FeatureInterestModal
+        visible={featureModalOpen}
+        onClose={() => setFeatureModalOpen(false)}
+      />
     </Screen>
   );
 }
@@ -584,6 +644,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionTitle: { fontFamily: font.uiStrong, fontSize: 15 },
+  featureChipsContainer: {
+    gap: space.xs + 2,
+    marginTop: space.xs,
+  },
+  featureChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: space.xs + 4,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  featureChipEmoji: {
+    fontSize: 16,
+  },
+  featureChipText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+  },
+  featureChipTagline: {
+    fontFamily: font.ui,
+    fontSize: 10,
+    lineHeight: 14,
+  },
   previewBox: {
     padding: space.md,
     borderRadius: radius.lg,
