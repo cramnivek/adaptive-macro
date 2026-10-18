@@ -39,4 +39,15 @@ describe('impactContent', () => {
     // Warmups cannot be PRs:
     expect(impactContent(100, 8, 'warmup', true).verdict).toBe('WARM-UP');
   });
+
+  it('reflects gymrat and classic personality modes in verdicts', () => {
+    const gymratPR = impactContent(120, 5, 'normal', true, 'gymrat');
+    expect(gymratPR.verdict).toContain('PR');
+
+    const gymratNormal = impactContent(100, 8, 'normal', false, 'gymrat');
+    expect(gymratNormal.verdict).toBeTruthy();
+
+    const classicFailure = impactContent(100, 8, 'failure', false, 'classic');
+    expect(classicFailure.verdict).toBe('TO FAILURE');
+  });
 });

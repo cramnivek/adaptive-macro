@@ -1,4 +1,6 @@
 import type { SetType } from '@adaptive-macros/engine';
+import type { AppPersonality } from '../state/settings';
+import { getEventCopy } from '../copy/personality';
 
 export interface ImpactContent {
   /** The large figure: "102.5 × 8", "BW × 12". */
@@ -33,8 +35,25 @@ export const impactContent = (
   reps: number,
   setType: SetType,
   isPR = false,
-): ImpactContent => ({
-  figure: `${weight === null ? 'BW' : Number.isInteger(weight) ? String(weight) : weight.toFixed(1)} × ${reps}`,
-  verdict: isPR && setType !== 'warmup' ? 'NEW PR!' : VERDICTS[setType],
-  isPR: isPR && setType !== 'warmup',
-});
+  personality?: AppPersonality,
+  seed?: string | number,
+): ImpactContent => {
+  let verdict = '';
+  if (isPR && setType !== 'warmup') {
+    verdict = getEventCopy('workout.impact_pr', { personality, seed });
+  } else if (setType === 'failure') {
+    verdict = getEventCopy('workout.impact_failure', { personality, seed });
+  } else if (setType === 'dropset') {
+    verdict = getEventCopy('workout.impact_dropset', { personality, seed });
+  } else if (setType === 'warmup') {
+    verdict = getEventCopy('workout.impact_warmup', { personality, seed });
+  } else {
+    verdict = getEventCopy('workout.impact_done', { personality, seed });
+  }
+
+  return {
+    figure: `${weight === null ? 'BW' : Number.isInteger(weight) ? String(weight) : weight.toFixed(1)} × ${reps}`,
+    verdict: verdict || (isPR && setType !== 'warmup' ? 'NEW PR!' : VERDICTS[setType]),
+    isPR: isPR && setType !== 'warmup',
+  };
+};

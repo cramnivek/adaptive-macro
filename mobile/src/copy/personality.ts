@@ -88,7 +88,6 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     },
   },
 
-  // --- ROUTINE & WORKOUT ACTIONS ---
   'workout.finish_btn': {
     context: 'routine',
     variants: {
@@ -111,6 +110,126 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
       classic: ['Resume workout'],
       ascend: ['Resume workout', 'Pick up where you left off'],
       gymrat: ['STILL IN THE LAB · RESUME', 'RESUME SESSION'],
+    },
+  },
+  'workout.empty_session_title': {
+    context: 'routine',
+    variants: {
+      classic: ['Add an exercise to start your workout.'],
+      ascend: ['Add your first exercise and let\'s get after it.', 'Start building your workout session.'],
+      gymrat: ['EMPTY CANVAS. ADD AN EXERCISE AND LET\'S COOK. 🔥', 'WHAT ARE WE LIFTING? ADD AN EXERCISE. 🗣️'],
+    },
+  },
+  'workout.rest_done_label': {
+    context: 'routine',
+    variants: {
+      classic: ['REST DONE'],
+      ascend: ['REST OVER · LOCK IN', 'TIME TO LIFT'],
+      gymrat: ['REST OVER · TIME TO COOK 🔥', 'LOCK IN 💀🔥', 'BACK TO THE LAB 🔥'],
+    },
+  },
+  'workout.rest_resting_label': {
+    context: 'routine',
+    variants: {
+      classic: ['REST'],
+      ascend: ['REST'],
+      gymrat: ['REST · BREATHE', 'RECHARGE'],
+    },
+  },
+  'workout.rest_done_btn': {
+    context: 'routine',
+    variants: {
+      classic: ['OK'],
+      ascend: ['READY', 'LET\'S GO'],
+      gymrat: ['COOK 🗣️', 'LOCKED IN 🔥'],
+    },
+  },
+  'workout.discard_title': {
+    context: 'routine',
+    variants: {
+      classic: ['Nothing logged'],
+      ascend: ['Nothing logged'],
+      gymrat: ['NOTHING LOGGED YET'],
+    },
+  },
+  'workout.discard_message': {
+    context: 'routine',
+    variants: {
+      classic: ['No sets were ticked. Discard this session?'],
+      ascend: ['No sets were recorded yet. Discard this session?'],
+      gymrat: ['Zero sets recorded. Discarding the session already? 💀'],
+    },
+  },
+  'workout.impact_done': {
+    context: 'achievement',
+    variants: {
+      classic: ['DONE'],
+      ascend: ['DONE', 'LOCKED IN', 'COUNT IT'],
+      gymrat: ['LOCKED IN 🔥', 'COOKED 🗣️', 'EASY WORK', 'LIGHT WEIGHT'],
+    },
+  },
+  'workout.impact_pr': {
+    context: 'achievement',
+    variants: {
+      classic: ['NEW PR!'],
+      ascend: ['NEW PR!', 'NEW PR! 🔥', 'NEW BEST!'],
+      gymrat: ['NEW PR 💀🔥', 'COOKED! 🗣️🔥', 'UNSTOPPABLE 🔥'],
+    },
+  },
+  'workout.impact_failure': {
+    context: 'achievement',
+    variants: {
+      classic: ['TO FAILURE'],
+      ascend: ['TO FAILURE', 'MAX EFFORT', 'EMPTIED THE TANK'],
+      gymrat: ['ABSOLUTE FAILURE 💀🔥', 'ZERO LEFTOVER 🔥', 'TILL THE WHEELS FALL OFF'],
+    },
+  },
+  'workout.impact_dropset': {
+    context: 'achievement',
+    variants: {
+      classic: ['DROP SET'],
+      ascend: ['DROP SET', 'DROP SET 🔥', 'PUSHED THROUGH'],
+      gymrat: ['DROP SET · KEEP COOKING 💀🔥', 'STRIP THE WEIGHT 🔥'],
+    },
+  },
+  'workout.impact_warmup': {
+    context: 'achievement',
+    variants: {
+      classic: ['WARM-UP'],
+      ascend: ['WARM-UP', 'WARMED UP'],
+      gymrat: ['WARM-UP · TIME TO WORK ⚡', 'DIALED IN'],
+    },
+  },
+  'milestone.dismiss_btn': {
+    context: 'achievement',
+    variants: {
+      classic: ['OK'],
+      ascend: ['GOOD WORK', 'NICE'],
+      gymrat: ['HUGE W 🔥', 'WE MOVE 💀🔥'],
+    },
+  },
+  'milestone.load_detail': {
+    context: 'achievement',
+    variants: {
+      classic: ['Heavier than you have ever had on it.'],
+      ascend: ['New territory. Heavier than you have ever had on it.'],
+      gymrat: ['ALL-TIME HEAVY. BRO JUST SET A NEW STANDARD. 💀🔥'],
+    },
+  },
+  'milestone.volume_detail': {
+    context: 'achievement',
+    variants: {
+      classic: ['Everything you have ever put on a bar, added up.'],
+      ascend: ['Massive milestone. Everything you have ever put on a bar, added up.'],
+      gymrat: ['LIFETIME VOLUME MONSTER. WE ARE TALKING MOUNTAINS OF IRON. 🔥'],
+    },
+  },
+  'milestone.sessions_detail': {
+    context: 'achievement',
+    variants: {
+      classic: ['Workouts finished. Most people never get here.'],
+      ascend: ['Consistency unlocked. Most people never get here.'],
+      gymrat: ['AN ACTUAL MACHINE. THE CONSISTENCY IS UNMATCHED. 🗣️🔥'],
     },
   },
 

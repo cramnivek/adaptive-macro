@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react';
 import { Animated, Modal, StyleSheet, Text, View } from 'react-native';
 import { describeMilestone } from '../milestones';
 import { thud } from '../platform/haptics';
-import type { UnitSystem } from '../state/settings';
+import type { AppPersonality, UnitSystem } from '../state/settings';
+import { getEventCopy } from '../copy/personality';
 import { SKEW, font, space } from '../theme';
 import { ease, impact } from '../theme/motion';
 import { session as loud } from '../theme/sessionTheme';
@@ -15,6 +16,7 @@ interface MilestoneSheetProps {
   milestone: Milestone | null;
   units: UnitSystem;
   onDismiss: () => void;
+  personality?: AppPersonality;
 }
 
 /**
@@ -30,7 +32,7 @@ interface MilestoneSheetProps {
  * field and a figure that punches in — so it reads as the same app shouting
  * louder, not as a different screen.
  */
-export const MilestoneSheet = ({ milestone, units, onDismiss }: MilestoneSheetProps) => {
+export const MilestoneSheet = ({ milestone, units, onDismiss, personality }: MilestoneSheetProps) => {
   const enter = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0)).current;
 
@@ -55,7 +57,7 @@ export const MilestoneSheet = ({ milestone, units, onDismiss }: MilestoneSheetPr
   }, [milestone, enter, pop]);
 
   if (milestone === null) return null;
-  const copy = describeMilestone(milestone, units);
+  const copy = describeMilestone(milestone, units, personality);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onDismiss}>
@@ -93,7 +95,9 @@ export const MilestoneSheet = ({ milestone, units, onDismiss }: MilestoneSheetPr
 
         <Tappable onPress={onDismiss} scaleTo={0.97} style={styles.dismissWrap}>
           <SlashPanel color={loud.panel} style={styles.dismiss}>
-            <Text style={styles.dismissLabel}>GOOD</Text>
+            <Text style={styles.dismissLabel}>
+              {getEventCopy('milestone.dismiss_btn', { personality, seed: milestone.value })}
+            </Text>
           </SlashPanel>
         </Tappable>
       </View>

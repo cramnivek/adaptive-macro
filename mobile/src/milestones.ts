@@ -47,6 +47,9 @@ export interface MilestoneCopy {
 
 const round = (value: number): string => String(Math.round(value));
 
+import type { AppPersonality } from './state/settings';
+import { getEventCopy } from './copy/personality';
+
 /**
  * What to say about a milestone.
  *
@@ -54,33 +57,42 @@ const round = (value: number): string => String(Math.round(value));
  * testable without a renderer. Every line is written to be the sentence you
  * would actually say, which is the whole test a milestone has to pass.
  */
-export const describeMilestone = (milestone: Milestone, units: UnitSystem): MilestoneCopy => {
+export const describeMilestone = (
+  milestone: Milestone,
+  units: UnitSystem,
+  personality?: AppPersonality,
+): MilestoneCopy => {
   const unit = units === 'metric' ? 'kg' : 'lb';
 
   if (milestone.kind === 'load') {
     return {
       label: (milestone.exercise ?? 'That lift').toUpperCase(),
       figure: `${round(displayWeight(milestone.value, units))} ${unit}`,
-      detail: 'Heavier than you have ever had on it.',
+      detail:
+        getEventCopy('milestone.load_detail', { personality, seed: milestone.value }) ||
+        'Heavier than you have ever had on it.',
     };
   }
 
   if (milestone.kind === 'volume') {
     const shown = displayWeight(milestone.value, units);
     const comparison = volumeComparison(milestone.value);
+    const base = getEventCopy('milestone.volume_detail', { personality, seed: milestone.value });
     return {
       label: 'LIFTED, ALL TIME',
       figure: `${Math.round(shown).toLocaleString()} ${unit}`,
       detail:
         comparison === null
-          ? 'Everything you have ever put on a bar, added up.'
-          : `Everything you have ever put on a bar — ${comparison}.`,
+          ? base || 'Everything you have ever put on a bar, added up.'
+          : `${base || 'Everything you have ever put on a bar'} — ${comparison}.`,
     };
   }
 
   return {
     label: 'SESSIONS',
     figure: round(milestone.value),
-    detail: 'Workouts finished. Most people never get here.',
+    detail:
+      getEventCopy('milestone.sessions_detail', { personality, seed: milestone.value }) ||
+      'Workouts finished. Most people never get here.',
   };
 };

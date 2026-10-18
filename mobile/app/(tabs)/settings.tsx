@@ -355,15 +355,29 @@ export default function SettingsScreen() {
               </View>
 
               <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Workout Done:</Text>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Set Ticked:</Text>
+                <Text style={[styles.previewVal, { color: colors.warning }]}>
+                  {getEventCopy('workout.impact_done', { personality: settings.personality, seed: 1 })}
+                </Text>
+              </View>
+
+              <View style={styles.previewRow}>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Rest Timer:</Text>
                 <Text style={[styles.previewVal, { color: colors.positive }]}>
+                  {getEventCopy('workout.rest_done_label', { personality: settings.personality, seed: 1 })}
+                </Text>
+              </View>
+
+              <View style={styles.previewRow}>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Workout Done:</Text>
+                <Text style={[styles.previewVal, { color: colors.text }]}>
                   {getEventCopy('workout.completed', { personality: settings.personality, seed: 1 })}
                 </Text>
               </View>
 
               <View style={styles.previewRow}>
                 <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Weekly Recap:</Text>
-                <Text style={[styles.previewVal, { color: colors.text }]}>
+                <Text style={[styles.previewVal, { color: colors.textMuted }]}>
                   {getEventCopy('trends.weekly_recap_ready', { personality: settings.personality, seed: 1 })}
                 </Text>
               </View>

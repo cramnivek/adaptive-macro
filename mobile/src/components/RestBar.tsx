@@ -1,6 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { formatRest } from '../rest';
+import type { AppPersonality } from '../state/settings';
+import { getEventCopy } from '../copy/personality';
 import { font, radius, space } from '../theme';
 import { useAnimatedTo } from '../theme/motion';
 import { session as loud } from '../theme/sessionTheme';
@@ -16,6 +18,8 @@ interface RestBarProps {
   /** Whether the end of the rest chimes, and the switch for it. */
   soundOn: boolean;
   onToggleSound: () => void;
+  /** Personality voice preference */
+  personality?: AppPersonality;
 }
 
 /**
@@ -29,7 +33,15 @@ interface RestBarProps {
  * matters more than it sounds — on the iOS PWA there is no vibration API at
  * all, so for those users this is the only signal the rest is up.
  */
-export const RestBar = ({ remaining, total, onAdjust, onSkip, soundOn, onToggleSound }: RestBarProps) => {
+export const RestBar = ({
+  remaining,
+  total,
+  onAdjust,
+  onSkip,
+  soundOn,
+  onToggleSound,
+  personality,
+}: RestBarProps) => {
   const done = remaining <= 0;
   const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
   const width = useAnimatedTo(fraction);
@@ -62,7 +74,9 @@ export const RestBar = ({ remaining, total, onAdjust, onSkip, soundOn, onToggleS
           />
         </Tappable>
         <Text style={[styles.label, { color: done ? loud.onLoud : loud.figureFaint }]}>
-          {done ? 'REST DONE' : 'REST'}
+          {done
+            ? getEventCopy('workout.rest_done_label', { personality, seed: total })
+            : getEventCopy('workout.rest_resting_label', { personality, seed: total })}
         </Text>
 
         <Text style={[styles.clock, { color: done ? loud.onLoud : loud.figure }]}>
@@ -98,7 +112,7 @@ export const RestBar = ({ remaining, total, onAdjust, onSkip, soundOn, onToggleS
             accessibilityLabel={done ? 'Dismiss' : 'Skip the rest of this rest'}
           >
             <Text style={[styles.stepLabel, { color: done ? loud.onLoud : loud.figureMuted }]}>
-              {done ? 'OK' : 'SKIP'}
+              {done ? getEventCopy('workout.rest_done_btn', { personality, seed: total }) : 'SKIP'}
             </Text>
           </Tappable>
         </View>

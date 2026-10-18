@@ -43,6 +43,7 @@ import { SwapExerciseSheet, type SwapMode } from '../src/components/SwapExercise
 import { Tappable } from '../src/components/Tappable';
 import { impactContent } from '../src/components/setImpact';
 import type { ImpactContent } from '../src/components/setImpact';
+import { getEventCopy } from '../src/copy/personality';
 import {
   activeSession,
   addSetToSession,
@@ -1215,6 +1216,8 @@ export default function SessionScreen() {
         reps,
         row.setType,
         isNewPR,
+        settings.personality,
+        row.key,
       ),
     });
 
@@ -1525,8 +1528,8 @@ export default function SessionScreen() {
 
     if (logged === 0) {
       const sure = await confirm({
-        title: 'Nothing logged',
-        message: 'No sets were ticked. Discard this session?',
+        title: getEventCopy('workout.discard_title', { personality: settings.personality }),
+        message: getEventCopy('workout.discard_message', { personality: settings.personality }),
         confirmLabel: 'Discard',
         destructive: true,
       });
@@ -1706,7 +1709,9 @@ export default function SessionScreen() {
         </View>
         <Tappable onPress={() => void finish()} scaleTo={0.93}>
           <SlashPanel color={loud.loud} style={styles.finish}>
-            <Text style={styles.finishLabel}>FINISH WORKOUT</Text>
+            <Text style={styles.finishLabel}>
+              {getEventCopy('workout.finish_btn', { personality: settings.personality })}
+            </Text>
           </SlashPanel>
         </Tappable>
       </View>
@@ -1725,7 +1730,16 @@ export default function SessionScreen() {
           onSkip={() => setRest(null)}
           soundOn={settings.restSound}
           onToggleSound={toggleAlert}
+          personality={settings.personality}
         />
+      )}
+
+      {blocks.length === 0 && (
+        <View style={styles.emptySessionWrap}>
+          <Text style={[styles.emptySessionText, { color: loud.figureFaint }]}>
+            {getEventCopy('workout.empty_session_title', { personality: settings.personality })}
+          </Text>
+        </View>
       )}
 
       {blocks.map((block, blockIndex) => {
@@ -2367,6 +2381,7 @@ export default function SessionScreen() {
       <MilestoneSheet
         milestone={milestone}
         units={settings.units}
+        personality={settings.personality}
         onDismiss={() => {
           setMilestone(null);
           if (finished === null) router.back();
@@ -2946,5 +2961,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 1.2,
     color: loud.figure,
+  },
+  emptySessionWrap: {
+    paddingVertical: space.xl,
+    paddingHorizontal: space.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptySessionText: {
+    fontFamily: font.display,
+    fontSize: 13,
+    letterSpacing: 0.8,
+    textAlign: 'center',
   },
 });

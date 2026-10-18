@@ -69,4 +69,24 @@ describe('Personality System v2 - getEventCopy', () => {
     expect(fallback).toBeTruthy();
     expect(fallback).not.toBe('Workout complete.');
   });
+
+  it('supports Phase 2 workout rest, impact, discard, and milestone variants', () => {
+    vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
+
+    // Rest done label
+    expect(getEventCopy('workout.rest_done_label', { personality: 'classic' })).toBe('REST DONE');
+    expect(getEventCopy('workout.rest_done_label', { personality: 'gymrat' })).toContain('COOK');
+
+    // Rest done action button
+    expect(getEventCopy('workout.rest_done_btn', { personality: 'classic' })).toBe('OK');
+    expect(getEventCopy('workout.rest_done_btn', { personality: 'gymrat' })).toContain('COOK');
+
+    // Empty session title
+    expect(getEventCopy('workout.empty_session_title', { personality: 'classic' })).toContain('Add an exercise');
+    expect(getEventCopy('workout.empty_session_title', { personality: 'gymrat' })).toContain('COOK');
+
+    // Milestone dismiss
+    expect(getEventCopy('milestone.dismiss_btn', { personality: 'classic' })).toBe('OK');
+    expect(getEventCopy('milestone.dismiss_btn', { personality: 'gymrat' })).toContain('W');
+  });
 });
