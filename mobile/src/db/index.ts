@@ -2516,3 +2516,13 @@ export const deleteBodyMeasurement = async (id: string): Promise<void> => {
   await db.runAsync('DELETE FROM body_measurements WHERE id = ?', id);
 };
 
+export {
+  getDailySteps,
+  getDailyStepsBetween,
+  getRecentDailySteps,
+  saveDailySteps,
+  bulkSaveDailySteps,
+  type DailyStepRecord,
+  type SaveDailyStepsInput,
+} from './stepQueries';
+

@@ -37,7 +37,9 @@ const contentType = (path: string): string => {
  * pin users to whatever build they first loaded.
  */
 const cacheControl = (path: string): string =>
-  path.startsWith('/_expo/static/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+  path.startsWith('/_expo/static/')
+    ? 'public, max-age=31536000, immutable'
+    : 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
 
 export const serveStatic = async (
   pathname: string,
@@ -80,12 +82,19 @@ export const serveStatic = async (
     if (real !== root && !real.startsWith(root + sep)) return null;
 
     const body = await readFile(target);
+    const isImmutable = decoded.startsWith('/_expo/static/');
+    const headers: Record<string, string> = {
+      'Content-Type': contentType(target),
+      'Cache-Control': cacheControl(decoded),
+    };
+    if (!isImmutable) {
+      headers['Pragma'] = 'no-cache';
+      headers['Expires'] = '0';
+    }
+
     return new Response(new Uint8Array(body), {
       status: 200,
-      headers: {
-        'Content-Type': contentType(target),
-        'Cache-Control': cacheControl(decoded),
-      },
+      headers,
     });
   } catch {
     return null;

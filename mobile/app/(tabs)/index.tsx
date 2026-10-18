@@ -2,7 +2,7 @@ import type { ISODate, LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CheckInCard } from '../../src/components/CheckInCard';
@@ -17,7 +17,7 @@ import { MacroSummary } from '../../src/components/MacroProgress';
 import { NutritionQualityCard } from '../../src/components/NutritionQualityCard';
 import { Screen } from '../../src/components/Screen';
 import { shouldAskAbout } from '../../src/dayStatus';
-import { lastMealsBefore, type RecentMeal } from '../../src/db';
+import { getDailySteps, lastMealsBefore, type DailyStepRecord, type RecentMeal } from '../../src/db';
 import { sameAsLabel } from '../../src/mealRepeat';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
@@ -25,6 +25,7 @@ import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 import { MissionBanner } from '../../src/components/MissionBanner';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
+import { StepLogModal } from '../../src/components/StepLogModal';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -56,6 +57,21 @@ export default function TodayScreen() {
   // copy it twice.
   const [repeating, setRepeating] = useState<Meal | null>(null);
   const [showStickerModal, setShowStickerModal] = useState(false);
+  const [dailySteps, setDailySteps] = useState<DailyStepRecord | null>(null);
+  const [stepModalOpen, setStepModalOpen] = useState(false);
+
+  const loadSteps = useCallback(async () => {
+    try {
+      const record = await getDailySteps(selectedDate);
+      setDailySteps(record);
+    } catch {
+      setDailySteps(null);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    void loadSteps();
+  }, [loadSteps]);
 
   const renderMealActions = (meal: Meal, style?: ViewStyle) => (
     <View style={[styles.mealActions, style]}>
@@ -316,6 +332,53 @@ export default function TodayScreen() {
         profile={settings.profile}
       />
 
+      {/* Daily Steps & NEAT Activity Card */}
+      <Pressable
+        onPress={() => setStepModalOpen(true)}
+        style={({ pressed }) => [
+          styles.stepsCard,
+          {
+            backgroundColor: colors.surfaceRaised,
+            borderColor: colors.border,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Daily steps and NEAT activity"
+      >
+        <View style={styles.stepsCardLeft}>
+          <View style={[styles.stepsIconBubble, { backgroundColor: colors.accent + '22', borderColor: colors.accent + '55' }]}>
+            <Ionicons name="footsteps" size={18} color={colors.accent} />
+          </View>
+          <View style={{ gap: 2, flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.stepsCardTitle, { color: colors.text }]}>
+                {dailySteps ? `${dailySteps.steps.toLocaleString()} Steps` : 'Daily Steps & NEAT'}
+              </Text>
+              {dailySteps && dailySteps.activeKcal ? (
+                <View style={[styles.stepsTag, { backgroundColor: colors.accent + '20' }]}>
+                  <Text style={[styles.stepsTagText, { color: colors.accent }]}>
+                    +{Math.round(dailySteps.activeKcal)} KCAL
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.stepsTag, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.stepsTagText, { color: colors.textMuted }]}>
+                    HEALTH SYNC
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.stepsCardSubtitle, { color: colors.textMuted }]}>
+              {dailySteps
+                ? `${Math.min(100, Math.round((dailySteps.steps / 10000) * 100))}% of 10k goal · ${dailySteps.distanceKm ?? 0} km walked · Tap to edit`
+                : 'Tap to log steps or sync Apple Health / Health Connect'}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      </Pressable>
+
       {/* Morning Scale Weight & Check-in (Always Active) */}
       {isToday && <CheckInCard />}
 
@@ -456,11 +519,62 @@ export default function TodayScreen() {
           profile: settings.profile,
         }}
       />
+      <StepLogModal
+        visible={stepModalOpen}
+        onClose={() => setStepModalOpen(false)}
+        date={selectedDate}
+        initialSteps={dailySteps?.steps ?? 0}
+        userWeightKg={settings.goalWeightKg ?? 75}
+        onSaved={() => {
+          void loadSteps();
+        }}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  stepsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: space.md,
+  },
+  stepsCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    flex: 1,
+  },
+  stepsIconBubble: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepsCardTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+  },
+  stepsTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+  },
+  stepsTagText: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 1,
+  },
+  stepsCardSubtitle: {
+    fontFamily: font.ui,
+    fontSize: 11,
+  },
   gear: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
   dateNav: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
   navButton: {

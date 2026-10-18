@@ -33,8 +33,12 @@ import {
   catalogueRegionsByExerciseName,
   dailyIntakeBetween,
   finishedSessionTimes,
+  getDailyStepsBetween,
   listAllSets,
+  type DailyStepRecord,
 } from '../../src/db';
+import { StepLogModal } from '../../src/components/StepLogModal';
+import { calculateNeatKcal } from '../../src/health/neat';
 import { calculateCoachingGoalAdjustment } from '../../src/ai/coachingAdjustment';
 import {
   axisDecimals,
@@ -117,37 +121,86 @@ export default function TrendsScreen() {
   const [monthlyError, setMonthlyError] = useState<string | null>(null);
   const [monthlyApplied, setMonthlyApplied] = useState(false);
 
+  // Daily Steps and Activity Sync State
+  const [stepsHistory, setStepsHistory] = useState<DailyStepRecord[]>([]);
+  const [stepModalOpen, setStepModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
   const unit = weightUnit(settings.units);
   const today = todayISO();
   // Fetch up to 365 days of data so switching between Week, Month, and Year is instantaneous
   const maxHistoryFrom = addDays(today, -365);
 
-  useFocusEffect(
-    useCallback(() => {
-      let current = true;
-      void Promise.all([
+  const fetchTrendsData = useCallback(async () => {
+    try {
+      const [intakeRows, allSets, byName, times, stepRows] = await Promise.all([
         dailyIntakeBetween(maxHistoryFrom, today),
         listAllSets(),
         catalogueRegionsByExerciseName(),
         finishedSessionTimes(maxHistoryFrom),
-      ]).then(([intakeRows, allSets, byName, times]) => {
+        getDailyStepsBetween(maxHistoryFrom, today),
+      ]);
+      setIntake(intakeRows);
+      setSets(allSets);
+      setRegions(byName);
+      setSessionTimes(times);
+      setStepsHistory(stepRows);
+    } catch {
+      // Graceful fallback
+    }
+  }, [maxHistoryFrom, today]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let current = true;
+      void fetchTrendsData().then(() => {
         if (!current) return;
-        setIntake(intakeRows);
-        setSets(allSets);
-        setRegions(byName);
-        setSessionTimes(times);
       });
       return () => {
         current = false;
       };
-    }, [maxHistoryFrom, today]),
+    }, [fetchTrendsData]),
   );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    thud('light');
+    try {
+      await fetchTrendsData();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchTrendsData]);
 
   // Windows
   const windowDays = TIMEFRAME_DAYS[timeframe];
   const timeframeFrom = addDays(today, -(windowDays - 1));
   const weekFrom = addDays(today, -6);
   const monthFrom = addDays(today, -27); // 4 full 7-day weeks = 28 days
+
+  const timeframeSteps = useMemo(() => {
+    return stepsHistory.filter((s) => s.date >= timeframeFrom && s.date <= today);
+  }, [stepsHistory, timeframeFrom, today]);
+
+  const stepsSummary = useMemo(() => {
+    const totalSteps = timeframeSteps.reduce((acc, s) => acc + s.steps, 0);
+    const count = timeframeSteps.length;
+    const avgSteps = count > 0 ? Math.round(totalSteps / count) : 0;
+    const totalNeatKcal = timeframeSteps.reduce(
+      (acc, s) => acc + (s.activeKcal ?? calculateNeatKcal(s.steps, latest?.trendWeightKg ?? 75)),
+      0,
+    );
+    const avgNeatKcal = count > 0 ? Math.round(totalNeatKcal / count) : 0;
+    const totalDistanceKm = timeframeSteps.reduce((acc, s) => acc + (s.distanceKm ?? 0), 0);
+    return {
+      totalSteps,
+      avgSteps,
+      totalNeatKcal,
+      avgNeatKcal,
+      totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+      daysLogged: count,
+    };
+  }, [timeframeSteps, latest?.trendWeightKg]);
 
   const bodyweightByDate = useMemo(
     () => bodyweightForDates(series, sets.map((s) => s.date), { extend: true }),
@@ -568,8 +621,69 @@ export default function TrendsScreen() {
   const comparison = volumeComparison(summaryPeriod.volumeKg);
 
   return (
-    <Screen title="Trends & Progress">
-      {/* Top High-Visibility Coaching Banner */}
+    <Screen
+      title="Trends & Progress"
+      action={
+        <Tappable
+          onPress={() => void handleRefresh()}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh trends data"
+          style={styles.refreshBtn}
+        >
+          <Ionicons name="refresh" size={20} color={colors.textMuted} />
+        </Tappable>
+      }
+      onRefresh={() => void handleRefresh()}
+      refreshing={refreshing}
+    >
+      {/* Top Prominent Timeframe Selector (Week / Month / Year) */}
+      <View style={styles.timeframeRow}>
+        <View
+          style={[
+            styles.timeframePillContainer,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+          ]}
+        >
+          {(
+            [
+              { key: 'week', label: 'Week (7D)' },
+              { key: 'month', label: 'Month (30D)' },
+              { key: 'year', label: 'Year (1Y)' },
+            ] as const
+          ).map((tf) => {
+            const active = timeframe === tf.key;
+            return (
+              <Tappable
+                key={tf.key}
+                onPress={() => {
+                  thud('light');
+                  setTimeframe(tf.key);
+                }}
+                scaleTo={0.96}
+                style={[
+                  styles.timeframePill,
+                  active && [styles.timeframePillActive, { backgroundColor: colors.surface }],
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[
+                    styles.timeframePillText,
+                    { color: active ? colors.text : colors.textMuted },
+                    active && { color: colors.text, fontFamily: font.uiStrong },
+                  ]}
+                >
+                  {tf.label}
+                </Text>
+              </Tappable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* High-Visibility Coaching Banner */}
       <FadeIn>
         <Tappable
           onPress={() => {
@@ -657,51 +771,6 @@ export default function TrendsScreen() {
           </View>
         </Tappable>
       </FadeIn>
-
-      {/* Timeframe Selector (Week / Month / Year) */}
-      <View style={styles.timeframeRow}>
-        <View
-          style={[
-            styles.timeframePillContainer,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-          ]}
-        >
-          {(
-            [
-              { key: 'week', label: 'Week (7D)' },
-              { key: 'month', label: 'Month (30D)' },
-              { key: 'year', label: 'Year (1Y)' },
-            ] as const
-          ).map((tf) => {
-            const active = timeframe === tf.key;
-            return (
-              <Tappable
-                key={tf.key}
-                onPress={() => {
-                  thud('light');
-                  setTimeframe(tf.key);
-                }}
-                scaleTo={0.96}
-                style={[
-                  styles.timeframePill,
-                  active && [styles.timeframePillActive, { backgroundColor: colors.surface }],
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[
-                    styles.timeframePillText,
-                    { color: active ? colors.text : colors.textMuted },
-                  ]}
-                >
-                  {tf.label}
-                </Text>
-              </Tappable>
-            );
-          })}
-        </View>
-      </View>
 
       {/* Unified Tab Switcher */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
@@ -897,6 +966,60 @@ export default function TrendsScreen() {
               emptyMessage="Weigh in for a couple of weeks"
               height={170}
             />
+          </Card>
+
+          {/* Daily steps & NEAT expenditure */}
+          <Card title="Daily steps & NEAT activity">
+            <View style={styles.stepsCardContent}>
+              <View style={styles.stepsGlanceRow}>
+                <View style={styles.stepsGlanceCol}>
+                  <Text style={[styles.stepsGlanceVal, { color: colors.text }]}>
+                    {stepsSummary.avgSteps.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
+                    avg daily steps
+                  </Text>
+                </View>
+                <View style={styles.stepsGlanceCol}>
+                  <Text style={[styles.stepsGlanceVal, { color: colors.accent }]}>
+                    ~{stepsSummary.avgNeatKcal} kcal
+                  </Text>
+                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
+                    avg daily NEAT
+                  </Text>
+                </View>
+                <View style={styles.stepsGlanceCol}>
+                  <Text style={[styles.stepsGlanceVal, { color: colors.positive }]}>
+                    {stepsSummary.totalDistanceKm} km
+                  </Text>
+                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
+                    total distance
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[styles.stepsExplainer, { color: colors.textMuted }]}>
+                {stepsSummary.daysLogged > 0
+                  ? `${stepsSummary.totalSteps.toLocaleString()} total steps logged over ${timeframeLabel}. Non-exercise movement fuels your metabolic baseline.`
+                  : 'No steps recorded for this period yet. Log daily steps or connect Apple Health / Google Health Connect to factor walking into your energy expenditure.'}
+              </Text>
+
+              <Tappable
+                onPress={() => {
+                  thud('light');
+                  setStepModalOpen(true);
+                }}
+                style={[
+                  styles.logStepsBtn,
+                  { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="footsteps" size={15} color={colors.accent} />
+                <Text style={[styles.logStepsBtnText, { color: colors.text }]}>
+                  Log Steps / Sync HealthKit
+                </Text>
+              </Tappable>
+            </View>
           </Card>
 
           <Card title="Goal timeline">
@@ -1104,6 +1227,17 @@ export default function TrendsScreen() {
         onApplyMonthlyAdjustment={handleApplyMonthlyAdjustment}
         initialMode={timeframe === 'month' ? 'monthly' : 'weekly'}
         units={settings.units}
+      />
+
+      <StepLogModal
+        visible={stepModalOpen}
+        onClose={() => setStepModalOpen(false)}
+        date={today}
+        initialSteps={stepsHistory.find((s) => s.date === today)?.steps ?? 0}
+        userWeightKg={latest?.trendWeightKg ?? 75}
+        onSaved={() => {
+          void fetchTrendsData();
+        }}
       />
     </Screen>
   );
@@ -1397,5 +1531,48 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 11,
     letterSpacing: 0.5,
+  },
+  refreshBtn: {
+    padding: space.xs,
+  },
+  stepsCardContent: {
+    gap: space.md,
+  },
+  stepsGlanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: space.xs,
+  },
+  stepsGlanceCol: {
+    alignItems: 'center',
+    gap: 2,
+    flex: 1,
+  },
+  stepsGlanceVal: {
+    fontFamily: font.figure,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  stepsGlanceLabel: {
+    fontFamily: font.ui,
+    fontSize: 11,
+  },
+  stepsExplainer: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  logStepsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  logStepsBtnText: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
   },
 });

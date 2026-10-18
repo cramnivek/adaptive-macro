@@ -246,4 +246,20 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE foods ADD COLUMN micronutrients TEXT;
   ALTER TABLE log_entries ADD COLUMN micronutrients TEXT;
   `,
+  // v13 — daily steps and health sync
+  //
+  // Records daily total steps, active energy burned (kcal), source (apple_health, health_connect, manual),
+  // and synced timestamp. Date is unique primary key so each day has one canonical daily step count.
+  `
+  CREATE TABLE IF NOT EXISTS daily_steps (
+    date         TEXT PRIMARY KEY NOT NULL,
+    steps        INTEGER NOT NULL,
+    source       TEXT NOT NULL DEFAULT 'manual',
+    active_kcal  REAL,
+    distance_km  REAL,
+    created_at   TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_daily_steps_date ON daily_steps (date);
+  `,
 ];
