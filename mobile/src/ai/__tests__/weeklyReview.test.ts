@@ -283,4 +283,26 @@ describe('weeklyReview metrics extractor and schema', () => {
     expect(metrics.nutrition.avgProteinG).toBe(160);
     expect(metrics.nutrition.targetProteinG).toBe(160);
   });
+
+  it('customizes coaching prompt based on user personality', () => {
+    const dummyMetrics: WeeklyExtractedMetrics = {
+      period: { from: '2026-10-11', to: '2026-10-17' },
+      weight: { loggedDays: 7, startWeightKg: 80, endWeightKg: 79.5, deltaKg: -0.5, percentBwChange: -0.6, avgWeightKg: 79.8 },
+      nutrition: { loggedDays: 7, avgCalories: 2200, targetCalories: 2200, avgExpenditure: 2600, avgEnergyDeltaKcal: -400, avgProteinG: 160, targetProteinG: 160 },
+      training: { sessionsCount: 4, totalWorkingSets: 16, totalVolumeKg: 10000, progressions: [], underVolumeGroups: [], optimalVolumeGroups: [], overVolumeGroups: [] },
+      confidence: 'high',
+    };
+
+    const gymratPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'gymrat');
+    expect(gymratPrompt).toContain('GYMRAT MODE');
+    expect(gymratPrompt).toContain('cooked');
+
+    const classicPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'classic');
+    expect(classicPrompt).toContain('CLASSIC MODE');
+    expect(classicPrompt).toContain('objective, direct');
+
+    const ascendPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'ascend');
+    expect(ascendPrompt).toContain('ASCEND MODE');
+    expect(ascendPrompt).toContain('warm, encouraging');
+  });
 });

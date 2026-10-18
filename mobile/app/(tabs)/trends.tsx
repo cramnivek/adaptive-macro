@@ -211,7 +211,7 @@ export default function TrendsScreen() {
   );
 
   const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.volumeKg}_${summary7D.workingSets}`;
-  const coachingCacheKey = `ascend_weekly_review_${coachingMetrics.period.to}`;
+  const coachingCacheKey = `ascend_weekly_review_${settings.personality}_${coachingMetrics.period.to}`;
   const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
 
   useEffect(() => {
@@ -256,7 +256,12 @@ export default function TrendsScreen() {
     setCoachingError(null);
     try {
       thud('light');
-      const result = await requestWeeklyReview(coachingMetrics, '', settings.goal?.direction);
+      const result = await requestWeeklyReview(
+        coachingMetrics,
+        '',
+        settings.goal?.direction,
+        settings.personality,
+      );
       setCoachingReview(result);
       setCoachingApplied(false);
       await AsyncStorage.setItem(
@@ -272,7 +277,7 @@ export default function TrendsScreen() {
     } finally {
       setCoachingLoading(false);
     }
-  }, [coachingMetrics, settings.goal?.direction, coachingCacheKey, coachingFingerprint]);
+  }, [coachingMetrics, settings.goal?.direction, settings.personality, coachingCacheKey, coachingFingerprint]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
     if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
@@ -809,6 +814,7 @@ export default function TrendsScreen() {
         onApplyAdjustment={handleApplyCoachingAdjustment}
         goal={settings.goal}
         expenditureKcal={latest?.expenditureKcal ?? program.expenditureKcal}
+        personality={settings.personality}
       />
     </Screen>
   );

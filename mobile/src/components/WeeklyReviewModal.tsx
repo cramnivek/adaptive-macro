@@ -18,6 +18,8 @@ import { thud } from '../platform/haptics';
 import type { WeeklyExtractedMetrics, WeeklyReviewResult } from '../ai/weeklyReview';
 import type { Goal } from '@adaptive-macros/engine';
 import { calculateCoachingGoalAdjustment } from '../ai/coachingAdjustment';
+import type { AppPersonality } from '../state/settings';
+import { getEventCopy } from '../copy/personality';
 
 interface WeeklyReviewModalProps {
   open: boolean;
@@ -31,6 +33,7 @@ interface WeeklyReviewModalProps {
   onApplyAdjustment?: () => void;
   goal?: Goal;
   expenditureKcal?: number;
+  personality?: AppPersonality;
 }
 
 const CONFIDENCE_COLORS = {
@@ -51,6 +54,7 @@ export const WeeklyReviewModal = ({
   onApplyAdjustment,
   goal,
   expenditureKcal,
+  personality,
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -98,7 +102,9 @@ export const WeeklyReviewModal = ({
           <View style={styles.headerTitleWrap}>
             <View style={styles.badgeRow}>
               <Ionicons name="sparkles" size={15} color={colors.accent} />
-              <Text style={[styles.headerBadge, { color: colors.textMuted }]}>WEEKLY COACH</Text>
+              <Text style={[styles.headerBadge, { color: colors.textMuted }]}>
+                {getEventCopy('trends.weekly_recap_tag', { personality }) || 'WEEKLY COACH'}
+              </Text>
             </View>
             <Text style={[styles.headerPeriod, { color: colors.textMuted }]}>
               {metrics.period.from} to {metrics.period.to}
@@ -142,7 +148,13 @@ export const WeeklyReviewModal = ({
           {loading && (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color={colors.accent} />
-              <Text style={styles.loadingTitle}>Reviewing your week...</Text>
+              <Text style={styles.loadingTitle}>
+                {personality === 'gymrat'
+                  ? 'COOKING UP YOUR WEEKLY RECAP... 🔥'
+                  : personality === 'classic'
+                    ? 'Preparing your weekly summary...'
+                    : 'Reviewing your week...'}
+              </Text>
               <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
                 Synthesizing your workouts, weight trends, and energy balance to tune your plan.
               </Text>
@@ -156,13 +168,17 @@ export const WeeklyReviewModal = ({
                 <Ionicons name="analytics" size={32} color={colors.accent} />
               </View>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                Ready for your 7-day coaching check-in
+                {getEventCopy('trends.weekly_recap_ready', { personality }) || 'Ready for your 7-day coaching check-in'}
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
                 Connect what you lifted in the gym with your scale trends and calorie balance to keep your progress on track.
               </Text>
               <View style={styles.btnWrap}>
-                <Button label="CHECK IN WITH COACH" onPress={onGenerate} tone="loud" />
+                <Button
+                  label={getEventCopy('trends.weekly_recap_action', { personality }) || 'CHECK IN WITH COACH'}
+                  onPress={onGenerate}
+                  tone="loud"
+                />
               </View>
             </View>
           )}
@@ -177,7 +193,9 @@ export const WeeklyReviewModal = ({
 
               {/* Friendly Summary */}
               <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>THE BIG PICTURE</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  {personality === 'gymrat' ? 'THE RECAP SCRIPT 👀' : 'THE BIG PICTURE'}
+                </Text>
                 <Text style={[styles.plainSummary, { color: colors.text }]}>
                   {review.plainSummary ?? review.synthesis}
                 </Text>
@@ -186,7 +204,9 @@ export const WeeklyReviewModal = ({
               {/* Key Wins */}
               {review.keyWins?.length > 0 && (
                 <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
-                  <Text style={[styles.sectionTitle, { color: colors.positive }]}>WINS THIS WEEK</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.positive }]}>
+                    {personality === 'gymrat' ? "THIS WEEK'S W'S 🗣️🔥" : 'WINS THIS WEEK'}
+                  </Text>
                   {review.keyWins.map((win, idx) => (
                     <View key={idx} style={styles.winRow}>
                       <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
@@ -202,7 +222,9 @@ export const WeeklyReviewModal = ({
                 <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
                   <View style={styles.cardHeaderRow}>
                     <Ionicons name="barbell" size={16} color={colors.accent} />
-                    <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>WORKOUTS & STRENGTH</Text>
+                    <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>
+                      {personality === 'gymrat' ? 'GYM ARC & LIFTS ⚡' : 'WORKOUTS & STRENGTH'}
+                    </Text>
                   </View>
                   <Text style={[styles.cardBody, { color: colors.textMuted }]}>
                     {review.trainingInsight}
@@ -214,7 +236,7 @@ export const WeeklyReviewModal = ({
                   <View style={styles.cardHeaderRow}>
                     <Ionicons name="restaurant" size={16} color={colors.warning} />
                     <Text style={[styles.cardHeaderTitle, { color: colors.warning }]}>
-                      NUTRITION & SCALE
+                      {personality === 'gymrat' ? 'MACROS & FUEL 🍽️' : 'NUTRITION & SCALE'}
                     </Text>
                   </View>
                   <Text style={[styles.cardBody, { color: colors.textMuted }]}>
@@ -229,7 +251,9 @@ export const WeeklyReviewModal = ({
                   <View style={styles.adjustTop}>
                     <View style={styles.adjustBadge}>
                       <Ionicons name="flash" size={14} color={colors.warning} />
-                      <Text style={[styles.adjustBadgeText, { color: colors.warning }]}>RECOMMENDED ADJUSTMENT</Text>
+                      <Text style={[styles.adjustBadgeText, { color: colors.warning }]}>
+                        {personality === 'gymrat' ? 'THE GAMEPLAN FOR NEXT WEEK 🎯' : 'RECOMMENDED ADJUSTMENT'}
+                      </Text>
                     </View>
                     <Text style={[styles.adjustTitle, { color: colors.text }]}>{review.suggestedAdjustment.title}</Text>
                   </View>
