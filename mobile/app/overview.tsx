@@ -244,7 +244,7 @@ export default function OverviewScreen() {
     setCoachingApplied(true);
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
-      const exp = latest?.expenditureKcal ?? program.expenditureKcal ?? 2200;
+      const exp = latest?.expenditureKcal ?? program?.expenditureKcal ?? 2200;
       const result = calculateCoachingGoalAdjustment({
         currentGoal: settings.goal,
         expenditureKcal: exp,
@@ -526,7 +526,7 @@ export default function OverviewScreen() {
         onGenerate={handleGenerateCoaching}
         onApplyAdjustment={handleApplyCoachingAdjustment}
         goal={settings.goal}
-        expenditureKcal={latest?.expenditureKcal ?? program.expenditureKcal}
+        expenditureKcal={latest?.expenditureKcal ?? program?.expenditureKcal}
       />
     </Screen>
   );
