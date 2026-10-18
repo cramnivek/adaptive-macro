@@ -4,7 +4,7 @@ import { displayWeight } from '../format';
 import { thud } from '../platform/haptics';
 import type { UnitSystem, AppPersonality } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
-import { SKEW, font } from '../theme';
+import { SKEW, font, radius } from '../theme';
 
 export interface PRCelebrationData {
   exerciseName: string;
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10, 10, 10, 0.94)',
     borderWidth: 2,
     borderColor: '#FFD700',
-    borderRadius: 6,
+    borderRadius: radius.lg,
     paddingVertical: 18,
     paddingHorizontal: 20,
     alignItems: 'center',
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#1C1917',
-    borderRadius: 4,
+    borderRadius: radius.md,
     transform: [{ skewX: SKEW }],
     borderWidth: 1,
     borderColor: 'rgba(255, 215, 0, 0.3)',
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 215, 0, 0.5)',
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 4,
+    borderRadius: radius.sm,
   },
   milestoneText: {
     fontFamily: font.figure,

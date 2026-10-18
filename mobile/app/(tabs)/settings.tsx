@@ -21,7 +21,7 @@ import { useSocial } from '../../src/social/session';
 import { playChime, primeChime } from '../../src/platform/chime';
 import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
-import { font, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { isPersonalityV2Enabled } from '../../src/flags';
 import { getEventCopy } from '../../src/copy/personality';
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: font.uiStrong, fontSize: 15 },
   previewBox: {
     padding: space.md,
-    borderRadius: 8,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     gap: space.xs,
     marginTop: space.xs,

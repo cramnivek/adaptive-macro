@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   doneSlab: { paddingHorizontal: space.xl, paddingVertical: space.sm },
   doneLabel: { fontFamily: font.uiStrong, fontSize: 14, letterSpacing: 1.6 },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  frame: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: '#000' },
+  frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   controls: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   // A horizontal row in a column stretches to the height it is given unless it
   // is told not to, and a chip stretched to two hundred points is an egg.
