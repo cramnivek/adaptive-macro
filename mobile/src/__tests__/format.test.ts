@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { axisDecimals, displayWeight, formatDayMonth, parseWeight, weightUnit } from '../format';
+import {
+  axisDecimals,
+  displayWeight,
+  formatDayMonth,
+  parseWeight,
+  roundToPlateIncrement,
+  weightUnit,
+} from '../format';
 
 describe('formatDayMonth', () => {
   it('gives the day and the month, and nothing else', () => {
@@ -57,5 +64,19 @@ describe('weight conversion and unit toggling', () => {
     const parsedKg = parseWeight('220.5', 'imperial');
     expect(parsedKg).not.toBeNull();
     expect(Math.round(parsedKg!)).toBe(100);
+  });
+
+  it('rounds converted weights to clean plate-friendly increments', () => {
+    // Metric rounds to nearest 1.25 kg
+    expect(roundToPlateIncrement(61.23, 'metric')).toBe(61.25);
+    expect(roundToPlateIncrement(102.1, 'metric')).toBe(102.5);
+    expect(roundToPlateIncrement(100.6, 'metric')).toBe(100);
+    expect(roundToPlateIncrement(100.7, 'metric')).toBe(101.25);
+
+    // Imperial rounds to nearest 2.5 lb
+    expect(roundToPlateIncrement(220.46, 'imperial')).toBe(220);
+    expect(roundToPlateIncrement(221.3, 'imperial')).toBe(222.5);
+    expect(roundToPlateIncrement(134.8, 'imperial')).toBe(135);
+    expect(roundToPlateIncrement(314.1, 'imperial')).toBe(315);
   });
 });

@@ -2401,3 +2401,92 @@ export const dailyIntakeBetween = async (
       proteinG: Math.round((row.protein_g ?? 0) * 10) / 10,
     }));
 };
+
+export interface BodyMeasurementInput {
+  date: ISODate;
+  waistCm?: number | null;
+  chestCm?: number | null;
+  armsCm?: number | null;
+  thighsCm?: number | null;
+  calvesCm?: number | null;
+  hipsCm?: number | null;
+  neckCm?: number | null;
+  shouldersCm?: number | null;
+  bodyFatPct?: number | null;
+  notes?: string | null;
+}
+
+export interface BodyMeasurementRecord extends BodyMeasurementInput {
+  id: string;
+  createdAt: string;
+}
+
+export const logBodyMeasurement = async (input: BodyMeasurementInput): Promise<BodyMeasurementRecord> => {
+  const db = await getDb();
+  const id = `bm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const now = new Date().toISOString();
+  await db.runAsync(
+    `INSERT INTO body_measurements (id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
+    input.date,
+    input.waistCm ?? null,
+    input.chestCm ?? null,
+    input.armsCm ?? null,
+    input.thighsCm ?? null,
+    input.calvesCm ?? null,
+    input.hipsCm ?? null,
+    input.neckCm ?? null,
+    input.shouldersCm ?? null,
+    input.bodyFatPct ?? null,
+    input.notes ?? null,
+    now,
+  );
+  return { id, ...input, createdAt: now };
+};
+
+export const getLatestBodyMeasurements = async (limit = 50): Promise<BodyMeasurementRecord[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    date: ISODate;
+    waist_cm: number | null;
+    chest_cm: number | null;
+    arms_cm: number | null;
+    thighs_cm: number | null;
+    calves_cm: number | null;
+    hips_cm: number | null;
+    neck_cm: number | null;
+    shoulders_cm: number | null;
+    body_fat_pct: number | null;
+    notes: string | null;
+    created_at: string;
+  }>(
+    `SELECT id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, notes, created_at
+       FROM body_measurements
+      ORDER BY date DESC, created_at DESC
+      LIMIT ?`,
+    limit,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    date: r.date,
+    waistCm: r.waist_cm,
+    chestCm: r.chest_cm,
+    armsCm: r.arms_cm,
+    thighsCm: r.thighs_cm,
+    calvesCm: r.calves_cm,
+    hipsCm: r.hips_cm,
+    neckCm: r.neck_cm,
+    shouldersCm: r.shoulders_cm,
+    bodyFatPct: r.body_fat_pct,
+    notes: r.notes,
+    createdAt: r.created_at,
+  }));
+};
+
+export const deleteBodyMeasurement = async (id: string): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM body_measurements WHERE id = ?', id);
+};
+

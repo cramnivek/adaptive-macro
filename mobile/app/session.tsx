@@ -67,7 +67,7 @@ import type { ActiveSession, CatalogueEntry, LoggedSet, Routine } from '../src/d
 import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch';
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
-import { displayWeight, parseWeight, weightUnit } from '../src/format';
+import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
@@ -387,9 +387,12 @@ export default function SessionScreen() {
           if (!row.weight.trim()) return row;
           const kg = parseWeight(row.weight, fromUnits);
           if (kg === null) return row;
+          const raw = displayWeight(kg, nextUnits);
+          const plateRounded = roundToPlateIncrement(raw, nextUnits);
+          const formatted = plateRounded % 1 === 0 ? plateRounded.toFixed(0) : String(plateRounded);
           return {
             ...row,
-            weight: String(displayWeight(kg, nextUnits).toFixed(1)),
+            weight: formatted,
           };
         }),
       })),
@@ -551,7 +554,8 @@ export default function SessionScreen() {
       }
       if (target === null) return block;
       const start = block.rows.length;
-      const drafts: Row[] = Array.from({ length: draftsToAdd(target.sets, start) }, (_, offset) => {
+      const warmupCount = block.rows.filter((r) => r.setType === 'warmup').length;
+      const drafts: Row[] = Array.from({ length: draftsToAdd(target.sets, start, warmupCount) }, (_, offset) => {
         const previous = block.previous[start + offset];
         return {
           key: newKey(),

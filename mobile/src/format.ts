@@ -7,6 +7,16 @@ export const weightUnit = (units: UnitSystem): string => (units === 'metric' ? '
 export const displayWeight = (kg: number, units: UnitSystem): number =>
   units === 'metric' ? kg : kgToLb(kg);
 
+/**
+ * Rounds a weight value to realistic gym plate increments:
+ * - Metric: nearest 1.25 kg (smallest standard Olympic change plate).
+ * - Imperial: nearest 2.5 lb (smallest standard Olympic plate).
+ */
+export const roundToPlateIncrement = (weight: number, units: UnitSystem): number => {
+  const step = units === 'metric' ? 1.25 : 2.5;
+  return Math.round(weight / step) * step;
+};
+
 export const formatWeight = (kg: number, units: UnitSystem, decimals = 1): string =>
   `${displayWeight(kg, units).toFixed(decimals)} ${weightUnit(units)}`;
 

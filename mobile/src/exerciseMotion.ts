@@ -61,8 +61,8 @@ interface SideMotion {
   anchor: { joint: 'frontAnkle' | 'hip'; at: Point; to?: Point };
   /** Both feet planted, legs solved between them and the hip. */
   feet?: { front: Point; back: Point };
-  /** Hands planted, the elbow solved, bending whichever way the exercise bends it. */
-  hand?: { at: Point; elbow: 'up' | 'back' | 'forward' };
+  /** Hands planted or constrained to a bar/cable path, the elbow solved via inverse kinematics. */
+  hand?: { at: Point; to?: Point; elbow: 'up' | 'back' | 'forward' };
   /** For a body too tall for the box when it hangs at full length. */
   scale?: number;
   load: Load;
@@ -174,11 +174,12 @@ export const MOTIONS = {
   },
   pulldown: {
     view: 'side',
-    from: { ...seated(100), upperArm: 98, forearm: 98 },
-    to: { ...seated(100), upperArm: 262, forearm: 82 },
+    from: { ...standing, ...seated(100) },
+    to: { ...standing, ...seated(100) },
     anchor: { joint: 'hip', at: [40, 69] },
+    hand: { at: [36, 7.5], to: [40, 40], elbow: 'forward' },
     load: 'handle',
-    props: [{ kind: 'seat' }, { kind: 'cable', from: [34, 0] }],
+    props: [{ kind: 'seat' }, { kind: 'cable', from: [36, 0] }],
   },
   'straight-arm-pulldown': {
     view: 'side',
@@ -433,9 +434,10 @@ export const MOTIONS = {
   },
   'face-pull': {
     view: 'side',
-    from: { ...standing, torso: 94, upperArm: 356, forearm: 356 },
-    to: { ...standing, torso: 94, upperArm: 195, forearm: 80 },
+    from: { ...standing, torso: 94 },
+    to: { ...standing, torso: 94 },
     anchor: { joint: 'frontAnkle', at: [42, FLOOR_Y] },
+    hand: { at: [75, 22], to: [46, 14], elbow: 'up' },
     load: 'handle',
     props: [{ kind: 'cable', from: [92, 26] }],
   },
@@ -722,7 +724,7 @@ export const sideJointsAt = (motion: SideMotion, progress: number): Joints => {
   let elbow: Point;
   let hand: Point;
   if (motion.hand) {
-    hand = motion.hand.at;
+    hand = motion.hand.to ? lerpPoint(motion.hand.at, motion.hand.to, k) : motion.hand.at;
     const pick = motion.hand.elbow === 'up' ? upOf : motion.hand.elbow === 'back' ? backOf : forwardOf;
     elbow = middleJoint(shoulder, hand, L.upperArm, L.forearm, pick);
   } else {

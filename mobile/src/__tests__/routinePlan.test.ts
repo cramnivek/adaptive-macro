@@ -14,6 +14,15 @@ describe('draftsToAdd', () => {
     expect(draftsToAdd(3, 3)).toBe(0);
     expect(draftsToAdd(3, 5)).toBe(0);
   });
+
+  it('excludes warm-up sets from the working set target', () => {
+    // 3 sets targeted, 3 total rows logged but 2 are warm-ups => 2 more working sets needed
+    expect(draftsToAdd(3, 3, 2)).toBe(2);
+    // 3 sets targeted, 1 warm-up and 3 working sets => target satisfied
+    expect(draftsToAdd(3, 4, 1)).toBe(0);
+    // 4 sets targeted, 2 warm-up rows logged => 4 working sets still needed
+    expect(draftsToAdd(4, 2, 2)).toBe(4);
+  });
 });
 
 describe('repsPrefill', () => {

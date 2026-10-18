@@ -214,4 +214,27 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_exercises_catalogue ON exercises (catalogue_id);
   CREATE INDEX IF NOT EXISTS idx_sets_exercise_id    ON sets (exercise_id);
   `,
+  // v11 — body circumferences and body fat percentage tracking
+  //
+  // Records waist, chest, arms, thighs, calves, hips, neck, shoulders (cm)
+  // and body fat percentage for tracking physique changes alongside scale weight.
+  `
+  CREATE TABLE IF NOT EXISTS body_measurements (
+    id            TEXT PRIMARY KEY NOT NULL,
+    date          TEXT NOT NULL,
+    waist_cm      REAL,
+    chest_cm      REAL,
+    arms_cm       REAL,
+    thighs_cm     REAL,
+    calves_cm     REAL,
+    hips_cm       REAL,
+    neck_cm       REAL,
+    shoulders_cm  REAL,
+    body_fat_pct  REAL,
+    notes         TEXT,
+    created_at    TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_body_measurements_date ON body_measurements (date);
+  `,
 ];

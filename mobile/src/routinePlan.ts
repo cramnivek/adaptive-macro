@@ -6,9 +6,17 @@
  * as every row is until ticked: nothing is written until a set is done.
  */
 
-/** How many draft rows an exercise still needs to reach its target. */
-export const draftsToAdd = (targetSets: number, rowsAlready: number): number =>
-  Math.max(0, targetSets - rowsAlready);
+/**
+ * How many draft rows an exercise still needs to reach its target.
+ *
+ * Warm-up sets do not count toward routine target sets: if a routine specifies
+ * 3 working sets, and 1 or more warm-up sets are logged, the routine still targets
+ * 3 working sets.
+ */
+export const draftsToAdd = (targetSets: number, rowsAlready: number, warmupRowsAlready = 0): number => {
+  const workingRows = Math.max(0, rowsAlready - warmupRowsAlready);
+  return Math.max(0, targetSets - workingRows);
+};
 
 /**
  * The reps a draft row opens with.

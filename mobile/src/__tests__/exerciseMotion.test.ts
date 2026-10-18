@@ -245,6 +245,20 @@ describe('joints turn the way the exercise turns them', () => {
     expect(j.frontKnee[0]).toBeGreaterThan(j.hip[0]);
     expect(j.backKnee).toEqual(j.frontKnee);
   });
+
+  it('keeps the pulldown bar and elbows in front of the body, never behind the back', () => {
+    expect(always('pulldown', (j) => j.hand[0] >= j.shoulder[0] - 2)).toBe(true);
+    expect(always('pulldown', (j) => j.elbow[0] >= j.shoulder[0] - 2)).toBe(true);
+    // Overhead at start, pulled down to chest at bottom
+    expect(at('pulldown', 0).hand[1]).toBeLessThan(12);
+    expect(at('pulldown', 1).hand[1]).toBeGreaterThan(35);
+  });
+
+  it('keeps the face-pull hands and elbows elevated at face and chest level', () => {
+    expect(always('face-pull', (j) => j.hand[1] <= 26)).toBe(true);
+    expect(always('face-pull', (j) => j.elbow[1] <= 26)).toBe(true);
+    expect(at('face-pull', 1).hand[0]).toBeLessThan(at('face-pull', 0).hand[0]);
+  });
 });
 
 describe('the shape of the movement', () => {

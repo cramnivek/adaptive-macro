@@ -24,6 +24,7 @@ import { VolumeLandmarksCard } from '../src/components/VolumeLandmarksCard';
 import { WeeklyReviewCard } from '../src/components/WeeklyReviewCard';
 import { WeeklyReviewModal } from '../src/components/WeeklyReviewModal';
 import { WeeklyBars } from '../src/components/WeeklyBars';
+import { BodyMeasurementsCard } from '../src/components/BodyMeasurementsCard';
 import {
   extractWeeklyMetrics,
   requestWeeklyReview,
@@ -511,6 +512,10 @@ export default function OverviewScreen() {
           </Card>
         </FadeIn>
       )}
+
+      <FadeIn delay={280}>
+        <BodyMeasurementsCard units={settings.units} />
+      </FadeIn>
 
       {/* Weekly Coaching Review Modal Popup */}
       <WeeklyReviewModal

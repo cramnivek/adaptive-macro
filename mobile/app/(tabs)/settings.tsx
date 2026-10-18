@@ -528,6 +528,14 @@ export default function SettingsScreen() {
             Logging, routines and progression live on the Train tab.
           </Text>
         </Card>
+
+        <Card title="Privacy & Legal" subtitle="Transparent, local-first data protection.">
+          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
+            Ascend is local-first: your diary, weight, body measurements, and workouts stay on your device.
+            Review our data practices and external API terms.
+          </Text>
+          <Button label="Read Privacy Policy ↗" onPress={() => router.push('/privacy' as any)} variant="subtle" />
+        </Card>
       </Section>
 
       {__DEV__ && (
