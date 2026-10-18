@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { displayWeight } from '../format';
-import { playChime } from '../platform/chime';
 import { thud } from '../platform/haptics';
-import { shoutColemanPR } from '../platform/prShout';
 import type { UnitSystem, AppPersonality } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
 import { SKEW, font, radius } from '../theme';
@@ -50,10 +48,6 @@ export const PRCelebration = ({
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerExit = useRef(new Animated.Value(1)).current;
 
-  const colemanQuote =
-    data.colemanQuote ||
-    getEventCopy('workout.pr_coleman_quote', { personality, seed: data.exerciseName });
-
   const onDoneRef = useRef(onDone);
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -89,16 +83,6 @@ export const PRCelebration = ({
     const timer = setTimeout(() => {
       thud('heavy');
     }, 130);
-
-    // Audio fanfare & Ronnie Coleman voice shout
-    if (soundEnabled) {
-      try {
-        playChime('rising');
-      } catch {
-        // Sound unprimed or muted
-      }
-    }
-    shoutColemanPR(colemanQuote, soundEnabled);
 
     const animation = Animated.sequence([
       Animated.parallel([
@@ -151,7 +135,7 @@ export const PRCelebration = ({
       clearTimeout(timer);
       animation.stop();
     };
-  }, [animProgress, bannerScale, bannerOpacity, bannerExit, colemanQuote, soundEnabled]);
+  }, [animProgress, bannerScale, bannerOpacity, bannerExit]);
 
   const unitLabel = units === 'metric' ? 'KG' : 'LB';
   const e1rmFormatted = displayWeight(data.e1rm, units).toFixed(1);
@@ -238,15 +222,15 @@ export const PRCelebration = ({
           {/* Big Figure */}
           <Text style={styles.figureText}>{data.figure}</Text>
 
-          {/* Ronnie Coleman PR Shout Badge */}
+          {/* PR Shout Badge */}
           <View style={styles.colemanCard}>
             <View style={styles.colemanHeader}>
               <Ionicons name="flame" size={13} color="#F59E0B" />
-              <Text style={styles.colemanHeaderLabel}>RONNIE COLEMAN</Text>
+              <Text style={styles.colemanHeaderLabel}>ALL-TIME PR</Text>
               <Ionicons name="flame" size={13} color="#F59E0B" />
             </View>
             <Text style={styles.colemanQuoteText}>
-              "{colemanQuote}"
+              LIGHT WEIGHT BABY!
             </Text>
           </View>
 

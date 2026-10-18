@@ -92,18 +92,9 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
   'workout.pr_coleman_quote': {
     context: 'achievement',
     variants: {
-      classic: ['YEAH BUDDY! LIGHT WEIGHT!'],
-      ascend: [
-        'YEAH BUDDY! LIGHT WEIGHT BABY!',
-        'LIGHT WEIGHT! AIN\'T NOTHIN\' TO IT BUT TO DO IT!',
-        'YEAH BUDDY! LIGHT WEIGHT!',
-      ],
-      gymrat: [
-        'YEAH BUDDY! LIGHT WEIGHT BABY! 🗣️🔥',
-        'LIGHT WEIGHT! AIN\'T NOTHIN\' TO IT BUT TO DO IT! 💀🔥',
-        'YEAH BUDDY! NOTHIN\' BUT A PEANUT! 🗣️',
-        'EVERYBODY WANNA BE A BODYBUILDER! LIGHT WEIGHT! 🔥',
-      ],
+      classic: ['LIGHT WEIGHT BABY!'],
+      ascend: ['LIGHT WEIGHT BABY!'],
+      gymrat: ['LIGHT WEIGHT BABY! 🔥'],
     },
   },
   'workout.pr_baseline_pill': {

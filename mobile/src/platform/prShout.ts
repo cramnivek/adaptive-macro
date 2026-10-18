@@ -12,35 +12,8 @@ export const cleanForSpeech = (rawText: string): string => {
 };
 
 /**
- * Speaks Ronnie Coleman's legendary hype quotes ("Yeah buddy! Light weight baby!")
- * via Web Speech API when running in a supported browser.
+ * Voice shout disabled to prevent robotic AI speech synthesis and avoid audio likeness concerns.
  */
-export const shoutColemanPR = (quote?: string, soundEnabled = true): void => {
-  if (!soundEnabled) return;
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-
-  try {
-    window.speechSynthesis.cancel();
-    const raw = quote || 'YEAH BUDDY! LIGHT WEIGHT BABY!';
-    const cleaned = cleanForSpeech(raw) || 'Yeah buddy! Light weight baby!';
-    const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.rate = 1.05;
-    utterance.pitch = 1.15;
-    utterance.volume = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices && voices.length > 0) {
-      const englishVoice =
-        voices.find(
-          (v) => v.lang.startsWith('en-US') && !v.name.toLowerCase().includes('whisper'),
-        ) || voices.find((v) => v.lang.startsWith('en'));
-      if (englishVoice) {
-        utterance.voice = englishVoice;
-      }
-    }
-
-    window.speechSynthesis.speak(utterance);
-  } catch {
-    // Speech synthesis quietly fails if unsupported/blocked
-  }
+export const shoutColemanPR = (_quote?: string, _soundEnabled = true): void => {
+  // Intentionally disabled: no synthetic AI voice or unapproved voice audio
 };

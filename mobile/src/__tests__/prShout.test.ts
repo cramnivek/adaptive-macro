@@ -23,13 +23,13 @@ describe('cleanForSpeech', () => {
 describe('Ronnie Coleman PR copy', () => {
   it('resolves Ronnie Coleman PR quotes across personalities', () => {
     const classic = getEventCopy('workout.pr_coleman_quote', { personality: 'classic' });
-    expect(classic).toContain('YEAH BUDDY');
+    expect(classic).toContain('LIGHT WEIGHT');
 
     const ascend = getEventCopy('workout.pr_coleman_quote', { personality: 'ascend' });
-    expect(ascend.includes('YEAH BUDDY') || ascend.includes('LIGHT WEIGHT')).toBe(true);
+    expect(ascend).toContain('LIGHT WEIGHT');
 
     const gymrat = getEventCopy('workout.pr_coleman_quote', { personality: 'gymrat' });
-    expect(gymrat.includes('YEAH BUDDY') || gymrat.includes('LIGHT WEIGHT')).toBe(true);
+    expect(gymrat).toContain('LIGHT WEIGHT');
   });
 
   it('includes Ronnie Coleman shouts in workout.impact_pr', () => {
