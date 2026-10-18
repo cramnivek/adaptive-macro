@@ -265,10 +265,6 @@ export const PostCard = ({
     if (!displayCardUrl) void generateCard();
   };
 
-  const handleShareWorkout = async () => {
-    handleOpenModal();
-  };
-
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Header: Author Avatar & Byline */}
@@ -568,51 +564,42 @@ export const PostCard = ({
             }}
             accessibilityRole="button"
             accessibilityLabel="Fist bump cheer"
-            hitSlop={8}
+            accessibilityState={{ selected: cheered }}
             style={[styles.actionBtn, cheered && styles.actionBtnActive]}
           >
-            <Text style={styles.emojiIcon}>{cheered ? '🔥' : '👊'}</Text>
+            <Ionicons
+              name={cheered ? 'flame' : 'flame-outline'}
+              size={20}
+              color={cheered ? colors.accent : colors.textMuted}
+            />
             <Text style={[styles.actionText, { color: cheered ? colors.accent : colors.textMuted }]}>
               {cheered ? 'Fired up!' : 'Cheer'}
             </Text>
           </Tappable>
+        </View>
 
-          {/* Copy Workout Quick Action */}
+        {/* Utilities are icon-only so all three fit beside the reactions on a
+            narrow card. Each keeps a full 44pt target and a spoken label. */}
+        <View style={styles.tools}>
           {hasExercises && (
             <Tappable
               onPress={() => setCopyOpen(true)}
               accessibilityRole="button"
               accessibilityLabel="Copy workout"
-              hitSlop={8}
-              style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+              style={styles.toolBtn}
             >
-              <Ionicons name="copy-outline" size={15} color={colors.textMuted} />
-              <Text style={[styles.actionText, { color: colors.text }]}>Copy</Text>
+              <Ionicons name="copy-outline" size={20} color={colors.textMuted} />
             </Tappable>
           )}
-
-          {/* Story Card Quick Button */}
           <Tappable
             onPress={handleOpenModal}
             accessibilityRole="button"
-            accessibilityLabel="View story card"
-            hitSlop={8}
-            style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+            accessibilityLabel="Share story card"
+            style={styles.toolBtn}
           >
-            <Ionicons name="image-outline" size={15} color={colors.accent} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Story Card</Text>
+            <Ionicons name="share-outline" size={20} color={colors.accent} />
           </Tappable>
         </View>
-
-        <Tappable
-          onPress={() => void handleShareWorkout()}
-          accessibilityRole="button"
-          accessibilityLabel="Share workout options"
-          hitSlop={8}
-          style={styles.shareBtn}
-        >
-          <Ionicons name="share-outline" size={19} color={colors.textMuted} />
-        </Tappable>
       </View>
 
       {onDelete && (
@@ -1058,15 +1045,25 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   interactions: {
+    // Reactions take the space the tools leave. Wrapping is only a fallback for
+    // very narrow cards or large text; without it a pill ran past the border.
+    flex: 1,
+    flexShrink: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  tools: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    flexShrink: 0,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 6,
+    gap: 6,
+    minHeight: TOUCH_TARGET,
     paddingHorizontal: 10,
     borderRadius: radius.pill,
   },
@@ -1077,10 +1074,7 @@ const styles = StyleSheet.create({
     fontFamily: font.figure,
     fontSize: 13,
   },
-  emojiIcon: {
-    fontSize: 15,
-  },
-  shareBtn: {
+  toolBtn: {
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
     alignItems: 'center',
