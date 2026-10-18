@@ -1,5 +1,5 @@
 import type { Food, Meal, Nutrients } from '@adaptive-macros/engine';
-import { roundTo } from '@adaptive-macros/engine';
+import { addMicros, roundTo, scaleMicros } from '@adaptive-macros/engine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,6 +14,7 @@ import { scanPhaseOf } from '../src/ai/foodScan';
 import { captureWithSystemCamera, chooseMealPhoto, preparePhoto } from '../src/ai/mealPhoto';
 import { FoodScanOverlay } from '../src/components/FoodScanOverlay';
 import { MealCameraSheet } from '../src/components/MealCameraSheet';
+import { FoodMicronutrientsView } from '../src/components/FoodMicronutrientsView';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { addLogEntry, saveFood } from '../src/db';
@@ -68,6 +69,7 @@ const scaleItem = (item: EstimatedItem, grams: number): Nutrients => {
     carbsG: item.carbsG * factor,
     fatG: item.fatG * factor,
     fiberG: item.fiberG * factor,
+    micros: scaleMicros(item.micros, factor),
   };
 };
 
@@ -255,12 +257,14 @@ export default function DescribeScreen() {
         const nutrients = scaleItem(draft.item, draft.grams);
         // Stored per 100 g like every other food, so it behaves identically
         // everywhere else in the app and can be searched for again later.
+        const per100gFactor = draft.grams > 0 ? 100 / draft.grams : 1;
         const per100g: Nutrients = {
           kcal: (nutrients.kcal / draft.grams) * 100,
           proteinG: (nutrients.proteinG / draft.grams) * 100,
           carbsG: (nutrients.carbsG / draft.grams) * 100,
           fatG: (nutrients.fatG / draft.grams) * 100,
           fiberG: ((nutrients.fiberG ?? 0) / draft.grams) * 100,
+          micros: scaleMicros(nutrients.micros, per100gFactor),
         };
 
         const food: Food = {
@@ -296,9 +300,9 @@ export default function DescribeScreen() {
     }
   };
 
-  const totals = drafts
+  const totals: Nutrients = drafts
     .filter((draft) => draft.included)
-    .reduce(
+    .reduce<Nutrients>(
       (sum, draft) => {
         const n = scaleItem(draft.item, draft.grams);
         return {
@@ -306,9 +310,11 @@ export default function DescribeScreen() {
           proteinG: sum.proteinG + n.proteinG,
           carbsG: sum.carbsG + n.carbsG,
           fatG: sum.fatG + n.fatG,
+          fiberG: (sum.fiberG ?? 0) + (n.fiberG ?? 0),
+          micros: addMicros(sum.micros, n.micros),
         };
       },
-      { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+      { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 },
     );
 
   const confidenceColor = (confidence: EstimatedItem['confidence']) =>
@@ -580,6 +586,15 @@ export default function DescribeScreen() {
                           </Text>
                         )}
                       </Text>
+                      {scaled.micros && (
+                        <FoodMicronutrientsView
+                          micros={scaled.micros}
+                          sex={settings.profile?.sex}
+                          collapsible
+                          defaultExpanded={false}
+                          title={`${draft.item.name} Micronutrients`}
+                        />
+                      )}
                     </>
                   )}
                 </View>
@@ -595,6 +610,15 @@ export default function DescribeScreen() {
               P {Math.round(totals.proteinG)} g · C {Math.round(totals.carbsG)} g · F{' '}
               {Math.round(totals.fatG)} g
             </Text>
+            {totals.micros && (
+              <FoodMicronutrientsView
+                micros={totals.micros}
+                sex={settings.profile?.sex}
+                collapsible
+                defaultExpanded={false}
+                title="Total Estimated Micronutrients"
+              />
+            )}
             <View style={{ height: space.md }} />
             <Button
               label="Add to diary"

@@ -16,6 +16,7 @@ import {
   estimateExpenditure,
   expenditureConfidence,
   scaleNutrients,
+  scaleMicros,
   seedExpenditure,
   todayISO,
   trendRate,
@@ -53,6 +54,7 @@ const scaleFromTotals = (
     carbsG: nutrients.carbsG * factor,
     fatG: nutrients.fatG * factor,
     fiberG: (nutrients.fiberG ?? 0) * factor,
+    micros: scaleMicros(nutrients.micros, factor),
   };
 };
 

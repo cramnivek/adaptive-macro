@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MEAL_LABELS } from '../format';
 import { font, radius, space, useTheme } from '../theme';
 import { Button, Stepper, TOUCH_TARGET } from './Controls';
+import { FoodMicronutrientsView } from './FoodMicronutrientsView';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -115,6 +116,14 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
               </Text>
             )}
 
+            <FoodMicronutrientsView
+              micros={preview?.micros}
+              collapsible
+              defaultExpanded={false}
+              title="Micronutrients"
+            />
+
+            <View style={{ height: space.sm }} />
             <Button
               label="Add to diary"
               disabled={validGrams <= 0}
@@ -132,7 +141,7 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
-    maxHeight: '78%',
+    maxHeight: '88%',
     borderTopLeftRadius: radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     borderWidth: StyleSheet.hairlineWidth,

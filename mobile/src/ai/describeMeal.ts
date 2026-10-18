@@ -33,6 +33,51 @@ export const MODEL_PRICING: Record<string, { inPerMTok: number; outPerMTok: numb
   'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 },
 };
 
+const nullableNumber = z
+  .number()
+  .nullable()
+  .optional()
+  .transform((v) => (v === null ? undefined : v));
+
+export const EstimatedMicrosSchema = z
+  .object({
+    sodiumMg: nullableNumber,
+    potassiumMg: nullableNumber,
+    calciumMg: nullableNumber,
+    magnesiumMg: nullableNumber,
+    phosphorusMg: nullableNumber,
+    ironMg: nullableNumber,
+    zincMg: nullableNumber,
+    copperMg: nullableNumber,
+    manganeseMg: nullableNumber,
+    seleniumMcg: nullableNumber,
+    iodineMcg: nullableNumber,
+    vitaminAMcg: nullableNumber,
+    vitaminCMg: nullableNumber,
+    vitaminDIU: nullableNumber,
+    vitaminEMg: nullableNumber,
+    vitaminKMcg: nullableNumber,
+    thiaminB1Mg: nullableNumber,
+    riboflavinB2Mg: nullableNumber,
+    niacinB3Mg: nullableNumber,
+    pantothenicAcidB5Mg: nullableNumber,
+    pyridoxineB6Mg: nullableNumber,
+    biotinB7Mcg: nullableNumber,
+    folateB9Mcg: nullableNumber,
+    cobalaminB12Mcg: nullableNumber,
+    cholineMg: nullableNumber,
+    saturatedFatG: nullableNumber,
+    monounsaturatedFatG: nullableNumber,
+    polyunsaturatedFatG: nullableNumber,
+    transFatG: nullableNumber,
+    cholesterolMg: nullableNumber,
+    sugarG: nullableNumber,
+    addedSugarG: nullableNumber,
+  })
+  .nullable()
+  .optional()
+  .transform((v) => (v === null ? undefined : v));
+
 /** One component of the meal, as Claude read it. */
 const EstimatedItemSchema = z.object({
   name: z
@@ -56,6 +101,9 @@ const EstimatedItemSchema = z.object({
     .describe(
       'The specific assumption made about portion size, preparation or ingredients, in one short sentence. Empty string only if the description left nothing to assume.',
     ),
+  micros: EstimatedMicrosSchema.describe(
+    'Estimated micronutrients (vitamins, minerals, electrolytes, lipids) for that portion.',
+  ),
 });
 
 export const MealEstimateSchema = z.object({
@@ -82,6 +130,12 @@ export type MealEstimate = z.infer<typeof MealEstimateSchema>;
 export const SYSTEM_PROMPT = `You estimate the nutrition of meals people describe in their own words, for a food logging app.
 
 Break the description into individual foods. For each, estimate the portion actually eaten in grams, then the calories and macros for that portion — not per 100 g.
+
+Also estimate available clinical micronutrients in the 'micros' field for each food's portion (using standard USDA/food composition data):
+- Minerals & Electrolytes: sodiumMg (mg), potassiumMg (mg), calciumMg (mg), magnesiumMg (mg), ironMg (mg), zincMg (mg)
+- Essential Vitamins: vitaminAMcg (mcg), vitaminCMg (mg), vitaminDIU (IU), vitaminEMg (mg), vitaminKMcg (mcg), B-vitamins (thiaminB1Mg, riboflavinB2Mg, niacinB3Mg, pyridoxineB6Mg, folateB9Mcg, cobalaminB12Mcg), cholineMg (mg)
+- Lipids & Sugars: saturatedFatG (g), transFatG (g), cholesterolMg (mg), sugarG (g), addedSugarG (g)
+Omit or set 0 for nutrients that are negligible or unknown.
 
 Portion sizes are the main source of error, so be explicit about them. When someone says "a coffee" or "some rice", pick a sensible everyday portion, state it in the assumption field, and mark confidence accordingly. Use the cooked weight where a food is described as cooked.
 

@@ -211,4 +211,41 @@ describe('describeMealWithGemini', () => {
       'The estimate service returned 503.',
     );
   });
+
+  it('parses micronutrients when provided in the estimate', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        geminiResponse({
+          items: [
+            {
+              name: 'Salmon fillet',
+              grams: 150,
+              kcal: 310,
+              proteinG: 34,
+              carbsG: 0,
+              fatG: 18,
+              fiberG: 0,
+              confidence: 'high',
+              assumption: 'Wild caught baked salmon portion',
+              micros: {
+                potassiumMg: 750,
+                sodiumMg: 90,
+                vitaminDIU: 600,
+                cobalaminB12Mcg: 4.5,
+              },
+            },
+          ],
+          notes: '',
+          notFood: false,
+        }),
+      ),
+    );
+
+    const result = await describeMealWithGemini('150g baked salmon', '');
+    expect(result.estimate.items[0].micros?.potassiumMg).toBe(750);
+    expect(result.estimate.items[0].micros?.sodiumMg).toBe(90);
+    expect(result.estimate.items[0].micros?.vitaminDIU).toBe(600);
+    expect(result.estimate.items[0].micros?.cobalaminB12Mcg).toBe(4.5);
+  });
 });
