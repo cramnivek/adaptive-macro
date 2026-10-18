@@ -426,8 +426,8 @@ const styles = StyleSheet.create({
   sheet: {
     marginTop: 40,
     flex: 1,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
     borderTopWidth: 1,
     overflow: 'hidden',
   },

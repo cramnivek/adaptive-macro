@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   // 343px a 375px phone leaves after its gutters.
   squares: { flexDirection: 'row', gap: 3, flexShrink: 1 },
   // Fixed, not flexed: a flexed cell stretched into a pill on a wide screen.
-  square: { width: 14, height: 14, borderRadius: radius.sm, borderWidth: 1.5 },
+  square: { width: 14, height: 14, borderRadius: radius.xs, borderWidth: 1.5 },
   count: { fontFamily: font.figure, fontSize: 12, width: 40, fontVariant: ['tabular-nums'] },
   note: { fontFamily: font.ui, fontSize: 11, marginTop: 2 },
 });

@@ -43,23 +43,17 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: 
       : colors.onFill;
 
   return (
-    // `Tappable` rather than `Pressable`: the press used to register only as a
-    // drop in opacity, which on a filled slab is barely visible. It sinks now.
-    //
-    // A primary action leans; everything else stays square. The lean is the
-    // app's one piece of shared visual language, and spending it on the single
-    // action a screen most wants you to take is what makes it mean anything —
-    // a screen where Cancel leans as hard as Save says nothing at all.
-    //
-    // The bottom margin is the button's own, as a field's is: with none, every
-    // stack of buttons touched, and a section heading under one sat on it.
+    // `Tappable` rather than `Pressable`: the press sinks now.
+    // In loud/training mode, the primary action carries the signature lean.
+    // In quiet instrument mode, primary and secondary controls use the soft
+    // rounded style (radius.md) for visual consistency with inputs and cards.
     <Tappable onPress={onPress} disabled={disabled} style={[styles.buttonSpacing, { opacity: disabled ? 0.4 : 1 }]}>
-      {variant === 'primary' ? (
+      {variant === 'primary' && isLoud ? (
         <SlashPanel color={background} style={styles.button}>
           <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
         </SlashPanel>
       ) : (
-        <View style={[styles.button, styles.squared, { backgroundColor: background }]}>
+        <View style={[styles.button, styles.rounded, { backgroundColor: background }]}>
           <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
         </View>
       )}
@@ -305,6 +299,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
   },
+  rounded: { borderRadius: radius.md },
   squared: { borderRadius: radius.md },
   buttonSpacing: { marginBottom: space.md },
   buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },

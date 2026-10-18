@@ -495,8 +495,8 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(10,10,11,0.9)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: loud.ground,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius['3xl'],
+    borderTopRightRadius: radius['3xl'],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     padding: space.lg,

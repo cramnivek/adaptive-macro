@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     marginTop: 'auto',
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
     borderWidth: 1,
     padding: space.lg,
   },

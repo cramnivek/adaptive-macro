@@ -71,3 +71,26 @@ describe.each([
     expect(levels[2] / levels[1]).toBeGreaterThanOrEqual(1.2);
   });
 });
+
+describe('Design system tokens', () => {
+  it('provides a coherent, non-decreasing semantic radius scale', async () => {
+    const { radius, space } = await import('../palette');
+
+    expect(radius.none).toBe(0);
+    expect(radius.xs).toBe(4);
+    expect(radius.sm).toBe(8);
+    expect(radius.md).toBe(12);
+    expect(radius.lg).toBe(16);
+    expect(radius.xl).toBe(20);
+    expect(radius['2xl']).toBe(24);
+    expect(radius['3xl']).toBe(28);
+    expect(radius.pill).toBe(999);
+
+    expect(space.xs).toBe(4);
+    expect(space.sm).toBe(8);
+    expect(space.md).toBe(12);
+    expect(space.lg).toBe(16);
+    expect(space.xl).toBe(24);
+    expect(space.xxl).toBe(32);
+  });
+});

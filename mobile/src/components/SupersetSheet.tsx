@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: loud.ground,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     paddingTop: space.lg,

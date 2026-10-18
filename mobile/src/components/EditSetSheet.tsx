@@ -164,8 +164,8 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
     backgroundColor: loud.ground,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     padding: space.lg,
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.3, color: loud.figureFaint, marginBottom: 4 },
   input: {
     minHeight: TOUCH_TARGET,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     backgroundColor: loud.panel,

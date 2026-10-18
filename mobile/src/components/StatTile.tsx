@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 96,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: space.md,
     paddingHorizontal: space.md,

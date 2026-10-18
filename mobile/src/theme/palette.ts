@@ -55,7 +55,22 @@ export const light: Palette = {
 
 /** Shared spacing scale, so padding stays consistent without magic numbers. */
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
-export const radius = { sm: 4, md: 6, lg: 8, pill: 999 } as const;
+
+/**
+ * Shared corner radius scale for soft, touch-friendly interfaces.
+ * Preserves sharp cuts (`none`) for Achievement mode and exported share cards.
+ */
+export const radius = {
+  none: 0,
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  '2xl': 24,
+  '3xl': 28,
+  pill: 999,
+} as const;
 
 /**
  * The lean.
