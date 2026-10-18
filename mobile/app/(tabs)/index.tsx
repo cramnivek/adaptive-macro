@@ -9,6 +9,8 @@ import { CheckInCard } from '../../src/components/CheckInCard';
 import { FadeIn } from '../../src/components/FadeIn';
 import { Tappable } from '../../src/components/Tappable';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
+import { ActiveWorkoutBanner } from '../../src/components/ActiveWorkoutBanner';
+import { FirstWeekCalibrationCard } from '../../src/components/FirstWeekCalibrationCard';
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
@@ -34,7 +36,6 @@ export default function TodayScreen() {
     program,
     removeEntry,
     editEntry,
-    usingSeedEstimate,
     ready,
     observations,
     dayStatus,
@@ -147,6 +148,8 @@ export default function TodayScreen() {
       }
     >
       <HomeScreenNotice />
+      <ActiveWorkoutBanner />
+      <FirstWeekCalibrationCard />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
@@ -232,17 +235,7 @@ export default function TodayScreen() {
         </View>
       )}
 
-      {ready && usingSeedEstimate && (
-        <Pressable onPress={() => router.push('/trends')}>
-          <View style={[styles.banner, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
-            <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
-            <Text style={[styles.bannerText, { color: colors.textMuted }]}>
-              This target still comes from a formula estimate. Log weight and food daily for about two weeks
-              and it will be measured from your own data.
-            </Text>
-          </View>
-        </Pressable>
-      )}
+
 
       <View style={styles.dayActions}>
         <Pressable

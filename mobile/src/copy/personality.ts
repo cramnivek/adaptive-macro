@@ -1,3 +1,4 @@
+import { todayISO } from '@adaptive-macros/engine';
 import { isPersonalityV2Enabled } from '../flags';
 import type { AppPersonality } from '../state/settings';
 
@@ -340,6 +341,12 @@ export const getEventCopy = (
 ): string => {
   const entry = EVENT_VARIANTS[eventId as keyof typeof EVENT_VARIANTS];
   if (!entry) {
+    if (!eventId) return 'Ready';
+    // If dotted ID like "workout.custom_action", generate human-readable fallback
+    if (typeof eventId === 'string' && eventId.includes('.')) {
+      const part = eventId.split('.').pop()?.replace(/_/g, ' ') ?? eventId;
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }
     return options.facts ? interpolate(eventId, options.facts) : eventId;
   }
 
@@ -373,8 +380,11 @@ export const getEventCopy = (
     return options.facts ? interpolate(eventId, options.facts) : eventId;
   }
 
-  // 4. Deterministic variant selection using hash of seed
-  const index = hashSeed(options.seed) % variants.length;
+  // 4. Deterministic variant selection using hash of seed.
+  // When no seed is explicitly provided, derive a stable date-and-event seed to enable natural
+  // daily variation across messages without re-render flicker.
+  const effectiveSeed = options.seed ?? `${options.facts?.date ?? todayISO()}:${String(eventId)}`;
+  const index = hashSeed(effectiveSeed) % variants.length;
   const template = variants[index] ?? variants[0];
 
   return interpolate(template, options.facts);

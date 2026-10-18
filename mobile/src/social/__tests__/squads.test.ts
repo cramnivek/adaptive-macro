@@ -92,6 +92,17 @@ describe('Training Squads service', () => {
     expect(squad.inviteCode).toBe('IRON26');
   });
 
+  it('refuses to fabricate mock squads when offline with unknown code', async () => {
+    await expect(
+      joinSquadByCode({
+        inviteCode: 'XYZ99',
+        user: mockUser,
+      }),
+    ).rejects.toThrow(/internet connection is required/i);
+
+    expect(await getMySquad()).toBeNull();
+  });
+
   it('records completed workouts and updates member weekly sessions', async () => {
     await createSquad({
       name: 'Alpha Lift',

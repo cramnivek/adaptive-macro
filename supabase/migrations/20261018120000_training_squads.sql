@@ -37,8 +37,22 @@ create table public.squad_cheers (
   unique (checkin_id, user_id)
 );
 
-create index squad_members_user on public.squad_members (user_id);
+create unique index squad_members_single_squad on public.squad_members (user_id);
 create index squad_checkins_squad_date on public.squad_checkins (squad_id, performed_on desc);
+
+-- Enforce maximum squad capacity (6 lifters max) at database level
+create or replace function public.check_squad_capacity() returns trigger as $$
+begin
+  if (select count(*) from public.squad_members where squad_id = new.squad_id) >= 6 then
+    raise exception 'squad_full' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger check_squad_capacity_trigger
+  before insert on public.squad_members
+  for each row execute function public.check_squad_capacity();
 
 alter table public.squads enable row level security;
 alter table public.squad_members enable row level security;
@@ -88,10 +102,21 @@ create policy "checkins are created by squad members" on public.squad_checkins
 
 -- Cheers
 create policy "cheers are readable by squad members" on public.squad_cheers
-  for select to authenticated using (true);
+  for select to authenticated using (
+    exists (
+      select 1 from public.squad_members m
+      where m.squad_id = squad_cheers.squad_id and m.user_id = (select auth.uid())
+    )
+  );
 
 create policy "cheers are created by squad members" on public.squad_cheers
-  for insert to authenticated with check (user_id = (select auth.uid()));
+  for insert to authenticated with check (
+    user_id = (select auth.uid()) and
+    exists (
+      select 1 from public.squad_members m
+      where m.squad_id = squad_cheers.squad_id and m.user_id = (select auth.uid())
+    )
+  );
 
 create policy "cheers can be removed by who gave them" on public.squad_cheers
   for delete to authenticated using (user_id = (select auth.uid()));

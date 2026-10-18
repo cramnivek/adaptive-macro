@@ -27,7 +27,7 @@ describe('Personality System v2 - getEventCopy', () => {
     expect(ascend.toLowerCase()).toContain('work');
 
     const gymrat = getEventCopy('workout.completed', { personality: 'gymrat' });
-    expect(gymrat).toContain('COOKED');
+    expect(gymrat).toMatch(/COOKED|UNSTOPPABLE|ANOTHER W/);
   });
 
   it('keeps sensitive and system contexts strictly neutral across all personalities', () => {
@@ -108,16 +108,44 @@ describe('Personality System v2 - getEventCopy', () => {
     expect(sysOverridden).toBe("Upload didn't go through. Your card is saved on this device.");
   });
 
-  it('returns a visible fallback string rather than blank for unknown event IDs', () => {
+  it('returns a visible human-readable fallback string rather than blank for unknown event IDs', () => {
     vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
 
     const unknown = getEventCopy('custom.unknown_event_id');
-    expect(unknown).toBe('custom.unknown_event_id');
+    expect(unknown).toBe('Unknown event id');
 
-    const unknownWithFacts = getEventCopy('custom.greet_{name}', {
+    const empty = getEventCopy('');
+    expect(empty).toBe('Ready');
+
+    const rawTemplate = getEventCopy('Hello {name}!', {
       facts: { name: 'Alex' },
     });
-    expect(unknownWithFacts).toBe('custom.greet_Alex');
+    expect(rawTemplate).toBe('Hello Alex!');
+  });
+
+  it('rotates variants naturally based on stable date-and-event seed when seed is omitted', () => {
+    vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
+
+    // Call on day 1
+    const day1Copy = getEventCopy('workout.completed', {
+      personality: 'ascend',
+      facts: { date: '2026-10-18' },
+    });
+
+    // Call on same day again -> strictly deterministic (no re-render flicker)
+    const day1CopyAgain = getEventCopy('workout.completed', {
+      personality: 'ascend',
+      facts: { date: '2026-10-18' },
+    });
+    expect(day1Copy).toBe(day1CopyAgain);
+
+    // Call on day 2
+    const day2Copy = getEventCopy('workout.completed', {
+      personality: 'ascend',
+      facts: { date: '2026-10-19' },
+    });
+    expect(day1Copy).toBeTruthy();
+    expect(day2Copy).toBeTruthy();
   });
 
   it('keeps functional action buttons clear and free of guilt/shaming in Gymrat mode', () => {

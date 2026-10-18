@@ -183,7 +183,9 @@ export const SquadHub = ({ user }: SquadHubProps) => {
             <View style={styles.bannerTagRow}>
               <View style={styles.squadBadge}>
                 <Ionicons name="shield-checkmark" size={13} color="#00E5FF" />
-                <Text style={styles.squadBadgeText}>ASCEND / SQUAD CHALLENGE (BETA)</Text>
+                <Text style={styles.squadBadgeText}>
+                  {squad.inviteCode === 'IRON26' ? 'SQUAD (DEMO PREVIEW)' : 'ASCEND / SQUAD CHALLENGE'}
+                </Text>
               </View>
               <Pressable onPress={handleCopyCode} style={styles.invitePill}>
                 <Ionicons name="copy-outline" size={12} color="#00E5FF" />

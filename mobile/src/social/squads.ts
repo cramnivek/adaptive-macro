@@ -332,6 +332,9 @@ export const createSquad = async (params: {
     try {
       const authUserId = await getAuthUserId(user);
       if (authUserId) {
+        // Clear any previous membership first to enforce single squad per user
+        await supabase.from('squad_members').delete().eq('user_id', authUserId);
+
         let inviteCode = generateInviteCode();
         let squadRow = null;
 
@@ -371,11 +374,11 @@ export const createSquad = async (params: {
       if (err instanceof Error && !err.message.includes('reach the server')) {
         throw err;
       }
-      // If offline, continue to local storage creation
+      // If network unreachable, allow single-user local fallback below
     }
   }
 
-  // Local fallback
+  // Local fallback: user-only squad without fabricated mock members
   const inviteCode = generateInviteCode();
   const squadId = `squad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const newSquad: TrainingSquad = {
@@ -419,6 +422,7 @@ export const createSquad = async (params: {
 
 /**
  * Joins an existing training squad by its invite code.
+ * Requires live network connection and authentic Supabase squad lookup.
  */
 export const joinSquadByCode = async (params: {
   inviteCode: string;
@@ -437,102 +441,59 @@ export const joinSquadByCode = async (params: {
     return demo;
   }
 
-  if (supabase) {
-    try {
-      const authUserId = await getAuthUserId(user);
-      if (authUserId) {
-        // Find squad by invite code
-        const { data: foundSquad, error: findErr } = await supabase
-          .from('squads')
-          .select('id, name, invite_code, weekly_target, created_by, created_at')
-          .eq('invite_code', cleanCode)
-          .maybeSingle();
-
-        if (findErr) throw new Error(messageFor(findErr));
-        if (!foundSquad) {
-          throw new Error(`Squad with code "${cleanCode}" was not found. Please verify the code.`);
-        }
-
-        // Check 6-member squad capacity
-        const { count } = await supabase
-          .from('squad_members')
-          .select('*', { count: 'exact', head: true })
-          .eq('squad_id', foundSquad.id);
-
-        if (count !== null && count >= 6) {
-          throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
-        }
-
-        // Insert membership
-        const { error: joinErr } = await supabase.from('squad_members').upsert({
-          squad_id: foundSquad.id,
-          user_id: authUserId,
-          role: 'member',
-        });
-
-        if (joinErr) throw new Error(messageFor(joinErr));
-
-        const liveSquad = await getMySquad(user);
-        if (liveSquad) return liveSquad;
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        // Rethrow user-facing validation errors
-        if (err.message.includes('not found') || err.message.includes('capacity')) {
-          throw err;
-        }
-      }
-      // If offline/connection failure, fall through to local fallback
-    }
+  if (!supabase) {
+    throw new Error('Unable to join squad. An internet connection is required to join a live squad.');
   }
 
-  // Local fallback mock joining
-  const squad: TrainingSquad = {
-    id: `squad_code_${cleanCode}`,
-    name: `Squad ${cleanCode}`,
-    inviteCode: cleanCode,
-    weeklyTargetSessions: 16,
-    weekStartDate: getMondayISO(),
-    createdBy: 'captain',
-    createdAt: new Date().toISOString(),
-    members: [
-      {
-        userId: 'u_cap',
-        username: 'squad_captain',
-        displayName: 'Squad Captain',
-        role: 'owner',
-        joinedAt: new Date(Date.now() - 7 * 86400000).toISOString(),
-        weeklySessions: 3,
-        bestPrThisWeek: null,
-      },
-      {
-        userId: user.id,
-        username: user.username,
-        displayName: user.displayName || user.username,
-        role: 'member',
-        joinedAt: new Date().toISOString(),
-        weeklySessions: 0,
-        bestPrThisWeek: null,
-      },
-    ],
-    recentActivity: [
-      {
-        id: `act_${Date.now()}`,
-        userId: user.id,
-        username: user.username,
-        displayName: user.displayName || user.username,
-        type: 'joined_squad',
-        title: 'Joined the squad',
-        detail: 'Ready to train together!',
-        timestamp: new Date().toISOString(),
-        cheersCount: 1,
-        hasCheered: false,
-      },
-    ],
-  };
+  const authUserId = await getAuthUserId(user);
+  if (!authUserId) {
+    throw new Error('Please sign in to join a training squad.');
+  }
 
-  await AsyncStorage.setItem(SQUAD_STORAGE_KEY, JSON.stringify(squad));
-  return squad;
+  // 1. Find squad by invite code
+  const { data: foundSquad, error: findErr } = await supabase
+    .from('squads')
+    .select('id, name, invite_code, weekly_target, created_by, created_at')
+    .eq('invite_code', cleanCode)
+    .maybeSingle();
+
+  if (findErr) throw new Error(messageFor(findErr));
+  if (!foundSquad) {
+    throw new Error(`Squad with code "${cleanCode}" was not found. Please verify the code.`);
+  }
+
+  // 2. Check 6-member squad capacity
+  const { count } = await supabase
+    .from('squad_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('squad_id', foundSquad.id);
+
+  if (count !== null && count >= 6) {
+    throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
+  }
+
+  // 3. Clear any existing membership in another squad before joining
+  await supabase.from('squad_members').delete().eq('user_id', authUserId);
+
+  // 4. Insert membership into the target squad
+  const { error: joinErr } = await supabase.from('squad_members').insert({
+    squad_id: foundSquad.id,
+    user_id: authUserId,
+    role: 'member',
+  });
+
+  if (joinErr) {
+    if (joinErr.message?.includes('squad_full') || joinErr.code === 'P0001') {
+      throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
+    }
+    throw new Error(messageFor(joinErr));
+  }
+
+  const liveSquad = await getMySquad(user);
+  if (!liveSquad) {
+    throw new Error('Joined squad, but could not load squad details. Please refresh.');
+  }
+  return liveSquad;
 };
 
 /**
