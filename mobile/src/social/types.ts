@@ -6,6 +6,10 @@ export interface Profile {
   display_name: string;
   instagram: string | null;
   is_private: boolean;
+  avatar_url?: string | null;
+  bio?: string | null;
+  training_focus?: string | null;
+  pr_highlight?: string | null;
 }
 
 export interface Post extends PostRow {
@@ -14,10 +18,12 @@ export interface Post extends PostRow {
   created_at: string;
 }
 
-/** A post as the feed returns it: with its author and its likes. */
+/** A post as the feed returns it: with its author, avatar, and its likes. */
 export interface FeedPost extends Post {
   username: string;
   display_name: string;
+  avatar_url?: string | null;
+  training_focus?: string | null;
   like_count: number;
   liked: boolean;
 }
@@ -29,6 +35,10 @@ export interface PublicProfile {
   display_name: string;
   instagram: string | null;
   is_private: boolean;
+  avatar_url?: string | null;
+  bio?: string | null;
+  training_focus?: string | null;
+  pr_highlight?: string | null;
 }
 
 /** What the follow button on a profile says. */

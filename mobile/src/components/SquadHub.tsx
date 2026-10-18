@@ -26,6 +26,8 @@ import { Tappable } from './Tappable';
 import { useApp } from '../state/AppStore';
 import { getEventCopy } from '../copy/personality';
 
+import { UserAvatar } from './UserAvatar';
+
 interface SquadHubProps {
   user: {
     id: string;
@@ -33,21 +35,6 @@ interface SquadHubProps {
     displayName: string;
   };
 }
-
-const AVATAR_PALETTE = ['#00E5FF', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6'];
-
-const getAvatarColor = (seed: string): string => {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-};
-
-const getInitials = (name?: string): string => {
-  if (!name) return '🏋️';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-};
 
 export const SquadHub = ({ user }: SquadHubProps) => {
   const { colors } = useTheme();
@@ -237,14 +224,15 @@ export const SquadHub = ({ user }: SquadHubProps) => {
           <View style={styles.membersList}>
             {squad.members.map((member, idx) => {
               const isMe = member.userId === user.id;
-              const initials = getInitials(member.displayName || member.username);
-              const avatarBg = getAvatarColor(member.username || member.userId);
 
               return (
                 <View key={member.userId || idx} style={styles.memberRow}>
-                  <View style={[styles.memberAvatar, { backgroundColor: avatarBg }]}>
-                    <Text style={styles.memberAvatarText}>{initials}</Text>
-                  </View>
+                  <UserAvatar
+                    avatarUrl={member.avatarUrl}
+                    username={member.username}
+                    name={member.displayName}
+                    size={38}
+                  />
 
                   <View style={styles.memberInfo}>
                     <View style={styles.memberNameRow}>
@@ -292,16 +280,12 @@ export const SquadHub = ({ user }: SquadHubProps) => {
               <View key={act.id} style={styles.activityCard}>
                 <View style={styles.activityTop}>
                   <View style={styles.actUserRow}>
-                    <View
-                      style={[
-                        styles.actAvatar,
-                        { backgroundColor: getAvatarColor(act.username || act.userId) },
-                      ]}
-                    >
-                      <Text style={styles.actAvatarText}>
-                        {getInitials(act.displayName || act.username)}
-                      </Text>
-                    </View>
+                    <UserAvatar
+                      avatarUrl={act.avatarUrl}
+                      username={act.username}
+                      name={act.displayName}
+                      size={34}
+                    />
                     <View>
                       <Text style={styles.actUserName}>{act.displayName}</Text>
                       <Text style={styles.actTitle}>{act.title}</Text>

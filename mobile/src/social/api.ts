@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { isAlreadyPosted, messageFor, OFFLINE, type ServerError } from './errors';
@@ -12,9 +13,50 @@ import type { Post, Profile } from './types';
  * and displays it and never has to know what Postgres or the auth server said.
  */
 
-export const PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
+export const BASE_PROFILE_COLUMNS = 'id, username, display_name, instagram, is_private';
+export const EXTENDED_PROFILE_COLUMNS =
+  'id, username, display_name, instagram, is_private, avatar_url, bio, training_focus, pr_highlight';
+export const PROFILE_COLUMNS = EXTENDED_PROFILE_COLUMNS;
 const POST_COLUMNS =
   'id, author_id, session_id, title, performed_on, duration_min, sets, volume_kg, exercises, highlight, caption, created_at';
+
+const PROFILE_EXTRA_KEY_PREFIX = 'ascend_profile_extra_';
+
+export interface ProfileExtraFields {
+  avatar_url?: string | null;
+  bio?: string | null;
+  training_focus?: string | null;
+  pr_highlight?: string | null;
+}
+
+export const isMissingColumnError = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') return false;
+  const error = err as { code?: string; message?: string };
+  return (
+    error.code === '42703' ||
+    (typeof error.message === 'string' &&
+      error.message.includes('column') &&
+      error.message.includes('does not exist'))
+  );
+};
+
+export const getCachedProfileExtra = async (id: string): Promise<ProfileExtraFields | null> => {
+  try {
+    const json = await AsyncStorage.getItem(`${PROFILE_EXTRA_KEY_PREFIX}${id}`);
+    if (!json) return null;
+    return JSON.parse(json) as ProfileExtraFields;
+  } catch {
+    return null;
+  }
+};
+
+export const setCachedProfileExtra = async (id: string, extra: ProfileExtraFields): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(`${PROFILE_EXTRA_KEY_PREFIX}${id}`, JSON.stringify(extra));
+  } catch {
+    // Best-effort storage
+  }
+};
 
 export const client = (): SupabaseClient => {
   if (supabase === null) throw new Error('Sign-in is not set up in this build.');
@@ -86,16 +128,89 @@ export const signOut = async (): Promise<void> => {
 
 export const myProfile = async (): Promise<Profile | null> => {
   const id = await userId();
-  const { data, error } = await client().from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle();
-  if (error) fail(error);
-  return data as Profile | null;
+  const cachedExtra = await getCachedProfileExtra(id);
+
+  const { data, error } = await client().from('profiles').select(EXTENDED_PROFILE_COLUMNS).eq('id', id).maybeSingle();
+  if (!error) {
+    if (!data) return null;
+    const profile = data as Profile;
+    const merged: Profile = {
+      ...profile,
+      avatar_url: profile.avatar_url ?? cachedExtra?.avatar_url ?? null,
+      bio: profile.bio ?? cachedExtra?.bio ?? null,
+      training_focus: profile.training_focus ?? cachedExtra?.training_focus ?? null,
+      pr_highlight: profile.pr_highlight ?? cachedExtra?.pr_highlight ?? null,
+    };
+    void setCachedProfileExtra(id, {
+      avatar_url: merged.avatar_url,
+      bio: merged.bio,
+      training_focus: merged.training_focus,
+      pr_highlight: merged.pr_highlight,
+    });
+    return merged;
+  }
+
+  if (isMissingColumnError(error)) {
+    const { data: baseData, error: baseError } = await client()
+      .from('profiles')
+      .select(BASE_PROFILE_COLUMNS)
+      .eq('id', id)
+      .maybeSingle();
+    if (baseError) fail(baseError);
+    if (!baseData) return null;
+    return {
+      ...(baseData as Profile),
+      avatar_url: cachedExtra?.avatar_url ?? null,
+      bio: cachedExtra?.bio ?? null,
+      training_focus: cachedExtra?.training_focus ?? null,
+      pr_highlight: cachedExtra?.pr_highlight ?? null,
+    };
+  }
+
+  fail(error);
 };
 
 export const saveProfile = async (fields: ProfileFields & { is_private: boolean }): Promise<Profile> => {
   const id = await userId();
-  const { data, error } = await client().from('profiles').upsert({ id, ...fields }).select(PROFILE_COLUMNS).single();
-  if (error) fail(error);
-  return data as Profile;
+  const extra: ProfileExtraFields = {
+    avatar_url: fields.avatar_url ?? null,
+    bio: fields.bio ?? null,
+    training_focus: fields.training_focus ?? null,
+    pr_highlight: fields.pr_highlight ?? null,
+  };
+  await setCachedProfileExtra(id, extra);
+
+  const { data, error } = await client()
+    .from('profiles')
+    .upsert({ id, ...fields })
+    .select(EXTENDED_PROFILE_COLUMNS)
+    .single();
+
+  if (!error) {
+    return data as Profile;
+  }
+
+  if (isMissingColumnError(error)) {
+    const baseFields = {
+      id,
+      username: fields.username,
+      display_name: fields.display_name,
+      instagram: fields.instagram,
+      is_private: fields.is_private,
+    };
+    const { data: baseData, error: baseError } = await client()
+      .from('profiles')
+      .upsert(baseFields)
+      .select(BASE_PROFILE_COLUMNS)
+      .single();
+    if (baseError) fail(baseError);
+    return {
+      ...(baseData as Profile),
+      ...extra,
+    };
+  }
+
+  fail(error);
 };
 
 export const createPost = async (row: PostRow): Promise<void> => {

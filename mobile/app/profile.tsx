@@ -12,8 +12,9 @@ import { cursorAfter, follow, followCounts, followState, like, PAGE, postsBy, pr
 import { postView } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
 import type { FeedPost, FollowState, PublicProfile } from '../src/social/types';
+import { UserAvatar } from '../src/components/UserAvatar';
 import { useApp } from '../src/state/AppStore';
-import { font, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 /**
  * Someone's profile, their follow state with you, and their workouts.
@@ -177,31 +178,88 @@ export default function ProfileScreen() {
       }
     >
       <Card>
-        <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
-        <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+        {/* Top Hero Row: Avatar + 3 Stat Pillars */}
+        <View style={styles.heroRow}>
+          <UserAvatar
+            avatarUrl={person.avatar_url}
+            username={person.username}
+            name={person.display_name}
+            size="lg"
+            ring
+          />
+          <View style={styles.pillarsContainer}>
+            <View style={styles.pillar}>
+              <Text style={[styles.pillarNumber, { color: colors.text }]}>{posts.length}</Text>
+              <Text style={[styles.pillarLabel, { color: colors.textMuted }]}>Workouts</Text>
+            </View>
+            <View style={styles.pillar}>
+              <Text style={[styles.pillarNumber, { color: colors.text }]}>{counts.followers}</Text>
+              <Text style={[styles.pillarLabel, { color: colors.textMuted }]}>Followers</Text>
+            </View>
+            <View style={styles.pillar}>
+              <Text style={[styles.pillarNumber, { color: colors.text }]}>{counts.following}</Text>
+              <Text style={[styles.pillarLabel, { color: colors.textMuted }]}>Following</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Identity & Badges */}
+        <View style={styles.identityBlock}>
+          <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
+          <View style={styles.handleRow}>
+            <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+            {person.training_focus ? (
+              <View style={[styles.focusTag, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                <Ionicons name="barbell-outline" size={12} color={colors.accent} />
+                <Text style={[styles.focusTagText, { color: colors.text }]}>{person.training_focus}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Bio */}
+        {person.bio ? (
+          <Text style={[styles.bio, { color: colors.text }]}>{person.bio}</Text>
+        ) : null}
+
+        {/* PR Highlight Callout */}
+        {person.pr_highlight ? (
+          <View style={[styles.prCallout, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+            <Ionicons name="trophy" size={18} color="#F59E0B" />
+            <View style={styles.prCalloutContent}>
+              <Text style={[styles.prCalloutLabel, { color: colors.textFaint }]}>PROUDEST PRs</Text>
+              <Text style={[styles.prCalloutText, { color: colors.text }]}>{person.pr_highlight}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Instagram Link */}
         {instagram !== null && (
           <Tappable
             onPress={() => void Linking.openURL(`https://instagram.com/${encodeURIComponent(instagram)}`).catch(() => notify('Could not open Instagram'))}
             accessibilityRole="link"
-            style={styles.link}
+            style={[styles.instaLink, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
           >
-            <Text style={[styles.linkText, { color: colors.accent }]}>Instagram: @{instagram}</Text>
+            <Ionicons name="logo-instagram" size={16} color={colors.accent} />
+            <Text style={[styles.instaLinkText, { color: colors.accent }]}>@{instagram}</Text>
           </Tappable>
         )}
-        <Text style={[styles.counts, { color: colors.textMuted }]}>
-          {counts.followers} {counts.followers === 1 ? 'follower' : 'followers'} · {counts.following} following
-        </Text>
-        {own ? (
-          <Button label="Edit profile" variant="subtle" onPress={() => router.push('/profile-setup')} />
-        ) : (
-          <Button
-            label={state === 'none' ? 'Follow' : state === 'requested' ? 'Requested' : 'Following'}
-            variant={state === 'none' ? 'primary' : 'subtle'}
-            disabled={busy}
-            onPress={() => void changeFollow()}
-          />
-        )}
+
+        {/* Action Button */}
+        <View style={styles.actionRow}>
+          {own ? (
+            <Button label="Edit profile" variant="subtle" onPress={() => router.push('/profile-setup')} />
+          ) : (
+            <Button
+              label={state === 'none' ? 'Follow' : state === 'requested' ? 'Requested' : 'Following'}
+              variant={state === 'none' ? 'primary' : 'subtle'}
+              disabled={busy}
+              onPress={() => void changeFollow()}
+            />
+          )}
+        </View>
       </Card>
+
       {locked ? (
         say('This account is private. Follow to see their workouts.')
       ) : posts.length === 0 ? (
@@ -216,6 +274,8 @@ export default function ProfileScreen() {
               author={{
                 username: post.username,
                 displayName: post.display_name,
+                avatarUrl: post.avatar_url,
+                trainingFocus: post.training_focus,
                 onPress: () => router.push({ pathname: '/profile', params: { username: post.username } }),
               }}
               likes={{ count: post.like_count, liked: post.liked, onToggle: () => void toggleLike(post) }}
@@ -232,9 +292,107 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 14, marginBottom: space.md },
   more: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
-  name: { fontFamily: font.uiStrong, fontSize: 20 },
-  handle: { fontFamily: font.ui, fontSize: 14, marginBottom: space.sm },
-  link: { minHeight: TOUCH_TARGET, justifyContent: 'center' },
-  linkText: { fontFamily: font.ui, fontSize: 14 },
-  counts: { fontFamily: font.ui, fontSize: 14, marginBottom: space.md },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    marginBottom: space.md,
+  },
+  pillarsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  pillar: {
+    alignItems: 'center',
+  },
+  pillarNumber: {
+    fontFamily: font.display,
+    fontSize: 18,
+  },
+  pillarLabel: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  identityBlock: {
+    marginBottom: space.xs,
+  },
+  name: {
+    fontFamily: font.display,
+    fontSize: 22,
+    letterSpacing: -0.3,
+  },
+  handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.xs,
+    marginTop: 2,
+    marginBottom: space.xs,
+  },
+  handle: {
+    fontFamily: font.ui,
+    fontSize: 14,
+  },
+  focusTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  focusTagText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+  },
+  bio: {
+    fontFamily: font.ui,
+    fontSize: 14,
+    lineHeight: 20,
+    marginVertical: space.xs,
+  },
+  prCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.sm + 2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginVertical: space.xs,
+  },
+  prCalloutContent: {
+    flex: 1,
+  },
+  prCalloutLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  prCalloutText: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
+    marginTop: 1,
+  },
+  instaLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    marginVertical: space.xs,
+  },
+  instaLinkText: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
+  },
+  actionRow: {
+    marginTop: space.sm,
+  },
 });

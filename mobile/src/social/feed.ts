@@ -1,4 +1,4 @@
-import { client, fail, PROFILE_COLUMNS, userId } from './api';
+import { BASE_PROFILE_COLUMNS, client, fail, isMissingColumnError, PROFILE_COLUMNS, userId } from './api';
 import { cursorAfter, escapeSearch, followStateFor, toFeedPost, type FeedCursor } from './feedRules';
 import type { FeedPost, FollowState, PublicProfile } from './types';
 
@@ -30,8 +30,20 @@ export const searchProfiles = async (text: string): Promise<PublicProfile[]> => 
     .like('username', `${prefix}%`)
     .order('username')
     .limit(PAGE);
-  if (error) fail(error);
-  return (data ?? []) as PublicProfile[];
+  if (!error) return (data ?? []) as PublicProfile[];
+
+  if (isMissingColumnError(error)) {
+    const { data: baseData, error: baseError } = await client()
+      .from('profiles')
+      .select(BASE_PROFILE_COLUMNS)
+      .like('username', `${prefix}%`)
+      .order('username')
+      .limit(PAGE);
+    if (baseError) fail(baseError);
+    return (baseData ?? []) as PublicProfile[];
+  }
+
+  fail(error);
 };
 
 export const profileByUsername = async (username: string): Promise<PublicProfile | null> => {
@@ -40,8 +52,19 @@ export const profileByUsername = async (username: string): Promise<PublicProfile
     .select(PROFILE_COLUMNS)
     .eq('username', username.toLowerCase())
     .maybeSingle();
-  if (error) fail(error);
-  return data as PublicProfile | null;
+  if (!error) return data as PublicProfile | null;
+
+  if (isMissingColumnError(error)) {
+    const { data: baseData, error: baseError } = await client()
+      .from('profiles')
+      .select(BASE_PROFILE_COLUMNS)
+      .eq('username', username.toLowerCase())
+      .maybeSingle();
+    if (baseError) fail(baseError);
+    return baseData as PublicProfile | null;
+  }
+
+  fail(error);
 };
 
 /** Zeros for a profile that is missing or hidden: the database returns no row for those. */
@@ -86,10 +109,26 @@ export const pendingRequests = async (): Promise<PublicProfile[]> => {
     .eq('followee_id', me)
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
-  if (error) fail(error);
-  return ((data ?? []) as unknown as { follower: PublicProfile | null }[])
-    .map((row) => row.follower)
-    .filter((p): p is PublicProfile => p !== null);
+  if (!error) {
+    return ((data ?? []) as unknown as { follower: PublicProfile | null }[])
+      .map((row) => row.follower)
+      .filter((p): p is PublicProfile => p !== null);
+  }
+
+  if (isMissingColumnError(error)) {
+    const { data: baseData, error: baseError } = await client()
+      .from('follows')
+      .select(`created_at, follower:profiles!follows_follower_id_fkey(${BASE_PROFILE_COLUMNS})`)
+      .eq('followee_id', me)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (baseError) fail(baseError);
+    return ((baseData ?? []) as unknown as { follower: PublicProfile | null }[])
+      .map((row) => row.follower)
+      .filter((p): p is PublicProfile => p !== null);
+  }
+
+  fail(error);
 };
 
 export const acceptRequest = async (from: string): Promise<void> => {

@@ -9,6 +9,7 @@ import { notify } from '../src/dialog';
 import { acceptRequest, declineRequest, pendingRequests } from '../src/social/feed';
 import { useSocial } from '../src/social/session';
 import type { PublicProfile } from '../src/social/types';
+import { UserAvatar } from '../src/components/UserAvatar';
 import { font, radius, space, useTheme } from '../src/theme';
 
 /**
@@ -87,8 +88,25 @@ export default function RequestsScreen() {
               accessibilityRole="button"
               style={styles.who}
             >
-              <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
-              <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+              <UserAvatar
+                avatarUrl={person.avatar_url}
+                username={person.username}
+                name={person.display_name}
+                size="md"
+              />
+              <View style={styles.whoText}>
+                <View style={styles.whoNameRow}>
+                  <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
+                  {person.training_focus ? (
+                    <View style={[styles.focusPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                      <Text style={[styles.focusPillText, { color: colors.accent }]}>
+                        {person.training_focus}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+              </View>
             </Tappable>
             <View style={styles.buttons}>
               <View style={styles.button}>
@@ -111,12 +129,36 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
-    paddingTop: space.sm,
+    paddingVertical: space.sm,
     marginBottom: space.sm,
   },
-  who: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginBottom: space.sm },
+  who: {
+    minHeight: TOUCH_TARGET,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.sm,
+  },
+  whoText: {
+    flex: 1,
+  },
+  whoNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   name: { fontFamily: font.uiStrong, fontSize: 15 },
+  focusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  focusPillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+  },
   handle: { fontFamily: font.ui, fontSize: 13 },
-  buttons: { flexDirection: 'row', gap: space.sm },
+  buttons: { flexDirection: 'row', gap: space.sm, paddingBottom: space.xs },
   button: { flex: 1 },
 });

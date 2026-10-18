@@ -27,24 +27,10 @@ import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
 import { useApp } from '../../src/state/AppStore';
 import { getEventCopy } from '../../src/copy/personality';
+import { UserAvatar } from '../../src/components/UserAvatar';
 import { font, radius, space, useTheme } from '../../src/theme';
 
 type FeedTab = 'following' | 'squad' | 'explore' | 'my-posts';
-
-const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
-
-const getAvatarColor = (seed: string): string => {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-};
-
-const getInitials = (name?: string): string => {
-  if (!name) return '🏋️';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-};
 
 /**
  * Lively, engaging fitness community hub:
@@ -287,11 +273,12 @@ export default function SocialScreen() {
               accessibilityLabel={`My profile, ${profile.username}`}
               style={[styles.profilePill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
             >
-              <View style={[styles.profilePillAvatar, { backgroundColor: getAvatarColor(profile.username) }]}>
-                <Text style={styles.profilePillAvatarText}>
-                  {getInitials(profile.display_name || profile.username)}
-                </Text>
-              </View>
+              <UserAvatar
+                avatarUrl={profile.avatar_url}
+                username={profile.username}
+                name={profile.display_name}
+                size={22}
+              />
               <Text style={[styles.profilePillText, { color: colors.text }]} numberOfLines={1}>
                 {profile.display_name || profile.username}
               </Text>
@@ -414,6 +401,8 @@ export default function SocialScreen() {
               author={{
                 username: post.username,
                 displayName: post.display_name,
+                avatarUrl: post.avatar_url,
+                trainingFocus: post.training_focus,
                 onPress: () => router.push({ pathname: '/profile', params: { username: post.username } }),
               }}
               likes={{ count: post.like_count, liked: post.liked, onToggle: () => void toggleLike(post) }}

@@ -11,6 +11,32 @@ describe('normaliseProfile', () => {
       username: 'marc.k',
       display_name: 'Marc',
       instagram: 'marc_k',
+      avatar_url: null,
+      bio: null,
+      training_focus: null,
+      pr_highlight: null,
+    });
+  });
+
+  it('normalises extended profile fields', () => {
+    expect(
+      normaliseProfile({
+        username: 'alex',
+        displayName: 'Alex',
+        instagram: '',
+        avatarUrl: ' preset:fire ',
+        bio: ' Heavy lifter ',
+        trainingFocus: ' Hypertrophy ',
+        prHighlight: ' 500 lb Deadlift ',
+      }),
+    ).toEqual({
+      username: 'alex',
+      display_name: 'Alex',
+      instagram: null,
+      avatar_url: 'preset:fire',
+      bio: 'Heavy lifter',
+      training_focus: 'Hypertrophy',
+      pr_highlight: '500 lb Deadlift',
     });
   });
 
@@ -22,6 +48,49 @@ describe('normaliseProfile', () => {
 describe('profileProblem', () => {
   it('accepts a profile inside the rules', () => {
     expect(profileProblem(fields('marc_k.99', 'Marc', 'Marc.K'))).toBeNull();
+  });
+
+  it('accepts valid extended profile fields', () => {
+    expect(
+      profileProblem({
+        username: 'marc_k.99',
+        display_name: 'Marc',
+        instagram: null,
+        avatar_url: 'preset:barbell',
+        bio: 'Focusing on strength and progressive overload.',
+        training_focus: 'Powerlifting',
+        pr_highlight: '405 Squat / 315 Bench',
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses an overlong bio, training focus, or PR highlight', () => {
+    expect(
+      profileProblem({
+        username: 'marc',
+        display_name: 'Marc',
+        instagram: null,
+        bio: 'a'.repeat(241),
+      }),
+    ).toBe('A bio must be 240 characters or less.');
+
+    expect(
+      profileProblem({
+        username: 'marc',
+        display_name: 'Marc',
+        instagram: null,
+        training_focus: 'x'.repeat(61),
+      }),
+    ).toBe('Training focus must be 60 characters or less.');
+
+    expect(
+      profileProblem({
+        username: 'marc',
+        display_name: 'Marc',
+        instagram: null,
+        pr_highlight: 'y'.repeat(81),
+      }),
+    ).toBe('PR highlight must be 80 characters or less.');
   });
 
   it('refuses a username too short, too long, or with other characters', () => {

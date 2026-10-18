@@ -1,13 +1,15 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
+import { UserAvatar } from '../src/components/UserAvatar';
 import { confirm, notify } from '../src/dialog';
 import { deleteAccount, signOut } from '../src/social/api';
 import { useSocial } from '../src/social/session';
-import { font, space, useTheme } from '../src/theme';
+import { font, radius, space, useTheme } from '../src/theme';
 
 /** The account: who you are to other people, your posts, and the way out. */
 export default function AccountScreen() {
@@ -76,9 +78,30 @@ export default function AccountScreen() {
   } else {
     body = (
       <>
-        <Card title={`@${profile.username}`} subtitle={profile.display_name}>
+        <Card>
+          <View style={styles.profileHeader}>
+            <UserAvatar
+              avatarUrl={profile.avatar_url}
+              username={profile.username}
+              name={profile.display_name}
+              size="lg"
+              ring
+            />
+            <View style={styles.profileHeaderMeta}>
+              <Text style={[styles.displayName, { color: colors.text }]}>{profile.display_name}</Text>
+              <Text style={[styles.handle, { color: colors.textFaint }]}>@{profile.username}</Text>
+              {profile.training_focus && (
+                <View style={[styles.focusBadge, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                  <Ionicons name="barbell-outline" size={12} color={colors.accent} />
+                  <Text style={[styles.focusBadgeText, { color: colors.text }]}>{profile.training_focus}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {profile.bio && <Text style={[styles.bio, { color: colors.text }]}>{profile.bio}</Text>}
           {profile.instagram && note(`Instagram: @${profile.instagram}`)}
-          {note(profile.is_private ? 'Private: only people you approve will see your posts.' : 'Public: anyone will be able to see your posts.')}
+          {note(profile.is_private ? 'Private: only people you approve will see your posts.' : 'Public: anyone can see your posts.')}
           <Button label="Edit profile" onPress={() => router.push('/profile-setup')} />
           <Button label="Your posts" variant="subtle" onPress={() => router.push('/my-posts')} />
           <Button label="Blocked people" variant="subtle" onPress={() => router.push('/blocked')} />
@@ -96,4 +119,44 @@ export default function AccountScreen() {
 
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 14, marginBottom: space.md },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginBottom: space.md,
+  },
+  profileHeaderMeta: {
+    flex: 1,
+    gap: 2,
+  },
+  displayName: {
+    fontFamily: font.display,
+    fontSize: 20,
+    letterSpacing: -0.2,
+  },
+  handle: {
+    fontFamily: font.ui,
+    fontSize: 14,
+  },
+  focusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  focusBadgeText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+  },
+  bio: {
+    fontFamily: font.ui,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: space.sm,
+  },
 });

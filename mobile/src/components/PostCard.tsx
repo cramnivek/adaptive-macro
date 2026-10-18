@@ -39,21 +39,7 @@ import { Button, TOUCH_TARGET } from './Controls';
 import { CopyWorkoutSheet } from './CopyWorkoutSheet';
 import { Tappable } from './Tappable';
 import { TransparentStickerModal } from './TransparentStickerModal';
-
-const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
-
-const getAvatarColor = (seed: string): string => {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-};
-
-const getInitials = (name?: string): string => {
-  if (!name) return '🏋️';
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-};
+import { UserAvatar } from './UserAvatar';
 
 /**
  * Rich, engaging workout post card:
@@ -75,7 +61,13 @@ export const PostCard = ({
   view: PostView;
   onDelete?: () => void;
   /** Whose post, for the feed and other people's profiles; tapping opens their profile. */
-  author?: { username: string; displayName: string; onPress: () => void };
+  author?: {
+    username: string;
+    displayName: string;
+    avatarUrl?: string | null;
+    trainingFocus?: string | null;
+    onPress: () => void;
+  };
   likes?: { count: number; liked: boolean; onToggle: () => void };
   /** The ⋯ menu: report, block. */
   onMore?: () => void;
@@ -275,18 +267,25 @@ export const PostCard = ({
         <View style={styles.byline}>
           {author ? (
             <Tappable onPress={author.onPress} accessibilityRole="button" hitSlop={8} style={styles.authorTarget}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: getAvatarColor(author.username) },
-                ]}
-              >
-                <Text style={styles.avatarText}>{getInitials(author.displayName || author.username)}</Text>
-              </View>
+              <UserAvatar
+                avatarUrl={author.avatarUrl}
+                username={author.username}
+                name={author.displayName}
+                size="md"
+              />
               <View style={styles.authorMeta}>
-                <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-                  {author.displayName}
-                </Text>
+                <View style={styles.authorNameRow}>
+                  <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+                    {author.displayName}
+                  </Text>
+                  {author.trainingFocus ? (
+                    <View style={[styles.focusBadge, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                      <Text style={[styles.focusBadgeText, { color: colors.accent }]} numberOfLines={1}>
+                        {author.trainingFocus}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={[styles.handle, { color: colors.textMuted }]} numberOfLines={1}>
                   @{author.username}{displayTime ? ` · ${displayTime}` : ''}
                 </Text>
@@ -831,24 +830,27 @@ const styles = StyleSheet.create({
     gap: space.sm,
     flex: 1,
   },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: font.uiStrong,
-    fontSize: 14,
-    color: '#ffffff',
-  },
   authorMeta: {
     flex: 1,
+  },
+  authorNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   name: {
     fontFamily: font.uiStrong,
     fontSize: 15,
+  },
+  focusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  focusBadgeText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
   },
   handle: {
     fontFamily: font.ui,

@@ -8,6 +8,7 @@ import { Tappable } from '../src/components/Tappable';
 import { searchProfiles } from '../src/social/feed';
 import { useSocial } from '../src/social/session';
 import type { PublicProfile } from '../src/social/types';
+import { UserAvatar } from '../src/components/UserAvatar';
 import { font, radius, space, useTheme } from '../src/theme';
 
 /**
@@ -85,9 +86,26 @@ export default function PeopleScreen() {
                     accessibilityRole="button"
                     style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   >
-                    <View style={styles.who}>
-                      <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
-                      <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+                    <View style={styles.personRow}>
+                      <UserAvatar
+                        avatarUrl={person.avatar_url}
+                        username={person.username}
+                        name={person.display_name}
+                        size="md"
+                      />
+                      <View style={styles.who}>
+                        <View style={styles.nameRow}>
+                          <Text style={[styles.name, { color: colors.text }]}>{person.display_name}</Text>
+                          {person.training_focus ? (
+                            <View style={[styles.focusPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                              <Text style={[styles.focusPillText, { color: colors.accent }]}>
+                                {person.training_focus}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={[styles.handle, { color: colors.textFaint }]}>@{person.username}</Text>
+                      </View>
                     </View>
                     {person.is_private && <Text style={[styles.tag, { color: colors.textMuted }]}>Private</Text>}
                   </Tappable>
@@ -109,8 +127,29 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     marginBottom: space.sm,
   },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexShrink: 1,
+  },
   who: { flexShrink: 1 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   name: { fontFamily: font.uiStrong, fontSize: 15 },
+  focusPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  focusPillText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+  },
   handle: { fontFamily: font.ui, fontSize: 13 },
   tag: { fontFamily: font.ui, fontSize: 12, marginLeft: space.md },
 });

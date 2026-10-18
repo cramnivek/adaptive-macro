@@ -13,6 +13,10 @@ export interface ProfileInput {
   username: string;
   displayName: string;
   instagram: string;
+  avatarUrl?: string | null;
+  bio?: string;
+  trainingFocus?: string;
+  prHighlight?: string;
 }
 
 /** The `profiles` columns a person can edit. */
@@ -20,12 +24,20 @@ export interface ProfileFields {
   username: string;
   display_name: string;
   instagram: string | null;
+  avatar_url?: string | null;
+  bio?: string | null;
+  training_focus?: string | null;
+  pr_highlight?: string | null;
 }
 
 export const normaliseProfile = (input: ProfileInput): ProfileFields => ({
   username: input.username.trim().replace(/^@/, '').toLowerCase(),
   display_name: input.displayName.trim(),
   instagram: input.instagram.trim().replace(/^@/, '') || null,
+  avatar_url: input.avatarUrl?.trim() || null,
+  bio: input.bio?.trim() || null,
+  training_focus: input.trainingFocus?.trim() || null,
+  pr_highlight: input.prHighlight?.trim() || null,
 });
 
 export const profileProblem = (fields: ProfileFields): string | null => {
@@ -33,6 +45,15 @@ export const profileProblem = (fields: ProfileFields): string | null => {
   if (fields.display_name.length < 1 || fields.display_name.length > 40) return 'A name is 1 to 40 characters.';
   if (fields.instagram !== null && !INSTAGRAM.test(fields.instagram)) {
     return 'That is not an Instagram handle: up to 30 letters, numbers, _ or .';
+  }
+  if (fields.bio && fields.bio.length > 240) {
+    return 'A bio must be 240 characters or less.';
+  }
+  if (fields.training_focus && fields.training_focus.length > 60) {
+    return 'Training focus must be 60 characters or less.';
+  }
+  if (fields.pr_highlight && fields.pr_highlight.length > 80) {
+    return 'PR highlight must be 80 characters or less.';
   }
   return null;
 };

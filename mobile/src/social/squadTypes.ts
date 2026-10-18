@@ -6,6 +6,7 @@ export interface SquadMember {
   joinedAt: string;
   weeklySessions: number;
   bestPrThisWeek?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface SquadActivity {
@@ -19,6 +20,7 @@ export interface SquadActivity {
   timestamp: string;
   cheersCount: number;
   hasCheered: boolean;
+  avatarUrl?: string | null;
 }
 
 export interface TrainingSquad {
