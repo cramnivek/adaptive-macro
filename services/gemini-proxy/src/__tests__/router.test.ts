@@ -53,9 +53,16 @@ describe('createRouter', () => {
   });
 
   it('answers /_health without touching the web build', async () => {
-    const res = await createRouter({ env, webRoot: '/nonexistent' })(get('/_health'));
-
+    const router = createRouter({ env, webRoot: '/nonexistent' });
+    const res = await router(get('/_health'));
     expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+
+    for (const path of ['/health', '/api/health', '/livez', '/readyz', '/healthz/']) {
+      const r = await router(get(path));
+      expect(r.status).toBe(200);
+      expect(await r.text()).toBe('ok');
+    }
   });
 
   // The whole point of co-hosting: the API is same-origin, so no CORS.

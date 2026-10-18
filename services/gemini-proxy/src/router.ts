@@ -284,6 +284,24 @@ export const createRouter = (opts: {
       return Response.json({ ok: true, url: publicUrl });
     }
 
+    // Health check endpoints answered independently of the web build.
+    // Supports /_health, /health, /api/health, /livez, /readyz, and /healthz/
+    // (Note: Cloud Run Google Frontend intercepts exact /healthz, but /health, /_health, etc. pass through).
+    const isHealthCheck =
+      pathname === '/_health' ||
+      pathname === '/health' ||
+      pathname === '/api/health' ||
+      pathname === '/healthz/' ||
+      pathname === '/livez' ||
+      pathname === '/readyz';
+
+    if (isHealthCheck) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Not found', { status: 404 });
+      }
+      return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
+    }
+
     // Nothing else lives under /api/. Falling through would answer a typo
     // with the homepage and a 200, which reads as "the endpoint is up".
     if (pathname === '/api' || pathname.startsWith('/api/')) {
@@ -294,17 +312,6 @@ export const createRouter = (opts: {
     // homepage would read as success to a client calling the wrong path.
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Not found', { status: 404 });
-    }
-
-    // NOT /healthz, which Google Front End intercepts on Cloud Run: it answers
-    // its own 404 page and the request never reaches the container. Measured
-    // against the deployment -- /health, /livez, /readyz and /healthz/ all pass
-    // through, only the exact /healthz does not. Do not rename this back.
-    // Independent of the web build on purpose: a container that answers this
-    // but 404s `/` is misconfigured rather than dead, and that is worth being
-    // able to tell apart.
-    if (pathname === '/_health') {
-      return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
     }
 
     const file = await serveStatic(pathname, opts.webRoot);
