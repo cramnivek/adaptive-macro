@@ -716,9 +716,9 @@ export default function TrendsScreen() {
               <View style={styles.coachingTagRow}>
                 <Text style={[styles.coachingTag, { color: colors.textMuted }]}>
                   {timeframe === 'month'
-                    ? 'MONTHLY REVIEW (30D)'
+                    ? (settings.personality === 'gymrat' ? '30-DAY MESOCYCLE RECAP 🔥' : 'MONTHLY REVIEW (30D)')
                     : timeframe === 'year'
-                      ? 'YEARLY OVERVIEW (1Y)'
+                      ? (settings.personality === 'gymrat' ? 'FULL YEAR GAINS OVERVIEW 🏆' : 'YEARLY OVERVIEW (1Y)')
                       : getEventCopy('trends.weekly_recap_tag', {
                           personality: settings.personality,
                           seed: 'weekly_tag',
@@ -744,14 +744,14 @@ export default function TrendsScreen() {
                   >
                     {timeframe === 'month'
                       ? monthlyReview
-                        ? '30D READY'
-                        : 'TAP TO REVIEW'
+                        ? (settings.personality === 'gymrat' ? '30D LOCKED IN 🔥' : '30D READY')
+                        : (settings.personality === 'gymrat' ? 'TAP TO LOCK IN 🔥' : 'TAP TO REVIEW')
                       : coachingReview
                         ? getEventCopy('trends.weekly_recap_action', {
                             personality: settings.personality,
                             seed: 'recap_action',
                           })
-                        : 'TAP TO CHECK IN'}
+                        : (settings.personality === 'gymrat' ? 'TAP TO CHECK IN 🏋️' : 'TAP TO CHECK IN')}
                   </Text>
                 </View>
               </View>
@@ -759,7 +759,9 @@ export default function TrendsScreen() {
                 {timeframe === 'month'
                   ? monthlyReview
                     ? `"${monthlyReview.headline}"`
-                    : 'Evaluate 4-week adherence, metabolic shift, and training over 30 days'
+                    : (settings.personality === 'gymrat'
+                        ? 'See if you actually locked in on macros and progressive overload over 30 days'
+                        : 'Evaluate 4-week adherence, metabolic shift, and training over 30 days')
                   : coachingReview
                     ? `"${coachingReview.headline}"`
                     : 'See how your workouts, scale weight, and calories connected this week'}
@@ -969,7 +971,7 @@ export default function TrendsScreen() {
           </Card>
 
           {/* Daily steps & NEAT expenditure */}
-          <Card title="Daily steps & NEAT activity">
+          <Card title={settings.personality === 'gymrat' ? 'Daily steps & NEAT burn 🔥' : 'Daily steps & NEAT activity'}>
             <View style={styles.stepsCardContent}>
               <View style={styles.stepsGlanceRow}>
                 <View style={styles.stepsGlanceCol}>
@@ -977,7 +979,7 @@ export default function TrendsScreen() {
                     {stepsSummary.avgSteps.toLocaleString()}
                   </Text>
                   <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    avg daily steps
+                    {settings.personality === 'gymrat' ? 'daily steps' : 'avg daily steps'}
                   </Text>
                 </View>
                 <View style={styles.stepsGlanceCol}>
@@ -985,7 +987,7 @@ export default function TrendsScreen() {
                     ~{stepsSummary.avgNeatKcal} kcal
                   </Text>
                   <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    avg daily NEAT
+                    {settings.personality === 'gymrat' ? 'free NEAT burn 🔥' : 'avg daily NEAT'}
                   </Text>
                 </View>
                 <View style={styles.stepsGlanceCol}>
@@ -993,7 +995,7 @@ export default function TrendsScreen() {
                     {stepsSummary.totalDistanceKm} km
                   </Text>
                   <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    total distance
+                    distance moved
                   </Text>
                 </View>
               </View>
@@ -1001,7 +1003,9 @@ export default function TrendsScreen() {
               <Text style={[styles.stepsExplainer, { color: colors.textMuted }]}>
                 {stepsSummary.daysLogged > 0
                   ? `${stepsSummary.totalSteps.toLocaleString()} total steps logged over ${timeframeLabel}. Non-exercise movement fuels your metabolic baseline.`
-                  : 'No steps recorded for this period yet. Log daily steps or connect Apple Health / Google Health Connect to factor walking into your energy expenditure.'}
+                  : (settings.personality === 'gymrat'
+                      ? 'No steps logged for this period yet. Lock in your daily steps or sync Apple Health / Health Connect to keep your calorie burn high.'
+                      : 'No steps recorded for this period yet. Log daily steps or connect Apple Health / Google Health Connect to factor walking into your energy expenditure.')}
               </Text>
 
               <Tappable
@@ -1016,7 +1020,7 @@ export default function TrendsScreen() {
               >
                 <Ionicons name="footsteps" size={15} color={colors.accent} />
                 <Text style={[styles.logStepsBtnText, { color: colors.text }]}>
-                  Log Steps / Sync HealthKit
+                  {settings.personality === 'gymrat' ? 'Log Steps / Health Sync 🔥' : 'Log Steps / Sync Health'}
                 </Text>
               </Tappable>
             </View>

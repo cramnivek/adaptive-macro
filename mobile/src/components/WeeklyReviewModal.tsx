@@ -548,7 +548,7 @@ export const WeeklyReviewModal = ({
                   </Text>
                   <View style={styles.btnWrap}>
                     <Button
-                      label="CHECK IN FOR MONTHLY REVIEW"
+                      label={personality === 'gymrat' ? 'LOCK IN 30-DAY CHECK-IN 🔥' : 'CHECK IN FOR MONTHLY REVIEW'}
                       onPress={onGenerateMonthly ?? (() => {})}
                       tone="loud"
                     />
@@ -567,9 +567,9 @@ export const WeeklyReviewModal = ({
                   {/* 4-Week Adherence & Verdict Card */}
                   <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
                     <View style={styles.adherenceScoreHeader}>
-                      <View>
+                      <View style={{ flex: 1, marginRight: space.sm }}>
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                          WEEKLY ADJUSTMENT ADHERENCE
+                          {personality === 'gymrat' ? 'WEEKLY TARGET LOCK-IN 🔥' : 'WEEKLY ADJUSTMENT ADHERENCE'}
                         </Text>
                         <Text style={[styles.adherenceSummaryText, { color: colors.textMuted }]}>
                           {monthlyMetrics.overallAdherence.adherenceSummary}
@@ -579,6 +579,8 @@ export const WeeklyReviewModal = ({
                         style={[
                           styles.adherenceScorePill,
                           {
+                            minWidth: 84,
+                            flexShrink: 0,
                             backgroundColor:
                               monthlyMetrics.overallAdherence.score >= 80
                                 ? colors.positive + '25'
@@ -607,8 +609,17 @@ export const WeeklyReviewModal = ({
                                 monthlyMetrics.overallAdherence.score >= 80 ? colors.positive : colors.warning,
                             },
                           ]}
+                          numberOfLines={1}
                         >
-                          {monthlyMetrics.overallAdherence.rating.toUpperCase()}
+                          {personality === 'gymrat'
+                            ? monthlyMetrics.overallAdherence.score >= 90
+                              ? 'BEAST MODE'
+                              : monthlyMetrics.overallAdherence.score >= 78
+                                ? 'LOCKED IN'
+                                : monthlyMetrics.overallAdherence.score >= 60
+                                  ? 'MID ⚖️'
+                                  : 'SLACKING 💀'
+                            : monthlyMetrics.overallAdherence.rating.toUpperCase()}
                         </Text>
                       </View>
                     </View>
@@ -662,7 +673,15 @@ export const WeeklyReviewModal = ({
                               ]}
                             >
                               <Text style={[styles.adherenceWeekBadgeText, { color: badgeColor }]}>
-                                {w.adherencePct}% {isGood ? 'TARGET' : w.status.toUpperCase()}
+                                {personality === 'gymrat'
+                                  ? w.loggedDays === 0
+                                    ? 'GHOSTED 👻'
+                                    : isGood
+                                      ? `${w.adherencePct}% LOCKED IN 🎯`
+                                      : w.status === 'under'
+                                        ? `${w.adherencePct}% DEFICIT 📉`
+                                        : `${w.adherencePct}% SURPLUS 📈`
+                                  : `${w.adherencePct}% ${isGood ? 'TARGET' : w.status.toUpperCase()}`}
                               </Text>
                             </View>
                           </View>
@@ -677,7 +696,7 @@ export const WeeklyReviewModal = ({
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="body-outline" size={16} color={colors.accent} />
                         <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
-                          30-DAY BODY COMPOSITION
+                          {personality === 'gymrat' ? '30-DAY SCALE & PHYSIQUE SHIFT ⚡' : '30-DAY BODY COMPOSITION'}
                         </Text>
                       </View>
                       <View style={styles.vitalStatRow}>
@@ -729,7 +748,7 @@ export const WeeklyReviewModal = ({
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="barbell-outline" size={16} color={colors.accent} />
                         <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
-                          30-DAY TRAINING VOLUME
+                          {personality === 'gymrat' ? '30-DAY TONNAGE & IRON MOVED 🏋️' : '30-DAY TRAINING VOLUME'}
                         </Text>
                       </View>
                       <View style={styles.vitalStatRow}>
@@ -760,7 +779,7 @@ export const WeeklyReviewModal = ({
                   {monthlyReview.keyWins.length > 0 && (
                     <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
                       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                        MONTHLY MILESTONE WINS 🏆
+                        {personality === 'gymrat' ? 'MASSIVE MONTHLY Ws 🏆' : 'MONTHLY MILESTONE WINS 🏆'}
                       </Text>
                       {monthlyReview.keyWins.map((win, idx) => (
                         <View key={idx} style={styles.winRow}>
@@ -774,7 +793,7 @@ export const WeeklyReviewModal = ({
                   {/* Monthly Big Picture */}
                   <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                      MONTHLY SYNTHESIS & ANALYSIS
+                      {personality === 'gymrat' ? 'COACH BREAKDOWN: THE BIG PICTURE 🧠' : 'MONTHLY SYNTHESIS & ANALYSIS'}
                     </Text>
                     <Text style={[styles.plainSummary, { color: colors.text }]}>
                       {monthlyReview.plainSummary ?? monthlyReview.synthesis}
@@ -786,7 +805,7 @@ export const WeeklyReviewModal = ({
                     <View style={styles.cardHeaderRow}>
                       <Ionicons name="compass-outline" size={18} color={colors.accent} />
                       <Text style={[styles.strategyTitle, { color: colors.accent }]}>
-                        STRATEGY FOR NEXT 30 DAYS
+                        {personality === 'gymrat' ? 'NEXT 30 DAYS BATTLE PLAN 🚀' : 'STRATEGY FOR NEXT 30 DAYS'}
                       </Text>
                     </View>
                     <Text style={[styles.strategyText, { color: colors.text }]}>
@@ -799,7 +818,9 @@ export const WeeklyReviewModal = ({
                     <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="barbell-outline" size={16} color={colors.accent} />
-                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>MESOCYCLE INSIGHT</Text>
+                        <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>
+                          {personality === 'gymrat' ? 'MESOCYCLE & OVERLOAD INTEL 💥' : 'MESOCYCLE INSIGHT'}
+                        </Text>
                       </View>
                       <Text style={[styles.cardBody, { color: colors.textMuted }]}>
                         {monthlyReview.trainingInsight}
@@ -809,7 +830,9 @@ export const WeeklyReviewModal = ({
                     <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="nutrition-outline" size={16} color={colors.accent} />
-                        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>NUTRITION INSIGHT</Text>
+                        <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>
+                          {personality === 'gymrat' ? 'MACRO & FUEL INTEL 🥩' : 'NUTRITION INSIGHT'}
+                        </Text>
                       </View>
                       <Text style={[styles.cardBody, { color: colors.textMuted }]}>
                         {monthlyReview.nutritionInsight}
@@ -844,8 +867,8 @@ export const WeeklyReviewModal = ({
                             ]}
                           >
                             {monthlyReview.suggestedAdjustment.hasAdjustment
-                              ? 'RECOMMENDED MONTHLY ADJUSTMENT'
-                              : 'MONTHLY TARGETS ON TRACK'}
+                              ? (personality === 'gymrat' ? 'RECOMMENDED COACH PROTOCOL 🔥' : 'RECOMMENDED MONTHLY ADJUSTMENT')
+                              : (personality === 'gymrat' ? 'TARGETS LOCKED IN · KEEP CRUSHING 🎯' : 'MONTHLY TARGETS ON TRACK')}
                           </Text>
                         </View>
                         <Text style={[styles.adjustTitle, { color: colors.text }]}>
@@ -887,7 +910,9 @@ export const WeeklyReviewModal = ({
                           {monthlyApplied ? (
                             <View style={styles.appliedPill}>
                               <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                              <Text style={styles.appliedText}>MONTHLY ADJUSTMENT APPLIED</Text>
+                              <Text style={styles.appliedText}>
+                                {personality === 'gymrat' ? 'ADJUSTMENT LOCKED IN 🔒🔥' : 'MONTHLY ADJUSTMENT APPLIED'}
+                              </Text>
                             </View>
                           ) : (
                             <Tappable
@@ -896,7 +921,9 @@ export const WeeklyReviewModal = ({
                               style={[styles.applyBtn, { backgroundColor: colors.accent }]}
                             >
                               <Text style={[styles.applyBtnText, { color: colors.onFill }]}>
-                                APPLY {monthlyReview.suggestedAdjustment.title.toUpperCase()}
+                                {personality === 'gymrat'
+                                  ? `LOCK IN ${monthlyReview.suggestedAdjustment.title.toUpperCase()} 🔥`
+                                  : `APPLY ${monthlyReview.suggestedAdjustment.title.toUpperCase()}`}
                               </Text>
                             </Tappable>
                           )}
@@ -917,7 +944,9 @@ export const WeeklyReviewModal = ({
                       >
                         <View style={styles.scienceTitleGroup}>
                           <Ionicons name="flask-outline" size={16} color={colors.accent} />
-                          <Text style={[styles.scienceTitle, { color: colors.text }]}>THE DEEP PHYSIOLOGY</Text>
+                          <Text style={[styles.scienceTitle, { color: colors.text }]}>
+                            {personality === 'gymrat' ? 'HYPERTROPHY & METABOLIC SCIENCE 🔬' : 'THE DEEP PHYSIOLOGY'}
+                          </Text>
                         </View>
                         <Ionicons
                           name={showMonthlyScience ? 'chevron-up' : 'chevron-down'}
@@ -938,7 +967,9 @@ export const WeeklyReviewModal = ({
                   {/* Recalculate button */}
                   <Tappable onPress={onGenerateMonthly} style={styles.regenBtn} scaleTo={0.98}>
                     <Ionicons name="refresh" size={14} color={colors.textMuted} />
-                    <Text style={[styles.regenText, { color: colors.textMuted }]}>Recalculate monthly review</Text>
+                    <Text style={[styles.regenText, { color: colors.textMuted }]}>
+                      {personality === 'gymrat' ? 'Re-cook Monthly Review 🔄' : 'Recalculate monthly review'}
+                    </Text>
                   </Tappable>
                 </>
               )}

@@ -31,12 +31,15 @@ export interface ProfileExtraFields {
 
 export const isMissingColumnError = (err: unknown): boolean => {
   if (!err || typeof err !== 'object') return false;
-  const error = err as { code?: string; message?: string };
+  const error = err as { code?: string; message?: string; details?: string; hint?: string };
+  const str = `${error.code ?? ''} ${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase();
   return (
     error.code === '42703' ||
-    (typeof error.message === 'string' &&
-      error.message.includes('column') &&
-      error.message.includes('does not exist'))
+    error.code === 'PGRST204' ||
+    str.includes('schema cache') ||
+    str.includes('could not find the') ||
+    (str.includes('column') &&
+      (str.includes('not exist') || str.includes('not found') || str.includes('unknown') || str.includes('missing')))
   );
 };
 
@@ -180,37 +183,46 @@ export const saveProfile = async (fields: ProfileFields & { is_private: boolean 
   };
   await setCachedProfileExtra(id, extra);
 
-  const { data, error } = await client()
+  try {
+    const { data, error } = await client()
+      .from('profiles')
+      .upsert({ id, ...fields })
+      .select(EXTENDED_PROFILE_COLUMNS)
+      .single();
+
+    if (!error && data) {
+      return data as Profile;
+    }
+
+    if (error && !isMissingColumnError(error)) {
+      fail(error);
+    }
+  } catch (err) {
+    if (!isMissingColumnError(err)) {
+      throw err;
+    }
+  }
+
+  // Fallback: save base columns that exist on all schema versions
+  const baseFields = {
+    id,
+    username: fields.username,
+    display_name: fields.display_name,
+    instagram: fields.instagram,
+    is_private: fields.is_private,
+  };
+  const { data: baseData, error: baseError } = await client()
     .from('profiles')
-    .upsert({ id, ...fields })
-    .select(EXTENDED_PROFILE_COLUMNS)
+    .upsert(baseFields)
+    .select(BASE_PROFILE_COLUMNS)
     .single();
 
-  if (!error) {
-    return data as Profile;
-  }
+  if (baseError) fail(baseError);
 
-  if (isMissingColumnError(error)) {
-    const baseFields = {
-      id,
-      username: fields.username,
-      display_name: fields.display_name,
-      instagram: fields.instagram,
-      is_private: fields.is_private,
-    };
-    const { data: baseData, error: baseError } = await client()
-      .from('profiles')
-      .upsert(baseFields)
-      .select(BASE_PROFILE_COLUMNS)
-      .single();
-    if (baseError) fail(baseError);
-    return {
-      ...(baseData as Profile),
-      ...extra,
-    };
-  }
-
-  fail(error);
+  return {
+    ...(baseData as Profile),
+    ...extra,
+  };
 };
 
 export const createPost = async (row: PostRow): Promise<void> => {

@@ -157,13 +157,13 @@ export default function AccountScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Health & Step Activity</Text>
             <Text style={[styles.subNote, { color: colors.textMuted }]}>
               {healthConfig?.enabled
-                ? `Sync active (${healthConfig.provider}) · ${(healthConfig.dailyStepGoal || 10000).toLocaleString()} steps daily goal`
-                : 'Connect Apple Health or log daily steps for NEAT metabolic tracking'}
+                ? `Auto-sync active (${healthConfig.provider === 'apple_health' ? 'Apple Health' : 'Google Health Connect'}) · ${(healthConfig.dailyStepGoal || 10000).toLocaleString()} steps daily goal`
+                : 'Connect Apple Health or Google Health Connect to automatically sync steps & activity'}
             </Text>
           </View>
         </View>
         <Button
-          label="Log Steps / Import Apple Health"
+          label="Sync Steps & Health Data"
           variant="subtle"
           onPress={() => setStepModalOpen(true)}
         />

@@ -353,12 +353,16 @@ export default function TodayScreen() {
           <View style={{ gap: 2, flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={[styles.stepsCardTitle, { color: colors.text }]}>
-                {dailySteps ? `${dailySteps.steps.toLocaleString()} Steps` : 'Daily Steps & NEAT'}
+                {dailySteps
+                  ? `${dailySteps.steps.toLocaleString()} Steps`
+                  : settings.personality === 'gymrat'
+                    ? 'Daily Steps & Cardio'
+                    : 'Daily Steps & NEAT'}
               </Text>
               {dailySteps && dailySteps.activeKcal ? (
                 <View style={[styles.stepsTag, { backgroundColor: colors.accent + '20' }]}>
                   <Text style={[styles.stepsTagText, { color: colors.accent }]}>
-                    +{Math.round(dailySteps.activeKcal)} KCAL
+                    +{Math.round(dailySteps.activeKcal)} KCAL{settings.personality === 'gymrat' ? ' 🔥' : ''}
                   </Text>
                 </View>
               ) : (
@@ -372,7 +376,9 @@ export default function TodayScreen() {
             <Text style={[styles.stepsCardSubtitle, { color: colors.textMuted }]}>
               {dailySteps
                 ? `${Math.min(100, Math.round((dailySteps.steps / 10000) * 100))}% of 10k goal · ${dailySteps.distanceKm ?? 0} km walked · Tap to edit`
-                : 'Tap to log steps or sync Apple Health / Health Connect'}
+                : settings.personality === 'gymrat'
+                  ? 'Hit your 10k daily step goal to keep expenditure dialed in 🔥'
+                  : 'Tap to log steps or sync Apple Health / Health Connect'}
             </Text>
           </View>
         </View>

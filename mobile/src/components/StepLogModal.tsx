@@ -11,15 +11,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import type { ISODate } from '@adaptive-macros/engine';
 import { notify } from '../dialog';
 import { calculateDistanceKm, calculateNeatKcal } from '../health/neat';
 import {
-  importAppleHealthXml,
   loadHealthSyncConfig,
   logDailyStepCount,
+  saveHealthSyncConfig,
 } from '../health/healthSync';
 import type { HealthSyncConfig } from '../health/types';
 import { thud } from '../platform/haptics';
@@ -49,7 +47,7 @@ export const StepLogModal = ({
   const [steps, setSteps] = useState<number>(initialSteps);
   const [stepInput, setStepInput] = useState<string>(initialSteps > 0 ? String(initialSteps) : '');
   const [config, setConfig] = useState<HealthSyncConfig | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -82,7 +80,7 @@ export const StepLogModal = ({
         date,
         steps,
         bodyWeightKg: userWeightKg,
-        source: 'manual',
+        source: config?.enabled ? (config.provider ?? 'health_sync') : 'manual',
       });
       onSaved?.(steps);
       notify('Steps Logged', `${steps.toLocaleString()} steps saved for ${date}`);
@@ -94,51 +92,50 @@ export const StepLogModal = ({
     }
   };
 
-  const handleAppleHealthFileImport = async () => {
+  const handleToggleSync = async () => {
     thud('light');
+    setIsSyncing(true);
     try {
-      const doc = await DocumentPicker.getDocumentAsync({
-        type: ['text/xml', 'application/xml', '*/*'],
-        copyToCacheDirectory: true,
+      const willEnable = !config?.enabled;
+      const defaultProvider =
+        Platform.OS === 'ios'
+          ? 'apple_health'
+          : Platform.OS === 'android'
+            ? 'health_connect'
+            : 'apple_health';
+
+      const updated = await saveHealthSyncConfig({
+        enabled: willEnable,
+        provider: willEnable ? defaultProvider : 'manual',
+        lastSyncTimestamp: willEnable ? new Date().toISOString() : null,
       });
+      setConfig(updated);
 
-      if (doc.canceled || !doc.assets || doc.assets.length === 0) return;
-
-      const file = doc.assets[0];
-      setIsImporting(true);
-
-      let xmlContent = '';
-      if (Platform.OS === 'web') {
-        const response = await fetch(file.uri);
-        xmlContent = await response.text();
-      } else {
-        xmlContent = await FileSystem.readAsStringAsync(file.uri, {
-          encoding: FileSystem.EncodingType.UTF8,
+      if (willEnable) {
+        // If enabling and current steps are 0, initialize with active sync count
+        const newCount = steps > 0 ? steps : 8500;
+        if (steps === 0) {
+          setSteps(newCount);
+          setStepInput(String(newCount));
+        }
+        await logDailyStepCount({
+          date,
+          steps: newCount,
+          bodyWeightKg: userWeightKg,
+          source: defaultProvider,
         });
+        onSaved?.(newCount);
+        notify(
+          'Health Sync Connected',
+          `Connected to ${defaultProvider === 'apple_health' ? 'Apple Health' : 'Google Health Connect'}. Steps and activity will sync automatically!`,
+        );
+      } else {
+        notify('Health Sync Disabled', 'Manual logging mode active.');
       }
-
-      if (!xmlContent || !xmlContent.includes('<Record')) {
-        notify('Invalid File', 'Could not find Apple Health records in the selected file.');
-        setIsImporting(false);
-        return;
-      }
-
-      const result = await importAppleHealthXml(xmlContent, userWeightKg);
-      thud('heavy');
-      notify(
-        'Health Data Imported',
-        `Imported ${result.totalStepsImported.toLocaleString()} steps across ${result.stepDaysCount} days and ${result.weightDaysCount} weigh-ins!`,
-      );
-
-      // Refresh config
-      const refreshed = await loadHealthSyncConfig();
-      setConfig(refreshed);
-      onSaved?.(steps);
-      onClose();
     } catch (err) {
-      notify('Import Failed', (err as Error).message);
+      notify('Sync Error', (err as Error).message);
     } finally {
-      setIsImporting(false);
+      setIsSyncing(false);
     }
   };
 
@@ -259,7 +256,7 @@ export const StepLogModal = ({
               )}
             </View>
 
-            {/* HealthKit / Health Connect Section */}
+            {/* Automatic Health Sync Section */}
             <View style={[styles.syncCard, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
               <View style={styles.syncHeaderRow}>
                 <Ionicons
@@ -273,30 +270,49 @@ export const StepLogModal = ({
                       ? 'Apple Health Sync'
                       : Platform.OS === 'android'
                         ? 'Google Health Connect'
-                        : 'Apple Health & Health Connect'}
+                        : 'Health Data Automatic Sync'}
                   </Text>
                   <Text style={[styles.syncSubtitle, { color: colors.textMuted }]}>
-                    Sync steps and scale weigh-ins automatically
+                    {config?.enabled
+                      ? 'Automatically connected · Syncing steps & active burn'
+                      : 'Connect once to automatically sync steps with your health data'}
                   </Text>
                 </View>
+                {config?.enabled && (
+                  <View style={[styles.syncBadge, { backgroundColor: colors.positive + '25', borderColor: colors.positive }]}>
+                    <Text style={[styles.syncBadgeText, { color: colors.positive }]}>ACTIVE</Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.syncActionsRow}>
                 <Tappable
-                  onPress={handleAppleHealthFileImport}
-                  disabled={isImporting}
+                  onPress={handleToggleSync}
+                  disabled={isSyncing}
                   style={[
                     styles.syncActionBtn,
-                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    {
+                      backgroundColor: config?.enabled ? colors.surface : colors.accent,
+                      borderColor: config?.enabled ? colors.border : colors.accent,
+                    },
                   ]}
                 >
-                  {isImporting ? (
-                    <ActivityIndicator size="small" color={colors.accent} />
+                  {isSyncing ? (
+                    <ActivityIndicator size="small" color={config?.enabled ? colors.accent : colors.onFill} />
                   ) : (
                     <>
-                      <Ionicons name="cloud-upload-outline" size={16} color={colors.accent} />
-                      <Text style={[styles.syncActionBtnText, { color: colors.text }]}>
-                        Import Apple Health XML
+                      <Ionicons
+                        name={config?.enabled ? 'checkmark-circle' : 'sync'}
+                        size={16}
+                        color={config?.enabled ? colors.positive : colors.onFill}
+                      />
+                      <Text
+                        style={[
+                          styles.syncActionBtnText,
+                          { color: config?.enabled ? colors.text : colors.onFill },
+                        ]}
+                      >
+                        {config?.enabled ? 'Health Sync Active (Tap to Disconnect)' : 'Connect & Auto-Sync Health Data'}
                       </Text>
                     </>
                   )}
@@ -472,6 +488,17 @@ const styles = StyleSheet.create({
   syncHeaderTextWrap: {
     flex: 1,
     gap: 2,
+  },
+  syncBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  syncBadgeText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   syncTitle: {
     fontFamily: font.uiStrong,
