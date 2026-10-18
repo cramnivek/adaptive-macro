@@ -113,4 +113,11 @@ describe('sessionDraft', () => {
     await clearWorkoutDraft('session-999');
     expect(await loadWorkoutDraft('session-999')).toBeNull();
   });
+
+  it('restores draft via latest fallback key when sessionId is omitted', async () => {
+    await saveWorkoutDraft('session-abc', sampleBlocks);
+    const restored = await loadWorkoutDraft();
+    expect(restored).not.toBeNull();
+    expect(restored).toHaveLength(2);
+  });
 });

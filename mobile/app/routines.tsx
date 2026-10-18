@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { ExercisePicker } from '../src/components/ExercisePicker';
@@ -69,6 +70,32 @@ export default function RoutinesScreen() {
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   const { settings } = useApp();
   const [busy, setBusy] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-save existing routines on every edit
+  useEffect(() => {
+    if (!editing || editing === 'new' || !draftName.trim() || draft.length === 0) return;
+    setAutoSaved(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await setRoutineExercises(editing, draft);
+        const existing = routines?.find((r) => r.id === editing);
+        if (existing && existing.name !== draftName.trim()) {
+          const { renameRoutine } = await import('../src/db');
+          await renameRoutine(editing, draftName.trim());
+        }
+        setAutoSaved(true);
+      } catch (err) {
+        console.warn('Failed to auto-save routine:', err);
+      }
+    }, 400);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [editing, draftName, draft, routines]);
 
   const refresh = async () => {
     setRoutines(await listRoutines());
@@ -191,6 +218,16 @@ export default function RoutinesScreen() {
   if (editing) {
     return (
       <Screen tone="loud" title={editing === 'new' ? 'New routine' : 'Edit routine'}>
+        <View style={styles.disclaimerBox}>
+          <Ionicons name="information-circle" size={18} color="#F59E0B" style={{ marginTop: 1 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.disclaimerTitle}>ROUTINE TEMPLATE</Text>
+            <Text style={styles.disclaimerText}>
+              Routines are templates for future workouts. Changes auto-save and apply to your next workout without altering any active workout session in progress.
+            </Text>
+          </View>
+        </View>
+
         <Card loud title="Name">
           <Field label="Routine name" value={draftName} onChangeText={setDraftName} placeholder="Push A" />
         </Card>
@@ -310,7 +347,15 @@ export default function RoutinesScreen() {
           )}
         </Card>
 
-        <Button tone="loud" label={busy ? 'Saving…' : 'Save routine'} onPress={save} disabled={busy} />
+        {autoSaved && editing !== 'new' && (
+          <Text style={styles.autoSavedBadge}>✓ Changes auto-saved to template</Text>
+        )}
+        <Button
+          tone="loud"
+          label={editing === 'new' ? (busy ? 'Creating…' : 'Create routine') : (busy ? 'Saving…' : 'Done')}
+          onPress={save}
+          disabled={busy}
+        />
         <Button tone="loud" label="Cancel" variant="subtle" onPress={() => setEditing(null)} />
       </Screen>
     );
@@ -429,4 +474,36 @@ const styles = StyleSheet.create({
   addButtonsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
   addExercise: { marginTop: space.sm },
   addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg },
+  disclaimerBox: {
+    flexDirection: 'row',
+    gap: space.sm,
+    backgroundColor: '#1E1810',
+    borderWidth: 1,
+    borderColor: '#78350F',
+    borderRadius: radius.md,
+    padding: space.md,
+    marginBottom: space.md,
+    alignItems: 'flex-start',
+  },
+  disclaimerTitle: {
+    fontFamily: font.display,
+    fontSize: 10,
+    color: '#F59E0B',
+    letterSpacing: 1.5,
+    marginBottom: 2,
+    fontWeight: '800',
+  },
+  disclaimerText: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    color: loud.figureMuted,
+  },
+  autoSavedBadge: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    color: '#34D399',
+    textAlign: 'center',
+    marginBottom: space.sm,
+  },
 });

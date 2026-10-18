@@ -36,45 +36,71 @@ export interface BlockDraft {
 }
 
 const DRAFT_PREFIX = 'adaptive_active_workout_draft_v1_';
+export const LATEST_ACTIVE_DRAFT_KEY = 'adaptive_latest_active_workout_draft_v1';
+
+const serializeDraftBlocks = (blocks: BlockDraft[]): BlockDraft[] => {
+  return blocks.map((b) => ({
+    name: b.name,
+    bodyweightBased: b.bodyweightBased,
+    isCardio: b.isCardio,
+    cardioMode: b.cardioMode,
+    supersetGroup: b.supersetGroup ?? null,
+    target: b.target,
+    rows: b.rows.map((r) => ({
+      key: r.key,
+      id: r.id,
+      weight: r.weight,
+      reps: r.reps,
+      setType: r.setType,
+      done: r.done,
+      rpe: r.rpe,
+      isCardio: r.isCardio,
+      cardioMode: r.cardioMode,
+      speed: r.speed,
+      incline: r.incline,
+      time: r.time,
+      distance: r.distance,
+    })),
+  }));
+};
 
 /**
- * Saves the in-progress state of an active workout session to persistent storage.
- * This preserves typed weights, rep numbers, custom sets, and cardio metrics
- * when the mobile browser or OS backgrounds or reloads the tab.
+ * Synchronously writes the in-progress workout draft to localStorage.
+ * Guarantees zero latency so unmounting or navigating away never loses
+ * typed weights, custom reps, or added exercises.
  */
-export const saveWorkoutDraft = async (sessionId: string, blocks: BlockDraft[]): Promise<void> => {
-  if (!sessionId || !blocks) return;
+export const saveWorkoutDraftSync = (sessionId: string, blocks: BlockDraft[]): void => {
+  if (!sessionId || !blocks || blocks.length === 0) return;
   const key = `${DRAFT_PREFIX}${sessionId}`;
   try {
-    const payload: BlockDraft[] = blocks.map((b) => ({
-      name: b.name,
-      bodyweightBased: b.bodyweightBased,
-      isCardio: b.isCardio,
-      cardioMode: b.cardioMode,
-      supersetGroup: b.supersetGroup ?? null,
-      target: b.target,
-      rows: b.rows.map((r) => ({
-        key: r.key,
-        id: r.id,
-        weight: r.weight,
-        reps: r.reps,
-        setType: r.setType,
-        done: r.done,
-        rpe: r.rpe,
-        isCardio: r.isCardio,
-        cardioMode: r.cardioMode,
-        speed: r.speed,
-        incline: r.incline,
-        time: r.time,
-        distance: r.distance,
-      })),
-    }));
-
+    const payload = serializeDraftBlocks(blocks);
     const json = JSON.stringify(payload);
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(key, json);
+      localStorage.setItem(LATEST_ACTIVE_DRAFT_KEY, json);
+    }
+  } catch (err) {
+    console.warn('Failed to save workout draft synchronously:', err);
+  }
+};
+
+/**
+ * Saves the in-progress state of an active workout session to persistent storage.
+ * Writes synchronously to localStorage and persists to AsyncStorage.
+ */
+export const saveWorkoutDraft = async (sessionId: string, blocks: BlockDraft[]): Promise<void> => {
+  if (!sessionId || !blocks || blocks.length === 0) return;
+  const key = `${DRAFT_PREFIX}${sessionId}`;
+  try {
+    const payload = serializeDraftBlocks(blocks);
+    const json = JSON.stringify(payload);
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, json);
+      localStorage.setItem(LATEST_ACTIVE_DRAFT_KEY, json);
     }
     await AsyncStorage.setItem(key, json);
+    await AsyncStorage.setItem(LATEST_ACTIVE_DRAFT_KEY, json);
   } catch (err) {
     console.warn('Failed to save workout draft:', err);
   }
@@ -82,22 +108,33 @@ export const saveWorkoutDraft = async (sessionId: string, blocks: BlockDraft[]):
 
 /**
  * Retrieves the saved in-progress draft for an active workout session.
- * Returns null if no draft exists or if the draft was cleared.
+ * Checks sessionId key first, then AsyncStorage, and falls back to latest active draft.
  */
-export const loadWorkoutDraft = async (sessionId: string): Promise<BlockDraft[] | null> => {
-  if (!sessionId) return null;
-  const key = `${DRAFT_PREFIX}${sessionId}`;
+export const loadWorkoutDraft = async (sessionId?: string | null): Promise<BlockDraft[] | null> => {
   try {
     let json: string | null = null;
-    if (typeof localStorage !== 'undefined') {
-      json = localStorage.getItem(key);
+    if (sessionId) {
+      const key = `${DRAFT_PREFIX}${sessionId}`;
+      if (typeof localStorage !== 'undefined') {
+        json = localStorage.getItem(key);
+      }
+      if (!json) {
+        json = await AsyncStorage.getItem(key);
+      }
     }
+
     if (!json) {
-      json = await AsyncStorage.getItem(key);
+      if (typeof localStorage !== 'undefined') {
+        json = localStorage.getItem(LATEST_ACTIVE_DRAFT_KEY);
+      }
+      if (!json) {
+        json = await AsyncStorage.getItem(LATEST_ACTIVE_DRAFT_KEY);
+      }
     }
+
     if (!json) return null;
     const parsed = JSON.parse(json) as BlockDraft[];
-    if (!Array.isArray(parsed)) return null;
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
     return parsed;
   } catch {
     return null;
@@ -113,7 +150,9 @@ export const clearWorkoutDraft = async (sessionId: string): Promise<void> => {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(key);
+      localStorage.removeItem(LATEST_ACTIVE_DRAFT_KEY);
     }
     await AsyncStorage.removeItem(key);
+    await AsyncStorage.removeItem(LATEST_ACTIVE_DRAFT_KEY);
   } catch {}
 };

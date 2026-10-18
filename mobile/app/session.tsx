@@ -59,6 +59,7 @@ import {
   cataloguePatternsByExerciseName,
   listRoutines,
   sessionSets,
+  setRoutineExercises,
   startSession,
   setSetRpe,
   updateExerciseSupersetGroup,
@@ -80,7 +81,7 @@ import type { WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, previousSetFor, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
-import { clearWorkoutDraft, loadWorkoutDraft, saveWorkoutDraft } from '../src/sessionDraft';
+import { clearWorkoutDraft, loadWorkoutDraft, saveWorkoutDraft, saveWorkoutDraftSync } from '../src/sessionDraft';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import {
@@ -729,39 +730,83 @@ export default function SessionScreen() {
               };
             }),
           );
-          setBlocks(hydrated);
+
+          // Safety check: ensure any exercises with sets logged in SQLite are included
+          const draftNames = new Set(draft.map((b) => b.name));
+          const missingLoggedNames = Array.from(
+            new Set(existing.sets.filter((s) => !draftNames.has(s.exerciseName)).map((s) => s.exerciseName)),
+          );
+          if (missingLoggedNames.length > 0) {
+            const extraBlocks = await Promise.all(
+              missingLoggedNames.map(async (name) => {
+                const mine = existing.sets.filter((s) => s.exerciseName === name);
+                return blockFor(
+                  name,
+                  mine[0]?.bodyweightBased ?? false,
+                  mine.map((s) => ({
+                    key: s.id,
+                    id: s.id,
+                    weight: s.weightKg === null ? '' : String(displayWeight(s.weightKg, workoutUnits).toFixed(1)),
+                    reps: String(s.reps),
+                    setType: s.setType,
+                    rpe: s.rpe,
+                    done: true,
+                    isCardio: s.isCardio,
+                    cardioMode: s.cardioMode ?? 'treadmill',
+                    speed: s.speedKph !== null && s.speedKph !== undefined ? String(s.speedKph) : undefined,
+                    incline: s.inclinePct !== null && s.inclinePct !== undefined ? String(s.inclinePct) : undefined,
+                    time: s.durationSeconds ? String(Math.round(s.durationSeconds / 60)) : undefined,
+                    distance: s.distanceKm !== null && s.distanceKm !== undefined ? String(s.distanceKm) : undefined,
+                  })),
+                  null,
+                  mine[0]?.isCardio ?? false,
+                  (mine[0]?.cardioMode as CardioMode) ?? 'treadmill',
+                  mine[0]?.supersetGroup ?? null,
+                );
+              }),
+            );
+            const merged = [...hydrated, ...extraBlocks];
+            setBlocks(merged);
+            saveWorkoutDraftSync(existing.id, merged);
+          } else {
+            setBlocks(hydrated);
+            saveWorkoutDraftSync(existing.id, hydrated);
+          }
         } else {
-          setBlocks(await blocksFromSession(existing, routine?.exercises ?? []));
+          const fallbackBlocks = await blocksFromSession(existing, routine?.exercises ?? []);
+          setBlocks(fallbackBlocks);
+          saveWorkoutDraftSync(existing.id, fallbackBlocks);
         }
       } else if (!started.current && (params.start === 'blank' || params.routine)) {
         started.current = true;
         const routine = loadedRoutines.find((r) => r.id === params.routine);
         const fresh = await startSession(routine?.name ?? 'Workout', todayISO(), routine?.id ?? null);
         setSession(fresh);
-        setBlocks(
-          await Promise.all(
-            (routine?.exercises ?? []).map(async (e) =>
-              withTargetRows(
-                await blockFor(
-                  e.name,
-                  e.bodyweightBased,
-                  [],
-                  {
-                    sets: e.targetSets,
-                    reps: e.targetReps,
-                    targetTime: e.targetTime,
-                    targetDistance: e.targetDistance,
-                    targetSpeed: e.targetSpeed,
-                    targetIncline: e.targetIncline,
-                  },
-                  e.isCardio ?? false,
-                  (e.cardioMode as CardioMode) ?? 'treadmill',
-                  e.supersetGroup ?? null,
-                ),
+        const initialBlocks = await Promise.all(
+          (routine?.exercises ?? []).map(async (e) =>
+            withTargetRows(
+              await blockFor(
+                e.name,
+                e.bodyweightBased,
+                [],
+                {
+                  sets: e.targetSets,
+                  reps: e.targetReps,
+                  targetTime: e.targetTime,
+                  targetDistance: e.targetDistance,
+                  targetSpeed: e.targetSpeed,
+                  targetIncline: e.targetIncline,
+                },
+                e.isCardio ?? false,
+                (e.cardioMode as CardioMode) ?? 'treadmill',
+                e.supersetGroup ?? null,
               ),
             ),
           ),
         );
+        setBlocks(initialBlocks);
+        saveWorkoutDraftSync(fresh.id, initialBlocks);
+        void saveWorkoutDraft(fresh.id, initialBlocks);
         if (params.cardio === '1') {
           setPickerMode('cardio');
           setPicking(true);
@@ -769,32 +814,54 @@ export default function SessionScreen() {
       }
       setLoading(false);
     })();
-  }, [params.start, params.routine, params.cardio, blockFor, blocksFromSession, withTargetRows]);
+  }, [params.start, params.routine, params.cardio, blockFor, blocksFromSession, withTargetRows, workoutUnits]);
 
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
-  // Auto-save active workout draft whenever blocks change
+  // Auto-save active workout draft whenever blocks change:
+  // Synchronous localStorage write ensures zero-latency persistence,
+  // followed by debounced async storage update.
   useEffect(() => {
     if (!session?.id || blocks.length === 0) return;
+    saveWorkoutDraftSync(session.id, blocks);
     const timer = setTimeout(() => {
       void saveWorkoutDraft(session.id, blocks);
-    }, 250);
+    }, 200);
     return () => clearTimeout(timer);
   }, [session?.id, blocks]);
+
+  // Flush draft immediately on unmount (when user presses back chevron or leaves session)
+  useEffect(() => {
+    return () => {
+      if (sessionRef.current?.id && blocksRef.current.length > 0) {
+        saveWorkoutDraftSync(sessionRef.current.id, blocksRef.current);
+        void saveWorkoutDraft(sessionRef.current.id, blocksRef.current);
+      }
+    };
+  }, []);
 
   // Immediately flush draft to storage when app is backgrounded or tab hidden
   useEffect(() => {
     if (!session?.id) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' && session?.id && blocksRef.current.length > 0) {
-        void saveWorkoutDraft(session.id, blocksRef.current);
+      if (state !== 'active' && sessionRef.current?.id && blocksRef.current.length > 0) {
+        saveWorkoutDraftSync(sessionRef.current.id, blocksRef.current);
+        void saveWorkoutDraft(sessionRef.current.id, blocksRef.current);
       }
     });
 
     const onVisibilityChange = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden' && session?.id && blocksRef.current.length > 0) {
-        void saveWorkoutDraft(session.id, blocksRef.current);
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'hidden' &&
+        sessionRef.current?.id &&
+        blocksRef.current.length > 0
+      ) {
+        saveWorkoutDraftSync(sessionRef.current.id, blocksRef.current);
+        void saveWorkoutDraft(sessionRef.current.id, blocksRef.current);
       }
     };
     if (typeof document !== 'undefined') {
@@ -1659,6 +1726,43 @@ export default function SessionScreen() {
       await discardSession(session.id);
       router.back();
       return;
+    }
+
+    if (session.routineId) {
+      const routine = routines.find((r) => r.id === session.routineId);
+      if (routine) {
+        const currentExerciseNames = blocks.map((b) => b.name);
+        const originalExerciseNames = routine.exercises.map((e) => e.name);
+        const hasChanges =
+          currentExerciseNames.length !== originalExerciseNames.length ||
+          currentExerciseNames.some((n, idx) => n !== originalExerciseNames[idx]);
+
+        if (hasChanges) {
+          const shouldUpdate = await confirm({
+            title: `Update ${routine.name}?`,
+            message: `You customized exercises during this workout. Would you like to update your "${routine.name}" template with today's exercises?`,
+            confirmLabel: 'Update Routine',
+            cancelLabel: 'Keep As Is',
+          });
+          if (shouldUpdate) {
+            const updatedDraft = blocks.map((b) => ({
+              name: b.name,
+              bodyweightBased: b.bodyweightBased,
+              targetSets: b.target?.sets ?? (b.rows.filter((r) => r.setType !== 'warmup').length || 3),
+              targetReps: b.target?.reps ?? null,
+              isCardio: b.isCardio,
+              cardioMode: b.cardioMode,
+              targetTime: b.target?.targetTime ?? null,
+              targetDistance: b.target?.targetDistance ?? null,
+              targetSpeed: b.target?.targetSpeed ?? null,
+              targetIncline: b.target?.targetIncline ?? null,
+              supersetGroup: b.supersetGroup ?? null,
+            }));
+            await setRoutineExercises(routine.id, updatedDraft);
+            notify('Routine updated', `"${routine.name}" template was updated with today's exercises.`);
+          }
+        }
+      }
     }
 
     await clearWorkoutDraft(session.id);

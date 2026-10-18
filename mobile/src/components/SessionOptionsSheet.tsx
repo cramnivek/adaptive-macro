@@ -97,6 +97,12 @@ export const SessionOptionsSheet = ({
           </Tappable>
         </View>
         <Text style={styles.subtitle}>Preferences, rest timer, chime tones, and units.</Text>
+        <View style={styles.autoSaveNotice}>
+          <Ionicons name="checkmark-circle" size={14} color="#34D399" />
+          <Text style={styles.autoSaveNoticeText}>
+            Workout auto-saved locally · Leave or resume anytime without losing progress.
+          </Text>
+        </View>
 
         <ScrollView
           style={styles.scrollArea}
@@ -817,5 +823,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 1.4,
     color: loud.onLoud,
+  },
+  autoSaveNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    backgroundColor: '#064E3B',
+    borderColor: '#059669',
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
+    marginTop: space.xs,
+    marginBottom: space.sm,
+  },
+  autoSaveNoticeText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    color: '#A7F3D0',
+    flex: 1,
   },
 });
