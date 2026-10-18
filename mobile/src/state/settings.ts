@@ -13,11 +13,14 @@ export type UnitSystem = 'metric' | 'imperial';
 export type WeightUnitSetting = 'switchable' | 'kg' | 'lbs';
 export type SpeedUnitSetting = 'switchable' | 'kph' | 'mph';
 export type SpeedUnit = 'kph' | 'mph';
+export type AppPersonality = 'classic' | 'ascend' | 'gymrat';
 
 export interface AppSettings {
   profile: UserProfile;
   activity: ActivityLevel;
   goal: Goal;
+  /** App personality voice preference ('classic' | 'ascend' | 'gymrat'). Defaults to 'ascend'. */
+  personality: AppPersonality;
   /** Optional target weight in kg, used only for the goal projection. */
   goalWeightKg: number | null;
   units: UnitSystem;
@@ -146,6 +149,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restSound: true,
   restChimeChoice: 'chime',
   postWorkouts: false,
+  personality: 'ascend',
   cardBlocks: ALL_BLOCKS,
   cardTemplate: DEFAULT_TEMPLATE,
   cardDepth: false,
@@ -164,6 +168,7 @@ export const SETTINGS_KEY = 'app.settings';
 export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings => ({
   ...DEFAULT_SETTINGS,
   ...stored,
+  personality: stored?.personality ?? DEFAULT_SETTINGS.personality,
   profile: { ...DEFAULT_SETTINGS.profile, ...stored?.profile },
   goal: { ...DEFAULT_SETTINGS.goal, ...stored?.goal },
   foodLookup: { ...DEFAULT_SETTINGS.foodLookup, ...stored?.foodLookup },

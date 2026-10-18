@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { displayWeight } from '../format';
 import { thud } from '../platform/haptics';
-import type { UnitSystem } from '../state/settings';
+import type { UnitSystem, AppPersonality } from '../state/settings';
+import { getEventCopy } from '../copy/personality';
 import { SKEW, font } from '../theme';
 
 export interface PRCelebrationData {
@@ -16,6 +17,7 @@ export interface PRCelebrationData {
 interface PRCelebrationProps {
   data: PRCelebrationData;
   units: UnitSystem;
+  personality?: AppPersonality;
   onDone: () => void;
 }
 
@@ -30,7 +32,7 @@ const PARTICLE_COLORS = [
 
 const NUM_PARTICLES = 30;
 
-export const PRCelebration = ({ data, units, onDone }: PRCelebrationProps) => {
+export const PRCelebration = ({ data, units, personality, onDone }: PRCelebrationProps) => {
   const { width, height } = useWindowDimensions();
   const animProgress = useRef(new Animated.Value(0)).current;
   const bannerScale = useRef(new Animated.Value(0.5)).current;
@@ -198,7 +200,9 @@ export const PRCelebration = ({ data, units, onDone }: PRCelebrationProps) => {
 
           {/* Top Flame Tag */}
           <View style={styles.tagWrap}>
-            <Text style={styles.tagText}>⚡ ALL-TIME RECORD ⚡</Text>
+            <Text style={styles.tagText}>
+              {getEventCopy('workout.pr_banner_tag', { personality, seed: data.exerciseName })}
+            </Text>
           </View>
 
           {/* Lift Details */}
@@ -213,8 +217,16 @@ export const PRCelebration = ({ data, units, onDone }: PRCelebrationProps) => {
           <View style={styles.milestonePill}>
             <Text style={styles.milestoneText}>
               {data.isFirstLog
-                ? `⭐ BASELINE 1RM · ${e1rmFormatted} ${unitLabel}`
-                : `🔥 ${e1rmFormatted} ${unitLabel} EST. 1RM (+${deltaFormatted} ${unitLabel})`}
+                ? getEventCopy('workout.pr_baseline_pill', {
+                    personality,
+                    facts: { e1rm: e1rmFormatted, unit: unitLabel },
+                    seed: data.exerciseName,
+                  })
+                : getEventCopy('workout.pr_delta_pill', {
+                    personality,
+                    facts: { e1rm: e1rmFormatted, unit: unitLabel, delta: deltaFormatted },
+                    seed: data.exerciseName,
+                  })}
             </Text>
           </View>
         </View>

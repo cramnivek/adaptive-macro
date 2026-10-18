@@ -178,13 +178,13 @@ export default function TodayScreen() {
               onPress={() => void markDay(yesterday, true)}
               style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
             >
-              <Text style={[styles.dayActionLabel, { color: colors.text }]}>That was all</Text>
+              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Yes, logged everything</Text>
             </Pressable>
             <Pressable
               onPress={() => void markDay(yesterday, false)}
               style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.warning }]}
             >
-              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Leave it out</Text>
+              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Exclude from estimate</Text>
             </Pressable>
           </View>
         </View>
@@ -227,7 +227,7 @@ export default function TodayScreen() {
           <Card
             key={meal}
             title={MEAL_LABELS[meal]}
-            subtitle={mealEntries.length ? `${Math.round(mealKcal)} kcal` : 'Nothing logged'}
+            subtitle={mealEntries.length ? `${Math.round(mealKcal)} kcal` : 'Ready to log'}
             right={
               /*
                 Every way of adding, on the row itself.

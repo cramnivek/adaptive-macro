@@ -58,6 +58,7 @@ import {
 } from '../../src/ai/weeklyReview';
 import { notify } from '../../src/dialog';
 import { thud } from '../../src/platform/haptics';
+import { getEventCopy } from '../../src/copy/personality';
 
 const WINDOW_DAYS = 90;
 
@@ -398,7 +399,12 @@ export default function TrendsScreen() {
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
-                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>WEEKLY COACH</Text>
+                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>
+                  {getEventCopy('trends.weekly_recap_tag', {
+                    personality: settings.personality,
+                    seed: 'weekly_tag',
+                  })}
+                </Text>
                 <View
                   style={[
                     styles.readyPill,
@@ -413,7 +419,12 @@ export default function TrendsScreen() {
                       { color: coachingReview ? colors.positive : colors.warning },
                     ]}
                   >
-                    {coachingReview ? 'REVIEW READY' : 'TAP TO CHECK IN'}
+                    {coachingReview
+                      ? getEventCopy('trends.weekly_recap_action', {
+                          personality: settings.personality,
+                          seed: 'recap_action',
+                        })
+                      : 'TAP TO CHECK IN'}
                   </Text>
                 </View>
               </View>

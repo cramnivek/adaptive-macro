@@ -1706,7 +1706,7 @@ export default function SessionScreen() {
         </View>
         <Tappable onPress={() => void finish()} scaleTo={0.93}>
           <SlashPanel color={loud.loud} style={styles.finish}>
-            <Text style={styles.finishLabel}>FINISH</Text>
+            <Text style={styles.finishLabel}>FINISH WORKOUT</Text>
           </SlashPanel>
         </Tappable>
       </View>
@@ -2508,6 +2508,7 @@ export default function SessionScreen() {
       <PRCelebration
         data={celebrationPR}
         units={settings.units}
+        personality={settings.personality}
         onDone={() => setCelebrationPR(null)}
       />
     )}

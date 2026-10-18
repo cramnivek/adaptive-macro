@@ -23,6 +23,8 @@ import { Card } from './Card';
 import { CreateJoinSquadModal } from './CreateJoinSquadModal';
 import { FadeIn } from './FadeIn';
 import { Tappable } from './Tappable';
+import { useApp } from '../state/AppStore';
+import { getEventCopy } from '../copy/personality';
 
 interface SquadHubProps {
   user: {
@@ -49,6 +51,7 @@ const getInitials = (name?: string): string => {
 
 export const SquadHub = ({ user }: SquadHubProps) => {
   const { colors } = useTheme();
+  const { settings } = useApp();
   const [squad, setSquad] = useState<TrainingSquad | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -132,10 +135,11 @@ export const SquadHub = ({ user }: SquadHubProps) => {
             <Text style={styles.emptyBadgeText}>TRAINING SQUADS</Text>
           </View>
 
-          <Text style={[styles.emptyHeadline, { color: colors.text }]}>Train Together. Stay Consistent.</Text>
+          <Text style={[styles.emptyHeadline, { color: colors.text }]}>
+            {getEventCopy('social.squad_empty_headline', { personality: settings.personality })}
+          </Text>
           <Text style={styles.emptyDesc}>
-            Form a tight-knit squad of 3–6 lifters. Set a weekly team session target, keep each other
-            accountable, and celebrate PRs together.
+            Team up with 3–6 lifters. Set a weekly session goal, stay accountable, and hype each other's PRs.
           </Text>
 
           <View style={styles.emptyActions}>

@@ -16,6 +16,7 @@ import { type CardBlock, type Placement, placementOrigin } from '../shareCardPla
 import { blocksFor, TEMPLATES, type TemplateId } from '../shareCardTemplate';
 import { subjectOf } from '../platform/depth';
 import { useApp } from '../state/AppStore';
+import { getEventCopy } from '../copy/personality';
 
 /** The card's own size. The preview is a fraction of it, and the sticker's place is kept as a fraction of both. */
 const CARD = { width: 1080, height: 1920 };
@@ -319,7 +320,12 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     <Modal visible={summary !== null && !hidden} animationType="slide" transparent onRequestClose={leave}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
-          <Text style={styles.title}>WORKOUT DONE</Text>
+          <Text style={styles.title}>
+            {getEventCopy('workout.completed', {
+              personality: settings.personality,
+              seed: summary?.title ?? 'workout',
+            })}
+          </Text>
           {summary && (
             <Text style={styles.subtitle}>
               {[
@@ -410,7 +416,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             <TextInput
               value={caption}
               onChangeText={setCaption}
-              placeholder="Say something about it (optional)"
+              placeholder={getEventCopy('social.caption_placeholder', { personality: settings.personality })}
               placeholderTextColor={loud.figureFaint}
               maxLength={MAX_CAPTION}
               multiline
@@ -431,7 +437,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           >
             <SlashPanel color={postLeads ? loud.panel : loud.loud} style={styles.button}>
               <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>
-                {drawing ? 'DRAWING…' : 'SHARE'}
+                {drawing ? 'SAVING…' : getEventCopy('social.share_btn', { personality: settings.personality })}
               </Text>
             </SlashPanel>
           </Tappable>

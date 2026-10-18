@@ -26,6 +26,7 @@ import { postView } from '../../src/social/postPayload';
 import { useSocial } from '../../src/social/session';
 import type { FeedPost } from '../../src/social/types';
 import { useApp } from '../../src/state/AppStore';
+import { getEventCopy } from '../../src/copy/personality';
 import { font, radius, space, useTheme } from '../../src/theme';
 
 type FeedTab = 'following' | 'squad' | 'explore' | 'my-posts';
@@ -371,9 +372,11 @@ export default function SocialScreen() {
           {activeTab === 'following' ? (
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No friend workouts yet</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                {getEventCopy('social.feed_empty_title', { personality: settings.personality })}
+              </Text>
               <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
-                Follow other lifters to see their workouts here, or check out what the community is lifting right now!
+                Follow training partners to see their sessions and PRs, or check out what the community is lifting right now.
               </Text>
               <View style={styles.emptyButtons}>
                 <Button label="Explore Community" onPress={() => handleTabChange('explore')} />
@@ -383,9 +386,11 @@ export default function SocialScreen() {
           ) : activeTab === 'explore' ? (
             <View style={styles.emptyCard}>
               <Ionicons name="globe-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No public workouts yet</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                {getEventCopy('social.explore_empty_title', { personality: settings.personality })}
+              </Text>
               <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
-                Be the first to share your training session with the community! Complete a workout and tap Post.
+                Be the first to share a session today. Log a workout and tap Post to share.
               </Text>
             </View>
           ) : (
@@ -393,7 +398,7 @@ export default function SocialScreen() {
               <Ionicons name="barbell-outline" size={32} color={colors.accent} style={{ marginBottom: space.xs }} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>No posted workouts yet</Text>
               <Text style={[styles.emptyDesc, { color: colors.textMuted }]}>
-                When you finish a workout in the Train tab, tap Post to save and share it here!
+                When you finish a workout in the Train tab, tap Post to save and share it here.
               </Text>
             </View>
           )}

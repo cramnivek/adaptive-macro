@@ -19,6 +19,7 @@ import { displayWeight, formatDate, weightUnit } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
+import { getEventCopy } from '../../src/copy/personality';
 
 /**
  * The training home.
@@ -105,15 +106,25 @@ export default function TrainScreen() {
           <Text style={[styles.note, { color: loud.figureFaint }]}>
             {open.sets.length} sets logged so far.
           </Text>
-          <Button tone="loud" label="Carry on" onPress={() => router.push('/session')} />
+          <Button
+            tone="loud"
+            label={getEventCopy('workout.resume_btn', { personality: settings.personality, seed: open.id })}
+            onPress={() => router.push('/session')}
+          />
         </Card>
       ) : (
-        <Card loud title="Log a workout">
+        <Card
+          loud
+          title={getEventCopy('workout.start_title', {
+            personality: settings.personality,
+            seed: routines.length,
+          })}
+        >
           {/* Each of these starts logging straight away. Routing to a screen
               that asks the same question again is the same tap twice. */}
           <Button
             tone="loud"
-            label="Start a session"
+            label="Start empty workout"
             onPress={() => router.push('/session?start=blank')}
           />
           {routines.map((routine) => (
@@ -147,7 +158,7 @@ export default function TrainScreen() {
                 </Text>
               </View>
               {last?.isRecord && (
-                <Text style={{ fontFamily: font.ui, color: loud.loud, fontSize: 12 }}>best yet</Text>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.loud, fontSize: 11, letterSpacing: 0.8 }}>NEW PR</Text>
               )}
             </Pressable>
           ))}

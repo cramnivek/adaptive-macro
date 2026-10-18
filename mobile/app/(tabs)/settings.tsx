@@ -19,10 +19,12 @@ import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useSocial } from '../../src/social/session';
 import { playChime, primeChime } from '../../src/platform/chime';
-import type { AppSettings, WeightUnitSetting, SpeedUnitSetting } from '../../src/state/settings';
+import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
 import { font, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
+import { isPersonalityV2Enabled } from '../../src/flags';
+import { getEventCopy } from '../../src/copy/personality';
 
 /**
  * A numeric setting that edits as free text and only commits on blur.
@@ -321,6 +323,55 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
+      {isPersonalityV2Enabled() && (
+        <Section title="App Personality">
+          <Card subtitle="How much gym energy should Ascend bring?">
+            <Segmented<AppPersonality>
+              label="Tone"
+              value={settings.personality ?? 'ascend'}
+              onChange={(personality) => void updateSettings({ personality })}
+              options={[
+                { value: 'classic', label: 'Classic' },
+                { value: 'ascend', label: 'Ascend' },
+                { value: 'gymrat', label: 'Gymrat 🔥' },
+              ]}
+            />
+            <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+              {settings.personality === 'classic'
+                ? 'Classic — Keep it clean, straightforward & quiet.'
+                : settings.personality === 'gymrat'
+                  ? 'Gymrat — FULL GYM ARC ENERGY. Big hype, unhinged celebrations & maximum encouragement.'
+                  : 'Ascend (Recommended) — A little hype, a lot of personality. Modern, encouraging, and sharp.'}
+            </Text>
+
+            <View style={[styles.previewBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+              <Text style={[styles.previewHeading, { color: colors.textFaint }]}>LIVE PREVIEW</Text>
+
+              <View style={styles.previewRow}>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Verified PR:</Text>
+                <Text style={[styles.previewVal, { color: colors.accent }]}>
+                  {getEventCopy('workout.pr_verified', { personality: settings.personality, seed: 1 })}
+                </Text>
+              </View>
+
+              <View style={styles.previewRow}>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Workout Done:</Text>
+                <Text style={[styles.previewVal, { color: colors.positive }]}>
+                  {getEventCopy('workout.completed', { personality: settings.personality, seed: 1 })}
+                </Text>
+              </View>
+
+              <View style={styles.previewRow}>
+                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Weekly Recap:</Text>
+                <Text style={[styles.previewVal, { color: colors.text }]}>
+                  {getEventCopy('trends.weekly_recap_ready', { personality: settings.personality, seed: 1 })}
+                </Text>
+              </View>
+            </View>
+          </Card>
+        </Section>
+      )}
+
       <Section title="Units & Training">
         <Card title="Units">
           <Segmented<WeightUnitSetting>
@@ -511,4 +562,32 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionTitle: { fontFamily: font.uiStrong, fontSize: 15 },
+  previewBox: {
+    padding: space.md,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: space.xs,
+    marginTop: space.xs,
+  },
+  previewHeading: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.sm,
+  },
+  previewLabel: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    minWidth: 88,
+  },
+  previewVal: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    flex: 1,
+  },
 });

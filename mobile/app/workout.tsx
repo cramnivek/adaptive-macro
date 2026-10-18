@@ -155,7 +155,7 @@ export default function WorkoutScreen() {
   if (past === null || workout === null || summary === null) {
     return (
       <Screen tone="loud">
-        <Text style={styles.note}>That workout isn't in your log.</Text>
+        <Text style={styles.note}>Workout not found.</Text>
       </Screen>
     );
   }
@@ -231,10 +231,10 @@ export default function WorkoutScreen() {
 
       {/* A post is a snapshot on the server; correcting a set here does not reach it. */}
       <Text style={styles.hint}>
-        Tap a set to correct it. A post of this workout keeps the figures it was posted with.
+        Tap any set to edit. Shared posts keep their original numbers.
       </Text>
 
-      <Button tone="loud" label="Share or post" onPress={() => setSharing(true)} />
+      <Button tone="loud" label="Share workout card" onPress={() => setSharing(true)} />
       <Button
         tone="loud"
         variant="subtle"
