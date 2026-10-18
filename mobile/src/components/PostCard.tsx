@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -507,8 +508,10 @@ export const PostCard = ({
                   }}
                 />
                 <View style={styles.expandPill}>
-                  <Ionicons name="expand-outline" size={13} color="#ffffff" />
-                  <Text style={styles.expandPillText}>Tap to open full card & share</Text>
+                  <Ionicons name="expand-outline" size={12} color="#ffffff" />
+                  <Text style={styles.expandPillText} numberOfLines={1}>
+                    Tap to expand & share
+                  </Text>
                 </View>
               </View>
             </Tappable>
@@ -640,7 +643,12 @@ export const PostCard = ({
               </Tappable>
             </View>
 
-            {/* High-Res Preview */}
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* High-Res Preview */}
             <View style={styles.modalPreview}>
               {displayCardUrl ? (
                 <Image
@@ -789,9 +797,10 @@ export const PostCard = ({
                 </Tappable>
               )}
             </View>
-          </View>
+          </ScrollView>
         </View>
-      </Modal>
+      </View>
+    </Modal>
 
       <TransparentStickerModal
         visible={stickerModalOpen}
@@ -993,7 +1002,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardPreviewFrame: {
-    height: 340,
+    width: '100%',
+    maxWidth: 240,
     aspectRatio: 9 / 16,
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -1008,21 +1018,22 @@ const styles = StyleSheet.create({
   },
   expandPill: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 8,
     alignSelf: 'center',
+    maxWidth: '88%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   expandPillText: {
     fontFamily: font.ui,
-    fontSize: 11,
+    fontSize: 10,
     color: '#ffffff',
   },
   cardLoadingFrame: {
@@ -1090,18 +1101,26 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     maxWidth: 420,
-    maxHeight: '94%',
+    maxHeight: '92%',
     borderRadius: radius['2xl'],
     borderWidth: 1,
-    padding: space.lg,
-    display: 'flex',
-    flexDirection: 'column',
+    paddingTop: space.md,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
+    overflow: 'hidden',
+  },
+  modalScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: space.md,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
   modalHeaderTitle: {
     flex: 1,
@@ -1126,7 +1145,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalPreview: {
-    height: 380,
+    height: 320,
+    maxHeight: 340,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: space.xs,
@@ -1135,6 +1155,7 @@ const styles = StyleSheet.create({
     height: '100%',
     aspectRatio: 9 / 16,
     borderRadius: radius.md,
+    overflow: 'hidden',
   },
   modalLoading: {
     alignItems: 'center',

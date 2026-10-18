@@ -83,6 +83,10 @@ interface FieldProps {
   maxLength?: number;
   /** Highlights border and label in danger red when true or contains an error string */
   error?: boolean | string;
+  /** Optional element (e.g. swap unit icon) rendered right beside the label */
+  labelRight?: React.ReactNode;
+  /** When provided, makes the label and accessory tap-accessible */
+  onPressLabel?: () => void;
 }
 
 export const Field = ({
@@ -99,12 +103,36 @@ export const Field = ({
   autoCorrect = true,
   maxLength,
   error,
+  labelRight,
+  onPressLabel,
 }: FieldProps) => {
   const { colors } = useTheme();
   const hasError = Boolean(error);
+
+  const labelNode = (
+    <View style={styles.labelRow}>
+      <Text numberOfLines={1} style={[styles.fieldLabel, { color: hasError ? colors.danger : colors.textMuted }]}>
+        {label}
+      </Text>
+      {labelRight}
+    </View>
+  );
+
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{label}</Text>
+      {onPressLabel ? (
+        <Pressable
+          onPress={onPressLabel}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={typeof label === 'string' ? label : undefined}
+          style={({ pressed }) => [styles.labelPressable, pressed && styles.labelPressed]}
+        >
+          {labelNode}
+        </Pressable>
+      ) : (
+        labelNode
+      )}
       <View
         style={[
           styles.inputRow,
@@ -319,6 +347,9 @@ const styles = StyleSheet.create({
   buttonSpacing: { marginBottom: space.md },
   buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },
   field: { gap: space.xs, marginBottom: space.md },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  labelPressable: { alignSelf: 'flex-start' },
+  labelPressed: { opacity: 0.6 },
   fieldLabel: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },
   inputRow: {
     flexDirection: 'row',

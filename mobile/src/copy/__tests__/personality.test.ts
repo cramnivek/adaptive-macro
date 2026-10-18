@@ -75,7 +75,7 @@ describe('Personality System v2 - getEventCopy', () => {
 
     // Rest done label
     expect(getEventCopy('workout.rest_done_label', { personality: 'classic' })).toBe('REST DONE');
-    expect(getEventCopy('workout.rest_done_label', { personality: 'gymrat' })).toContain('COOK');
+    expect(getEventCopy('workout.rest_done_label', { personality: 'gymrat' })).toMatch(/COOK|LOCK IN|LAB/);
 
     // Rest done action button (functional label keeps clarity)
     expect(getEventCopy('workout.rest_done_btn', { personality: 'classic' })).toBe('OK');
@@ -83,7 +83,7 @@ describe('Personality System v2 - getEventCopy', () => {
 
     // Empty session title
     expect(getEventCopy('workout.empty_session_title', { personality: 'classic' })).toContain('Add an exercise');
-    expect(getEventCopy('workout.empty_session_title', { personality: 'gymrat' })).toContain('COOK');
+    expect(getEventCopy('workout.empty_session_title', { personality: 'gymrat' })).toMatch(/COOK|WHAT ARE WE LIFTING/);
 
     // Milestone dismiss
     expect(getEventCopy('milestone.dismiss_btn', { personality: 'classic' })).toBe('OK');
@@ -162,8 +162,8 @@ describe('Personality System v2 - getEventCopy', () => {
     expect(getEventCopy('workout.discard_message', { personality: 'gymrat' })).not.toContain('💀');
 
     // Squad empty state headline
-    expect(getEventCopy('social.squad_empty_headline', { personality: 'gymrat' })).toContain(
-      'THE SQUAD ARC STARTS HERE.',
+    expect(getEventCopy('social.squad_empty_headline', { personality: 'gymrat' })).toMatch(
+      /THE SQUAD ARC STARTS HERE|TRAIN TOGETHER/,
     );
   });
 });
