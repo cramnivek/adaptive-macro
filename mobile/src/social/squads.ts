@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { todayISO } from '@adaptive-macros/engine';
+import { supabase } from './client';
+import { messageFor } from './errors';
 import type { SquadActivity, SquadMember, TrainingSquad } from './squadTypes';
 
-const SQUAD_STORAGE_KEY = 'ascend_user_squad';
+export const SQUAD_STORAGE_KEY = 'ascend_user_squad';
 
 /** Gets the ISO date of the Monday for the current week. */
 export const getMondayISO = (dateStr: string = todayISO()): string => {
@@ -119,11 +121,174 @@ export const createDefaultDemoSquad = (user: {
   };
 };
 
+/**
+ * Resolves the authenticated user's ID from Supabase session, or caller param.
+ */
+const getAuthUserId = async (user?: { id: string }): Promise<string | null> => {
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user?.id) return data.session.user.id;
+    } catch {
+      // Offline or session read failure
+    }
+  }
+  return user?.id ?? null;
+};
+
+/**
+ * Fetches the user's active training squad.
+ * Queries Supabase when online and signed in; falls back to AsyncStorage cache.
+ */
 export const getMySquad = async (user?: {
   id: string;
   username: string;
   displayName: string;
 }): Promise<TrainingSquad | null> => {
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        // 1. Check user membership
+        const { data: memberRows, error: mErr } = await supabase
+          .from('squad_members')
+          .select('squad_id, role, joined_at')
+          .eq('user_id', authUserId)
+          .limit(1);
+
+        if (!mErr && memberRows && memberRows.length > 0) {
+          const squadId = memberRows[0].squad_id;
+
+          // 2. Fetch squad details
+          const { data: squadRow, error: sErr } = await supabase
+            .from('squads')
+            .select('id, name, invite_code, weekly_target, created_by, created_at')
+            .eq('id', squadId)
+            .single();
+
+          if (!sErr && squadRow) {
+            // 3. Fetch all members
+            const { data: allMembers } = await supabase
+              .from('squad_members')
+              .select('squad_id, user_id, role, joined_at')
+              .eq('squad_id', squadId);
+
+            const memberUserIds = (allMembers ?? []).map((m) => m.user_id);
+            const profilesMap = new Map<string, { username: string; display_name: string }>();
+
+            if (memberUserIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, username, display_name')
+                .in('id', memberUserIds);
+
+              (profiles ?? []).forEach((p) => {
+                profilesMap.set(p.id, { username: p.username, display_name: p.display_name });
+              });
+            }
+
+            // 4. Fetch recent checkins
+            const weekStart = getMondayISO();
+            const { data: checkinRows } = await supabase
+              .from('squad_checkins')
+              .select('id, squad_id, user_id, workout_id, performed_on, pr_highlight, created_at')
+              .eq('squad_id', squadId)
+              .order('created_at', { ascending: false })
+              .limit(30);
+
+            // 5. Fetch cheers for checkins
+            const checkinIds = (checkinRows ?? []).map((c) => c.id);
+            let cheerRows: { checkin_id: string; user_id: string }[] = [];
+            if (checkinIds.length > 0) {
+              const { data: cheers } = await supabase
+                .from('squad_cheers')
+                .select('checkin_id, user_id')
+                .in('checkin_id', checkinIds);
+              cheerRows = cheers ?? [];
+            }
+
+            // Build members roster
+            const members: SquadMember[] = (allMembers ?? []).map((m) => {
+              const p = profilesMap.get(m.user_id);
+              const memberWeekCheckins = (checkinRows ?? []).filter(
+                (c) => c.user_id === m.user_id && c.performed_on >= weekStart,
+              );
+              const prCheckin = memberWeekCheckins.find((c) => Boolean(c.pr_highlight));
+              return {
+                userId: m.user_id,
+                username: p?.username ?? (m.user_id === authUserId && user?.username ? user.username : 'lifter'),
+                displayName:
+                  p?.display_name ?? (m.user_id === authUserId && user?.displayName ? user.displayName : 'Lifter'),
+                role: m.role as 'owner' | 'member',
+                joinedAt: m.joined_at,
+                weeklySessions: memberWeekCheckins.length,
+                bestPrThisWeek: prCheckin?.pr_highlight ?? null,
+              };
+            });
+
+            // Sort roster: owners first, then most sessions
+            members.sort((a, b) => {
+              if (a.role === 'owner' && b.role !== 'owner') return -1;
+              if (b.role === 'owner' && a.role !== 'owner') return 1;
+              return b.weeklySessions - a.weeklySessions;
+            });
+
+            // Build recent activities
+            const recentActivity: SquadActivity[] = (checkinRows ?? []).map((c) => {
+              const p = profilesMap.get(c.user_id);
+              const matchingCheers = cheerRows.filter((ch) => ch.checkin_id === c.id);
+              const hasCheered = matchingCheers.some((ch) => ch.user_id === authUserId);
+              return {
+                id: c.id,
+                userId: c.user_id,
+                username: p?.username ?? 'lifter',
+                displayName: p?.display_name ?? 'Lifter',
+                type: c.pr_highlight ? 'pr_set' : 'workout_completed',
+                title: c.pr_highlight ? `New PR: ${c.pr_highlight}` : 'Completed workout',
+                detail: c.performed_on ? `Trained on ${c.performed_on}` : undefined,
+                timestamp: c.created_at,
+                cheersCount: matchingCheers.length,
+                hasCheered,
+              };
+            });
+
+            const squad: TrainingSquad = {
+              id: squadRow.id,
+              name: squadRow.name,
+              inviteCode: squadRow.invite_code,
+              weeklyTargetSessions: squadRow.weekly_target,
+              weekStartDate: weekStart,
+              createdBy: squadRow.created_by,
+              createdAt: squadRow.created_at,
+              members,
+              recentActivity,
+            };
+
+            await AsyncStorage.setItem(SQUAD_STORAGE_KEY, JSON.stringify(squad));
+            return squad;
+          }
+        } else if (!mErr && (!memberRows || memberRows.length === 0)) {
+          // If local storage has a real squad (not IRON26 demo), clear it since user left on server
+          const raw = await AsyncStorage.getItem(SQUAD_STORAGE_KEY);
+          if (raw) {
+            try {
+              const cached = JSON.parse(raw) as TrainingSquad;
+              if (cached.inviteCode !== 'IRON26') {
+                await AsyncStorage.removeItem(SQUAD_STORAGE_KEY);
+                return null;
+              }
+            } catch {
+              // Ignore JSON parse error
+            }
+          }
+        }
+      }
+    } catch {
+      // Offline or network error: fall through to AsyncStorage cache
+    }
+  }
+
+  // AsyncStorage fallback
   try {
     const raw = await AsyncStorage.getItem(SQUAD_STORAGE_KEY);
     if (!raw) return null;
@@ -146,6 +311,9 @@ export const getMySquad = async (user?: {
   }
 };
 
+/**
+ * Creates a new training squad on Supabase (with offline/local fallback).
+ */
 export const createSquad = async (params: {
   name: string;
   weeklyTargetSessions?: number;
@@ -159,9 +327,57 @@ export const createSquad = async (params: {
 
   const target = Math.max(6, Math.min(48, weeklyTargetSessions));
   const weekStart = getMondayISO();
+
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        let inviteCode = generateInviteCode();
+        let squadRow = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const { data, error } = await supabase
+            .from('squads')
+            .insert({
+              name: trimmedName,
+              invite_code: inviteCode,
+              weekly_target: target,
+              created_by: authUserId,
+            })
+            .select('id, name, invite_code, weekly_target, created_by, created_at')
+            .single();
+
+          if (!error && data) {
+            squadRow = data;
+            break;
+          }
+          inviteCode = generateInviteCode();
+        }
+
+        if (squadRow) {
+          const { error: memberErr } = await supabase.from('squad_members').insert({
+            squad_id: squadRow.id,
+            user_id: authUserId,
+            role: 'owner',
+          });
+
+          if (memberErr) throw new Error(messageFor(memberErr));
+
+          const liveSquad = await getMySquad(user);
+          if (liveSquad) return liveSquad;
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && !err.message.includes('reach the server')) {
+        throw err;
+      }
+      // If offline, continue to local storage creation
+    }
+  }
+
+  // Local fallback
   const inviteCode = generateInviteCode();
   const squadId = `squad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
   const newSquad: TrainingSquad = {
     id: squadId,
     name: trimmedName,
@@ -201,6 +417,9 @@ export const createSquad = async (params: {
   return newSquad;
 };
 
+/**
+ * Joins an existing training squad by its invite code.
+ */
 export const joinSquadByCode = async (params: {
   inviteCode: string;
   user: { id: string; username: string; displayName: string };
@@ -211,19 +430,63 @@ export const joinSquadByCode = async (params: {
     throw new Error('Please enter a valid 6-character squad code.');
   }
 
-  // If joining demo code "IRON26", return demo squad
+  // Demo squad shortcut
   if (cleanCode === 'IRON26') {
     const demo = createDefaultDemoSquad(user);
     await AsyncStorage.setItem(SQUAD_STORAGE_KEY, JSON.stringify(demo));
     return demo;
   }
 
-  const current = await getMySquad();
-  if (current && current.inviteCode === cleanCode) {
-    return current;
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        // Find squad by invite code
+        const { data: foundSquad, error: findErr } = await supabase
+          .from('squads')
+          .select('id, name, invite_code, weekly_target, created_by, created_at')
+          .eq('invite_code', cleanCode)
+          .maybeSingle();
+
+        if (findErr) throw new Error(messageFor(findErr));
+        if (!foundSquad) {
+          throw new Error(`Squad with code "${cleanCode}" was not found. Please verify the code.`);
+        }
+
+        // Check 6-member squad capacity
+        const { count } = await supabase
+          .from('squad_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('squad_id', foundSquad.id);
+
+        if (count !== null && count >= 6) {
+          throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
+        }
+
+        // Insert membership
+        const { error: joinErr } = await supabase.from('squad_members').upsert({
+          squad_id: foundSquad.id,
+          user_id: authUserId,
+          role: 'member',
+        });
+
+        if (joinErr) throw new Error(messageFor(joinErr));
+
+        const liveSquad = await getMySquad(user);
+        if (liveSquad) return liveSquad;
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        // Rethrow user-facing validation errors
+        if (err.message.includes('not found') || err.message.includes('capacity')) {
+          throw err;
+        }
+      }
+      // If offline/connection failure, fall through to local fallback
+    }
   }
 
-  // Mock finding or creating new squad for this code
+  // Local fallback mock joining
   const squad: TrainingSquad = {
     id: `squad_code_${cleanCode}`,
     name: `Squad ${cleanCode}`,
@@ -272,22 +535,68 @@ export const joinSquadByCode = async (params: {
   return squad;
 };
 
-export const leaveSquad = async (): Promise<void> => {
+/**
+ * Leaves the current training squad.
+ */
+export const leaveSquad = async (user?: { id: string }): Promise<void> => {
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        await supabase.from('squad_members').delete().eq('user_id', authUserId);
+      }
+    } catch {
+      // Ignore network errors on leave
+    }
+  }
   await AsyncStorage.removeItem(SQUAD_STORAGE_KEY);
 };
 
+/**
+ * Records a finished workout session to the squad's shared check-in feed.
+ */
 export const recordSquadWorkoutSession = async (params: {
   title: string;
   prHighlight?: string | null;
   durationMin?: number;
+  workoutId?: string;
   user: { id: string; username: string; displayName: string };
 }): Promise<TrainingSquad | null> => {
-  const squad = await getMySquad();
+  const { title, prHighlight, durationMin, workoutId, user } = params;
+
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        const { data: memberRows } = await supabase
+          .from('squad_members')
+          .select('squad_id')
+          .eq('user_id', authUserId)
+          .limit(1);
+
+        if (memberRows && memberRows.length > 0) {
+          const squadId = memberRows[0].squad_id;
+          await supabase.from('squad_checkins').insert({
+            squad_id: squadId,
+            user_id: authUserId,
+            workout_id: workoutId || `workout_${Date.now()}`,
+            performed_on: todayISO(),
+            pr_highlight: prHighlight?.slice(0, 120) || null,
+          });
+
+          const refreshed = await getMySquad(user);
+          if (refreshed) return refreshed;
+        }
+      }
+    } catch {
+      // Fall through to local fallback
+    }
+  }
+
+  // Local fallback
+  const squad = await getMySquad(user);
   if (!squad) return null;
 
-  const { title, prHighlight, durationMin, user } = params;
-
-  // Increment user sessions
   let memberFound = false;
   squad.members = squad.members.map((m) => {
     if (m.userId === user.id) {
@@ -313,7 +622,6 @@ export const recordSquadWorkoutSession = async (params: {
     });
   }
 
-  // Add activity
   squad.recentActivity.unshift({
     id: `act_${Date.now()}`,
     userId: user.id,
@@ -327,7 +635,6 @@ export const recordSquadWorkoutSession = async (params: {
     hasCheered: true,
   });
 
-  // Keep last 25 activities
   if (squad.recentActivity.length > 25) {
     squad.recentActivity = squad.recentActivity.slice(0, 25);
   }
@@ -336,7 +643,53 @@ export const recordSquadWorkoutSession = async (params: {
   return squad;
 };
 
-export const cheerSquadActivity = async (activityId: string): Promise<TrainingSquad | null> => {
+/**
+ * Toggles a cheer on a squad check-in / activity item.
+ */
+export const cheerSquadActivity = async (
+  activityId: string,
+  user?: { id: string },
+): Promise<TrainingSquad | null> => {
+  if (supabase) {
+    try {
+      const authUserId = await getAuthUserId(user);
+      if (authUserId) {
+        // Check if cheer exists for this checkin
+        const { data: existingCheer } = await supabase
+          .from('squad_cheers')
+          .select('id')
+          .eq('checkin_id', activityId)
+          .eq('user_id', authUserId)
+          .maybeSingle();
+
+        if (existingCheer) {
+          await supabase.from('squad_cheers').delete().eq('id', existingCheer.id);
+        } else {
+          // Find checkin to get squad_id
+          const { data: checkin } = await supabase
+            .from('squad_checkins')
+            .select('squad_id')
+            .eq('id', activityId)
+            .maybeSingle();
+
+          if (checkin) {
+            await supabase.from('squad_cheers').insert({
+              squad_id: checkin.squad_id,
+              checkin_id: activityId,
+              user_id: authUserId,
+            });
+          }
+        }
+
+        const refreshed = await getMySquad();
+        if (refreshed) return refreshed;
+      }
+    } catch {
+      // Fall through to local fallback
+    }
+  }
+
+  // Local fallback
   const squad = await getMySquad();
   if (!squad) return null;
 
@@ -344,7 +697,7 @@ export const cheerSquadActivity = async (activityId: string): Promise<TrainingSq
     if (act.id === activityId) {
       return {
         ...act,
-        cheersCount: act.hasCheered ? act.cheersCount - 1 : act.cheersCount + 1,
+        cheersCount: act.hasCheered ? Math.max(0, act.cheersCount - 1) : act.cheersCount + 1,
         hasCheered: !act.hasCheered,
       };
     }

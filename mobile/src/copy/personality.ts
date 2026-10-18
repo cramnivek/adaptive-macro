@@ -93,7 +93,7 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['FINISH WORKOUT'],
       ascend: ['FINISH WORKOUT'],
-      gymrat: ['LOCK IN WORKOUT'],
+      gymrat: ['FINISH WORKOUT'],
     },
   },
   'workout.start_title': {
@@ -141,7 +141,7 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['OK'],
       ascend: ['READY', 'LET\'S GO'],
-      gymrat: ['COOK 🗣️', 'LOCKED IN 🔥'],
+      gymrat: ['LET\'S GO 🔥', 'LOCKED IN 🔥'],
     },
   },
   'workout.discard_title': {
@@ -149,7 +149,7 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['Nothing logged'],
       ascend: ['Nothing logged'],
-      gymrat: ['NOTHING LOGGED YET'],
+      gymrat: ['NO SETS LOGGED'],
     },
   },
   'workout.discard_message': {
@@ -157,7 +157,7 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['No sets were ticked. Discard this session?'],
       ascend: ['No sets were recorded yet. Discard this session?'],
-      gymrat: ['Zero sets recorded. Discarding the session already? 💀'],
+      gymrat: ['Zero sets recorded. Discard this session?'],
     },
   },
   'workout.impact_done': {
@@ -297,7 +297,7 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['Train together. Hit your goals.'],
       ascend: ['Train together. Stay consistent.'],
-      gymrat: ['SQUAD ARC: NO MISSED SESSIONS.', 'TRAIN TOGETHER. HIT NEW PRS. 🔥'],
+      gymrat: ['THE SQUAD ARC STARTS HERE.', 'TRAIN TOGETHER. HIT NEW PRS. 🔥'],
     },
   },
 
@@ -328,16 +328,20 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
   },
 };
 
+export type PersonalityEventId = keyof typeof EVENT_VARIANTS;
+
 /**
  * Resolves an event copy string based on the developer feature flag,
  * user's personality preference, context guardrails, and deterministic seed.
  */
 export const getEventCopy = (
-  eventId: string,
+  eventId: PersonalityEventId | (string & {}),
   options: CopyEventOptions = {},
 ): string => {
-  const entry = EVENT_VARIANTS[eventId];
-  if (!entry) return '';
+  const entry = EVENT_VARIANTS[eventId as keyof typeof EVENT_VARIANTS];
+  if (!entry) {
+    return options.facts ? interpolate(eventId, options.facts) : eventId;
+  }
 
   // 1. If rollout flag is OFF, always return Classic (legacy neutral)
   if (!isPersonalityV2Enabled()) {
@@ -345,9 +349,15 @@ export const getEventCopy = (
     return interpolate(classicList[0] ?? '', options.facts);
   }
 
-  // 2. Sensitive and System messages are strictly neutral regardless of user preference
-  const context = options.context ?? entry.context;
-  if (context === 'sensitive' || context === 'system') {
+  // 2. Sensitive and System messages are strictly neutral regardless of user preference.
+  // Authoritative guardrail: caller options CANNOT bypass an entry's registered sensitive/system context.
+  const isGuarded =
+    entry.context === 'sensitive' ||
+    entry.context === 'system' ||
+    options.context === 'sensitive' ||
+    options.context === 'system';
+
+  if (isGuarded) {
     const list = entry.variants.classic;
     return interpolate(list[0] ?? '', options.facts);
   }
@@ -359,7 +369,9 @@ export const getEventCopy = (
       : 'ascend';
 
   const variants = entry.variants[personality] ?? entry.variants.ascend ?? entry.variants.classic;
-  if (!variants || variants.length === 0) return '';
+  if (!variants || variants.length === 0) {
+    return options.facts ? interpolate(eventId, options.facts) : eventId;
+  }
 
   // 4. Deterministic variant selection using hash of seed
   const index = hashSeed(options.seed) % variants.length;

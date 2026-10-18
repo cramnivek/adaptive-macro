@@ -77,9 +77,9 @@ describe('Personality System v2 - getEventCopy', () => {
     expect(getEventCopy('workout.rest_done_label', { personality: 'classic' })).toBe('REST DONE');
     expect(getEventCopy('workout.rest_done_label', { personality: 'gymrat' })).toContain('COOK');
 
-    // Rest done action button
+    // Rest done action button (functional label keeps clarity)
     expect(getEventCopy('workout.rest_done_btn', { personality: 'classic' })).toBe('OK');
-    expect(getEventCopy('workout.rest_done_btn', { personality: 'gymrat' })).toContain('COOK');
+    expect(getEventCopy('workout.rest_done_btn', { personality: 'gymrat' })).toMatch(/LET'S GO|LOCKED IN/);
 
     // Empty session title
     expect(getEventCopy('workout.empty_session_title', { personality: 'classic' })).toContain('Add an exercise');
@@ -88,5 +88,54 @@ describe('Personality System v2 - getEventCopy', () => {
     // Milestone dismiss
     expect(getEventCopy('milestone.dismiss_btn', { personality: 'classic' })).toBe('OK');
     expect(getEventCopy('milestone.dismiss_btn', { personality: 'gymrat' })).toContain('W');
+  });
+
+  it('strictly enforces authoritative sensitivity even if caller passes context: "routine"', () => {
+    vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
+
+    // Caller attempts to bypass sensitive context
+    const overridden = getEventCopy('sensitive.calorie_adj_title', {
+      personality: 'gymrat',
+      context: 'routine',
+    });
+    expect(overridden).toBe('Review calorie target change');
+
+    // Caller attempts to bypass system context
+    const sysOverridden = getEventCopy('system.upload_failed', {
+      personality: 'gymrat',
+      context: 'achievement',
+    });
+    expect(sysOverridden).toBe("Upload didn't go through. Your card is saved on this device.");
+  });
+
+  it('returns a visible fallback string rather than blank for unknown event IDs', () => {
+    vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
+
+    const unknown = getEventCopy('custom.unknown_event_id');
+    expect(unknown).toBe('custom.unknown_event_id');
+
+    const unknownWithFacts = getEventCopy('custom.greet_{name}', {
+      facts: { name: 'Alex' },
+    });
+    expect(unknownWithFacts).toBe('custom.greet_Alex');
+  });
+
+  it('keeps functional action buttons clear and free of guilt/shaming in Gymrat mode', () => {
+    vi.spyOn(flags, 'isPersonalityV2Enabled').mockReturnValue(true);
+
+    // Finish workout action button
+    expect(getEventCopy('workout.finish_btn', { personality: 'gymrat' })).toBe('FINISH WORKOUT');
+
+    // Discard workout dialog
+    expect(getEventCopy('workout.discard_title', { personality: 'gymrat' })).toBe('NO SETS LOGGED');
+    expect(getEventCopy('workout.discard_message', { personality: 'gymrat' })).toBe(
+      'Zero sets recorded. Discard this session?',
+    );
+    expect(getEventCopy('workout.discard_message', { personality: 'gymrat' })).not.toContain('💀');
+
+    // Squad empty state headline
+    expect(getEventCopy('social.squad_empty_headline', { personality: 'gymrat' })).toContain(
+      'THE SQUAD ARC STARTS HERE.',
+    );
   });
 });

@@ -16,7 +16,15 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+const mockSupabase = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('../client', () => ({
+  get supabase() {
+    return mockSupabase.current;
+  },
+}));
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { todayISO } from '@adaptive-macros/engine';
 import {
   cheerSquadActivity,
   createDefaultDemoSquad,
@@ -133,5 +141,176 @@ describe('Training Squads service', () => {
     expect(await getMySquad()).not.toBeNull();
     await leaveSquad();
     expect(await getMySquad()).toBeNull();
+  });
+});
+
+describe('Training Squads - Supabase Multiplayer integration', () => {
+  const mockUser = {
+    id: 'user-uuid-1',
+    username: 'multi_lifter',
+    displayName: 'Multi Lifter',
+  };
+
+  const fakeSquad = {
+    id: 'squad-uuid-1234',
+    name: 'Apex Lifters',
+    invite_code: 'APEX26',
+    weekly_target: 18,
+    created_by: mockUser.id,
+    created_at: new Date().toISOString(),
+  };
+
+  const fakeMembers = [
+    { squad_id: fakeSquad.id, user_id: mockUser.id, role: 'owner', joined_at: new Date().toISOString() },
+    { squad_id: fakeSquad.id, user_id: 'user-uuid-2', role: 'member', joined_at: new Date().toISOString() },
+  ];
+
+  const fakeProfiles = [
+    { id: mockUser.id, username: mockUser.username, display_name: mockUser.displayName },
+    { id: 'user-uuid-2', username: 'partner_joe', display_name: 'Partner Joe' },
+  ];
+
+  const fakeCheckins = [
+    {
+      id: 'checkin-uuid-101',
+      squad_id: fakeSquad.id,
+      user_id: 'user-uuid-2',
+      workout_id: 'w-1',
+      performed_on: todayISO(),
+      pr_highlight: 'Bench 120kg',
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  const fakeCheers = [{ checkin_id: 'checkin-uuid-101', user_id: mockUser.id }];
+
+  beforeEach(() => {
+    mockSupabase.current = null;
+  });
+
+  it('fetches squad from Supabase, aggregates weekly sessions, and maps checkins/cheers', async () => {
+    mockSupabase.current = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: mockUser.id } } },
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'squad_members') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue({ data: [fakeMembers[0]], error: null }),
+            // for all members query:
+            then: vi.fn((resolve: (val: any) => void) =>
+              resolve({ data: fakeMembers, error: null }),
+            ),
+          };
+        }
+        if (table === 'squads') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({ data: fakeSquad, error: null }),
+          };
+        }
+        if (table === 'profiles') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockResolvedValue({ data: fakeProfiles, error: null }),
+          };
+        }
+        if (table === 'squad_checkins') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            order: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue({ data: fakeCheckins, error: null }),
+          };
+        }
+        if (table === 'squad_cheers') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockResolvedValue({ data: fakeCheers, error: null }),
+          };
+        }
+        return {
+          select: vi.fn().mockReturnThis(),
+        };
+      }),
+    };
+
+    const squad = await getMySquad(mockUser);
+    expect(squad).not.toBeNull();
+    expect(squad?.id).toBe(fakeSquad.id);
+    expect(squad?.name).toBe('Apex Lifters');
+    expect(squad?.members).toHaveLength(2);
+    expect(squad?.recentActivity).toHaveLength(1);
+    expect(squad?.recentActivity[0].hasCheered).toBe(true);
+    expect(squad?.recentActivity[0].cheersCount).toBe(1);
+  });
+
+  it('enforces 6-member capacity check when joining squad on Supabase', async () => {
+    mockSupabase.current = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: mockUser.id } } },
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'squads') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: fakeSquad, error: null }),
+          };
+        }
+        if (table === 'squad_members') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({ count: 6, error: null }),
+          };
+        }
+        return {
+          select: vi.fn().mockReturnThis(),
+        };
+      }),
+    };
+
+    await expect(
+      joinSquadByCode({
+        inviteCode: 'APEX26',
+        user: mockUser,
+      }),
+    ).rejects.toThrow(/full capacity/);
+  });
+
+  it('throws error when squad code does not exist on Supabase', async () => {
+    mockSupabase.current = {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({
+          data: { session: { user: { id: mockUser.id } } },
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'squads') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          };
+        }
+        return {
+          select: vi.fn().mockReturnThis(),
+        };
+      }),
+    };
+
+    await expect(
+      joinSquadByCode({
+        inviteCode: 'UNKNOWN',
+        user: mockUser,
+      }),
+    ).rejects.toThrow(/was not found/);
   });
 });

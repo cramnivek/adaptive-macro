@@ -101,7 +101,7 @@ export const CreateJoinSquadModal = ({
           <View style={styles.titleGroup}>
             <View style={styles.badge}>
               <Ionicons name="shield-checkmark" size={14} color="#00E5FF" />
-              <Text style={styles.badgeText}>ASCEND SQUADS</Text>
+              <Text style={styles.badgeText}>ASCEND SQUADS (BETA)</Text>
             </View>
             <Text style={[styles.title, { color: colors.text }]}>
               {tab === 'create' ? 'Start a Training Squad' : 'Join a Training Squad'}

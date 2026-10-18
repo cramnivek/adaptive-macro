@@ -132,7 +132,7 @@ export const SquadHub = ({ user }: SquadHubProps) => {
         <Card style={styles.emptyCard}>
           <View style={styles.emptyBadge}>
             <Ionicons name="shield-checkmark" size={16} color="#00E5FF" />
-            <Text style={styles.emptyBadgeText}>TRAINING SQUADS</Text>
+            <Text style={styles.emptyBadgeText}>TRAINING SQUADS (BETA PREVIEW)</Text>
           </View>
 
           <Text style={[styles.emptyHeadline, { color: colors.text }]}>
@@ -183,7 +183,7 @@ export const SquadHub = ({ user }: SquadHubProps) => {
             <View style={styles.bannerTagRow}>
               <View style={styles.squadBadge}>
                 <Ionicons name="shield-checkmark" size={13} color="#00E5FF" />
-                <Text style={styles.squadBadgeText}>ASCEND / SQUAD CHALLENGE</Text>
+                <Text style={styles.squadBadgeText}>ASCEND / SQUAD CHALLENGE (BETA)</Text>
               </View>
               <Pressable onPress={handleCopyCode} style={styles.invitePill}>
                 <Ionicons name="copy-outline" size={12} color="#00E5FF" />
