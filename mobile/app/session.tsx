@@ -874,6 +874,63 @@ export default function SessionScreen() {
       }),
     );
 
+  const removeRow = async (blockIndex: number, rowIndex: number) => {
+    const block = blocks[blockIndex];
+    if (!block) return;
+    const row = block.rows[rowIndex];
+    if (!row) return;
+
+    if (row.done && row.id) {
+      const setLabel = row.setType === 'warmup' ? 'Warm-up Set' : `Set ${rowIndex + 1}`;
+      const sure = await confirm({
+        title: `Delete ${setLabel}?`,
+        message: 'This logged set will be removed from your workout history.',
+        confirmLabel: 'Delete Set',
+        destructive: true,
+      });
+      if (!sure) return;
+      await deleteSet(row.id);
+      setSession(await activeSession());
+    }
+
+    thud('light');
+    setBlocks((current) =>
+      current.map((b, bi) => {
+        if (bi !== blockIndex) return b;
+        const remaining = b.rows.filter((_, ri) => ri !== rowIndex);
+        if (remaining.length === 0) {
+          const freshRow: Row = b.isCardio
+            ? {
+                key: newKey(),
+                id: null,
+                weight: '',
+                reps: '0',
+                setType: 'normal',
+                rpe: null,
+                done: false,
+                isCardio: true,
+                cardioMode: b.cardioMode,
+                speed: '',
+                incline: '',
+                time: '',
+                distance: '',
+              }
+            : {
+                key: newKey(),
+                id: null,
+                weight: '',
+                reps: '0',
+                setType: 'normal',
+                rpe: null,
+                done: false,
+              };
+          return { ...b, rows: [freshRow] };
+        }
+        return { ...b, rows: remaining };
+      }),
+    );
+  };
+
   const toggleBlockCardioMode = async (blockIndex: number, mode: CardioMode) => {
     const block = blocks[blockIndex];
     if (!block) return;
@@ -2121,6 +2178,7 @@ export default function SessionScreen() {
                 <Text style={[styles.col, styles.colNum]}>REPS</Text>
                 <Text style={[styles.col, styles.colRpe]}>RPE</Text>
                 <View style={styles.colTick} />
+                <View style={styles.colDel} />
               </View>
             )}
             {block.isCardio && block.cardioMode === 'treadmill' && (
@@ -2131,6 +2189,7 @@ export default function SessionScreen() {
                 <Text style={[styles.col, styles.colCardioInc]}>INCL%</Text>
                 <Text style={[styles.col, styles.colCardioTime]}>MIN</Text>
                 <View style={styles.colTick} />
+                <View style={styles.colDel} />
               </View>
             )}
             {block.isCardio && block.cardioMode === 'outside' && (
@@ -2140,6 +2199,7 @@ export default function SessionScreen() {
                 <Text style={[styles.col, styles.colCardioDist]}>KM</Text>
                 <Text style={[styles.col, styles.colCardioTimeWide]}>MIN</Text>
                 <View style={styles.colTick} />
+                <View style={styles.colDel} />
               </View>
             )}
 
@@ -2186,8 +2246,14 @@ export default function SessionScreen() {
                             setType: row.setType === 'normal' ? 'warmup' : 'normal',
                           })
                         }
+                        onLongPress={() => void removeRow(blockIndex, rowIndex)}
                         scaleTo={block.isCardio ? 1 : 0.8}
                         style={styles.colSet}
+                        accessibilityLabel={
+                          row.setType === 'warmup'
+                            ? 'Warmup set. Tap to change type, long press to delete.'
+                            : `Set ${rowIndex + 1}. Tap to change type, long press to delete.`
+                        }
                       >
                         <Text
                           style={[
@@ -2404,6 +2470,20 @@ export default function SessionScreen() {
                         </Text>
                       </Tappable>
 
+                      <Tappable
+                        onPress={() => void removeRow(blockIndex, rowIndex)}
+                        scaleTo={0.82}
+                        style={styles.colDel}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete set ${rowIndex + 1}`}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={15}
+                          color={row.done ? 'rgba(255,255,255,0.7)' : loud.figureFaint}
+                        />
+                      </Tappable>
+
                       {landed?.rowKey === row.key && (
                         <ImpactFrame content={landed.content} onDone={clearLanded} />
                       )}
@@ -2477,9 +2557,23 @@ export default function SessionScreen() {
                 );
               })}
 
-            <Tappable onPress={() => addRow(blockIndex)} style={styles.addSet} scaleTo={0.98}>
-              <Text style={styles.addSetLabel}>{block.isCardio ? '+ ADD INTERVAL' : '+ ADD SET'}</Text>
-            </Tappable>
+            <View style={styles.addSetRow}>
+              <Tappable onPress={() => addRow(blockIndex)} style={[styles.addSet, { flex: 1 }]} scaleTo={0.98}>
+                <Text style={styles.addSetLabel}>{block.isCardio ? '+ ADD INTERVAL' : '+ ADD SET'}</Text>
+              </Tappable>
+              {block.rows.length > 1 && (
+                <Tappable
+                  onPress={() => void removeRow(blockIndex, block.rows.length - 1)}
+                  style={styles.removeSetBtn}
+                  scaleTo={0.96}
+                  accessibilityRole="button"
+                  accessibilityLabel={block.isCardio ? 'Remove last interval' : 'Remove last set'}
+                >
+                  <Ionicons name="trash-outline" size={13} color={loud.warn} style={{ marginRight: 4 }} />
+                  <Text style={styles.removeSetLabel}>− REMOVE</Text>
+                </Tappable>
+              )}
+            </View>
           </View>
         </FadeIn>
       );
@@ -2909,16 +3003,17 @@ const styles = StyleSheet.create({
   },
   columns: { flexDirection: 'row', alignItems: 'center', paddingBottom: 5 },
   col: { fontFamily: font.display, fontSize: 9, letterSpacing: 1.4, color: loud.figureFaint },
-  colSet: { width: 34, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },
+  colSet: { width: 32, textAlign: 'center', alignItems: 'center', justifyContent: 'center' },
   colPrev: { flex: 1, textAlign: 'center' },
-  colNum: { width: 64, textAlign: 'center', marginHorizontal: 3 },
-  colCardioSpd: { width: 54, textAlign: 'center', marginHorizontal: 2 },
-  colCardioInc: { width: 44, textAlign: 'center', marginHorizontal: 2 },
-  colCardioTime: { width: 52, textAlign: 'center', marginHorizontal: 2 },
-  colCardioDist: { width: 64, textAlign: 'center', marginHorizontal: 3 },
-  colCardioTimeWide: { width: 64, textAlign: 'center', marginHorizontal: 3 },
-  colRpe: { width: 44, alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
-  colTick: { width: 40, alignItems: 'center', justifyContent: 'center' },
+  colNum: { width: 58, textAlign: 'center', marginHorizontal: 2 },
+  colCardioSpd: { width: 50, textAlign: 'center', marginHorizontal: 2 },
+  colCardioInc: { width: 42, textAlign: 'center', marginHorizontal: 2 },
+  colCardioTime: { width: 48, textAlign: 'center', marginHorizontal: 2 },
+  colCardioDist: { width: 58, textAlign: 'center', marginHorizontal: 2 },
+  colCardioTimeWide: { width: 58, textAlign: 'center', marginHorizontal: 2 },
+  colRpe: { width: 40, alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+  colTick: { width: 38, alignItems: 'center', justifyContent: 'center' },
+  colDel: { width: 30, alignItems: 'center', justifyContent: 'center' },
 
   cardioModeRow: {
     flexDirection: 'row',
@@ -3080,6 +3175,12 @@ const styles = StyleSheet.create({
   // a fourth colour, so they are the same white at low opacity.
   inputOnLoud: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)' },
 
+  addSetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: 4,
+  },
   addSet: {
     minHeight: TOUCH_TARGET - 6,
     alignItems: 'center',
@@ -3088,9 +3189,20 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
     borderColor: loud.rule,
-    marginTop: 4,
   },
   addSetLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.6, color: loud.loud },
+  removeSetBtn: {
+    minHeight: TOUCH_TARGET - 6,
+    paddingHorizontal: space.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(235, 87, 87, 0.35)',
+    backgroundColor: 'rgba(235, 87, 87, 0.08)',
+  },
+  removeSetLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 1.2, color: loud.warn },
 
   slab: {
     minHeight: TOUCH_TARGET,
