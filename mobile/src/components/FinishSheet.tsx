@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: font.figure, fontSize: 14, color: loud.figureMuted, marginTop: 4 },
   // A story is 9:16; the preview keeps that shape at a size that leaves the buttons on screen.
   preview: { height: 360, alignItems: 'center', justifyContent: 'center', marginVertical: space.md },
-  image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.lg },
+  image: { height: 360, aspectRatio: 9 / 16, borderRadius: radius.lg, overflow: 'hidden' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: loud.ground },
   // The way into the editor. A full touch target, centred, and it says what is
   // behind it: the first person to use the composer asked where the customising

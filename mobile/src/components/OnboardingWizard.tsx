@@ -35,7 +35,12 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [selectedSpotlight, setSelectedSpotlight] = useState<DashboardSpotlight>(
     settings.dashboardSpotlight ?? 'balanced',
   );
-  const [units, setUnits] = useState<UnitSystem>(settings.units);
+  const [heightUnit, setHeightUnit] = useState<'cm' | 'in'>(
+    settings.units === 'imperial' ? 'in' : 'cm',
+  );
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lb'>(
+    settings.units === 'imperial' ? 'lb' : 'kg',
+  );
   const [sex, setSex] = useState<Sex>(settings.profile.sex);
   const [ageStr, setAgeStr] = useState(
     settings.onboarded ? String(settings.profile.age) : '',
@@ -45,6 +50,38 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [activity, setActivity] = useState<ActivityLevel>(settings.activity);
   const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
   const [attempted, setAttempted] = useState(false);
+
+  const toggleHeightUnit = () => {
+    thud('light');
+    const next = heightUnit === 'cm' ? 'in' : 'cm';
+    setHeightUnit(next);
+    if (heightStr.trim()) {
+      const h = Number.parseFloat(heightStr);
+      if (Number.isFinite(h) && h > 0) {
+        if (next === 'in') {
+          setHeightStr(String(Math.round(h / 2.54)));
+        } else {
+          setHeightStr(String(Math.round(h * 2.54)));
+        }
+      }
+    }
+  };
+
+  const toggleWeightUnit = () => {
+    thud('light');
+    const next = weightUnit === 'kg' ? 'lb' : 'kg';
+    setWeightUnit(next);
+    if (weightStr.trim()) {
+      const w = Number.parseFloat(weightStr);
+      if (Number.isFinite(w) && w > 0) {
+        if (next === 'lb') {
+          setWeightStr((w * 2.20462).toFixed(1));
+        } else {
+          setWeightStr((w / 2.20462).toFixed(1));
+        }
+      }
+    }
+  };
 
   const parsedAge = Math.round(Number.parseFloat(ageStr));
   const parsedHeight = Number.parseFloat(heightStr);
@@ -75,9 +112,10 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       return;
     }
     thud('heavy');
-    const weightKg = units === 'imperial' ? weightNum / 2.20462 : weightNum;
+    const weightKg = weightUnit === 'lb' ? weightNum / 2.20462 : weightNum;
     const roundedWeightKg = Math.round(weightKg * 100) / 100;
-    const heightCm = Math.round(units === 'imperial' ? heightNum * 2.54 : heightNum);
+    const heightCm = Math.round(heightUnit === 'in' ? heightNum * 2.54 : heightNum);
+    const effectiveUnits: UnitSystem = weightUnit === 'lb' ? 'imperial' : 'metric';
 
     const patch = {
       onboarded: true,
@@ -85,8 +123,8 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
       dashboardSpotlight: selectedSpotlight,
       missionOnboardingDismissed: true,
       featureOnboardingDismissed: true,
-      units,
-      workoutUnits: units,
+      units: effectiveUnits,
+      workoutUnits: effectiveUnits,
       activity,
       profile: {
         ...settings.profile,
@@ -215,41 +253,6 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
             </>
           ) : (
             <View style={styles.form}>
-              {/* Unit System */}
-              <Segmented<UnitSystem>
-                label="UNITS"
-                value={units}
-                onChange={(u) => {
-                  thud('light');
-                  const prev = units;
-                  setUnits(u);
-                  if (heightStr.trim()) {
-                    const h = Number.parseFloat(heightStr);
-                    if (Number.isFinite(h) && h > 0) {
-                      if (u === 'imperial' && prev === 'metric') {
-                        setHeightStr(String(Math.round(h / 2.54)));
-                      } else if (u === 'metric' && prev === 'imperial') {
-                        setHeightStr(String(Math.round(h * 2.54)));
-                      }
-                    }
-                  }
-                  if (weightStr.trim()) {
-                    const w = Number.parseFloat(weightStr);
-                    if (Number.isFinite(w) && w > 0) {
-                      if (u === 'imperial' && prev === 'metric') {
-                        setWeightStr((w * 2.20462).toFixed(1));
-                      } else if (u === 'metric' && prev === 'imperial') {
-                        setWeightStr((w / 2.20462).toFixed(1));
-                      }
-                    }
-                  }
-                }}
-                options={[
-                  { value: 'metric', label: 'Metric (kg · cm)' },
-                  { value: 'imperial', label: 'Imperial (lb · in)' },
-                ]}
-              />
-
               {/* Biological Sex */}
               <Segmented<Sex>
                 label="BIOLOGICAL SEX"
@@ -278,21 +281,25 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
                 </View>
                 <View style={styles.col}>
                   <Field
-                    label={`HEIGHT (${units === 'imperial' ? 'IN' : 'CM'})`}
+                    label={`HEIGHT (${heightUnit.toUpperCase()})`}
+                    labelRight={<Ionicons name="swap-horizontal" size={13} color={loud.loud} />}
+                    onPressLabel={toggleHeightUnit}
                     value={heightStr}
                     onChangeText={setHeightStr}
                     keyboardType="numeric"
-                    placeholder={units === 'imperial' ? '68' : '175'}
+                    placeholder={heightUnit === 'in' ? '68' : '175'}
                     error={isHeightInvalid}
                   />
                 </View>
                 <View style={styles.col}>
                   <Field
-                    label={`WEIGHT (${units === 'imperial' ? 'LB' : 'KG'})`}
+                    label={`WEIGHT (${weightUnit.toUpperCase()})`}
+                    labelRight={<Ionicons name="swap-horizontal" size={13} color={loud.loud} />}
+                    onPressLabel={toggleWeightUnit}
                     value={weightStr}
                     onChangeText={setWeightStr}
                     keyboardType="numeric"
-                    placeholder={units === 'imperial' ? '155' : '70'}
+                    placeholder={weightUnit === 'lb' ? '155' : '70'}
                     error={isWeightInvalid}
                   />
                 </View>

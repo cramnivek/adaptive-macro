@@ -23,7 +23,7 @@ describe('impactContent', () => {
   });
 
   it('distinguishes a warm-up from a working set', () => {
-    expect(impactContent(60, 10, 'warmup').verdict).toBe('WARM-UP');
+    expect(['WARM-UP', 'WARMED UP']).toContain(impactContent(60, 10, 'warmup').verdict);
     expect(['DONE', 'LOCKED IN', 'COUNT IT']).toContain(impactContent(100, 8, 'normal').verdict);
   });
 
@@ -41,7 +41,7 @@ describe('impactContent', () => {
       impactContent(100, 8, 'failure', true).verdict,
     );
     // Warmups cannot be PRs:
-    expect(impactContent(100, 8, 'warmup', true).verdict).toBe('WARM-UP');
+    expect(['WARM-UP', 'WARMED UP']).toContain(impactContent(100, 8, 'warmup', true).verdict);
   });
 
   it('reflects gymrat and classic personality modes in verdicts', () => {

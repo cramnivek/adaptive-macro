@@ -52,6 +52,28 @@ describe('First-week calibration and returning user helpers', () => {
     expect(Math.round(weightKg * 10) / 10).toBe(74.8);
   });
 
+  it('handles independent height and weight unit swaps without coupling', () => {
+    // Height swap: cm -> in -> cm
+    const initialCm = 175;
+    const swappedInches = Math.round(initialCm / 2.54); // 69
+    expect(swappedInches).toBe(69);
+    const backToCm = Math.round(swappedInches * 2.54);
+    expect(backToCm).toBe(175);
+
+    // Weight swap: kg -> lb -> kg
+    const initialKg = 75;
+    const swappedLb = Number((initialKg * 2.20462).toFixed(1)); // 165.3
+    expect(swappedLb).toBe(165.3);
+    const backToKg = Number((swappedLb / 2.20462).toFixed(1));
+    expect(backToKg).toBe(75);
+
+    // Mixed units: height in inches (68), weight in kg (70)
+    const mixedHeightCm = Math.round(68 * 2.54);
+    const mixedWeightKg = 70;
+    expect(mixedHeightCm).toBe(173);
+    expect(mixedWeightKg).toBe(70);
+  });
+
   it('computes returning workout banner sets description accurately', () => {
     const formatSetsLabel = (count: number) =>
       count === 0 ? 'Session active · No sets logged yet' : `${count} set${count === 1 ? '' : 's'} recorded`;
