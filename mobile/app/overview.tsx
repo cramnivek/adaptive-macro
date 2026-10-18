@@ -321,7 +321,7 @@ export default function OverviewScreen() {
           }}
           style={styles.coachingBanner}
           accessibilityRole="button"
-          accessibilityLabel="Open Weekly AI Coaching Review"
+          accessibilityLabel="Open Weekly Coach Review"
         >
           <View style={styles.coachingBannerLeft}>
             <View style={styles.coachingIconCircle}>
@@ -329,7 +329,7 @@ export default function OverviewScreen() {
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
-                <Text style={styles.coachingTag}>WEEKLY AI COACH</Text>
+                <Text style={styles.coachingTag}>WEEKLY COACH</Text>
                 <View
                   style={[
                     styles.readyPill,
@@ -342,7 +342,7 @@ export default function OverviewScreen() {
                       coachingReview ? styles.readyTextActive : styles.readyTextPending,
                     ]}
                   >
-                    {coachingReview ? 'REVIEW READY' : 'TAP TO GENERATE'}
+                    {coachingReview ? 'REVIEW READY' : 'TAP TO CHECK IN'}
                   </Text>
                 </View>
               </View>

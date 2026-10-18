@@ -98,7 +98,7 @@ export const WeeklyReviewModal = ({
           <View style={styles.headerTitleWrap}>
             <View style={styles.badgeRow}>
               <Ionicons name="sparkles" size={15} color={colors.accent} />
-              <Text style={[styles.headerBadge, { color: colors.textMuted }]}>WEEKLY AI COACH</Text>
+              <Text style={[styles.headerBadge, { color: colors.textMuted }]}>WEEKLY COACH</Text>
             </View>
             <Text style={[styles.headerPeriod, { color: colors.textMuted }]}>
               {metrics.period.from} to {metrics.period.to}
@@ -142,9 +142,9 @@ export const WeeklyReviewModal = ({
           {loading && (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color={colors.accent} />
-              <Text style={styles.loadingTitle}>Analyzing your week...</Text>
+              <Text style={styles.loadingTitle}>Reviewing your week...</Text>
               <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
-                Connecting your workouts, weight readings, and energy balance into plain-English advice.
+                Synthesizing your workouts, weight trends, and energy balance to tune your plan.
               </Text>
             </View>
           )}
@@ -159,10 +159,10 @@ export const WeeklyReviewModal = ({
                 Ready for your 7-day coaching check-in
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                Our AI coach connects what you lifted in the gym with your scale weight and calorie balance, giving you simple, personalized advice.
+                Connect what you lifted in the gym with your scale trends and calorie balance to keep your progress on track.
               </Text>
               <View style={styles.btnWrap}>
-                <Button label="GENERATE COACHING REVIEW" onPress={onGenerate} tone="loud" />
+                <Button label="CHECK IN WITH COACH" onPress={onGenerate} tone="loud" />
               </View>
             </View>
           )}

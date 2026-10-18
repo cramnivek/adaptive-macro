@@ -385,7 +385,7 @@ export default function TrendsScreen() {
             { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Open Weekly AI Coaching Review"
+          accessibilityLabel="Open Weekly Coach Review"
         >
           <View style={styles.coachingBannerLeft}>
             <View
@@ -398,7 +398,7 @@ export default function TrendsScreen() {
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
-                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>WEEKLY AI COACH</Text>
+                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>WEEKLY COACH</Text>
                 <View
                   style={[
                     styles.readyPill,
@@ -413,7 +413,7 @@ export default function TrendsScreen() {
                       { color: coachingReview ? colors.positive : colors.warning },
                     ]}
                   >
-                    {coachingReview ? 'REVIEW READY' : 'TAP TO GENERATE'}
+                    {coachingReview ? 'REVIEW READY' : 'TAP TO CHECK IN'}
                   </Text>
                 </View>
               </View>

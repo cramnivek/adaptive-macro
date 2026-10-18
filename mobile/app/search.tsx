@@ -476,7 +476,7 @@ export default function SearchScreen() {
               )}
               {canLookUp && (
                 <Button
-                  label={lookingUp ? `Looking it up… ${lookupElapsed}s` : 'Look it up with AI'}
+                  label={lookingUp ? `Looking it up… ${lookupElapsed}s` : 'Smart food lookup'}
                   variant="subtle"
                   disabled={lookingUp}
                   onPress={() => void runLookup()}

@@ -137,7 +137,7 @@ export const WeeklyReviewCard = ({
         <View style={styles.headerTitleWrap}>
           <View style={styles.badgeRow}>
             <Ionicons name="sparkles" size={14} color="#00E5FF" />
-            <Text style={styles.headerBadge}>AI COACHING REVIEW</Text>
+            <Text style={styles.headerBadge}>WEEKLY COACH</Text>
           </View>
           <Text style={styles.headerSubtitle}>
             {metrics.period.from} to {metrics.period.to}
@@ -194,7 +194,7 @@ export const WeeklyReviewCard = ({
           </View>
 
           <Text style={styles.promptPitch}>
-            Connect your gym progress, scale weight readings, and nutrition balance into clear, personalized coaching advice.
+            Connect your gym progress, scale weight trends, and nutrition balance into clear, personalized coaching guidance.
           </Text>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
@@ -205,10 +205,10 @@ export const WeeklyReviewCard = ({
               style={styles.generateBtn}
               scaleTo={0.97}
               accessibilityRole="button"
-              accessibilityLabel="Generate weekly AI coaching review"
+              accessibilityLabel="Open weekly coach review"
             >
               <Ionicons name="sparkles" size={16} color="#0A0A0B" style={{ marginRight: 6 }} />
-              <Text style={styles.generateBtnText}>GENERATE REVIEW</Text>
+              <Text style={styles.generateBtnText}>CHECK IN</Text>
             </Tappable>
 
             {onOpenModal && (
@@ -230,8 +230,8 @@ export const WeeklyReviewCard = ({
       {loading && (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="small" color="#00E5FF" style={{ marginBottom: space.sm }} />
-          <Text style={styles.loadingText}>Analyzing workouts, scale trends & nutrition...</Text>
-          <Text style={styles.loadingSub}>Synthesizing your progress into plain-English coaching</Text>
+          <Text style={styles.loadingText}>Reviewing workouts, scale trends & nutrition...</Text>
+          <Text style={styles.loadingSub}>Synthesizing your progress to tune your plan</Text>
         </View>
       )}
 
