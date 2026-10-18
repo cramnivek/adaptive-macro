@@ -23,7 +23,7 @@ export const CheckInCard = () => {
 
   return (
     <FadeIn>
-      <Card title={`Last week · ${copy.week}`}>
+      <Card variant="featured" title={`Last week · ${copy.week}`}>
         <Text style={[styles.headline, { color: colors.text }]}>{copy.headline}</Text>
         <Text style={[styles.reason, { color: colors.textMuted }]}>{copy.reason}</Text>
 

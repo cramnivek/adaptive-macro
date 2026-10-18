@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
   },
-  stepperInput: { fontFamily: font.figure, flex: 1, fontSize: 18, textAlign: 'center' },
+  stepperInput: { fontFamily: font.figure, flex: 1, minWidth: 0, fontSize: 18, textAlign: 'center' },
   segmentItem: {
     flex: 1,
     minHeight: TOUCH_TARGET,

@@ -3,7 +3,7 @@ import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CheckInCard } from '../../src/components/CheckInCard';
 import { FadeIn } from '../../src/components/FadeIn';
@@ -44,9 +44,51 @@ export default function TodayScreen() {
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
   const [recentMeals, setRecentMeals] = useState<Map<Meal, RecentMeal>>(new Map());
+  const { width } = useWindowDimensions();
+  const isCompact = width < 360;
+
   // The meal being copied, so a second tap before the diary reloads cannot
   // copy it twice.
   const [repeating, setRepeating] = useState<Meal | null>(null);
+
+  const renderMealActions = (meal: Meal, style?: ViewStyle) => (
+    <View style={[styles.mealActions, style]}>
+      <Tappable
+        onPress={() =>
+          router.push({ pathname: '/describe', params: { meal, capture: 'camera' } })
+        }
+        scaleTo={0.9}
+        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+        accessibilityLabel={`Photograph something to add to ${MEAL_LABELS[meal]}`}
+      >
+        <Ionicons name="camera-outline" size={18} color={colors.text} />
+      </Tappable>
+      <Tappable
+        onPress={() => router.push({ pathname: '/describe', params: { meal } })}
+        scaleTo={0.9}
+        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+        accessibilityLabel={`Describe something to add to ${MEAL_LABELS[meal]}`}
+      >
+        <Ionicons name="sparkles-outline" size={18} color={colors.text} />
+      </Tappable>
+      <Tappable
+        onPress={() => router.push({ pathname: '/scan', params: { meal } })}
+        scaleTo={0.9}
+        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
+        accessibilityLabel={`Scan a barcode to add to ${MEAL_LABELS[meal]}`}
+      >
+        <Ionicons name="barcode-outline" size={18} color={colors.text} />
+      </Tappable>
+      <Tappable
+        onPress={() => router.push({ pathname: '/search', params: { meal } })}
+        scaleTo={0.9}
+        style={[styles.iconButton, { backgroundColor: colors.accent }]}
+        accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
+      >
+        <Ionicons name="add" size={18} color={colors.onFill} />
+      </Tappable>
+    </View>
+  );
 
   useEffect(() => {
     let live = true;
@@ -228,53 +270,9 @@ export default function TodayScreen() {
             key={meal}
             title={MEAL_LABELS[meal]}
             subtitle={mealEntries.length ? `${Math.round(mealKcal)} kcal` : 'Ready to log'}
-            right={
-              /*
-                Every way of adding, on the row itself.
-                These were behind an ellipsis, which is a glyph that promises
-                nothing: photographing a meal is the fastest way to log one and
-                it was two taps down a menu nobody had a reason to open. Four
-                icon-sized targets fit because the row is full width, and each
-                one says what it does by looking like it.
-              */
-              <View style={styles.mealActions}>
-                <Tappable
-                  onPress={() =>
-                    router.push({ pathname: '/describe', params: { meal, capture: 'camera' } })
-                  }
-                  scaleTo={0.9}
-                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-                  accessibilityLabel={`Photograph something to add to ${MEAL_LABELS[meal]}`}
-                >
-                  <Ionicons name="camera-outline" size={18} color={colors.text} />
-                </Tappable>
-                <Tappable
-                  onPress={() => router.push({ pathname: '/describe', params: { meal } })}
-                  scaleTo={0.9}
-                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-                  accessibilityLabel={`Describe something to add to ${MEAL_LABELS[meal]}`}
-                >
-                  <Ionicons name="sparkles-outline" size={18} color={colors.text} />
-                </Tappable>
-                <Tappable
-                  onPress={() => router.push({ pathname: '/scan', params: { meal } })}
-                  scaleTo={0.9}
-                  style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-                  accessibilityLabel={`Scan a barcode to add to ${MEAL_LABELS[meal]}`}
-                >
-                  <Ionicons name="barcode-outline" size={18} color={colors.text} />
-                </Tappable>
-                <Tappable
-                  onPress={() => router.push({ pathname: '/search', params: { meal } })}
-                  scaleTo={0.9}
-                  style={[styles.iconButton, { backgroundColor: colors.accent }]}
-                  accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
-                >
-                  <Ionicons name="add" size={18} color={colors.onFill} />
-                </Tappable>
-              </View>
-            }
+            right={!isCompact ? renderMealActions(meal) : undefined}
           >
+            {isCompact && renderMealActions(meal, styles.mealActionsNarrow)}
             {/*
               Each entry arrives rather than appearing. The stagger is small and
               capped: a logged food should slide in, but a meal with eight items
@@ -382,6 +380,7 @@ const styles = StyleSheet.create({
   completeness: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginTop: space.xs },
   completenessText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   mealActions: { flexDirection: 'row', gap: space.sm },
+  mealActionsNarrow: { flexDirection: 'row', gap: space.sm, marginTop: space.xs, marginBottom: space.sm },
   // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
   // hits reliably, and they are two adjacent targets on one row.
   iconButton: {

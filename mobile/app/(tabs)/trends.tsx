@@ -22,7 +22,7 @@ import { MethodSheet } from '../../src/components/MethodSheet';
 import { MuscleFigure } from '../../src/components/MuscleFigure';
 import { REGION_LABELS, type MuscleRegion } from '../../src/components/muscleMap';
 import { Screen } from '../../src/components/Screen';
-import { SlashPanel } from '../../src/components/SlashPanel';
+import { TOUCH_TARGET } from '../../src/components/Controls';
 import { StatTile } from '../../src/components/StatTile';
 import { Tappable } from '../../src/components/Tappable';
 import { VolumeLandmarksCard } from '../../src/components/VolumeLandmarksCard';
@@ -445,7 +445,7 @@ export default function TrendsScreen() {
       </FadeIn>
 
       {/* Unified Tab Switcher */}
-      <View style={styles.switcher}>
+      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
         {(
           [
             { key: 'all', label: 'OVERVIEW' },
@@ -461,15 +461,24 @@ export default function TrendsScreen() {
                 thud('light');
                 setActiveTab(tab.key);
               }}
-              style={styles.switchItem}
+              scaleTo={0.97}
+              style={[
+                styles.tabItem,
+                active && [styles.tabItemActive, { backgroundColor: colors.surface }],
+              ]}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
-              <SlashPanel color={active ? colors.accent : colors.surfaceRaised} style={styles.switchPanel}>
-                <Text style={[styles.switchLabel, { color: active ? colors.onFill : colors.textMuted }]}>
-                  {tab.label}
-                </Text>
-              </SlashPanel>
+              <Text
+                style={[
+                  styles.tabItemText,
+                  { color: active ? colors.text : colors.textMuted },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {tab.label}
+              </Text>
             </Tappable>
           );
         })}
@@ -921,24 +930,34 @@ const styles = StyleSheet.create({
     marginLeft: space.sm,
   },
 
-  switcher: {
+  tabsContainer: {
     flexDirection: 'row',
-    gap: space.xs,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 3,
     marginBottom: space.md,
   },
-  switchItem: {
+  tabItem: {
     flex: 1,
-  },
-  switchPanel: {
-    minHeight: 38,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: TOUCH_TARGET,
+    paddingVertical: 7,
     paddingHorizontal: 4,
+    borderRadius: radius.pill,
   },
-  switchLabel: {
-    fontFamily: font.display,
-    fontSize: 11,
-    letterSpacing: 0.8,
+  tabItemActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  tabItemText: {
+    fontFamily: font.uiStrong,
+    fontSize: 10.5,
+    letterSpacing: 0.6,
     textAlign: 'center',
   },
 
