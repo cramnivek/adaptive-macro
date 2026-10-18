@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.md,
     marginBottom: space.md,
@@ -882,7 +882,7 @@ const styles = StyleSheet.create({
   coachingIconCircle: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: radius.pill,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -951,8 +951,8 @@ const styles = StyleSheet.create({
   glanceTile: {
     flex: 1,
     minWidth: '47%',
-    borderRadius: radius.md,
-    padding: space.sm,
+    borderRadius: radius.lg,
+    padding: space.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
   glanceTileLabel: {

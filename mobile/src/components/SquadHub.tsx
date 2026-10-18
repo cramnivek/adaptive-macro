@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
     backgroundColor: '#0A111B',
     borderColor: '#1E293B',
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     gap: space.sm,
   },
   emptyBadge: {
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#00E5FF',
     paddingVertical: 12,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
   },
   primaryBtnText: {
     fontFamily: font.uiStrong,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#050D18',
     borderColor: '#112238',
     borderWidth: 1,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     padding: space.md,
     gap: space.md,
   },
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: '#070E1A',
     borderColor: '#142032',
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     padding: space.md,
     gap: space.sm,
   },
@@ -585,7 +585,7 @@ const styles = StyleSheet.create({
   memberAvatar: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -661,11 +661,9 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   activityCard: {
-    backgroundColor: '#0B1422',
-    borderColor: '#162338',
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    padding: space.sm,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#0E1724',
     gap: 4,
   },
   activityTop: {
@@ -682,7 +680,7 @@ const styles = StyleSheet.create({
   actAvatar: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -714,7 +712,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#121F32',
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
   },
   cheerBtnActive: {
     backgroundColor: 'rgba(251, 191, 36, 0.2)',

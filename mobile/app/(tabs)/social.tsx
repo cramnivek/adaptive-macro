@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     right: 4,
     minWidth: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   profilePillAvatar: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -791,7 +791,7 @@ export const PostCard = ({
 const styles = StyleSheet.create({
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     padding: space.lg,
     marginBottom: space.lg,
   },
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -971,7 +971,7 @@ const styles = StyleSheet.create({
   cardPreviewFrame: {
     height: 340,
     aspectRatio: 9 / 16,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: loud.ground,
     position: 'relative',
@@ -1067,7 +1067,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     maxHeight: '94%',
-    borderRadius: radius.lg,
+    borderRadius: radius['2xl'],
     borderWidth: 1,
     padding: space.lg,
     display: 'flex',
