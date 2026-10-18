@@ -59,7 +59,8 @@ function ProfileForm() {
     try {
       await saveProfile({ ...fields, is_private: visibility === 'private' });
       await refreshProfile();
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     } catch (error) {
       setProblem((error as Error).message);
     } finally {

@@ -595,6 +595,7 @@ export default function SettingsScreen() {
         <Card subtitle="Your log lives on this device. An account is optional.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
+          <Button label="Re-run Onboarding" onPress={() => router.push('/onboard')} variant="subtle" />
           <Text style={[styles.note, { color: colors.textFaint }]}>
             Your food, weight, workouts and settings are kept only on this device, so this file is your
             only copy of the log and your only way onto another device. It holds your weigh-ins, your diary
