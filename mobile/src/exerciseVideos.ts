@@ -48,6 +48,16 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
     };
   }
 
+  if (norm.includes('romanian') || norm.includes('rdl')) {
+    return {
+      setupLabel: 'PHASE 1: STANDING HIP LOCKOUT',
+      depthLabel: 'PHASE 2: DEEP HIP HINGE STRETCH',
+      transitionLabel: 'POSTERIOR CHAIN HINGE / GLUTE DRIVE',
+      scrubberStart: 'LOCKOUT',
+      scrubberEnd: 'HINGE',
+    };
+  }
+
   if (norm.includes('deadlift')) {
     return {
       setupLabel: 'PHASE 1: TOP LOCKOUT',
@@ -55,6 +65,16 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
       transitionLabel: 'HINGE / WEDGE DRIVE',
       scrubberStart: 'LOCKOUT',
       scrubberEnd: 'FLOOR SETUP',
+    };
+  }
+
+  if (norm.includes('overhead') && (norm.includes('triceps') || norm.includes('tricep') || norm.includes('extension'))) {
+    return {
+      setupLabel: 'PHASE 1: DEEP TRICEPS STRETCH',
+      depthLabel: 'PHASE 2: OVERHEAD LOCKOUT & ROPE FLARE',
+      transitionLabel: 'OVERHEAD EXTENSION / LONG HEAD DRIVE',
+      scrubberStart: 'STRETCH',
+      scrubberEnd: 'LOCKOUT',
     };
   }
 
@@ -140,6 +160,16 @@ export const getKeyframePhaseConfig = (canonicalName?: string): KeyframePhaseCon
       transitionLabel: 'HAMSTRING CURL / CONTROLLED ECCENTRIC',
       scrubberStart: 'SETUP',
       scrubberEnd: 'CURL PEAK',
+    };
+  }
+
+  if (norm.includes('leg press')) {
+    return {
+      setupLabel: 'PHASE 1: 90° KNEE FLEXION SETUP',
+      depthLabel: 'PHASE 2: FULL LEG EXTENSION LOCKOUT',
+      transitionLabel: 'SLED DRIVE / CONTROLLED ECCENTRIC',
+      scrubberStart: 'SETUP',
+      scrubberEnd: 'LOCKOUT',
     };
   }
 
@@ -1106,6 +1136,239 @@ export const EXERCISE_VIDEO_REGISTRY: Record<string, ExerciseVideoBundle> = {
       },
     },
   },
+
+  'leg-press': {
+    canonicalName: '45-Degree Incline Leg Press (Machine)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_lockout_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_lockout_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_lockout_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/leg_press_lockout_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Knee Tracking & Pelvic Anchoring',
+        focus: 'Flat Lumbar Spine & Smooth Sled Drive',
+        checkpoints: [
+          {
+            label: 'Lower Back Pinned to Pad',
+            cue: 'Keep your pelvis and lumbar spine glued to the back pad; do not let your tailbone curl off the seat at the bottom.',
+            researchBasis: 'Escamilla et al. (2001): Posterior pelvic tilt at deep flexion dramatically multiplies lumbar compressive and shear stresses.',
+          },
+          {
+            label: 'Soft Knee Lockout',
+            cue: 'Drive the sled to full leg extension but keep knees softly unlocked; never violently hyperextend under heavy loads.',
+            researchBasis: 'Prevents tibiofemoral joint shear and protects posterior cruciate ligaments.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Footplate Force Distribution',
+        focus: 'Tripod Foot Drive',
+        checkpoints: [
+          {
+            label: 'Shoulder-Width Mid-Plate Placement',
+            cue: 'Place feet shoulder-width apart in the center of the plate, driving evenly through heels and mid-foot.',
+            researchBasis: 'Mid-plate positioning balances quadriceps and gluteus maximus recruitment while minimizing patellofemoral pressure.',
+          },
+        ],
+      },
+      front: {
+        title: 'Knee Tracking Splayed Over Toes',
+        focus: 'Zero Valgus Collapse',
+        checkpoints: [
+          {
+            label: 'Knees Track in Line with Second Toe',
+            cue: 'Ensure knees track outward over your toes throughout the descent and ascent.',
+            researchBasis: 'Prevents dynamic knee valgus and excessive medial collateral ligament tension.',
+          },
+        ],
+      },
+    },
+  },
+
+  'overhead-triceps-extension': {
+    canonicalName: 'Overhead Triceps Extension (Cable)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_lockout_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_lockout_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_lockout_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/overhead_triceps_lockout_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Long-Head Triceps Stretch',
+        focus: 'Deep Shoulder Elevation & Full Extension',
+        checkpoints: [
+          {
+            label: 'Deep Elbow Flexion Stretch',
+            cue: 'Let the rope travel deeply behind your head/neck until elbows are past 90° for maximal long-head pre-stretch.',
+            researchBasis: 'Maeo et al. (2023): Overhead triceps extensions elicit ~1.5x greater long-head hypertrophy than neutral pushdowns due to stretch-mediated mechanisms.',
+          },
+          {
+            label: 'Complete Lockout with Rope Flare',
+            cue: 'Press the rope straight forward and upward, flaring the rope ends outward at peak lockout for full contraction.',
+            researchBasis: 'Maximizes radial extension and peak shortening of the lateral and medial heads.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Split-Stance Core Bracing',
+        focus: 'Ribs Pulled Down & Anti-Extension',
+        checkpoints: [
+          {
+            label: 'Forward Torso Incline (30°–45°)',
+            cue: 'Maintain a stable forward athletic split stance; brace abs to prevent hyperextending your lower back.',
+            researchBasis: 'Counteracts the rearward cable pull vector and maintains pelvic stability.',
+          },
+        ],
+      },
+      front: {
+        title: 'Elbow Position Tracking',
+        focus: 'Elbows Tucked Inward',
+        checkpoints: [
+          {
+            label: 'Elbows Kept Shoulder-Width',
+            cue: 'Avoid excessive elbow flare outward; keep upper arms aligned beside your head.',
+            researchBasis: 'Maintains optimal line of pull along the triceps tendon and reduces subacromial shear.',
+          },
+        ],
+      },
+    },
+  },
+
+  'romanian-deadlift': {
+    canonicalName: 'Romanian Deadlift (Barbell)',
+    iso: {
+      male: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+      },
+      female: {
+        glow: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+        cinema: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+      },
+    },
+    side: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+    front: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+    keyframes: {
+      side: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_stretch_keyframe.jpg',
+      },
+      iso: {
+        male: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_stretch_keyframe.jpg',
+        },
+        female: {
+          standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+          deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_stretch_keyframe.jpg',
+        },
+      },
+      front: {
+        standing: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_setup_keyframe.jpg',
+        deep: 'https://storage.googleapis.com/adaptive-macro-card-images/exercises/rdl_stretch_keyframe.jpg',
+      },
+    },
+    angleMetadata: {
+      side: {
+        title: 'Posterior Hip Hinge & Vertical Shins',
+        focus: 'Maximal Hamstring Stretch & Neutral Spine',
+        checkpoints: [
+          {
+            label: 'Hips Pushed Horizontally Backward',
+            cue: 'Push your hips as far back as possible toward the wall behind you rather than squatting down.',
+            researchBasis: 'McAllister et al. (2014): Pure hip hinge maximizes hamstring and gluteus maximus torque while preserving knee kinematics.',
+          },
+          {
+            label: 'Vertical Shins (15°–20° Soft Knee Bend)',
+            cue: 'Keep your shins perpendicular to the floor with minimal forward knee travel.',
+            researchBasis: 'Prevents quadriceps takeover and isolates the posterior kinetic chain.',
+          },
+          {
+            label: 'Bar Glides Along Thighs',
+            cue: 'Keep the barbell skimming close against thighs and just below kneecaps with lats locked.',
+            researchBasis: 'Minimizes external moment arm on the lumbar spine and protects L4–L5 vertebrae.',
+          },
+        ],
+      },
+      iso: {
+        title: 'Lat Engagement & Rigid Core',
+        focus: 'Anti-Flexion Back Rigidity',
+        checkpoints: [
+          {
+            label: 'Shoulder Blades Set & Flat Lumbar Spine',
+            cue: 'Pack your lats as if squeezing oranges in your armpits to keep the bar pinned against the legs.',
+            researchBasis: 'Latissimus dorsi tension creates thoracolumbar fascia stiffness and prevents spinal flexion.',
+          },
+        ],
+      },
+      front: {
+        title: 'Hip-Width Stance & Symmetrical Grip',
+        focus: 'Bilateral Alignment',
+        checkpoints: [
+          {
+            label: 'Feet Hip-Width Apart, Toes Forward',
+            cue: 'Plant feet directly under your hip joints with toes pointing forward or slightly splayed.',
+            researchBasis: 'Optimizes mechanical advantage and bilateral hamstring load distribution.',
+          },
+        ],
+      },
+    },
+  },
 };
 
 /**
@@ -1296,6 +1559,48 @@ export const videoBundleFor = (exerciseName: string): ExerciseVideoBundle | null
     norm === 'lying hamstring curl'
   ) {
     return EXERCISE_VIDEO_REGISTRY['lying-leg-curl'];
+  }
+
+  // 12. 45-Degree Incline Leg Press Family (Machine)
+  if (
+    norm === 'leg press' ||
+    norm === 'leg press (machine)' ||
+    norm === '45-degree leg press' ||
+    norm === '45 degree leg press' ||
+    norm === 'incline leg press' ||
+    norm === 'incline leg press (machine)' ||
+    norm === '45° leg press' ||
+    norm === '45° incline leg press' ||
+    norm === 'sled leg press'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['leg-press'];
+  }
+
+  // 13. Overhead Triceps Extension Family (Cable Rope)
+  if (
+    norm === 'overhead triceps extension (cable)' ||
+    norm === 'overhead tricep extension (cable)' ||
+    norm === 'overhead triceps extension' ||
+    norm === 'overhead tricep extension' ||
+    norm === 'cable overhead triceps extension' ||
+    norm === 'cable overhead extension' ||
+    norm === 'cable overhead tricep extension' ||
+    norm === 'overhead cable triceps extension' ||
+    norm === 'overhead cable tricep extension'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['overhead-triceps-extension'];
+  }
+
+  // 14. Romanian Deadlift Family (Barbell)
+  if (
+    norm === 'romanian deadlift (barbell)' ||
+    norm === 'romanian deadlift' ||
+    norm === 'barbell romanian deadlift' ||
+    norm === 'rdl (barbell)' ||
+    norm === 'barbell rdl' ||
+    norm === 'rdl'
+  ) {
+    return EXERCISE_VIDEO_REGISTRY['romanian-deadlift'];
   }
 
   return null;

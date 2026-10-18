@@ -75,6 +75,24 @@ describe('videoBundleFor Movement Matching', () => {
       expect(videoBundleFor('Lying Leg Curl')?.canonicalName).toBe('Lying Leg Curl (Machine)');
       expect(videoBundleFor('Prone Leg Curl')?.canonicalName).toBe('Lying Leg Curl (Machine)');
     });
+
+    it('matches exact canonical 45-Degree Incline Leg Press names', () => {
+      expect(videoBundleFor('Leg Press')?.canonicalName).toBe('45-Degree Incline Leg Press (Machine)');
+      expect(videoBundleFor('Incline Leg Press')?.canonicalName).toBe('45-Degree Incline Leg Press (Machine)');
+      expect(videoBundleFor('45-Degree Leg Press')?.canonicalName).toBe('45-Degree Incline Leg Press (Machine)');
+    });
+
+    it('matches exact canonical Overhead Triceps Extension names', () => {
+      expect(videoBundleFor('Overhead Triceps Extension (Cable)')?.canonicalName).toBe('Overhead Triceps Extension (Cable)');
+      expect(videoBundleFor('Cable Overhead Extension')?.canonicalName).toBe('Overhead Triceps Extension (Cable)');
+      expect(videoBundleFor('Overhead Cable Triceps Extension')?.canonicalName).toBe('Overhead Triceps Extension (Cable)');
+    });
+
+    it('matches exact canonical Romanian Deadlift names', () => {
+      expect(videoBundleFor('Romanian Deadlift (Barbell)')?.canonicalName).toBe('Romanian Deadlift (Barbell)');
+      expect(videoBundleFor('Barbell Romanian Deadlift')?.canonicalName).toBe('Romanian Deadlift (Barbell)');
+      expect(videoBundleFor('Barbell RDL')?.canonicalName).toBe('Romanian Deadlift (Barbell)');
+    });
   });
 
   describe('Distinct Variations & Accessory Lifts (Fall Through to 2D Kinematic Studio)', () => {
@@ -97,16 +115,15 @@ describe('videoBundleFor Movement Matching', () => {
       expect(videoBundleFor('Chin-Up')).toBeNull();
     });
 
-    it('does NOT match Good Mornings or RDLs to conventional deadlift video bundle', () => {
+    it('does NOT match Good Mornings or dumbbell RDLs to barbell deadlift or barbell RDL', () => {
       expect(videoBundleFor('Good Morning (Barbell)')).toBeNull();
-      expect(videoBundleFor('Romanian Deadlift (Barbell)')).toBeNull();
       expect(videoBundleFor('Romanian Deadlift (Dumbbell)')).toBeNull();
+      expect(videoBundleFor('Stiff-Leg Deadlift (Dumbbell)')).toBeNull();
     });
 
-    it('does NOT match Goblet Squats, Hack Squats, or Leg Press to barbell back squat', () => {
+    it('does NOT match Goblet Squats or Hack Squats to barbell back squat', () => {
       expect(videoBundleFor('Goblet Squat (Dumbbell)')).toBeNull();
       expect(videoBundleFor('Hack Squat (Machine)')).toBeNull();
-      expect(videoBundleFor('Leg Press')).toBeNull();
       expect(videoBundleFor('Front Squat (Barbell)')).toBeNull();
       expect(videoBundleFor('Bulgarian Split Squat')).toBeNull();
     });
@@ -209,5 +226,29 @@ describe('getKeyframePhaseConfig Dynamic Telemetry Labels', () => {
     expect(config.depthLabel).toBe('PHASE 2: PEAK KNEE FLEXION');
     expect(config.scrubberStart).toBe('SETUP');
     expect(config.scrubberEnd).toBe('CURL PEAK');
+  });
+
+  it('provides accurate phase labels for 45-Degree Leg Press', () => {
+    const config = getKeyframePhaseConfig('45-Degree Incline Leg Press (Machine)');
+    expect(config.setupLabel).toBe('PHASE 1: 90° KNEE FLEXION SETUP');
+    expect(config.depthLabel).toBe('PHASE 2: FULL LEG EXTENSION LOCKOUT');
+    expect(config.scrubberStart).toBe('SETUP');
+    expect(config.scrubberEnd).toBe('LOCKOUT');
+  });
+
+  it('provides accurate phase labels for Overhead Triceps Extension', () => {
+    const config = getKeyframePhaseConfig('Overhead Triceps Extension (Cable)');
+    expect(config.setupLabel).toBe('PHASE 1: DEEP TRICEPS STRETCH');
+    expect(config.depthLabel).toBe('PHASE 2: OVERHEAD LOCKOUT & ROPE FLARE');
+    expect(config.scrubberStart).toBe('STRETCH');
+    expect(config.scrubberEnd).toBe('LOCKOUT');
+  });
+
+  it('provides accurate phase labels for Romanian Deadlift', () => {
+    const config = getKeyframePhaseConfig('Romanian Deadlift (Barbell)');
+    expect(config.setupLabel).toBe('PHASE 1: STANDING HIP LOCKOUT');
+    expect(config.depthLabel).toBe('PHASE 2: DEEP HIP HINGE STRETCH');
+    expect(config.scrubberStart).toBe('LOCKOUT');
+    expect(config.scrubberEnd).toBe('HINGE');
   });
 });
