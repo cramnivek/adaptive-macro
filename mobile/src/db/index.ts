@@ -7,6 +7,7 @@ import type {
   ISODate,
   LogEntry,
   Meal,
+  Micronutrients,
   Nutrients,
   SetType,
 } from '@adaptive-macros/engine';
@@ -181,25 +182,35 @@ interface FoodRow {
   portions: string;
   fetched_at: string | null;
   sources: string | null;
+  micronutrients: string | null;
 }
 
-const rowToFood = (row: FoodRow): Food => ({
-  id: row.id,
-  name: row.name,
-  brand: row.brand ?? undefined,
-  barcode: row.barcode ?? undefined,
-  source: row.source as Food['source'],
-  per100g: {
-    kcal: row.kcal,
-    proteinG: row.protein_g,
-    carbsG: row.carbs_g,
-    fatG: row.fat_g,
-    fiberG: row.fiber_g,
-  },
-  portions: JSON.parse(row.portions) as FoodPortion[],
-  fetchedAt: row.fetched_at ?? undefined,
-  sources: row.sources ? (JSON.parse(row.sources) as string[]) : undefined,
-});
+const rowToFood = (row: FoodRow): Food => {
+  let micros: Micronutrients | undefined;
+  if (row.micronutrients) {
+    try {
+      micros = JSON.parse(row.micronutrients);
+    } catch {}
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    brand: row.brand ?? undefined,
+    barcode: row.barcode ?? undefined,
+    source: row.source as Food['source'],
+    per100g: {
+      kcal: row.kcal,
+      proteinG: row.protein_g,
+      carbsG: row.carbs_g,
+      fatG: row.fat_g,
+      fiberG: row.fiber_g,
+      micros,
+    },
+    portions: JSON.parse(row.portions) as FoodPortion[],
+    fetchedAt: row.fetched_at ?? undefined,
+    sources: row.sources ? (JSON.parse(row.sources) as string[]) : undefined,
+  };
+};
 
 /**
  * Caches a food locally. Remote lookups are cached on first use so a food you
@@ -209,13 +220,14 @@ const rowToFood = (row: FoodRow): Food => ({
 export const saveFood = async (food: Food): Promise<void> => {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at, sources)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at, sources, micronutrients)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, brand = excluded.brand, barcode = excluded.barcode,
        kcal = excluded.kcal, protein_g = excluded.protein_g, carbs_g = excluded.carbs_g,
        fat_g = excluded.fat_g, fiber_g = excluded.fiber_g, portions = excluded.portions,
-       fetched_at = excluded.fetched_at, sources = excluded.sources`,
+       fetched_at = excluded.fetched_at, sources = excluded.sources,
+       micronutrients = excluded.micronutrients`,
     food.id,
     food.name,
     food.brand ?? null,
@@ -229,6 +241,7 @@ export const saveFood = async (food: Food): Promise<void> => {
     JSON.stringify(food.portions),
     food.fetchedAt ?? new Date().toISOString(),
     food.sources?.length ? JSON.stringify(food.sources) : null,
+    food.per100g.micros ? JSON.stringify(food.per100g.micros) : null,
   );
 };
 
@@ -295,29 +308,39 @@ interface LogRow {
   carbs_g: number;
   fat_g: number;
   fiber_g: number;
+  micronutrients?: string | null;
 }
 
-const rowToEntry = (row: LogRow): LogEntry => ({
-  id: row.id,
-  date: row.date,
-  foodId: row.food_id,
-  foodName: row.food_name,
-  grams: row.grams,
-  meal: row.meal as Meal,
-  nutrients: {
-    kcal: row.kcal,
-    proteinG: row.protein_g,
-    carbsG: row.carbs_g,
-    fatG: row.fat_g,
-    fiberG: row.fiber_g,
-  },
-});
+const rowToEntry = (row: LogRow): LogEntry => {
+  let micros: Micronutrients | undefined;
+  if (row.micronutrients) {
+    try {
+      micros = JSON.parse(row.micronutrients);
+    } catch {}
+  }
+  return {
+    id: row.id,
+    date: row.date,
+    foodId: row.food_id,
+    foodName: row.food_name,
+    grams: row.grams,
+    meal: row.meal as Meal,
+    nutrients: {
+      kcal: row.kcal,
+      proteinG: row.protein_g,
+      carbsG: row.carbs_g,
+      fatG: row.fat_g,
+      fiberG: row.fiber_g,
+      micros,
+    },
+  };
+};
 
 export const addLogEntry = async (entry: LogEntry): Promise<void> => {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, micronutrients, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     entry.id,
     entry.date,
     entry.foodId,
@@ -329,6 +352,7 @@ export const addLogEntry = async (entry: LogEntry): Promise<void> => {
     entry.nutrients.carbsG,
     entry.nutrients.fatG,
     entry.nutrients.fiberG ?? 0,
+    entry.nutrients.micros ? JSON.stringify(entry.nutrients.micros) : null,
     new Date().toISOString(),
   );
 };
@@ -348,7 +372,7 @@ export const updateLogEntry = async (
   const db = await getDb();
   await db.runAsync(
     `UPDATE log_entries
-     SET grams = ?, meal = ?, kcal = ?, protein_g = ?, carbs_g = ?, fat_g = ?, fiber_g = ?
+     SET grams = ?, meal = ?, kcal = ?, protein_g = ?, carbs_g = ?, fat_g = ?, fiber_g = ?, micronutrients = ?
      WHERE id = ?`,
     changes.grams,
     changes.meal,
@@ -357,6 +381,7 @@ export const updateLogEntry = async (
     changes.nutrients.carbsG,
     changes.nutrients.fatG,
     changes.nutrients.fiberG ?? 0,
+    changes.nutrients.micros ? JSON.stringify(changes.nutrients.micros) : null,
     id,
   );
 };
@@ -412,8 +437,8 @@ export const copyEntriesToDay = async (
   await db.withTransactionAsync(async () => {
     for (const entry of wanted) {
       await db.runAsync(
-        `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, micronutrients, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         to,
         entry.foodId,
@@ -425,6 +450,7 @@ export const copyEntriesToDay = async (
         entry.nutrients.carbsG,
         entry.nutrients.fatG,
         entry.nutrients.fiberG ?? 0,
+        entry.nutrients.micros ? JSON.stringify(entry.nutrients.micros) : null,
         new Date().toISOString(),
       );
     }

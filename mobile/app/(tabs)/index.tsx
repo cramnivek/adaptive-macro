@@ -14,6 +14,7 @@ import { FirstWeekCalibrationCard } from '../../src/components/FirstWeekCalibrat
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
 import { MacroSummary } from '../../src/components/MacroProgress';
+import { NutritionQualityCard } from '../../src/components/NutritionQualityCard';
 import { Screen } from '../../src/components/Screen';
 import { shouldAskAbout } from '../../src/dayStatus';
 import { lastMealsBefore, type RecentMeal } from '../../src/db';
@@ -41,6 +42,7 @@ export default function TodayScreen() {
     dayStatus,
     markDay,
     copyDay,
+    settings,
   } = useApp();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
@@ -207,6 +209,12 @@ export default function TodayScreen() {
           </Pressable>
         )}
       </Card>
+
+      <NutritionQualityCard
+        consumed={totals}
+        entries={entries}
+        profile={settings.profile}
+      />
 
       {isToday && <CheckInCard />}
 

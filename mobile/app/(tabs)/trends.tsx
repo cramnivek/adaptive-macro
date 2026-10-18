@@ -18,6 +18,7 @@ import { CountUp } from '../../src/components/CountUp';
 import { FadeIn } from '../../src/components/FadeIn';
 import { LineChart } from '../../src/components/LineChart';
 import { LoggingStrip } from '../../src/components/LoggingStrip';
+import { NutritionQualityCard } from '../../src/components/NutritionQualityCard';
 import { MethodSheet } from '../../src/components/MethodSheet';
 import { MuscleFigure } from '../../src/components/MuscleFigure';
 import { REGION_LABELS, type MuscleRegion } from '../../src/components/muscleMap';
@@ -77,6 +78,8 @@ export default function TrendsScreen() {
     dayStatus,
     updateSettings,
     observations,
+    totals,
+    entries,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
@@ -671,6 +674,12 @@ export default function TrendsScreen() {
           <Card title="Logging streak (last 14 days)">
             <LoggingStrip days={strip} />
           </Card>
+
+          <NutritionQualityCard
+            consumed={totals}
+            entries={entries}
+            profile={settings.profile}
+          />
         </>
       )}
 

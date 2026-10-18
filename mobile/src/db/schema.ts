@@ -237,4 +237,13 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_body_measurements_date ON body_measurements (date);
   `,
+  // v12 — full clinical micronutrients panel
+  //
+  // Stores clinical micronutrients as JSON in foods and log_entries
+  // (covering all essential vitamins, trace minerals, electrolytes, and lipid fractions).
+  // Nullable: existing rows contain no micronutrients; parsing safely falls back.
+  `
+  ALTER TABLE foods ADD COLUMN micronutrients TEXT;
+  ALTER TABLE log_entries ADD COLUMN micronutrients TEXT;
+  `,
 ];

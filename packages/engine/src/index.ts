@@ -10,3 +10,4 @@ export * from './simulate.ts';
 export * from './workouts.ts';
 export * from './checkIn.ts';
 export * from './volumeLandmarks.ts';
+export * from './micronutrients.ts';

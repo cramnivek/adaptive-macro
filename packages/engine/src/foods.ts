@@ -1,5 +1,6 @@
 import type { ISODate, Nutrients } from './types.ts';
 import { KCAL_PER_G, roundTo } from './units.ts';
+import { addMicros, scaleMicros } from './micronutrients.ts';
 
 export type FoodSource =
   | 'openfoodfacts'
@@ -73,6 +74,7 @@ export const scaleNutrients = (per100g: Nutrients, grams: number): Nutrients => 
     carbsG: per100g.carbsG * factor,
     fatG: per100g.fatG * factor,
     fiberG: (per100g.fiberG ?? 0) * factor,
+    micros: scaleMicros(per100g.micros, factor),
   };
 };
 
@@ -96,6 +98,7 @@ export const per100gFromPortion = (nutrients: Nutrients, grams: number): Nutrien
     carbsG: nutrients.carbsG * factor,
     fatG: nutrients.fatG * factor,
     fiberG: (nutrients.fiberG ?? 0) * factor,
+    micros: scaleMicros(nutrients.micros, factor),
   };
 };
 
@@ -105,6 +108,7 @@ export const addNutrients = (a: Nutrients, b: Nutrients): Nutrients => ({
   carbsG: a.carbsG + b.carbsG,
   fatG: a.fatG + b.fatG,
   fiberG: (a.fiberG ?? 0) + (b.fiberG ?? 0),
+  micros: addMicros(a.micros, b.micros),
 });
 
 export const sumNutrients = (items: Nutrients[]): Nutrients =>
@@ -116,6 +120,7 @@ export const roundNutrients = (n: Nutrients): Nutrients => ({
   carbsG: roundTo(n.carbsG, 1),
   fatG: roundTo(n.fatG, 1),
   fiberG: roundTo(n.fiberG ?? 0, 1),
+  micros: n.micros ? scaleMicros(n.micros, 1) : undefined,
 });
 
 /** Signed remainder against a target; negative means over. */

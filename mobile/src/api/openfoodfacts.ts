@@ -1,4 +1,4 @@
-import type { Food, FoodPortion } from '@adaptive-macros/engine';
+import type { Food, FoodPortion, Micronutrients } from '@adaptive-macros/engine';
 import { fetchJson, isUsableNumber, kjToKcal } from './http';
 import { PROXY_TOKEN } from './gemini';
 
@@ -26,6 +26,18 @@ interface OffNutriments {
   carbohydrates_100g?: number;
   fat_100g?: number;
   fiber_100g?: number;
+  sodium_100g?: number;
+  salt_100g?: number;
+  potassium_100g?: number;
+  calcium_100g?: number;
+  magnesium_100g?: number;
+  iron_100g?: number;
+  zinc_100g?: number;
+  'vitamin-a_100g'?: number;
+  'vitamin-c_100g'?: number;
+  'vitamin-d_100g'?: number;
+  'saturated-fat_100g'?: number;
+  sugars_100g?: number;
 }
 
 interface OffProduct {
@@ -106,6 +118,35 @@ const toFood = (product: OffProduct): Food | null => {
   if (proteinG + carbsG + fatG > 105) return null;
   if (proteinG > 100 || carbsG > 100 || fatG > 100) return null;
 
+  // Extract available clinical micronutrients
+  const micros: Micronutrients = {};
+  if (isUsableNumber(nutriments.sodium_100g)) {
+    micros.sodiumMg = Math.round(nutriments.sodium_100g * 1000);
+  } else if (isUsableNumber(nutriments.salt_100g)) {
+    micros.sodiumMg = Math.round((nutriments.salt_100g / 2.5) * 1000);
+  }
+  if (isUsableNumber(nutriments.potassium_100g)) {
+    micros.potassiumMg = Math.round(nutriments.potassium_100g < 1 ? nutriments.potassium_100g * 1000 : nutriments.potassium_100g);
+  }
+  if (isUsableNumber(nutriments.calcium_100g)) {
+    micros.calciumMg = Math.round(nutriments.calcium_100g < 1 ? nutriments.calcium_100g * 1000 : nutriments.calcium_100g);
+  }
+  if (isUsableNumber(nutriments.magnesium_100g)) {
+    micros.magnesiumMg = Math.round(nutriments.magnesium_100g < 1 ? nutriments.magnesium_100g * 1000 : nutriments.magnesium_100g);
+  }
+  if (isUsableNumber(nutriments.iron_100g)) {
+    micros.ironMg = Math.round(nutriments.iron_100g < 1 ? nutriments.iron_100g * 1000 : nutriments.iron_100g);
+  }
+  if (isUsableNumber(nutriments.zinc_100g)) {
+    micros.zincMg = Math.round(nutriments.zinc_100g < 1 ? nutriments.zinc_100g * 1000 : nutriments.zinc_100g);
+  }
+  if (isUsableNumber(nutriments['saturated-fat_100g'])) {
+    micros.saturatedFatG = nutriments['saturated-fat_100g'];
+  }
+  if (isUsableNumber(nutriments.sugars_100g)) {
+    micros.sugarG = nutriments.sugars_100g;
+  }
+
   return {
     id: `off:${product.code}`,
     name,
@@ -118,6 +159,7 @@ const toFood = (product: OffProduct): Food | null => {
       carbsG,
       fatG,
       fiberG,
+      micros: Object.keys(micros).length > 0 ? micros : undefined,
     },
     portions: portionsFor(product),
     fetchedAt: new Date().toISOString(),

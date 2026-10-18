@@ -146,6 +146,39 @@ export const formatUsdaName = (description: string): string => {
     .replace(/(^|[\s,(/-])([a-z])/g, (_, prefix: string, letter: string) => prefix + letter.toUpperCase());
 };
 
+const MICRO_IDS = {
+  calciumMg: 1087,
+  ironMg: 1089,
+  magnesiumMg: 1090,
+  phosphorusMg: 1091,
+  potassiumMg: 1092,
+  sodiumMg: 1093,
+  zincMg: 1095,
+  copperMg: 1098,
+  manganeseMg: 1101,
+  seleniumMcg: 1103,
+  vitaminCMg: 1162,
+  thiaminB1Mg: 1165,
+  riboflavinB2Mg: 1166,
+  niacinB3Mg: 1167,
+  pantothenicAcidB5Mg: 1170,
+  pyridoxineB6Mg: 1175,
+  folateB9Mcg: 1177,
+  cobalaminB12Mcg: 1178,
+  cholineMg: 1180,
+  vitaminAMcg: 1106,
+  vitaminEMg: 1109,
+  vitaminDIU: 1114,
+  vitaminKMcg: 1185,
+  saturatedFatG: 1258,
+  monounsaturatedFatG: 1292,
+  polyunsaturatedFatG: 1293,
+  transFatG: 1257,
+  cholesterolMg: 1253,
+  sugarG: 2000,
+  addedSugarG: 1235,
+} as const;
+
 const toFood = (food: FdcFood): Food | null => {
   const nutrients = food.foodNutrients ?? [];
   const description = food.description?.trim();
@@ -155,6 +188,14 @@ const toFood = (food: FdcFood): Food | null => {
   // A USDA entry with no energy value is an incomplete record, not a zero
   // calorie food, so it is dropped rather than logged as free.
   if (kcal <= 0) return null;
+
+  const micros: Record<string, number> = {};
+  for (const [key, id] of Object.entries(MICRO_IDS)) {
+    const val = nutrientValue(nutrients, id);
+    if (val > 0) {
+      micros[key] = val;
+    }
+  }
 
   return {
     id: `usda:${food.fdcId}`,
@@ -168,6 +209,7 @@ const toFood = (food: FdcFood): Food | null => {
       carbsG: nutrientValue(nutrients, NUTRIENT_IDS.carbs),
       fatG: nutrientValue(nutrients, NUTRIENT_IDS.fat),
       fiberG: nutrientValue(nutrients, NUTRIENT_IDS.fiber),
+      micros: Object.keys(micros).length > 0 ? (micros as any) : undefined,
     },
     portions: portionsFor(food),
     fetchedAt: new Date().toISOString(),
