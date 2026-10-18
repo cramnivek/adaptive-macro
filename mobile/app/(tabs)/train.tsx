@@ -158,7 +158,9 @@ export default function TrainScreen() {
                 </Text>
               </View>
               {last?.isRecord && (
-                <Text style={{ fontFamily: font.uiStrong, color: loud.loud, fontSize: 11, letterSpacing: 0.8 }}>NEW PR</Text>
+                <View style={styles.prBadge}>
+                  <Text style={styles.prBadgeText}>NEW PR</Text>
+                </View>
               )}
             </Pressable>
           ))}
@@ -245,7 +247,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: TOUCH_TARGET,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingVertical: space.xs,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.sm,
+  },
+  prBadge: {
+    paddingHorizontal: space.xs + 2,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+    backgroundColor: 'rgba(255, 77, 0, 0.15)',
+  },
+  prBadgeText: {
+    fontFamily: font.uiStrong,
+    color: loud.loud,
+    fontSize: 11,
+    letterSpacing: 0.8,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   chip: {

@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 92,
     backgroundColor: loud.panel,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.md,
   },

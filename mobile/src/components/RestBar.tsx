@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   bell: { minWidth: 32, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   wrap: {
     minHeight: 48,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: space.md,
     overflow: 'hidden',

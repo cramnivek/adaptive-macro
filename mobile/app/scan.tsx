@@ -155,9 +155,9 @@ const styles = StyleSheet.create({
     width: '78%',
     aspectRatio: 1.6,
     borderWidth: 2,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
   },
-  panel: { borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: space.lg, gap: space.sm },
+  panel: { borderRadius: radius.xl, borderWidth: StyleSheet.hairlineWidth, padding: space.lg, gap: space.sm },
   message: { fontFamily: font.uiStrong, fontSize: 16, textAlign: 'center' },
   hint: { fontFamily: font.ui, fontSize: 13, lineHeight: 18, textAlign: 'center' },
 });

@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: space.sm,
     alignItems: 'flex-start',
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.md,
     marginBottom: space.md,
