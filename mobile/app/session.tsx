@@ -86,6 +86,12 @@ import { clearWorkoutDraft, loadWorkoutDraft, saveWorkoutDraft, saveWorkoutDraft
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import {
+  adjustRestCountdown,
+  clearRestCountdown,
+  startRestCountdown,
+  syncActiveSessionFromDb,
+} from '../src/state/activeWorkoutStore';
+import {
   type CardioMode,
   type SpeedUnit,
   calculateCardioSteps,
@@ -327,7 +333,10 @@ export default function SessionScreen() {
     // Left on screen for a moment rather than cleared at once. On the iOS PWA
     // there is no vibration API, so this bar is the only thing those users get
     // telling them the rest is up.
-    const id = setTimeout(() => setRest(null), 6000);
+    const id = setTimeout(() => {
+      setRest(null);
+      clearRestCountdown();
+    }, 6000);
     return () => clearTimeout(id);
     // `announced` holds it to once per rest, so the extra dependencies cannot
     // make it fire twice.
@@ -349,6 +358,7 @@ export default function SessionScreen() {
     setRest((current) =>
       current === null ? null : { endsAt: current.endsAt + delta, total: clamped },
     );
+    adjustRestCountdown(Math.round(delta / 1000));
   };
 
   const stepRestSeconds = (steps: number) => {
@@ -358,6 +368,7 @@ export default function SessionScreen() {
 
   const nudgeRest = (steps: number) => {
     stepRestSeconds(steps);
+    adjustRestCountdown(steps * 15);
   };
 
     /** Active speed unit: locked setting, or active speed unit if switchable (default kph). */
@@ -1332,11 +1343,13 @@ export default function SessionScreen() {
         if (!isLastInGroup) {
           const nextBlock = groupBlocks[myIndexInGroup + 1];
           setRest(null);
+          clearRestCountdown();
           notify(`Next Up · Superset ${block.supersetGroup}`, `Move straight to ${nextBlock.name}!`);
         } else {
           const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
           if (settings.restSound) primeChime();
           setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+          startRestCountdown(settings.restSeconds, block.name);
           notify(`Round ${completedRounds} Done!`, `Rest now before the next round of Superset ${block.supersetGroup}.`);
         }
       }
@@ -1421,6 +1434,7 @@ export default function SessionScreen() {
         // Not the last in round: prompt next exercise immediately with zero rest delay
         const nextBlock = groupBlocks[myIndexInGroup + 1];
         setRest(null);
+        clearRestCountdown();
         notify(
           `Next Up · Superset ${block.supersetGroup}`,
           `Move straight to ${nextBlock.name}!`,
@@ -1430,6 +1444,7 @@ export default function SessionScreen() {
         const completedRounds = block.rows.slice(0, rowIndex + 1).filter((r) => r.done || r.key === row.key).length;
         if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
         setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+        startRestCountdown(settings.restSeconds, block.name);
         notify(
           `Round ${completedRounds} Done!`,
           `Rest now before the next round of Superset ${block.supersetGroup}.`,
@@ -1441,6 +1456,7 @@ export default function SessionScreen() {
       // needs before it will let the chime play when the rest runs out.
       if (settings.restSound) primeChime(settings.restChimeChoice ?? 'chime');
       setRest({ endsAt: Date.now() + settings.restSeconds * 1000, total: settings.restSeconds });
+      startRestCountdown(settings.restSeconds, block.name);
     }
   };
 
@@ -1748,6 +1764,8 @@ export default function SessionScreen() {
       if (!sure) return;
       await clearWorkoutDraft(session.id);
       await discardSession(session.id);
+      clearRestCountdown();
+      void syncActiveSessionFromDb();
       router.back();
       return;
     }
@@ -1791,6 +1809,8 @@ export default function SessionScreen() {
 
     await clearWorkoutDraft(session.id);
     await finishSession(session.id);
+    clearRestCountdown();
+    void syncActiveSessionFromDb();
 
     /*
       Checked after the session is written, so today's sets are part of the

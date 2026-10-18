@@ -1,15 +1,17 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { FloatingWorkoutBar } from '../../src/components/FloatingWorkoutBar';
 import { font, useTheme } from '../../src/theme';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textFaint,
         // React Navigation styles its own label, so the typeface pass over our
@@ -70,5 +72,7 @@ export default function TabsLayout() {
         options={{ title: 'Settings', href: null }}
       />
     </Tabs>
+    <FloatingWorkoutBar />
+  </View>
   );
 }

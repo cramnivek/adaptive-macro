@@ -19,6 +19,7 @@ import { displayWeight, formatDate, weightUnit } from '../../src/format';
 import { thud } from '../../src/platform/haptics';
 import type { UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
+import { PlateSheet } from '../../src/components/PlateSheet';
 import { font, radius, space } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
 import { getEventCopy } from '../../src/copy/personality';
@@ -44,6 +45,8 @@ export default function TrainScreen() {
   const [sets, setSets] = useState<Awaited<ReturnType<typeof listAllSets>>>([]);
   const [top, setTop] = useState<{ name: string; setCount: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [plateModalOpen, setPlateModalOpen] = useState(false);
+  const [plateWeight, setPlateWeight] = useState<number>(workoutUnits === 'metric' ? 60 : 135);
 
   // Reloaded on focus rather than on mount: coming back from finishing a
   // session must not leave a stale "in progress" card on screen.
@@ -305,6 +308,34 @@ export default function TrainScreen() {
         />
       </Card>
 
+      {/* Gym Floor Tools */}
+      <Card loud variant="featured" title="Gym Floor Tools">
+        <Tappable
+          onPress={() => {
+            thud('light');
+            setPlateWeight(workoutUnits === 'metric' ? 60 : 135);
+            setPlateModalOpen(true);
+          }}
+          style={[styles.toolCard, { backgroundColor: loud.ground, borderColor: loud.rule }]}
+          scaleTo={0.98}
+          accessibilityRole="button"
+          accessibilityLabel="Open Barbell Plate Calculator"
+        >
+          <View style={[styles.toolIconCircle, { backgroundColor: loud.loud + '22' }]}>
+            <Ionicons name="barbell" size={20} color={loud.loud} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: font.uiStrong, color: loud.figure, fontSize: 14 }}>
+              Barbell Plate Calculator
+            </Text>
+            <Text style={[styles.note, { color: loud.figureFaint, marginTop: 2 }]}>
+              Visual rack breakdown with Olympic competition plate colors
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={loud.figureFaint} />
+        </Tappable>
+      </Card>
+
       {totalSets === 0 && (
         <Card loud title="Bringing history over">
           <Text style={[styles.note, { color: loud.figureFaint }]}>
@@ -313,11 +344,51 @@ export default function TrainScreen() {
           </Text>
         </Card>
       )}
+
+      <PlateSheet
+        open={plateModalOpen}
+        weight={plateWeight}
+        units={workoutUnits}
+        bar={settings.barbell}
+        customPlates={settings.customPlates?.[workoutUnits] ?? []}
+        onBarChange={(bar) => void updateSettings({ barbell: bar })}
+        onAddCustomPlate={async (plate) => {
+          const current = settings.customPlates?.[workoutUnits] ?? [];
+          if (current.includes(plate)) return;
+          const updated = [...current, plate].sort((a, b) => b - a);
+          await updateSettings({
+            customPlates: { ...settings.customPlates, [workoutUnits]: updated },
+          });
+        }}
+        onRemoveCustomPlate={async (plate) => {
+          const current = settings.customPlates?.[workoutUnits] ?? [];
+          const updated = current.filter((p) => p !== plate);
+          await updateSettings({
+            customPlates: { ...settings.customPlates, [workoutUnits]: updated },
+          });
+        }}
+        onClose={() => setPlateModalOpen(false)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  toolCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  toolIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   listStack: { gap: space.xs, marginBottom: space.md },
   row: {

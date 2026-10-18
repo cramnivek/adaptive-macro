@@ -5,7 +5,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { activeSession, discardSession, type ActiveSession } from '../db';
 import { confirm } from '../dialog';
 import { thud } from '../platform/haptics';
-import { font, radius, space } from '../theme';
+import { useApp } from '../state/AppStore';
+import {
+  clearRestCountdown,
+  subscribeActiveWorkout,
+  syncActiveSessionFromDb,
+  type ActiveWorkoutState,
+} from '../state/activeWorkoutStore';
+import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Tappable } from './Tappable';
 
@@ -16,7 +23,11 @@ import { Tappable } from './Tappable';
  */
 export const ActiveWorkoutBanner = () => {
   const router = useRouter();
+  const { colors } = useTheme();
+  const { settings } = useApp();
   const [session, setSession] = useState<ActiveSession | null>(null);
+  const [workoutStore, setWorkoutStore] = useState<ActiveWorkoutState | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   const checkActiveSession = useCallback(async () => {
     try {
@@ -29,10 +40,19 @@ export const ActiveWorkoutBanner = () => {
 
   useEffect(() => {
     void checkActiveSession();
-    // Poll periodically while screen is visible
+    const unsub = subscribeActiveWorkout(setWorkoutStore);
     const timer = setInterval(() => void checkActiveSession(), 4000);
-    return () => clearInterval(timer);
+    return () => {
+      unsub();
+      clearInterval(timer);
+    };
   }, [checkActiveSession]);
+
+  useEffect(() => {
+    if (!workoutStore?.rest) return;
+    const interval = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(interval);
+  }, [workoutStore?.rest]);
 
   if (!session) return null;
 
@@ -50,26 +70,60 @@ export const ActiveWorkoutBanner = () => {
     });
     if (!ok) return;
     thud('light');
+    clearRestCountdown();
     await discardSession(session.id);
+    void syncActiveSessionFromDb();
     setSession(null);
   };
 
   const setsCount = session.sets.length;
+  const isGymrat = settings.personality === 'gymrat';
+
+  let restRemaining: number | null = null;
+  if (workoutStore?.rest) {
+    restRemaining = Math.max(0, Math.round((workoutStore.rest.endsAt - now) / 1000));
+  }
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const isResting = restRemaining !== null && restRemaining > 0;
+  const isRestDone = restRemaining === 0;
 
   return (
-    <View style={[styles.banner, { backgroundColor: loud.panel, borderColor: loud.loud }]}>
+    <View style={[styles.banner, { backgroundColor: loud.panel, borderColor: isResting ? colors.accent : loud.loud }]}>
       <View style={styles.content}>
         <View style={styles.badgeRow}>
-          <View style={styles.pulseDot} />
-          <Text style={styles.badgeText}>WORKOUT IN PROGRESS</Text>
+          <View style={[styles.pulseDot, { backgroundColor: isRestDone ? colors.positive : isResting ? colors.accent : loud.loud }]} />
+          <Text style={[styles.badgeText, isResting && { color: colors.accent }]}>
+            {isGymrat ? 'LOCK IN · WORKOUT ACTIVE 🔥' : 'WORKOUT IN PROGRESS'}
+          </Text>
         </View>
 
         <Text style={styles.title}>
-          {setsCount === 0 ? 'Session active · No sets logged yet' : `${setsCount} set${setsCount === 1 ? '' : 's'} recorded`}
+          {workoutStore?.currentExerciseName
+            ? `${workoutStore.currentExerciseName} (${setsCount} set${setsCount === 1 ? '' : 's'})`
+            : setsCount === 0
+              ? 'Session active · No sets logged yet'
+              : `${setsCount} set${setsCount === 1 ? '' : 's'} recorded`}
         </Text>
-        <Text style={styles.sub}>
-          Tap to pick up right where you left off.
-        </Text>
+
+        {isResting ? (
+          <Text style={[styles.sub, { color: colors.accent, fontWeight: '700' }]}>
+            Rest timer ticking: {formatTime(restRemaining!)} remaining ⏳
+          </Text>
+        ) : isRestDone ? (
+          <Text style={[styles.sub, { color: colors.positive, fontWeight: '700' }]}>
+            Rest finished! Ready to lift your next set 💥
+          </Text>
+        ) : (
+          <Text style={styles.sub}>
+            {isGymrat ? 'Tap to get back under the iron.' : 'Tap to pick up right where you left off.'}
+          </Text>
+        )}
       </View>
 
       <View style={styles.actions}>
