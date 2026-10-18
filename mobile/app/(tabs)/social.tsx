@@ -251,83 +251,56 @@ export default function SocialScreen() {
   return (
     <Screen
       title="Social"
+      subtitle={`${counts.followers} followers · ${counts.following} following`}
       onRefresh={handleRefresh}
       refreshing={refreshing}
       action={
         <View style={styles.actions}>
+          <Tappable
+            onPress={() => router.push('/people')}
+            accessibilityRole="button"
+            accessibilityLabel="Find people"
+            style={styles.icon}
+          >
+            <Ionicons name="search-outline" size={21} color={colors.textMuted} />
+          </Tappable>
+
           <Tappable
             onPress={() => router.push('/requests')}
             accessibilityRole="button"
             accessibilityLabel={`Follow requests, ${requests}`}
             style={styles.icon}
           >
-            <Ionicons name="person-add-outline" size={22} color={colors.textMuted} />
+            <Ionicons name="person-add-outline" size={21} color={colors.textMuted} />
             {requests > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.danger }]}>
                 <Text style={styles.badgeText}>{requests}</Text>
               </View>
             )}
           </Tappable>
-          <Tappable onPress={() => router.push('/people')} accessibilityRole="button" accessibilityLabel="Find people" style={styles.icon}>
-            <Ionicons name="search-outline" size={22} color={colors.textMuted} />
-          </Tappable>
+
+          {profile && (
+            <Tappable
+              onPress={() => router.push({ pathname: '/profile', params: { username: profile.username } })}
+              accessibilityRole="button"
+              accessibilityLabel={`My profile, ${profile.username}`}
+              style={[styles.profilePill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+            >
+              <View style={[styles.profilePillAvatar, { backgroundColor: getAvatarColor(profile.username) }]}>
+                <Text style={styles.profilePillAvatarText}>
+                  {getInitials(profile.display_name || profile.username)}
+                </Text>
+              </View>
+              <Text style={[styles.profilePillText, { color: colors.text }]} numberOfLines={1}>
+                {profile.display_name || profile.username}
+              </Text>
+            </Tappable>
+          )}
+
           {gear}
         </View>
       }
     >
-      {/* Profile Hero Card */}
-      <View style={[styles.heroCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.heroTop}>
-          <View style={[styles.heroAvatar, { backgroundColor: getAvatarColor(profile.username) }]}>
-            <Text style={styles.heroAvatarText}>{getInitials(profile.display_name || profile.username)}</Text>
-          </View>
-          <View style={styles.heroMeta}>
-            <Text style={[styles.heroName, { color: colors.text }]} numberOfLines={1}>
-              {profile.display_name}
-            </Text>
-            <Text style={[styles.heroHandle, { color: colors.textMuted }]}>@{profile.username}</Text>
-            <Text style={[styles.heroFollowCounts, { color: colors.textMuted }]}>
-              <Text style={[styles.countBold, { color: colors.text }]}>{counts.followers}</Text> followers ·{' '}
-              <Text style={[styles.countBold, { color: colors.text }]}>{counts.following}</Text> following
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.heroActions}>
-          <Pressable
-            onPress={() => router.push('/people')}
-            style={[styles.heroActionBtn, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
-          >
-            <Ionicons name="search-outline" size={14} color={colors.text} />
-            <Text style={[styles.heroActionText, { color: colors.text }]}>Find lifters</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/requests')}
-            style={[
-              styles.heroActionBtn,
-              {
-                backgroundColor: requests > 0 ? colors.accent + '20' : colors.surfaceRaised,
-                borderColor: requests > 0 ? colors.accent : colors.border,
-              },
-            ]}
-          >
-            <Ionicons name="person-add-outline" size={14} color={requests > 0 ? colors.accent : colors.text} />
-            <Text style={[styles.heroActionText, { color: requests > 0 ? colors.accent : colors.text }]}>
-              Requests {requests > 0 ? `(${requests})` : ''}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push({ pathname: '/profile', params: { username: profile.username } })}
-            style={[styles.heroActionBtn, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
-          >
-            <Ionicons name="person-outline" size={14} color={colors.text} />
-            <Text style={[styles.heroActionText, { color: colors.text }]}>My Profile</Text>
-          </Pressable>
-        </View>
-      </View>
-
       {/* Segmented Feed Tabs Bar */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
         {(['following', 'squad', 'explore', 'my-posts'] as const).map((tab) => {
@@ -483,68 +456,34 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#fff', fontFamily: font.uiStrong, fontSize: 10 },
 
-  // Hero Card
-  heroCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
-    padding: space.md,
-    marginBottom: space.md,
-  },
-  heroTop: {
+  // Compact Profile Pill in header
+  profilePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
-    marginBottom: space.sm,
+    gap: 6,
+    paddingLeft: 4,
+    paddingRight: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 130,
+    marginRight: 4,
   },
-  heroAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  profilePillAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroAvatarText: {
+  profilePillAvatarText: {
     fontFamily: font.uiStrong,
-    fontSize: 16,
+    fontSize: 9,
     color: '#ffffff',
   },
-  heroMeta: {
-    flex: 1,
-  },
-  heroName: {
+  profilePillText: {
     fontFamily: font.uiStrong,
-    fontSize: 16,
-  },
-  heroHandle: {
-    fontFamily: font.ui,
-    fontSize: 12,
-    marginTop: 1,
-  },
-  heroFollowCounts: {
-    fontFamily: font.ui,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  countBold: {
-    fontFamily: font.uiStrong,
-  },
-  heroActions: {
-    flexDirection: 'row',
-    gap: space.xs,
-    marginTop: space.xs,
-  },
-  heroActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: space.sm,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  heroActionText: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
+    fontSize: 11.5,
   },
 
   // Segmented Tabs
