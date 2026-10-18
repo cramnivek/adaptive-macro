@@ -81,6 +81,8 @@ interface FieldProps {
   /** On by default; off for emails, handles and codes, which a keyboard would "fix" into something else. */
   autoCorrect?: boolean;
   maxLength?: number;
+  /** Highlights border and label in danger red when true or contains an error string */
+  error?: boolean | string;
 }
 
 export const Field = ({
@@ -96,13 +98,22 @@ export const Field = ({
   autoCapitalize = 'sentences',
   autoCorrect = true,
   maxLength,
+  error,
 }: FieldProps) => {
   const { colors } = useTheme();
+  const hasError = Boolean(error);
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: hasError ? colors.danger : colors.textMuted }]}>{label}</Text>
       <View
-        style={[styles.inputRow, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+        style={[
+          styles.inputRow,
+          {
+            backgroundColor: colors.surfaceRaised,
+            borderColor: hasError ? colors.danger : colors.border,
+            borderWidth: hasError ? 1.5 : StyleSheet.hairlineWidth,
+          },
+        ]}
       >
         <TextInput
           value={value}
@@ -126,7 +137,11 @@ export const Field = ({
         />
         {suffix && <Text style={[styles.suffix, { color: colors.textFaint }]}>{suffix}</Text>}
       </View>
-      {hint && <Text style={[styles.hint, { color: colors.textFaint }]}>{hint}</Text>}
+      {typeof error === 'string' && error.length > 0 ? (
+        <Text style={[styles.hint, { color: colors.danger }]}>{error}</Text>
+      ) : hint ? (
+        <Text style={[styles.hint, { color: colors.textFaint }]}>{hint}</Text>
+      ) : null}
     </View>
   );
 };

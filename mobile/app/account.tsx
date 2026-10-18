@@ -7,6 +7,7 @@ import { Screen } from '../src/components/Screen';
 import { confirm, notify } from '../src/dialog';
 import { deleteAccount, signOut } from '../src/social/api';
 import { useSocial } from '../src/social/session';
+import { forgetGoogleAccount } from '../src/social/socialSignIn';
 import { font, space, useTheme } from '../src/theme';
 
 /** The account: who you are to other people, your posts, and the way out. */
@@ -20,6 +21,7 @@ export default function AccountScreen() {
     setBusy(true);
     try {
       await step();
+      await forgetGoogleAccount().catch(() => undefined);
     } catch (error) {
       notify(failure, (error as Error).message);
     } finally {
@@ -84,6 +86,7 @@ export default function AccountScreen() {
           <Button label="Blocked people" variant="subtle" onPress={() => router.push('/blocked')} />
         </Card>
         <Card>
+          {note('Your food and workout logs stay on this device after signing out.')}
           <Button label="Sign out" variant="subtle" disabled={busy} onPress={() => void leave(signOut, 'Could not sign out')} />
           <Button label="Delete account" variant="danger" disabled={busy} onPress={() => void remove()} />
         </Card>

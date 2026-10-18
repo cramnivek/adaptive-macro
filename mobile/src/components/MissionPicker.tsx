@@ -27,6 +27,10 @@ export interface MissionPickerProps {
   isSaving?: boolean;
   saveButtonLabel?: string;
   style?: ViewStyle;
+  /** When true, renders a clean streamlined view tailored for onboarding */
+  compact?: boolean;
+  /** When true, hides the dynamic praise header */
+  hidePraiseBox?: boolean;
 }
 
 export const MissionPicker = ({
@@ -38,6 +42,8 @@ export const MissionPicker = ({
   isSaving = false,
   saveButtonLabel = 'LOCK IN MY MISSION 🚀',
   style,
+  compact = false,
+  hidePraiseBox = false,
 }: MissionPickerProps) => {
   const { colors } = useTheme();
   const [mission, setMission] = useState<UserMission>(selectedMission);
@@ -65,28 +71,30 @@ export const MissionPicker = ({
   return (
     <View style={[styles.container, style]}>
       {/* Dynamic Motivation & Praise Banner */}
-      <View
-        style={[
-          styles.praiseBox,
-          {
-            backgroundColor: colors.surfaceRaised,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.praiseBadgeRow}>
-          <Ionicons name="sparkles" size={13} color={colors.accent} />
-          <Text style={[styles.praiseBadgeText, { color: colors.accent }]}>
-            YOUR TRAINING MISSION
+      {!hidePraiseBox && !compact && (
+        <View
+          style={[
+            styles.praiseBox,
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.praiseBadgeRow}>
+            <Ionicons name="sparkles" size={13} color={colors.accent} />
+            <Text style={[styles.praiseBadgeText, { color: colors.accent }]}>
+              YOUR TRAINING MISSION
+            </Text>
+          </View>
+          <Text style={[styles.praiseMessage, { color: colors.text }]}>
+            {praise}
           </Text>
         </View>
-        <Text style={[styles.praiseMessage, { color: colors.text }]}>
-          {praise}
-        </Text>
-      </View>
+      )}
 
       {/* Mission Cards Grid */}
-      <View style={styles.missionsList}>
+      <View style={[styles.missionsList, compact && styles.compactMissionsList]}>
         {MISSION_LIST.map((item: MissionDefinition) => {
           const isSelected = mission === item.id;
 
@@ -96,6 +104,7 @@ export const MissionPicker = ({
               onPress={() => handleSelectMission(item.id)}
               style={({ pressed }) => [
                 styles.missionCard,
+                compact && styles.compactMissionCard,
                 {
                   backgroundColor: isSelected ? colors.surfaceRaised : colors.surface,
                   borderColor: isSelected ? item.accentColor : colors.border,
@@ -107,37 +116,54 @@ export const MissionPicker = ({
               accessibilityState={{ checked: isSelected }}
               accessibilityLabel={`${item.name}: ${item.tagline}`}
             >
-              <View style={styles.cardHeader}>
+              <View style={[styles.cardHeader, compact && styles.compactCardHeader]}>
                 <View
                   style={[
                     styles.emojiBubble,
+                    compact && styles.compactEmojiBubble,
                     {
                       backgroundColor: `${item.accentColor}22`,
                       borderColor: `${item.accentColor}55`,
                     },
                   ]}
                 >
-                  <Text style={styles.emojiText}>{item.emoji}</Text>
+                  <Text style={[styles.emojiText, compact && styles.compactEmojiText]}>
+                    {item.emoji}
+                  </Text>
                 </View>
 
                 <View style={styles.headerInfo}>
+                  {!compact && (
+                    <Text
+                      style={[
+                        styles.badgeTag,
+                        { color: isSelected ? item.accentColor : colors.textFaint },
+                      ]}
+                    >
+                      {item.badge}
+                    </Text>
+                  )}
                   <Text
                     style={[
-                      styles.badgeTag,
-                      { color: isSelected ? item.accentColor : colors.textFaint },
+                      styles.cardTitle,
+                      compact && styles.compactCardTitle,
+                      { color: colors.text },
                     ]}
                   >
-                    {item.badge}
-                  </Text>
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>
                     {item.name}
                   </Text>
+                  {compact && (
+                    <Text style={[styles.compactTagline, { color: colors.textMuted }]}>
+                      {item.tagline}
+                    </Text>
+                  )}
                 </View>
 
                 {/* Radio selection indicator */}
                 <View
                   style={[
                     styles.radioCircle,
+                    compact && styles.compactRadioCircle,
                     isSelected
                       ? {
                           backgroundColor: item.accentColor,
@@ -150,73 +176,81 @@ export const MissionPicker = ({
                   ]}
                 >
                   {isSelected && (
-                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                    <Ionicons name="checkmark" size={compact ? 12 : 14} color="#FFFFFF" />
                   )}
                 </View>
               </View>
 
-              <Text style={[styles.tagline, { color: colors.textMuted }]}>
-                {item.tagline}
-              </Text>
-              <Text style={[styles.desc, { color: colors.textFaint }]}>
-                {item.description}
-              </Text>
+              {!compact && (
+                <>
+                  <Text style={[styles.tagline, { color: colors.textMuted }]}>
+                    {item.tagline}
+                  </Text>
+                  <Text style={[styles.desc, { color: colors.textFaint }]}>
+                    {item.description}
+                  </Text>
+                </>
+              )}
             </Pressable>
           );
         })}
       </View>
 
       {/* Dashboard Spotlight Selector */}
-      <View style={styles.spotlightSection}>
-        <View style={styles.spotlightHeader}>
-          <Text style={[styles.spotlightTitle, { color: colors.text }]}>
-            Home Screen Spotlight
-          </Text>
-          <Text style={[styles.spotlightSubtitle, { color: colors.textMuted }]}>
-            Choose what your daily dashboard leads with.
-          </Text>
-        </View>
+      {!compact && (
+        <View style={styles.spotlightSection}>
+          <View style={styles.spotlightHeader}>
+            <Text style={[styles.spotlightTitle, { color: colors.text }]}>
+              Home Screen Spotlight
+            </Text>
+            <Text style={[styles.spotlightSubtitle, { color: colors.textMuted }]}>
+              Choose what your daily dashboard leads with.
+            </Text>
+          </View>
 
-        <View style={styles.spotlightRow}>
-          {SPOTLIGHT_OPTIONS.map((opt) => {
-            const isSelected = spotlight === opt.id;
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={() => handleSelectSpotlight(opt.id)}
-                style={({ pressed }) => [
-                  styles.spotlightPill,
-                  {
-                    backgroundColor: isSelected ? colors.text : colors.surfaceRaised,
-                    borderColor: isSelected ? colors.text : colors.border,
-                    opacity: pressed ? 0.75 : 1,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={opt.label}
-              >
-                <Text style={styles.spotlightEmoji}>{opt.emoji}</Text>
-                <Text
-                  style={[
-                    styles.spotlightText,
-                    { color: isSelected ? colors.background : colors.text },
+          <View style={styles.spotlightRow}>
+            {SPOTLIGHT_OPTIONS.map((opt) => {
+              const isSelected = spotlight === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => handleSelectSpotlight(opt.id)}
+                  style={({ pressed }) => [
+                    styles.spotlightPill,
+                    {
+                      backgroundColor: isSelected ? colors.text : colors.surfaceRaised,
+                      borderColor: isSelected ? colors.text : colors.border,
+                      opacity: pressed ? 0.75 : 1,
+                    },
                   ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={opt.label}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text style={styles.spotlightEmoji}>{opt.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.spotlightText,
+                      { color: isSelected ? colors.background : colors.text },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Guarantee Badge */}
-      <View style={[styles.guaranteeBox, { backgroundColor: colors.surfaceRaised }]}>
-        <Ionicons name="shield-checkmark" size={14} color={colors.accent} />
-        <Text style={[styles.guaranteeText, { color: colors.textMuted }]}>
-          All features (3D Kinematics, Scale Weight, Story Stickers, AI Coach & DRI Panel) are always 100% active and unlocked.
-        </Text>
-      </View>
+      {!compact && (
+        <View style={[styles.guaranteeBox, { backgroundColor: colors.surfaceRaised }]}>
+          <Ionicons name="shield-checkmark" size={14} color={colors.accent} />
+          <Text style={[styles.guaranteeText, { color: colors.textMuted }]}>
+            All features (3D Kinematics, Scale Weight, Story Stickers, AI Coach & DRI Panel) are always 100% active and unlocked.
+          </Text>
+        </View>
+      )}
 
       {/* Save Button */}
       {onSave && (
@@ -260,15 +294,28 @@ const styles = StyleSheet.create({
   missionsList: {
     gap: space.sm,
   },
+  compactMissionsList: {
+    gap: space.xs + 2,
+  },
   missionCard: {
     padding: space.md,
     borderRadius: radius.xl,
     borderWidth: 1.5,
     gap: space.xs,
   },
+  compactMissionCard: {
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    gap: 0,
+  },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: space.sm,
+  },
+  compactCardHeader: {
     gap: space.sm,
   },
   emojiBubble: {
@@ -279,8 +326,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  compactEmojiBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+  },
   emojiText: {
     fontSize: 18,
+  },
+  compactEmojiText: {
+    fontSize: 16,
   },
   headerInfo: {
     flex: 1,
@@ -296,6 +351,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
   },
+  compactCardTitle: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  compactTagline: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   radioCircle: {
     width: 22,
     height: 22,
@@ -303,6 +368,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  compactRadioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
   },
   tagline: {
     fontFamily: font.uiStrong,
