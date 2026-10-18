@@ -97,8 +97,8 @@ export const WeeklyReviewModal = ({
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
             <View style={styles.badgeRow}>
-              <Ionicons name="sparkles" size={15} color="#00E5FF" />
-              <Text style={styles.headerBadge}>WEEKLY AI COACH</Text>
+              <Ionicons name="sparkles" size={15} color={colors.accent} />
+              <Text style={[styles.headerBadge, { color: colors.textMuted }]}>WEEKLY AI COACH</Text>
             </View>
             <Text style={[styles.headerPeriod, { color: colors.textMuted }]}>
               {metrics.period.from} to {metrics.period.to}
@@ -141,7 +141,7 @@ export const WeeklyReviewModal = ({
           {/* Loading Indicator */}
           {loading && (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color="#00E5FF" />
+              <ActivityIndicator size="large" color={colors.accent} />
               <Text style={styles.loadingTitle}>Analyzing your week...</Text>
               <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
                 Connecting your workouts, weight readings, and energy balance into plain-English advice.
@@ -152,8 +152,8 @@ export const WeeklyReviewModal = ({
           {/* No Review Yet State */}
           {!review && !loading && (
             <View style={styles.emptyState}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="analytics" size={32} color="#00E5FF" />
+              <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                <Ionicons name="analytics" size={32} color={colors.accent} />
               </View>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 Ready for your 7-day coaching check-in
@@ -171,8 +171,8 @@ export const WeeklyReviewModal = ({
           {review && !loading && (
             <>
               {/* Headline */}
-              <View style={styles.headlineBox}>
-                <Text style={styles.headlineText}>"{review.headline}"</Text>
+              <View style={[styles.headlineBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+                <Text style={[styles.headlineText, { color: colors.text }]}>"{review.headline}"</Text>
               </View>
 
               {/* Friendly Summary */}
@@ -186,10 +186,10 @@ export const WeeklyReviewModal = ({
               {/* Key Wins */}
               {review.keyWins?.length > 0 && (
                 <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
-                  <Text style={[styles.sectionTitle, { color: '#10B981' }]}>WINS THIS WEEK</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.positive }]}>WINS THIS WEEK</Text>
                   {review.keyWins.map((win, idx) => (
                     <View key={idx} style={styles.winRow}>
-                      <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+                      <Ionicons name="checkmark-circle" size={18} color={colors.positive} />
                       <Text style={[styles.winText, { color: colors.text }]}>{win}</Text>
                     </View>
                   ))}
@@ -201,8 +201,8 @@ export const WeeklyReviewModal = ({
                 {/* Workout Card */}
                 <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
                   <View style={styles.cardHeaderRow}>
-                    <Ionicons name="barbell" size={16} color="#00E5FF" />
-                    <Text style={styles.cardHeaderTitle}>WORKOUTS & STRENGTH</Text>
+                    <Ionicons name="barbell" size={16} color={colors.accent} />
+                    <Text style={[styles.cardHeaderTitle, { color: colors.accent }]}>WORKOUTS & STRENGTH</Text>
                   </View>
                   <Text style={[styles.cardBody, { color: colors.textMuted }]}>
                     {review.trainingInsight}
@@ -212,8 +212,8 @@ export const WeeklyReviewModal = ({
                 {/* Nutrition Card */}
                 <View style={[styles.insightCard, { backgroundColor: colors.surfaceRaised }]}>
                   <View style={styles.cardHeaderRow}>
-                    <Ionicons name="restaurant" size={16} color="#FBBF24" />
-                    <Text style={[styles.cardHeaderTitle, { color: '#FBBF24' }]}>
+                    <Ionicons name="restaurant" size={16} color={colors.warning} />
+                    <Text style={[styles.cardHeaderTitle, { color: colors.warning }]}>
                       NUTRITION & SCALE
                     </Text>
                   </View>
@@ -225,25 +225,25 @@ export const WeeklyReviewModal = ({
 
               {/* Recommended Target Adjustment */}
               {review.suggestedAdjustment && (
-                <View style={styles.adjustBox}>
+                <View style={[styles.adjustBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
                   <View style={styles.adjustTop}>
                     <View style={styles.adjustBadge}>
-                      <Ionicons name="flash" size={14} color="#00E5FF" />
-                      <Text style={styles.adjustBadgeText}>RECOMMENDED ADJUSTMENT</Text>
+                      <Ionicons name="flash" size={14} color={colors.warning} />
+                      <Text style={[styles.adjustBadgeText, { color: colors.warning }]}>RECOMMENDED ADJUSTMENT</Text>
                     </View>
-                    <Text style={styles.adjustTitle}>{review.suggestedAdjustment.title}</Text>
+                    <Text style={[styles.adjustTitle, { color: colors.text }]}>{review.suggestedAdjustment.title}</Text>
                   </View>
 
-                  <Text style={styles.adjustRationale}>
+                  <Text style={[styles.adjustRationale, { color: colors.textMuted }]}>
                     {review.suggestedAdjustment.rationale}
                   </Text>
 
                   {/* Explicit Before / After Comparison Preview */}
                   {review.suggestedAdjustment.hasAdjustment && (
-                    <View style={styles.beforeAfterContainer}>
+                    <View style={[styles.beforeAfterContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <View style={styles.beforeAfterCol}>
-                        <Text style={styles.beforeAfterLabel}>CURRENT TARGET</Text>
-                        <Text style={styles.beforeAfterVal}>
+                        <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>CURRENT TARGET</Text>
+                        <Text style={[styles.beforeAfterVal, { color: colors.text }]}>
                           {adjustmentPreview
                             ? `${Math.round(adjustmentPreview.currentKcal).toLocaleString()} kcal`
                             : (metrics.nutrition.targetCalories
@@ -251,7 +251,7 @@ export const WeeklyReviewModal = ({
                                 : '—')}
                         </Text>
                         {adjustmentPreview && (
-                          <Text style={styles.beforeAfterSub}>
+                          <Text style={[styles.beforeAfterSub, { color: colors.textMuted }]}>
                             {adjustmentPreview.currentGoal.direction === 'maintain'
                               ? 'Maintenance'
                               : adjustmentPreview.currentGoal.direction === 'lose'
@@ -260,10 +260,10 @@ export const WeeklyReviewModal = ({
                           </Text>
                         )}
                       </View>
-                      <Ionicons name="arrow-forward" size={16} color="#00E5FF" />
+                      <Ionicons name="arrow-forward" size={16} color={colors.textMuted} />
                       <View style={styles.beforeAfterCol}>
-                        <Text style={styles.beforeAfterLabel}>RECALCULATED</Text>
-                        <Text style={[styles.beforeAfterVal, { color: '#00E5FF' }]}>
+                        <Text style={[styles.beforeAfterLabel, { color: colors.textFaint }]}>RECALCULATED</Text>
+                        <Text style={[styles.beforeAfterVal, { color: colors.accent }]}>
                           {adjustmentPreview
                             ? `${Math.round(adjustmentPreview.achievableKcal).toLocaleString()} kcal`
                             : review.suggestedAdjustment.deltaKcal && metrics.nutrition.targetCalories
@@ -271,7 +271,7 @@ export const WeeklyReviewModal = ({
                               : '—'}
                         </Text>
                         {adjustmentPreview && (
-                          <Text style={[styles.beforeAfterSub, { color: '#00E5FF' }]}>
+                          <Text style={[styles.beforeAfterSub, { color: colors.positive }]}>
                             {adjustmentPreview.rateChangeDescription}
                           </Text>
                         )}
@@ -282,7 +282,7 @@ export const WeeklyReviewModal = ({
                   {/* Safety Guardrail Alert if below 1200 kcal */}
                   {adjustmentPreview?.isSafetyFloorTriggered && (
                     <View style={styles.safetyWarningBox}>
-                      <Ionicons name="warning-outline" size={14} color="#FBBF24" />
+                      <Ionicons name="warning-outline" size={14} color={colors.warning} />
                       <Text style={styles.safetyWarningText}>
                         Safety floor notice: This target reaches the 1,200 kcal/day lower bound. To protect metabolism and lean tissue, Ascend will not program targets below 1,200 kcal/day. Consider increasing daily activity or taking a maintenance break.
                       </Text>
@@ -297,18 +297,19 @@ export const WeeklyReviewModal = ({
                       }}
                       style={[
                         styles.applyBtn,
-                        applied && { backgroundColor: '#102A1E', borderColor: '#1D5A3C' },
+                        { backgroundColor: colors.accent },
+                        applied && { backgroundColor: colors.positive + '20', borderColor: colors.positive, borderWidth: 1 },
                       ]}
                     >
                       <Ionicons
                         name={applied ? 'checkmark-circle' : 'arrow-forward-circle'}
                         size={18}
-                        color={applied ? '#10B981' : '#050B14'}
+                        color={applied ? colors.positive : colors.onFill}
                       />
                       <Text
                         style={[
                           styles.applyBtnText,
-                          applied && { color: '#10B981' },
+                          { color: applied ? colors.positive : colors.onFill },
                         ]}
                       >
                         {applied ? 'ADJUSTMENT APPLIED' : 'APPLY THIS ADJUSTMENT'}
@@ -316,8 +317,8 @@ export const WeeklyReviewModal = ({
                     </Tappable>
                   ) : (
                     <View style={styles.onTrackPill}>
-                      <Ionicons name="checkmark-done" size={16} color="#10B981" />
-                      <Text style={styles.onTrackText}>Targets are dialed in · Keep going</Text>
+                      <Ionicons name="checkmark-done" size={16} color={colors.positive} />
+                      <Text style={[styles.onTrackText, { color: colors.positive }]}>Targets are dialed in · Keep going</Text>
                     </View>
                   )}
                 </View>
@@ -326,15 +327,15 @@ export const WeeklyReviewModal = ({
               {/* Expandable Science & References Drawer */}
               <View style={[styles.scienceBox, { borderColor: colors.border }]}>
                 <Pressable
-                  style={styles.scienceHeader}
+                  style={[styles.scienceHeader, { backgroundColor: colors.surfaceRaised }]}
                   onPress={() => {
                     thud('light');
                     setShowScience((prev) => !prev);
                   }}
                 >
                   <View style={styles.scienceTitleGroup}>
-                    <Ionicons name="school-outline" size={18} color="#00E5FF" />
-                    <Text style={styles.scienceTitle}>Learn the Science & Evidence</Text>
+                    <Ionicons name="school-outline" size={18} color={colors.accent} />
+                    <Text style={[styles.scienceTitle, { color: colors.text }]}>Learn the Science & Evidence</Text>
                   </View>
                   <Ionicons
                     name={showScience ? 'chevron-up' : 'chevron-down'}
@@ -344,7 +345,7 @@ export const WeeklyReviewModal = ({
                 </Pressable>
 
                 {showScience && (
-                  <View style={styles.scienceBody}>
+                  <View style={[styles.scienceBody, { backgroundColor: colors.surface }]}>
                     <Text style={[styles.scienceText, { color: colors.textMuted }]}>
                       {review.scienceExplanation ??
                         'Ascend uses evidence-based exercise physiology to interpret your week. By comparing working sets against research-proven volume landmarks and tracking progressive overload, we ensure you stay in your muscle-building sweet spot without overreaching.'}
@@ -427,7 +428,6 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 12,
     letterSpacing: 1.2,
-    color: '#00E5FF',
   },
   headerPeriod: {
     fontFamily: font.figure,
@@ -510,9 +510,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#092532',
     borderWidth: 1,
-    borderColor: '#00E5FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.sm,
@@ -534,8 +532,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   headlineBox: {
-    backgroundColor: '#081726',
-    borderColor: '#00E5FF',
     borderWidth: 1,
     borderRadius: radius.md,
     padding: space.md,
@@ -543,7 +539,6 @@ const styles = StyleSheet.create({
   headlineText: {
     fontFamily: font.display,
     fontSize: 18,
-    color: '#E0F7FF',
     lineHeight: 24,
     fontStyle: 'italic',
   },
@@ -591,7 +586,6 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 11,
     letterSpacing: 1,
-    color: '#00E5FF',
   },
   cardBody: {
     fontFamily: font.ui,
@@ -599,8 +593,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   adjustBox: {
-    backgroundColor: '#091A2A',
-    borderColor: '#1D4566',
     borderWidth: 1,
     borderRadius: radius.md,
     padding: space.md,
@@ -616,27 +608,22 @@ const styles = StyleSheet.create({
   },
   adjustBadgeText: {
     fontFamily: font.uiStrong,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 1.2,
-    color: '#00E5FF',
   },
   adjustTitle: {
     fontFamily: font.display,
     fontSize: 17,
-    color: '#FFFFFF',
   },
   adjustRationale: {
     fontFamily: font.ui,
     fontSize: 13,
-    color: '#94A3B8',
     lineHeight: 18,
   },
   beforeAfterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#05111B',
-    borderColor: '#11304A',
     borderWidth: 1,
     borderRadius: radius.sm,
     padding: space.sm,
@@ -648,20 +635,17 @@ const styles = StyleSheet.create({
   },
   beforeAfterLabel: {
     fontFamily: font.uiStrong,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 1,
-    color: '#64748B',
     marginBottom: 2,
   },
   beforeAfterVal: {
     fontFamily: font.display,
-    fontSize: 14,
-    color: '#F8FAFC',
+    fontSize: 15,
   },
   beforeAfterSub: {
     fontFamily: font.figure,
-    fontSize: 10,
-    color: '#94A3B8',
+    fontSize: 11.5,
     marginTop: 2,
   },
   safetyWarningBox: {
@@ -687,7 +671,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#00E5FF',
     paddingVertical: 12,
     paddingHorizontal: space.md,
     borderRadius: radius.sm,
@@ -696,7 +679,6 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 13,
     letterSpacing: 0.8,
-    color: '#050B14',
   },
   onTrackPill: {
     flexDirection: 'row',
@@ -707,7 +689,6 @@ const styles = StyleSheet.create({
   onTrackText: {
     fontFamily: font.ui,
     fontSize: 12,
-    color: '#10B981',
   },
   scienceBox: {
     borderWidth: 1,
@@ -719,7 +700,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: space.md,
-    backgroundColor: '#11161F',
   },
   scienceTitleGroup: {
     flexDirection: 'row',
@@ -729,11 +709,9 @@ const styles = StyleSheet.create({
   scienceTitle: {
     fontFamily: font.uiStrong,
     fontSize: 13,
-    color: '#00E5FF',
   },
   scienceBody: {
     padding: space.md,
-    backgroundColor: '#0A0F16',
     gap: space.sm,
   },
   scienceText: {

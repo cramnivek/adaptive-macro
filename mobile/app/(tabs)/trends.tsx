@@ -46,7 +46,7 @@ import {
 } from '../../src/format';
 import { loggingStrip } from '../../src/loggingStrip';
 import { useApp } from '../../src/state/AppStore';
-import { font, radius, space, useTheme } from '../../src/theme';
+import { font, radius, space, useTheme, type Palette } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
 import { volumeComparison } from '../../src/volume';
 import { weeklyTotals, type SessionTimes } from '../../src/weeklyTraining';
@@ -380,40 +380,50 @@ export default function TrendsScreen() {
             thud('light');
             setCoachingModalOpen(true);
           }}
-          style={styles.coachingBanner}
+          style={[
+            styles.coachingBanner,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Open Weekly AI Coaching Review"
         >
           <View style={styles.coachingBannerLeft}>
-            <View style={styles.coachingIconCircle}>
-              <Ionicons name="sparkles" size={18} color="#00E5FF" />
+            <View
+              style={[
+                styles.coachingIconCircle,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="sparkles" size={18} color={colors.accent} />
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
-                <Text style={styles.coachingTag}>WEEKLY AI COACH</Text>
+                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>WEEKLY AI COACH</Text>
                 <View
                   style={[
                     styles.readyPill,
-                    coachingReview ? styles.readyPillActive : styles.readyPillPending,
+                    coachingReview
+                      ? { backgroundColor: colors.positive + '20', borderColor: colors.positive }
+                      : { backgroundColor: colors.warning + '20', borderColor: colors.warning },
                   ]}
                 >
                   <Text
                     style={[
                       styles.readyPillText,
-                      coachingReview ? styles.readyTextActive : styles.readyTextPending,
+                      { color: coachingReview ? colors.positive : colors.warning },
                     ]}
                   >
                     {coachingReview ? 'REVIEW READY' : 'TAP TO GENERATE'}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.coachingHeadline} numberOfLines={1}>
+              <Text style={[styles.coachingHeadline, { color: colors.text }]} numberOfLines={1}>
                 {coachingReview ? `"${coachingReview.headline}"` : 'See how your workouts, scale weight, and calories connected this week'}
               </Text>
             </View>
           </View>
           <View style={styles.coachingArrowWrap}>
-            <Ionicons name="chevron-forward" size={18} color="#00E5FF" />
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </View>
         </Tappable>
       </FadeIn>
@@ -439,8 +449,8 @@ export default function TrendsScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
-              <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
-                <Text style={[styles.switchLabel, { color: active ? loud.onLoud : loud.figureMuted }]}>
+              <SlashPanel color={active ? colors.accent : colors.surfaceRaised} style={styles.switchPanel}>
+                <Text style={[styles.switchLabel, { color: active ? colors.onFill : colors.textMuted }]}>
                   {tab.label}
                 </Text>
               </SlashPanel>
@@ -453,112 +463,111 @@ export default function TrendsScreen() {
       <View style={styles.atAGlanceGrid}>
         {activeTab === 'all' && (
           <>
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>WEIGHT TREND</Text>
-              <Text style={styles.glanceTileValue}>
-                {latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
-              </Text>
-              <Text style={styles.glanceTileSub}>
-                {trend ? formatRate(trend.rateKgPerWeek, settings.units) : 'settling'}
-              </Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>CALORIE PLAN</Text>
-              <Text style={styles.glanceTileValue}>
-                {program.calories.adjustmentKcal === 0
+            <GlanceTile
+              label="WEIGHT TREND"
+              value={latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
+              sub={trend ? formatRate(trend.rateKgPerWeek, settings.units) : 'settling'}
+              colors={colors}
+            />
+            <GlanceTile
+              label="CALORIE PLAN"
+              value={
+                program.calories.adjustmentKcal === 0
                   ? 'Maintenance'
-                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`}
-              </Text>
-              <Text style={styles.glanceTileSub}>
-                {program?.calories?.kcal ? `${Math.round(program.calories.kcal)} target` : 'target'}
-              </Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>WORKOUTS</Text>
-              <Text style={styles.glanceTileValue}>{summary7D.sessions} sessions</Text>
-              <Text style={styles.glanceTileSub}>past 7 days</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>RECORDS (PRS)</Text>
-              <Text style={[styles.glanceTileValue, summary7D.records > 0 && { color: loud.loud }]}>
-                {summary7D.records}
-              </Text>
-              <Text style={styles.glanceTileSub}>{summary7D.workingSets} working sets</Text>
-            </View>
+                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`
+              }
+              sub={program?.calories?.kcal ? `${Math.round(program.calories.kcal)} target` : 'target'}
+              colors={colors}
+            />
+            <GlanceTile
+              label="WORKOUTS"
+              value={`${summary7D.sessions} sessions`}
+              sub="past 7 days"
+              colors={colors}
+            />
+            <GlanceTile
+              label="RECORDS (PRS)"
+              value={summary7D.records}
+              sub={`${summary7D.workingSets} working sets`}
+              highlight={summary7D.records > 0}
+              colors={colors}
+            />
           </>
         )}
 
         {activeTab === 'body' && (
           <>
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>TREND WEIGHT</Text>
-              <Text style={styles.glanceTileValue}>
-                {latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
-              </Text>
-              <Text style={styles.glanceTileSub}>smoothed trend</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>RATE OF CHANGE</Text>
-              <Text style={styles.glanceTileValue}>
-                {trend ? formatRate(trend.rateKgPerWeek, settings.units) : '—'}
-              </Text>
-              <Text style={styles.glanceTileSub}>per week</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>CALORIE PLAN</Text>
-              <Text style={styles.glanceTileValue}>
-                {program.calories.adjustmentKcal === 0
+            <GlanceTile
+              label="TREND WEIGHT"
+              value={latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
+              sub="smoothed trend"
+              colors={colors}
+            />
+            <GlanceTile
+              label="RATE OF CHANGE"
+              value={trend ? formatRate(trend.rateKgPerWeek, settings.units) : '—'}
+              sub="per week"
+              colors={colors}
+            />
+            <GlanceTile
+              label="CALORIE PLAN"
+              value={
+                program.calories.adjustmentKcal === 0
                   ? 'Maintenance'
-                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`}
-              </Text>
-              <Text style={styles.glanceTileSub}>daily delta</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>ESTIMATED TDEE</Text>
-              <Text style={styles.glanceTileValue}>
-                {latest ? `${Math.round(latest.expenditureKcal)}` : '—'}{' '}
-                <Text style={styles.glanceUnit}>kcal</Text>
-              </Text>
-              <Text style={styles.glanceTileSub}>daily expenditure</Text>
-            </View>
+                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`
+              }
+              sub="daily delta"
+              colors={colors}
+            />
+            <GlanceTile
+              label="ESTIMATED TDEE"
+              value={
+                latest ? (
+                  <>
+                    {Math.round(latest.expenditureKcal)}{' '}
+                    <Text style={[styles.glanceUnit, { color: colors.textMuted }]}>kcal</Text>
+                  </>
+                ) : (
+                  '—'
+                )
+              }
+              sub="daily expenditure"
+              colors={colors}
+            />
           </>
         )}
 
         {activeTab === 'workouts' && (
           <>
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>WORKOUTS</Text>
-              <Text style={styles.glanceTileValue}>{summary7D.sessions} sessions</Text>
-              <Text style={styles.glanceTileSub}>past 7 days</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>WORKING SETS</Text>
-              <Text style={styles.glanceTileValue}>{summary7D.workingSets}</Text>
-              <Text style={styles.glanceTileSub}>total completed</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>NEW BESTS (PRS)</Text>
-              <Text style={[styles.glanceTileValue, summary7D.records > 0 && { color: loud.loud }]}>
-                {summary7D.records}
-              </Text>
-              <Text style={styles.glanceTileSub}>milestone lifts</Text>
-            </View>
-
-            <View style={styles.glanceTile}>
-              <Text style={styles.glanceTileLabel}>GROWTH RANGE</Text>
-              <Text style={[styles.glanceTileValue, { color: '#6FB58A' }]}>
-                {diagnostics7D.optimalMusclesCount} / {diagnostics7D.muscleVolumes.length}
-              </Text>
-              <Text style={styles.glanceTileSub}>muscles in range</Text>
-            </View>
+            <GlanceTile
+              label="WORKOUTS"
+              value={`${summary7D.sessions} sessions`}
+              sub="past 7 days"
+              colors={colors}
+            />
+            <GlanceTile
+              label="WORKING SETS"
+              value={summary7D.workingSets}
+              sub="total completed"
+              colors={colors}
+            />
+            <GlanceTile
+              label="NEW BESTS (PRS)"
+              value={summary7D.records}
+              sub="milestone lifts"
+              highlight={summary7D.records > 0}
+              colors={colors}
+            />
+            <GlanceTile
+              label="GROWTH RANGE"
+              value={
+                <Text style={{ color: colors.positive }}>
+                  {diagnostics7D.optimalMusclesCount} / {diagnostics7D.muscleVolumes.length}
+                </Text>
+              }
+              sub="muscles in range"
+              colors={colors}
+            />
           </>
         )}
       </View>
@@ -816,14 +825,32 @@ const Key = ({
   </View>
 );
 
+const GlanceTile = ({
+  label,
+  value,
+  sub,
+  highlight = false,
+  colors,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub: string;
+  highlight?: boolean;
+  colors: Palette;
+}) => (
+  <View style={[styles.glanceTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <Text style={[styles.glanceTileLabel, { color: colors.textMuted }]}>{label}</Text>
+    <Text style={[styles.glanceTileValue, { color: highlight ? loud.loud : colors.text }]}>{value}</Text>
+    <Text style={[styles.glanceTileSub, { color: colors.textFaint }]}>{sub}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   coachingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#071626',
     borderWidth: 1,
-    borderColor: '#00E5FF',
     borderRadius: radius.md,
     paddingVertical: space.md,
     paddingHorizontal: space.md,
@@ -839,9 +866,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#092532',
     borderWidth: 1,
-    borderColor: '#00E5FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -856,39 +881,23 @@ const styles = StyleSheet.create({
   },
   coachingTag: {
     fontFamily: font.uiStrong,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: '#00E5FF',
+    fontSize: 11,
+    letterSpacing: 1.1,
   },
   readyPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  readyPillActive: {
-    backgroundColor: '#102A1E',
-    borderColor: '#1D5A3C',
-  },
-  readyPillPending: {
-    backgroundColor: '#1C1914',
-    borderColor: '#4D3B18',
-  },
   readyPillText: {
     fontFamily: font.uiStrong,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.8,
-  },
-  readyTextActive: {
-    color: '#10B981',
-  },
-  readyTextPending: {
-    color: '#FBBF24',
   },
   coachingHeadline: {
     fontFamily: font.ui,
     fontSize: 13,
-    color: '#F0F9FF',
     lineHeight: 18,
   },
   coachingArrowWrap: {
@@ -911,8 +920,8 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 1.1,
+    fontSize: 11,
+    letterSpacing: 0.8,
     textAlign: 'center',
   },
 
@@ -925,34 +934,28 @@ const styles = StyleSheet.create({
   glanceTile: {
     flex: 1,
     minWidth: '47%',
-    backgroundColor: loud.panel,
     borderRadius: radius.md,
     padding: space.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: loud.rule,
   },
   glanceTileLabel: {
-    fontFamily: font.display,
-    fontSize: 9,
-    letterSpacing: 1.2,
-    color: loud.figureFaint,
-    marginBottom: 2,
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 3,
   },
   glanceTileValue: {
     fontFamily: font.figure,
     fontSize: 18,
-    color: loud.figure,
     fontVariant: ['tabular-nums'],
   },
   glanceUnit: {
     fontFamily: font.ui,
     fontSize: 11,
-    color: loud.figureMuted,
   },
   glanceTileSub: {
     fontFamily: font.ui,
-    fontSize: 11,
-    color: loud.figureFaint,
+    fontSize: 11.5,
     marginTop: 2,
   },
 
