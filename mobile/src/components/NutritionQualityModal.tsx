@@ -22,6 +22,7 @@ import {
   requestAiNutritionReview,
   runLocalNutritionDiagnostics,
 } from '../ai/nutritionAdvisor';
+import { TransparentStickerModal } from './TransparentStickerModal';
 
 interface NutritionQualityModalProps {
   visible: boolean;
@@ -48,6 +49,7 @@ export const NutritionQualityModal = ({
   const [aiAdvice, setAiAdvice] = useState<NutritionAdviceResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [stickerModalOpen, setStickerModalOpen] = useState(false);
 
   const diagnostics = useMemo(() => {
     return runLocalNutritionDiagnostics({
@@ -162,15 +164,27 @@ export const NutritionQualityModal = ({
             </View>
           </View>
 
-          <Pressable
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Close nutrition panel"
-            style={[styles.closeButton, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
-          >
-            <Ionicons name="close" size={20} color={colors.text} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+            <Pressable
+              onPress={() => setStickerModalOpen(true)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Export transparent nutrition sticker"
+              style={[styles.closeButton, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+            >
+              <Ionicons name="sparkles" size={18} color={colors.accent} />
+            </Pressable>
+
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Close nutrition panel"
+              style={[styles.closeButton, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+            >
+              <Ionicons name="close" size={20} color={colors.text} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Tab Navigator */}
@@ -231,6 +245,27 @@ export const NutritionQualityModal = ({
                     </View>
                   ))}
                 </View>
+
+                <Tappable
+                  onPress={() => setStickerModalOpen(true)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: space.xs,
+                    marginTop: space.sm,
+                    paddingVertical: space.xs + 2,
+                    borderRadius: radius.md,
+                    backgroundColor: colors.surface,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Ionicons name="sparkles" size={14} color={colors.accent} />
+                  <Text style={{ fontFamily: font.figure, fontSize: 11, color: colors.accent, fontWeight: '700' }}>
+                    EXPORT TRANSPARENT STORY STICKER
+                  </Text>
+                </Tappable>
               </View>
 
               {/* Protein Timing / mTOR Section */}
@@ -406,6 +441,12 @@ export const NutritionQualityModal = ({
           )}
         </ScrollView>
       </View>
+      <TransparentStickerModal
+        visible={stickerModalOpen}
+        onClose={() => setStickerModalOpen(false)}
+        mode="nutrition"
+        nutritionData={{ consumed, profile }}
+      />
     </Modal>
   );
 };

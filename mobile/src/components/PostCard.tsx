@@ -38,6 +38,7 @@ import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
 import { CopyWorkoutSheet } from './CopyWorkoutSheet';
 import { Tappable } from './Tappable';
+import { TransparentStickerModal } from './TransparentStickerModal';
 
 const AVATAR_PALETTE = ['#E57373', '#81C784', '#64B5F6', '#FFB74D', '#BA68C8', '#4DB6AC', '#F06292', '#FF8A65'];
 
@@ -94,6 +95,7 @@ export const PostCard = ({
   const [retrying, setRetrying] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [stickerModalOpen, setStickerModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [expandedExercises, setExpandedExercises] = useState(false);
@@ -676,6 +678,21 @@ export const PostCard = ({
                 <Text style={styles.primaryActionText}>SHARE IMAGE</Text>
               </Tappable>
 
+              <Tappable
+                onPress={() => {
+                  setModalOpen(false);
+                  setStickerModalOpen(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Export transparent sticker for Instagram or TikTok"
+                style={[styles.primaryActionBtn, { backgroundColor: loud.loud, marginBottom: space.sm }]}
+              >
+                <Ionicons name="sparkles" size={16} color={loud.onLoud} />
+                <Text style={[styles.primaryActionText, { color: loud.onLoud }]}>
+                  EXPORT TRANSPARENT STICKER
+                </Text>
+              </Tappable>
+
               <View style={styles.secondaryActionRow}>
                 <Tappable
                   onPress={async () => {
@@ -775,6 +792,13 @@ export const PostCard = ({
           </View>
         </View>
       </Modal>
+
+      <TransparentStickerModal
+        visible={stickerModalOpen}
+        onClose={() => setStickerModalOpen(false)}
+        mode="workout"
+        workoutSummary={postViewToShareCard(view)}
+      />
 
       {/* Copy Workout Modal Sheet */}
       <CopyWorkoutSheet

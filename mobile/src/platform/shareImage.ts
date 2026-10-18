@@ -1,6 +1,8 @@
 import { Platform, Share } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import type { Nutrients, UserProfile } from '@adaptive-macros/engine';
+import { computeNutritionQualityScore } from '@adaptive-macros/engine';
 import { type ShareCard, titleLines } from '../shareCard';
 import { coverRect } from './depth';
 import {
@@ -13,6 +15,8 @@ import {
 import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
 import { font } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+
+export type StickerTheme = 'glass' | 'hud' | 'solid' | 'prism';
 
 /**
  * A finished workout as a story-sized picture, and handing it to the share sheet.
@@ -1088,6 +1092,7 @@ export const drawOverlay = (
   summary: ShareCard,
   blocks: CardBlocks = ALL_BLOCKS,
   template: TemplateId = DEFAULT_TEMPLATE,
+  theme: StickerTheme = 'glass',
 ): HTMLCanvasElement => {
   const layout = LAYOUTS[template];
   const scratch = document.createElement('canvas');
@@ -1100,20 +1105,250 @@ export const drawOverlay = (
   overlay.width = layout.width;
   overlay.height = height;
   const out = overlay.getContext('2d') as CanvasRenderingContext2D;
-  if (layout.panel !== null) {
-    // The ground first, then everything that was drawn, over it. Nearly opaque:
-    // a gym is a busy photograph, and at three-quarters the plates and the
-    // lighting behind the block came through the type and muddied it.
-    out.fillStyle = 'rgba(12,12,15,0.9)';
-    roundRect(out, 0, 0, layout.width, height, layout.panel);
-    out.fill();
-    out.strokeStyle = 'rgba(247,245,239,0.1)';
-    out.lineWidth = 2;
-    roundRect(out, 1, 1, layout.width - 2, height - 2, layout.panel - 1);
-    out.stroke();
+
+  if (theme !== 'hud' && layout.panel !== null) {
+    const r = layout.panel;
+    if (theme === 'glass') {
+      out.fillStyle = 'rgba(13, 14, 18, 0.76)';
+      roundRect(out, 0, 0, layout.width, height, r);
+      out.fill();
+
+      // Top specular rim
+      const rim = out.createLinearGradient(0, 0, 0, 48);
+      rim.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
+      rim.addColorStop(1, 'rgba(255, 255, 255, 0.03)');
+      out.strokeStyle = rim;
+      out.lineWidth = 1.5;
+      roundRect(out, 1, 1, layout.width - 2, height - 2, r - 1);
+      out.stroke();
+    } else if (theme === 'solid') {
+      out.fillStyle = '#0B0C0E';
+      roundRect(out, 0, 0, layout.width, height, r);
+      out.fill();
+
+      out.strokeStyle = 'rgba(247, 245, 239, 0.12)';
+      out.lineWidth = 2;
+      roundRect(out, 1, 1, layout.width - 2, height - 2, r - 1);
+      out.stroke();
+    } else if (theme === 'prism') {
+      out.fillStyle = 'rgba(14, 15, 20, 0.9)';
+      roundRect(out, 0, 0, layout.width, height, r);
+      out.fill();
+
+      const borderGrad = out.createLinearGradient(0, 0, layout.width, height);
+      borderGrad.addColorStop(0, '#FF3B30');
+      borderGrad.addColorStop(0.5, '#FF5E3A');
+      borderGrad.addColorStop(1, '#FF9500');
+      out.strokeStyle = borderGrad;
+      out.lineWidth = 3;
+      roundRect(out, 1.5, 1.5, layout.width - 3, height - 3, r - 1);
+      out.stroke();
+    }
   }
+
   out.drawImage(scratch, 0, 0, layout.width, height, 0, 0, layout.width, height);
   return overlay;
+};
+
+/**
+ * Draws a transparent sticker for daily nutrition quality and macros.
+ */
+export const drawNutritionOverlay = (
+  consumed: Nutrients,
+  profile: UserProfile,
+  theme: StickerTheme = 'glass',
+): HTMLCanvasElement => {
+  const width = BLOCK_W;
+  const pad = 44;
+  const inner = width - pad * 2;
+  const scratch = document.createElement('canvas');
+  scratch.width = width;
+  scratch.height = 1000;
+  const ctx = scratch.getContext('2d') as CanvasRenderingContext2D;
+
+  const quality = computeNutritionQualityScore(consumed, profile.sex);
+
+  let y = pad;
+
+  // Header wordmark
+  wordmark(ctx, pad, y + 26, 26);
+  y += 56;
+
+  // Big score
+  ctx.font = `700 84px ${font.display}`;
+  ctx.fillStyle = loud.figure;
+  ctx.fillText(String(quality.score), pad, y + 68);
+  const scoreW = ctx.measureText(String(quality.score)).width;
+
+  ctx.font = `700 30px ${font.display}`;
+  ctx.fillStyle = loud.loud;
+  ctx.fillText(`/100 · ${quality.grade.toUpperCase()}`, pad + scoreW + 16, y + 42);
+
+  ctx.font = `600 20px ${font.uiStrong}`;
+  track(ctx, 6);
+  ctx.fillStyle = faint;
+  ctx.fillText('NUTRITION QUALITY INDEX', pad + scoreW + 16, y + 70);
+  track(ctx, 0);
+
+  y += 106;
+
+  // Macros row
+  const cells: [string, string][] = [
+    ['PROTEIN', `${Math.round(consumed.proteinG)}g`],
+    ['CARBS', `${Math.round(consumed.carbsG)}g`],
+    ['FAT', `${Math.round(consumed.fatG)}g`],
+  ];
+  if (consumed.fiberG && consumed.fiberG > 0) {
+    cells.push(['FIBER', `${Math.round(consumed.fiberG)}g`]);
+  }
+  if (consumed.kcal > 0) {
+    cells.push(['KCAL', `${Math.round(consumed.kcal)}`]);
+  }
+
+  const { under } = statRow(ctx, cells, pad, y + 36, inner, 46);
+  y += under + 50;
+
+  // Highlight badge
+  if (quality.highlights.length > 0) {
+    ctx.font = `600 22px ${font.uiStrong}`;
+    track(ctx, 2);
+    ctx.fillStyle = loud.loud;
+    ctx.fillText('✓ ' + quality.highlights[0].toUpperCase(), pad, y + 10);
+    track(ctx, 0);
+    y += 34;
+  }
+
+  y += pad;
+
+  const height = y;
+  const overlay = document.createElement('canvas');
+  overlay.width = width;
+  overlay.height = height;
+  const out = overlay.getContext('2d') as CanvasRenderingContext2D;
+
+  if (theme !== 'hud') {
+    const r = 36;
+    if (theme === 'glass') {
+      out.fillStyle = 'rgba(13, 14, 18, 0.76)';
+      roundRect(out, 0, 0, width, height, r);
+      out.fill();
+
+      const rim = out.createLinearGradient(0, 0, 0, 48);
+      rim.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
+      rim.addColorStop(1, 'rgba(255, 255, 255, 0.03)');
+      out.strokeStyle = rim;
+      out.lineWidth = 1.5;
+      roundRect(out, 1, 1, width - 2, height - 2, r - 1);
+      out.stroke();
+    } else if (theme === 'solid') {
+      out.fillStyle = '#0B0C0E';
+      roundRect(out, 0, 0, width, height, r);
+      out.fill();
+
+      out.strokeStyle = 'rgba(247, 245, 239, 0.12)';
+      out.lineWidth = 2;
+      roundRect(out, 1, 1, width - 2, height - 2, r - 1);
+      out.stroke();
+    } else if (theme === 'prism') {
+      out.fillStyle = 'rgba(14, 15, 20, 0.9)';
+      roundRect(out, 0, 0, width, height, r);
+      out.fill();
+
+      const borderGrad = out.createLinearGradient(0, 0, width, height);
+      borderGrad.addColorStop(0, '#FF3B30');
+      borderGrad.addColorStop(0.5, '#FF5E3A');
+      borderGrad.addColorStop(1, '#FF9500');
+      out.strokeStyle = borderGrad;
+      out.lineWidth = 3;
+      roundRect(out, 1.5, 1.5, width - 3, height - 3, r - 1);
+      out.stroke();
+    }
+  }
+
+  out.drawImage(scratch, 0, 0, width, height, 0, 0, width, height);
+  return overlay;
+};
+
+export interface StickerExport {
+  file: File;
+  url: string;
+  blob: Blob;
+  width: number;
+  height: number;
+}
+
+export const exportStickerCanvas = async (
+  canvas: HTMLCanvasElement,
+  title: string,
+): Promise<StickerExport | null> => {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return null;
+  const stem = title.replace(/[^\w-]+/g, '-').toLowerCase() || 'ascend-sticker';
+  const name = `${stem}-sticker.png`;
+  const file = new File([blob], name, { type: 'image/png' });
+  const url = URL.createObjectURL(blob);
+  return { file, url, blob, width: canvas.width, height: canvas.height };
+};
+
+export const copyStickerToClipboard = async (blob: Blob): Promise<boolean> => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob }),
+      ]);
+      return true;
+    } catch (err) {
+      console.warn('Clipboard write failed:', err);
+    }
+  }
+  return false;
+};
+
+export const shareStickerPng = async (
+  title: string,
+  sticker: StickerExport,
+): Promise<'shared' | 'downloaded' | 'cancelled'> => {
+  if (Platform.OS !== 'web') {
+    try {
+      let localUri = sticker.url;
+      const targetPath = `${FileSystem.cacheDirectory ?? ''}${title.replace(/[^\w-]+/g, '-').toLowerCase()}-sticker.png`;
+      if (sticker.url.startsWith('data:')) {
+        const base64Data = sticker.url.split(',')[1] ?? sticker.url;
+        await FileSystem.writeAsStringAsync(targetPath, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        localUri = targetPath;
+      }
+      await Sharing.shareAsync(localUri, {
+        mimeType: 'image/png',
+        dialogTitle: `${title} Sticker`,
+        UTI: 'public.png',
+      });
+      return 'shared';
+    } catch {
+      return 'cancelled';
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [sticker.file] })) {
+    try {
+      await navigator.share({
+        files: [sticker.file],
+        title: `${title} Sticker`,
+      });
+      return 'shared';
+    } catch {
+      return 'cancelled';
+    }
+  }
+
+  const link = document.createElement('a');
+  link.href = sticker.url;
+  link.download = sticker.file.name;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  return 'downloaded';
 };
 
 /**

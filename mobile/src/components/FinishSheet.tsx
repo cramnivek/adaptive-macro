@@ -23,6 +23,7 @@ const CARD = { width: 1080, height: 1920 };
 import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+import { TransparentStickerModal } from './TransparentStickerModal';
 import { CardEditor } from './CardEditor';
 import { Tappable } from './Tappable';
 import { useBlockGesture } from './useBlockGesture';
@@ -80,6 +81,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [place, setPlace] = useState<Placement>(TEMPLATES[template].place);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [stickerModalOpen, setStickerModalOpen] = useState(false);
   const [ground, setGround] = useState<string | null>(null);
   const [sticker, setSticker] = useState<{ uri: string; width: number; height: number } | null>(null);
   // The person, cut out of the photograph, so the type can pass behind them.
@@ -420,6 +422,19 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             </View>
           )}
 
+          {summary !== null && (
+            <Tappable
+              onPress={() => setStickerModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Export transparent sticker for Instagram or TikTok"
+              style={[styles.editAction, { marginVertical: space.xs }]}
+            >
+              <Text style={[styles.editLabel, { color: loud.loud }]}>
+                ✨ EXPORT TRANSPARENT STICKER (FOR INSTAGRAM / TIKTOK)
+              </Text>
+            </Tappable>
+          )}
+
           {account !== 'unavailable' && writing && !posted && (
             <TextInput
               value={caption}
@@ -504,6 +519,12 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           onClose={() => setEditing(false)}
         />
       )}
+      <TransparentStickerModal
+        visible={stickerModalOpen}
+        onClose={() => setStickerModalOpen(false)}
+        mode="workout"
+        workoutSummary={summary}
+      />
     </Modal>
   );
 };
