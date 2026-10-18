@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { thud } from '../platform/haptics';
@@ -77,6 +77,15 @@ export const PlateSheet = ({
   const plates = PLATE_SETS[units];
   const largest = plates[0];
 
+  const allPlates = useMemo(() => {
+    const customOnly = (customPlates ?? []).filter(
+      (p) => typeof p === 'number' && Number.isFinite(p) && p > 0,
+    );
+    return Array.from(new Set([...plates, ...customOnly])).sort((a, b) => b - a);
+  }, [plates, customPlates]);
+
+  const barWeight = BAR_WEIGHT[units][bar];
+
   const [perSide, setPerSide] = useState<number[]>([]);
   const [nonBarbellTarget, setNonBarbellTarget] = useState<number>(units === 'metric' ? 50 : 100);
   const [mode, setMode] = useState<'plates' | 'warmup'>(isBarbell ? initialMode : 'warmup');
@@ -114,6 +123,10 @@ export const PlateSheet = ({
   }, [isVisible, weight, units, bar, customPlates, isBarbell, initialMode]);
 
   const total = isBarbell ? totalFromPlates(perSide, units, bar) : nonBarbellTarget;
+  const sideSum = useMemo(() => {
+    const sum = perSide.reduce((acc, p) => acc + p, 0);
+    return Math.round(sum * 100) / 100;
+  }, [perSide]);
   const formula = isBarbell
     ? describeFormula(perSide, units, bar)
     : `Target working weight · step ±${stepSize} ${unit}`;
@@ -202,28 +215,69 @@ export const PlateSheet = ({
             <Text style={styles.totalNumber}>
               {total} <Text style={styles.totalUnit}>{unit.toUpperCase()}</Text>
             </Text>
-            {(mode === 'warmup' || !isBarbell) && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-                <Tappable
-                  onPress={() => adjustTargetWeight(-stepSize)}
-                  scaleTo={0.92}
-                  style={styles.rackBtn}
-                  accessibilityLabel={`Decrease target weight by ${stepSize} ${unit}`}
-                >
-                  <Text style={styles.rackBtnText}>−{stepSize}</Text>
-                </Tappable>
-                <Tappable
-                  onPress={() => adjustTargetWeight(stepSize)}
-                  scaleTo={0.92}
-                  style={styles.rackBtn}
-                  accessibilityLabel={`Increase target weight by ${stepSize} ${unit}`}
-                >
-                  <Text style={styles.rackBtnText}>+{stepSize}</Text>
-                </Tappable>
-              </View>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
+              <Tappable
+                onPress={() => adjustTargetWeight(-stepSize)}
+                scaleTo={0.92}
+                style={styles.rackBtn}
+                accessibilityLabel={`Decrease target weight by ${stepSize} ${unit}`}
+              >
+                <Text style={styles.rackBtnText}>−{stepSize}</Text>
+              </Tappable>
+              <Tappable
+                onPress={() => adjustTargetWeight(stepSize)}
+                scaleTo={0.92}
+                style={styles.rackBtn}
+                accessibilityLabel={`Increase target weight by ${stepSize} ${unit}`}
+              >
+                <Text style={styles.rackBtnText}>+{stepSize}</Text>
+              </Tappable>
+            </View>
           </View>
           <Text style={styles.formulaText}>{formula}</Text>
+
+          {/* Symmetrical Breakdown HUD */}
+          {isBarbell && (
+            <View style={styles.symmetryCard}>
+              <View style={styles.symmetrySegment}>
+                <Text style={styles.symmetryLabel}>LEFT SLEEVE</Text>
+                <Text style={styles.symmetryValue}>
+                  {sideSum} <Text style={styles.symmetryUnit}>{unit.toUpperCase()}</Text>
+                </Text>
+                <Text style={styles.symmetryPlatesCount} numberOfLines={1}>
+                  {perSide.length === 0 ? 'Empty' : `${perSide.length} plate${perSide.length > 1 ? 's' : ''}`}
+                </Text>
+              </View>
+
+              <View style={styles.symmetryPlus}>
+                <Text style={styles.symmetryPlusText}>+</Text>
+              </View>
+
+              <View style={styles.symmetrySegmentBar}>
+                <Text style={styles.symmetryLabel}>BARBELL</Text>
+                <Text style={styles.symmetryValue}>
+                  {barWeight} <Text style={styles.symmetryUnit}>{unit.toUpperCase()}</Text>
+                </Text>
+                <Text style={styles.symmetryPlatesCount} numberOfLines={1}>
+                  {bar === 'standard' ? 'Olympic' : 'Light'}
+                </Text>
+              </View>
+
+              <View style={styles.symmetryPlus}>
+                <Text style={styles.symmetryPlusText}>+</Text>
+              </View>
+
+              <View style={styles.symmetrySegment}>
+                <Text style={styles.symmetryLabel}>RIGHT SLEEVE</Text>
+                <Text style={styles.symmetryValue}>
+                  {sideSum} <Text style={styles.symmetryUnit}>{unit.toUpperCase()}</Text>
+                </Text>
+                <Text style={styles.symmetryPlatesCount} numberOfLines={1}>
+                  {perSide.length === 0 ? 'Empty' : `${perSide.length} plate${perSide.length > 1 ? 's' : ''}`}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Mode Selector Tabs: Load Plates vs Warm-up Ramp (only on barbell exercises) */}
@@ -290,61 +344,122 @@ export const PlateSheet = ({
 
         {isBarbell && mode === 'plates' ? (
           <>
-            {/* Interactive Barbell Sleeve */}
+            {/* Interactive Symmetrical Barbell */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.barScroll}
               contentContainerStyle={styles.barScrollContent}
             >
-              <View style={styles.bar} accessibilityLabel={`Each side: ${describePlates(perSide) || 'nothing'}`}>
-                <View style={styles.sleeve} />
-                <View style={styles.collar} />
-                {perSide.map((plate, index) => {
-                  const rank = plates.indexOf(plate);
-                  const isCustom = rank === -1;
-                  const color = isCustom
-                    ? '#8E44AD'
-                    : (PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]);
-                  const plateHeight = Math.max(30, Math.min(104, 36 + 64 * (plate / largest)));
-                  const plateWidth = Math.max(14, Math.min(22, plate >= plates[2] ? 20 : 15));
-                  return (
-                    <Tappable
-                      key={`${plate}-${index}`}
-                      onPress={() => removePlateAt(index)}
-                      scaleTo={0.92}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Remove ${plate} ${unit} plate`}
-                      style={[
-                        styles.plate,
-                        {
-                          height: plateHeight,
-                          width: plateWidth,
-                          backgroundColor: color,
-                        },
-                      ]}
-                    >
-                      <Text
+              <View
+                style={styles.barContainer}
+                accessibilityLabel={`Symmetrical barbell loaded with ${describePlates(perSide) || 'no plates'} on each side`}
+              >
+                {/* Full bar steel underlay */}
+                <View style={styles.barUnderlay} />
+
+                {/* Left Sleeve (Reversed: Outermost plate on the left, Innermost plate against the left collar) */}
+                <View style={styles.sleeveLeftSection}>
+                  {[...perSide].reverse().map((plate, revIdx) => {
+                    const originalIndex = perSide.length - 1 - revIdx;
+                    const rank = plates.indexOf(plate);
+                    const isCustom = rank === -1;
+                    const color = isCustom
+                      ? '#8E44AD'
+                      : (PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]);
+                    const plateHeight = Math.max(32, Math.min(104, 38 + 62 * (plate / largest)));
+                    const plateWidth = Math.max(14, Math.min(22, plate >= plates[2] ? 20 : 15));
+                    return (
+                      <Tappable
+                        key={`left-${plate}-${originalIndex}`}
+                        onPress={() => removePlateAt(originalIndex)}
+                        scaleTo={0.92}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${plate} ${unit} plate from both sleeves`}
                         style={[
-                          styles.plateNumber,
-                          { color: rank === 4 ? '#111' : '#FFF' },
+                          styles.plate,
+                          {
+                            height: plateHeight,
+                            width: plateWidth,
+                            backgroundColor: color,
+                          },
                         ]}
-                        numberOfLines={1}
                       >
-                        {plate}
-                      </Text>
-                    </Tappable>
-                  );
-                })}
-                {perSide.length === 0 && (
-                  <Text style={styles.emptyPrompt}>EMPTY BAR · TAP PLATES BELOW</Text>
-                )}
+                        <Text
+                          style={[
+                            styles.plateNumber,
+                            { color: rank === 4 ? '#111' : '#FFF' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {plate}
+                        </Text>
+                      </Tappable>
+                    );
+                  })}
+                </View>
+
+                {/* Left Collar */}
+                <View style={styles.collar} />
+
+                {/* Center Bar Shaft with Weight Badge */}
+                <View style={styles.centerShaft}>
+                  <View style={styles.centerShaftLine} />
+                  <View style={styles.centerBadge}>
+                    <Text style={styles.centerBadgeText}>
+                      {barWeight} {unit.toUpperCase()} BAR
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Right Collar */}
+                <View style={styles.collar} />
+
+                {/* Right Sleeve (Innermost plate against collar, Outermost plate toward right end) */}
+                <View style={styles.sleeveRightSection}>
+                  {perSide.map((plate, index) => {
+                    const rank = plates.indexOf(plate);
+                    const isCustom = rank === -1;
+                    const color = isCustom
+                      ? '#8E44AD'
+                      : (PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]);
+                    const plateHeight = Math.max(32, Math.min(104, 38 + 62 * (plate / largest)));
+                    const plateWidth = Math.max(14, Math.min(22, plate >= plates[2] ? 20 : 15));
+                    return (
+                      <Tappable
+                        key={`right-${plate}-${index}`}
+                        onPress={() => removePlateAt(index)}
+                        scaleTo={0.92}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${plate} ${unit} plate from both sleeves`}
+                        style={[
+                          styles.plate,
+                          {
+                            height: plateHeight,
+                            width: plateWidth,
+                            backgroundColor: color,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.plateNumber,
+                            { color: rank === 4 ? '#111' : '#FFF' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {plate}
+                        </Text>
+                      </Tappable>
+                    );
+                  })}
+                </View>
               </View>
             </ScrollView>
             <Text style={styles.hint}>
               {perSide.length > 0
-                ? 'Tap any plate on the sleeve to remove it'
-                : 'Barbell is symmetrical · plates chosen are added to both sides'}
+                ? 'Tap any plate on either sleeve to remove it from both sides'
+                : 'Barbell is symmetrical · tapping plates below adds 1 to EACH sleeve'}
             </Text>
 
             {/* Bar Weight Selection */}
@@ -375,7 +490,7 @@ export const PlateSheet = ({
             {/* Plate Rack: Add Plates */}
             <View style={styles.rackSection}>
               <View style={styles.rackHeaderRow}>
-                <Text style={styles.rackHeader}>ADD PLATES (EACH SIDE)</Text>
+                <Text style={styles.rackHeader}>ADD TO BOTH SIDES (+1 EACH SLEEVE)</Text>
                 {!showCustomInput && (
                   <Tappable
                     onPress={() => {
@@ -443,17 +558,50 @@ export const PlateSheet = ({
                 style={styles.rackStrip}
                 contentContainerStyle={styles.rackContent}
               >
-                {/* Standard plates */}
-                {plates.map((plate) => {
+                {allPlates.map((plate) => {
+                  const isCustom = !plates.includes(plate);
                   const rank = plates.indexOf(plate);
-                  const color = PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1];
+                  const color = isCustom
+                    ? '#8E44AD'
+                    : (PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]);
+
+                  if (isCustom) {
+                    return (
+                      <View key={`custom-${plate}`} style={styles.customPlatePillWrap}>
+                        <Tappable
+                          onPress={() => addPlate(plate)}
+                          scaleTo={0.94}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add custom ${plate} ${unit} to both sleeves`}
+                          style={[styles.rackBtn, styles.customPlateBtn]}
+                        >
+                          <View style={[styles.rackPip, { backgroundColor: '#8E44AD' }]} />
+                          <Text style={styles.rackBtnText}>+{plate}</Text>
+                        </Tappable>
+                        {onRemoveCustomPlate && (
+                          <Tappable
+                            onPress={() => {
+                              thud('light');
+                              onRemoveCustomPlate(plate);
+                            }}
+                            scaleTo={0.85}
+                            style={styles.customPlateDelete}
+                            accessibilityLabel={`Delete custom plate ${plate} from rack`}
+                          >
+                            <Text style={styles.customPlateDeleteText}>✕</Text>
+                          </Tappable>
+                        )}
+                      </View>
+                    );
+                  }
+
                   return (
                     <Tappable
-                      key={plate}
+                      key={`plate-${plate}`}
                       onPress={() => addPlate(plate)}
                       scaleTo={0.94}
                       accessibilityRole="button"
-                      accessibilityLabel={`Add ${plate} ${unit} to each side`}
+                      accessibilityLabel={`Add ${plate} ${unit} to both sleeves`}
                       style={[styles.rackBtn, { borderColor: color }]}
                     >
                       <View style={[styles.rackPip, { backgroundColor: color }]} />
@@ -461,37 +609,6 @@ export const PlateSheet = ({
                     </Tappable>
                   );
                 })}
-
-                {/* Saved Custom plates */}
-                {customPlates
-                  .filter((p) => !plates.includes(p))
-                  .map((plate) => (
-                    <View key={`custom-${plate}`} style={styles.customPlatePillWrap}>
-                      <Tappable
-                        onPress={() => addPlate(plate)}
-                        scaleTo={0.94}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Add custom ${plate} ${unit} to each side`}
-                        style={[styles.rackBtn, styles.customPlateBtn]}
-                      >
-                        <View style={[styles.rackPip, { backgroundColor: '#8E44AD' }]} />
-                        <Text style={styles.rackBtnText}>+{plate}</Text>
-                      </Tappable>
-                      {onRemoveCustomPlate && (
-                        <Tappable
-                          onPress={() => {
-                            thud('light');
-                            onRemoveCustomPlate(plate);
-                          }}
-                          scaleTo={0.85}
-                          style={styles.customPlateDelete}
-                          accessibilityLabel={`Delete custom plate ${plate} from rack`}
-                        >
-                          <Text style={styles.customPlateDeleteText}>✕</Text>
-                        </Tappable>
-                      )}
-                    </View>
-                  ))}
               </ScrollView>
             </View>
           </>
@@ -631,7 +748,7 @@ export const PlateSheet = ({
             <>
               {perSide.length > 0 && (
                 <Tappable onPress={clearPlates} scaleTo={0.95} style={styles.clearBtn}>
-                  <Text style={styles.clearText}>CLEAR</Text>
+                  <Text style={styles.clearText}>EMPTY BAR</Text>
                 </Tappable>
               )}
               <Tappable
@@ -723,39 +840,150 @@ const styles = StyleSheet.create({
     color: loud.figureMuted,
     marginTop: 2,
   },
+  symmetryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: loud.panel,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    paddingVertical: space.xs + 2,
+    paddingHorizontal: space.sm,
+    marginTop: space.xs + 2,
+    marginBottom: 2,
+  },
+  symmetrySegment: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  symmetrySegmentBar: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  symmetryLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 1.1,
+    color: loud.figureFaint,
+    marginBottom: 2,
+  },
+  symmetryValue: {
+    fontFamily: font.figure,
+    fontSize: 14,
+    fontWeight: '700',
+    color: loud.figure,
+  },
+  symmetryUnit: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    color: loud.loud,
+  },
+  symmetryPlatesCount: {
+    fontFamily: font.ui,
+    fontSize: 10,
+    color: loud.figureMuted,
+    marginTop: 1,
+  },
+  symmetryPlus: {
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  symmetryPlusText: {
+    fontFamily: font.display,
+    fontSize: 13,
+    color: loud.figureFaint,
+  },
   barScroll: {
-    marginVertical: space.sm,
+    marginVertical: space.xs,
   },
   barScrollContent: {
     flexGrow: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
   },
-  bar: {
+  barContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 104,
-    gap: 2,
-    minWidth: 200,
+    justifyContent: 'center',
+    height: 110,
+    minWidth: 260,
+    position: 'relative',
   },
-  sleeve: {
+  barUnderlay: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    height: 7,
+    backgroundColor: '#353840',
+    top: 51.5,
+    borderRadius: 3,
+  },
+  sleeveLeftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    minWidth: 36,
+    gap: 2,
+    paddingRight: 1,
+  },
+  sleeveRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 36,
+    gap: 2,
+    paddingLeft: 1,
+  },
+  collar: {
+    width: 8,
+    height: 38,
+    backgroundColor: '#7A7E88',
+    borderRadius: 2,
+  },
+  centerShaft: {
+    width: 86,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  centerShaftLine: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 6,
-    backgroundColor: loud.rule,
-    top: 49,
+    height: 7,
+    backgroundColor: '#4A4E58',
+    top: 51.5,
   },
-  collar: {
-    width: 10,
-    height: 32,
-    backgroundColor: loud.figureMuted,
-    marginRight: 4,
+  centerBadge: {
+    backgroundColor: 'rgba(15, 17, 21, 0.92)',
+    borderWidth: 1,
+    borderColor: loud.rule,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    zIndex: 2,
+  },
+  centerBadgeText: {
+    fontFamily: font.display,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: loud.figureMuted,
   },
   plate: {
     borderRadius: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 2,
+    elevation: 3,
   },
   plateNumber: {
     fontFamily: font.figure,
@@ -1190,7 +1418,29 @@ export const PlatePreview = ({ weight, units, bar, customPlates = [], onPress }:
     >
       <View style={previewStyles.bar}>
         <View style={[previewStyles.sleeve, { backgroundColor: loud.rule }]} />
+        {/* Left Sleeve (Reversed) */}
+        {[...(load?.perSide ?? [])].reverse().map((plate, index) => {
+          const rank = plates.indexOf(plate);
+          const color =
+            rank >= 0
+              ? PLATE_COLOURS[rank] ?? PLATE_COLOURS[PLATE_COLOURS.length - 1]
+              : '#8E44AD';
+          return (
+            <View
+              key={`prev-l-${plate}-${index}`}
+              style={{
+                width: plate >= plates[2] ? 4 : 3,
+                height: 8 + 14 * (plate / largest),
+                borderRadius: 1,
+                backgroundColor: color,
+              }}
+            />
+          );
+        })}
         <View style={[previewStyles.collar, { backgroundColor: loud.figureMuted }]} />
+        <View style={previewStyles.centerBar} />
+        <View style={[previewStyles.collar, { backgroundColor: loud.figureMuted }]} />
+        {/* Right Sleeve */}
         {(load?.perSide ?? []).map((plate, index) => {
           const rank = plates.indexOf(plate);
           const color =
@@ -1199,10 +1449,10 @@ export const PlatePreview = ({ weight, units, bar, customPlates = [], onPress }:
               : '#8E44AD';
           return (
             <View
-              key={`${plate}-${index}`}
+              key={`prev-r-${plate}-${index}`}
               style={{
-                width: plate >= plates[2] ? 6 : 4,
-                height: 12 + 22 * (plate / largest),
+                width: plate >= plates[2] ? 4 : 3,
+                height: 8 + 14 * (plate / largest),
                 borderRadius: 1,
                 backgroundColor: color,
               }}
@@ -1235,9 +1485,10 @@ const previewStyles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: space.sm,
   },
-  bar: { width: 64, height: 36, flexDirection: 'row', alignItems: 'center', gap: 1.5 },
-  sleeve: { position: 'absolute', left: 0, right: 0, height: 3, top: 16.5 },
-  collar: { width: 4, height: 14, marginRight: 2 },
+  bar: { width: 68, height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 1 },
+  sleeve: { position: 'absolute', left: 4, right: 4, height: 2.5, top: 16.75 },
+  collar: { width: 3, height: 16, borderRadius: 1 },
+  centerBar: { width: 10, height: 4, backgroundColor: '#555', borderRadius: 1 },
   label: { fontFamily: font.display, fontSize: 10, letterSpacing: 1.2 },
   words: { fontFamily: font.figure, fontSize: 15, marginTop: 2 },
   chevron: { fontSize: 22, marginLeft: space.xs },

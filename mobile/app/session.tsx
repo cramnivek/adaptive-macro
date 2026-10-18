@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -162,6 +163,19 @@ const NOT_A_LOGIN = {
   autoComplete: 'off',
   dataSet: { lpignore: 'true', '1pIgnore': 'true', bwignore: 'true', formType: 'other' },
 } as const;
+
+/**
+ * Normalizes user-typed workout numbers (weights, reps, etc.) so that typing into
+ * an auto-filled or pre-existing '0' replaces the leading zero rather than appending ('05' -> '5'),
+ * while preserving valid decimals (e.g. '0.5', '0.').
+ */
+const handleWorkoutNumberInput = (text: string): string => {
+  if (text.length > 1 && text.startsWith('0') && text[1] !== '.' && text[1] !== ',') {
+    const stripped = text.replace(/^0+/, '');
+    return stripped === '' ? '0' : stripped;
+  }
+  return text;
+};
 
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
@@ -2205,7 +2219,9 @@ export default function SessionScreen() {
                           <>
                             <TextInput
                               value={row.distance ?? ''}
-                              onChangeText={(distance) => editRow(blockIndex, rowIndex, { distance })}
+                              onChangeText={(distance) =>
+                                editRow(blockIndex, rowIndex, { distance: handleWorkoutNumberInput(distance) })
+                              }
                               onBlur={() => void commitEdit(blockIndex, rowIndex)}
                               {...NOT_A_LOGIN}
                               keyboardType="decimal-pad"
@@ -2220,7 +2236,9 @@ export default function SessionScreen() {
                             />
                             <TextInput
                               value={row.time ?? ''}
-                              onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                              onChangeText={(time) =>
+                                editRow(blockIndex, rowIndex, { time: handleWorkoutNumberInput(time) })
+                              }
                               onBlur={() => void commitEdit(blockIndex, rowIndex)}
                               {...NOT_A_LOGIN}
                               keyboardType="decimal-pad"
@@ -2238,7 +2256,9 @@ export default function SessionScreen() {
                           <>
                             <TextInput
                               value={row.speed ?? ''}
-                              onChangeText={(speed) => editRow(blockIndex, rowIndex, { speed })}
+                              onChangeText={(speed) =>
+                                editRow(blockIndex, rowIndex, { speed: handleWorkoutNumberInput(speed) })
+                              }
                               onBlur={() => void commitEdit(blockIndex, rowIndex)}
                               {...NOT_A_LOGIN}
                               keyboardType="decimal-pad"
@@ -2253,7 +2273,9 @@ export default function SessionScreen() {
                             />
                             <TextInput
                               value={row.incline ?? ''}
-                              onChangeText={(incline) => editRow(blockIndex, rowIndex, { incline })}
+                              onChangeText={(incline) =>
+                                editRow(blockIndex, rowIndex, { incline: handleWorkoutNumberInput(incline) })
+                              }
                               onBlur={() => void commitEdit(blockIndex, rowIndex)}
                               {...NOT_A_LOGIN}
                               keyboardType="decimal-pad"
@@ -2268,7 +2290,9 @@ export default function SessionScreen() {
                             />
                             <TextInput
                               value={row.time ?? ''}
-                              onChangeText={(time) => editRow(blockIndex, rowIndex, { time })}
+                              onChangeText={(time) =>
+                                editRow(blockIndex, rowIndex, { time: handleWorkoutNumberInput(time) })
+                              }
                               onBlur={() => void commitEdit(blockIndex, rowIndex)}
                               {...NOT_A_LOGIN}
                               keyboardType="decimal-pad"
@@ -2287,11 +2311,24 @@ export default function SessionScreen() {
                         <>
                           <TextInput
                             value={row.weight}
-                            onChangeText={(weight) => editRow(blockIndex, rowIndex, { weight })}
+                            onChangeText={(weight) =>
+                              editRow(blockIndex, rowIndex, { weight: handleWorkoutNumberInput(weight) })
+                            }
+                            onFocus={(e) => {
+                              editRow(blockIndex, rowIndex, { weight: '0' });
+                              if (Platform.OS === 'web') {
+                                setTimeout(() => {
+                                  try {
+                                    (e.target as any)?.select?.();
+                                  } catch {}
+                                }, 15);
+                              }
+                            }}
+                            selectTextOnFocus
                             onBlur={() => void commitEdit(blockIndex, rowIndex)}
                             {...NOT_A_LOGIN}
                             keyboardType="decimal-pad"
-                            placeholder={block.bodyweightBased ? 'BW' : '—'}
+                            placeholder={block.bodyweightBased ? 'BW' : '0'}
                             placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
                             style={[
                               styles.input,
@@ -2302,11 +2339,24 @@ export default function SessionScreen() {
                           />
                           <TextInput
                             value={row.reps}
-                            onChangeText={(reps) => editRow(blockIndex, rowIndex, { reps })}
+                            onChangeText={(reps) =>
+                              editRow(blockIndex, rowIndex, { reps: handleWorkoutNumberInput(reps) })
+                            }
+                            onFocus={(e) => {
+                              editRow(blockIndex, rowIndex, { reps: '0' });
+                              if (Platform.OS === 'web') {
+                                setTimeout(() => {
+                                  try {
+                                    (e.target as any)?.select?.();
+                                  } catch {}
+                                }, 15);
+                              }
+                            }}
+                            selectTextOnFocus
                             onBlur={() => void commitEdit(blockIndex, rowIndex)}
                             {...NOT_A_LOGIN}
                             keyboardType="number-pad"
-                            placeholder="—"
+                            placeholder="0"
                             placeholderTextColor={row.done ? loud.onLoud : loud.figureFaint}
                             style={[
                               styles.input,
