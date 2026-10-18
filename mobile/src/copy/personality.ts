@@ -60,16 +60,50 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     context: 'achievement',
     variants: {
       classic: ['New personal record!'],
-      ascend: ['NEW PR. You earned that. 🔥', 'NEW PR. Okay, you are getting strong.', 'That is a new best. Big moves.'],
-      gymrat: ['NAHHH YOU ACTUALLY HIT THAT?! 💀🔥', 'NEW PR UNLOCKED. WE ARE SO BACK.', 'ALL-TIME PR. BRO WENT BEAST MODE. 🗣️🔥'],
+      ascend: [
+        'YEAH BUDDY! NEW PR. You earned that. 🔥',
+        'LIGHT WEIGHT! That is a new best. Big moves.',
+        'NEW PR. Okay, you are getting strong.',
+      ],
+      gymrat: [
+        'YEAH BUDDY! LIGHT WEIGHT BABY! 🗣️🔥',
+        'LIGHT WEIGHT! AIN\'T NOTHIN\' TO IT BUT TO DO IT! 💀🔥',
+        'YEAH BUDDY! ALL-TIME PR UNLOCKED. WE ARE SO BACK.',
+        'NAHHH YOU ACTUALLY HIT THAT?! BRO WENT BEAST MODE. 🗣️🔥',
+      ],
     },
   },
   'workout.pr_banner_tag': {
     context: 'achievement',
     variants: {
       classic: ['⚡ PERSONAL RECORD ⚡'],
-      ascend: ['⚡ ALL-TIME PR ⚡', '⚡ NEW PR UNLOCKED ⚡'],
-      gymrat: ['⚡ NEW ALL-TIME PR 💀🔥 ⚡', '⚡ MAXIMUM PR UNLOCKED ⚡'],
+      ascend: [
+        '⚡ ALL-TIME PR ⚡',
+        '⚡ YEAH BUDDY! LIGHT WEIGHT! ⚡',
+        '⚡ NEW PR UNLOCKED ⚡',
+      ],
+      gymrat: [
+        '⚡ YEAH BUDDY! LIGHT WEIGHT BABY! 💀🔥 ⚡',
+        '⚡ LIGHT WEIGHT! NEW ALL-TIME PR 💀🔥 ⚡',
+        '⚡ MAXIMUM PR UNLOCKED ⚡',
+      ],
+    },
+  },
+  'workout.pr_coleman_quote': {
+    context: 'achievement',
+    variants: {
+      classic: ['YEAH BUDDY! LIGHT WEIGHT!'],
+      ascend: [
+        'YEAH BUDDY! LIGHT WEIGHT BABY!',
+        'LIGHT WEIGHT! AIN\'T NOTHIN\' TO IT BUT TO DO IT!',
+        'YEAH BUDDY! LIGHT WEIGHT!',
+      ],
+      gymrat: [
+        'YEAH BUDDY! LIGHT WEIGHT BABY! 🗣️🔥',
+        'LIGHT WEIGHT! AIN\'T NOTHIN\' TO IT BUT TO DO IT! 💀🔥',
+        'YEAH BUDDY! NOTHIN\' BUT A PEANUT! 🗣️',
+        'EVERYBODY WANNA BE A BODYBUILDER! LIGHT WEIGHT! 🔥',
+      ],
     },
   },
   'workout.pr_baseline_pill': {
@@ -174,7 +208,11 @@ const EVENT_VARIANTS: Record<string, { context: CopyContext; variants: EventVari
     variants: {
       classic: ['NEW PR!'],
       ascend: ['NEW PR!', 'NEW PR! 🔥', 'NEW BEST!'],
-      gymrat: ['NEW PR 💀🔥', 'COOKED! 🗣️🔥', 'UNSTOPPABLE 🔥'],
+      gymrat: [
+        'YEAH BUDDY! PR UNLOCKED 💀🔥',
+        'COOKED! LIGHT WEIGHT BABY! 🗣️🔥',
+        'UNSTOPPABLE — YEAH BUDDY! 🔥',
+      ],
     },
   },
   'workout.impact_failure': {

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { displayWeight } from '../format';
+import { playChime } from '../platform/chime';
 import { thud } from '../platform/haptics';
+import { shoutColemanPR } from '../platform/prShout';
 import type { UnitSystem, AppPersonality } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
 import { SKEW, font, radius } from '../theme';
@@ -12,12 +15,14 @@ export interface PRCelebrationData {
   e1rm: number;
   delta: number;
   isFirstLog: boolean;
+  colemanQuote?: string;
 }
 
 interface PRCelebrationProps {
   data: PRCelebrationData;
   units: UnitSystem;
   personality?: AppPersonality;
+  soundEnabled?: boolean;
   onDone: () => void;
 }
 
@@ -32,12 +37,22 @@ const PARTICLE_COLORS = [
 
 const NUM_PARTICLES = 30;
 
-export const PRCelebration = ({ data, units, personality, onDone }: PRCelebrationProps) => {
+export const PRCelebration = ({
+  data,
+  units,
+  personality,
+  soundEnabled = true,
+  onDone,
+}: PRCelebrationProps) => {
   const { width, height } = useWindowDimensions();
   const animProgress = useRef(new Animated.Value(0)).current;
   const bannerScale = useRef(new Animated.Value(0.5)).current;
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerExit = useRef(new Animated.Value(1)).current;
+
+  const colemanQuote =
+    data.colemanQuote ||
+    getEventCopy('workout.pr_coleman_quote', { personality, seed: data.exerciseName });
 
   const onDoneRef = useRef(onDone);
   useEffect(() => {
@@ -75,6 +90,16 @@ export const PRCelebration = ({ data, units, personality, onDone }: PRCelebratio
       thud('heavy');
     }, 130);
 
+    // Audio fanfare & Ronnie Coleman voice shout
+    if (soundEnabled) {
+      try {
+        playChime('rising');
+      } catch {
+        // Sound unprimed or muted
+      }
+    }
+    shoutColemanPR(colemanQuote, soundEnabled);
+
     const animation = Animated.sequence([
       Animated.parallel([
         // Particle explosion outward
@@ -99,7 +124,7 @@ export const PRCelebration = ({ data, units, personality, onDone }: PRCelebratio
           }),
         ]),
       ]),
-      Animated.delay(200),
+      Animated.delay(900),
       // Smooth exit
       Animated.parallel([
         Animated.timing(bannerExit, {
@@ -126,7 +151,7 @@ export const PRCelebration = ({ data, units, personality, onDone }: PRCelebratio
       clearTimeout(timer);
       animation.stop();
     };
-  }, [animProgress, bannerScale, bannerOpacity, bannerExit]);
+  }, [animProgress, bannerScale, bannerOpacity, bannerExit, colemanQuote, soundEnabled]);
 
   const unitLabel = units === 'metric' ? 'KG' : 'LB';
   const e1rmFormatted = displayWeight(data.e1rm, units).toFixed(1);
@@ -212,6 +237,18 @@ export const PRCelebration = ({ data, units, personality, onDone }: PRCelebratio
 
           {/* Big Figure */}
           <Text style={styles.figureText}>{data.figure}</Text>
+
+          {/* Ronnie Coleman PR Shout Badge */}
+          <View style={styles.colemanCard}>
+            <View style={styles.colemanHeader}>
+              <Ionicons name="flame" size={13} color="#F59E0B" />
+              <Text style={styles.colemanHeaderLabel}>RONNIE COLEMAN</Text>
+              <Ionicons name="flame" size={13} color="#F59E0B" />
+            </View>
+            <Text style={styles.colemanQuoteText}>
+              "{colemanQuote}"
+            </Text>
+          </View>
 
           {/* 1RM Est Milestone */}
           <View style={styles.milestonePill}>
@@ -335,5 +372,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     fontVariant: ['tabular-nums'],
+  },
+  colemanCard: {
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#1E1810',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    borderRadius: radius.md,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  colemanHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 3,
+  },
+  colemanHeaderLabel: {
+    fontFamily: font.display,
+    fontSize: 9,
+    color: '#F59E0B',
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  colemanQuoteText: {
+    fontFamily: font.display,
+    fontSize: 13,
+    color: '#FEF08A',
+    fontWeight: '800',
+    letterSpacing: 1,
+    textAlign: 'center',
   },
 });

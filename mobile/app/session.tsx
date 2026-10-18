@@ -2704,6 +2704,7 @@ export default function SessionScreen() {
         data={celebrationPR}
         units={workoutUnits}
         personality={settings.personality}
+        soundEnabled={settings.restSound}
         onDone={() => setCelebrationPR(null)}
       />
     )}
