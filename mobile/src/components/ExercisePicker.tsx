@@ -28,7 +28,6 @@ import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { TOUCH_TARGET } from './Controls';
 import { ExerciseIcon } from './ExerciseIcon';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 const couldNotLookUp = 'Could not look that up. You can still add it.';
@@ -372,19 +371,19 @@ export const ExercisePicker = ({
           }}
           scaleTo={0.97}
         >
-          <SlashPanel color={loud.loud} style={styles.slab}>
+          <View style={[styles.slab, styles.slabRounded, { backgroundColor: loud.loud }]}>
             <Text style={[styles.slabLabel, { color: loud.onLoud }]} numberOfLines={1}>
               ADD {rawTerm.toUpperCase()}
               {isCardio ? ` (${cardioMode === 'outside' ? 'OUTSIDE' : 'MACHINE'})` : ''}
             </Text>
-          </SlashPanel>
+          </View>
         </Tappable>
       )}
 
       <Tappable onPress={onCancel} scaleTo={0.97}>
-        <SlashPanel color={loud.panel} style={styles.slab}>
+        <View style={[styles.slab, styles.slabRounded, { backgroundColor: loud.panel }]}>
           <Text style={[styles.slabLabel, { color: loud.figureMuted }]}>CANCEL</Text>
-        </SlashPanel>
+        </View>
       </Tappable>
     </View>
   );
@@ -392,7 +391,7 @@ export const ExercisePicker = ({
 
 const styles = StyleSheet.create({
   picker: {
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     padding: space.sm,
@@ -408,7 +407,7 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET - 12,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     backgroundColor: loud.panel,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
@@ -430,7 +429,7 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: TOUCH_TARGET - 10,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: space.md,
     marginBottom: space.xs,
@@ -550,6 +549,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.lg,
     marginBottom: space.sm,
+  },
+  slabRounded: {
+    borderRadius: radius.lg,
   },
   slabLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, textAlign: 'center' },
 });

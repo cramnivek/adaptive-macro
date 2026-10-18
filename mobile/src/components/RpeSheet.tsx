@@ -3,7 +3,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RPE_SCALE, formatRpe, rpeMeaning } from '../rpe';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 interface RpeSheetProps {
@@ -49,7 +48,15 @@ export const RpeSheet = ({ open, current, onChoose, onClose }: RpeSheetProps) =>
                 style={styles.cell}
                 accessibilityLabel={`RPE ${formatRpe(value)}, ${rpeMeaning(value)}`}
               >
-                <SlashPanel color={selected ? loud.loud : loud.panel} style={styles.cellPanel}>
+                <View
+                  style={[
+                    styles.cellPanel,
+                    {
+                      backgroundColor: selected ? loud.loud : loud.panel,
+                      borderColor: selected ? loud.loud : loud.rule,
+                    },
+                  ]}
+                >
                   <Text style={[styles.cellValue, { color: selected ? loud.onLoud : loud.figure }]}>
                     {formatRpe(value)}
                   </Text>
@@ -62,18 +69,18 @@ export const RpeSheet = ({ open, current, onChoose, onClose }: RpeSheetProps) =>
                   >
                     {rpeMeaning(value)}
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
             );
           })}
         </View>
 
         <Tappable onPress={() => onChoose(null)} scaleTo={0.97}>
-          <SlashPanel color={loud.panel} style={styles.action}>
+          <View style={styles.action}>
             <Text style={[styles.actionLabel, { color: loud.figureMuted }]}>
               {current === null ? 'SKIP' : 'CLEAR RATING'}
             </Text>
-          </SlashPanel>
+          </View>
         </Tappable>
       </View>
     </Modal>
@@ -103,9 +110,24 @@ const styles = StyleSheet.create({
   // enough for the gloss to sit under the number rather than beside it.
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   cell: { width: '31%', flexGrow: 1 },
-  cellPanel: { minHeight: 58, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  cellPanel: {
+    minHeight: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   cellValue: { fontFamily: font.figure, fontSize: 20, fontVariant: ['tabular-nums'] },
   cellGloss: { fontFamily: font.ui, fontSize: 9, marginTop: 1 },
-  action: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  action: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: loud.panel,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+  },
   actionLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4 },
 });

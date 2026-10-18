@@ -122,10 +122,17 @@ export const RestBar = ({
 };
 
 const styles = StyleSheet.create({
-  bell: { minWidth: 32, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
+  bell: {
+    minWidth: 36,
+    minHeight: 36,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+  },
   wrap: {
-    minHeight: 48,
-    borderRadius: radius.md,
+    minHeight: 52,
+    borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: space.md,
     overflow: 'hidden',
@@ -134,7 +141,7 @@ const styles = StyleSheet.create({
   wrapResting: { backgroundColor: loud.panel, borderColor: loud.rule },
   wrapDone: { backgroundColor: loud.loud, borderColor: loud.loud },
   // Sits behind the content and shrinks to nothing as the rest runs out.
-  fill: { right: undefined, backgroundColor: 'rgba(232,53,42,0.28)' },
+  fill: { right: undefined, backgroundColor: 'rgba(232,53,42,0.28)', borderRadius: radius.pill },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -149,13 +156,15 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     flex: 1,
   },
-  actions: { flexDirection: 'row', gap: 4 },
+  actions: { flexDirection: 'row', gap: 6 },
   step: {
-    minWidth: 40,
+    minWidth: 42,
     minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   stepLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 0.8 },
 });

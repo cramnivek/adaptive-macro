@@ -5,7 +5,6 @@ import { type CardBlock, type CardBlocks, type Placement, placementOrigin } from
 import { type CardTemplate, TEMPLATE_IDS, TEMPLATES, type TemplateId } from '../shareCardTemplate';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { useBlockGesture } from './useBlockGesture';
 
@@ -97,9 +96,9 @@ export const CardEditor = ({
         <View style={styles.bar}>
           <Text style={styles.title}>THE CARD</Text>
           <Tappable onPress={onClose} accessibilityRole="button" style={styles.done}>
-            <SlashPanel color={loud.loud} style={styles.doneSlab}>
+            <View style={styles.doneSlab}>
               <Text style={[styles.doneLabel, { color: loud.onLoud }]}>DONE</Text>
-            </SlashPanel>
+            </View>
           </Tappable>
         </View>
 
@@ -210,7 +209,7 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: font.display, fontSize: 18, letterSpacing: 1.4, color: loud.figure },
   done: { minHeight: 44, justifyContent: 'center' },
-  doneSlab: { paddingHorizontal: space.xl, paddingVertical: space.sm },
+  doneSlab: { paddingHorizontal: space.xl, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: loud.loud },
   doneLabel: { fontFamily: font.uiStrong, fontSize: 14, letterSpacing: 1.6 },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },

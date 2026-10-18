@@ -24,7 +24,6 @@ import { MAX_CAPTION } from '../social/postPayload';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { CardEditor } from './CardEditor';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { useBlockGesture } from './useBlockGesture';
 
@@ -308,11 +307,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       accessibilityState={{ disabled: posting || posted }}
       style={[styles.action, (posting || posted) && styles.spent]}
     >
-      <SlashPanel color={postLeads ? loud.loud : loud.panel} style={styles.button}>
+      <View
+        style={[
+          styles.button,
+          {
+            backgroundColor: postLeads ? loud.loud : loud.panel,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: postLeads ? loud.loud : loud.rule,
+          },
+        ]}
+      >
         <Text style={[styles.buttonLabel, { color: postLeads ? loud.onLoud : loud.figure }]}>
           {posted ? 'POSTED' : posting ? 'POSTING…' : 'POST'}
         </Text>
-      </SlashPanel>
+      </View>
     </Tappable>
   );
 
@@ -435,11 +443,20 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             accessibilityState={{ disabled: drawing }}
             style={[styles.action, drawing && styles.spent]}
           >
-            <SlashPanel color={postLeads ? loud.panel : loud.loud} style={styles.button}>
+            <View
+              style={[
+                styles.button,
+                {
+                  backgroundColor: postLeads ? loud.panel : loud.loud,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: postLeads ? loud.rule : loud.loud,
+                },
+              ]}
+            >
               <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>
                 {drawing ? 'SAVING…' : getEventCopy('social.share_btn', { personality: settings.personality })}
               </Text>
-            </SlashPanel>
+            </View>
           </Tappable>
           {!postLeads && postButton}
           {note && <Text style={styles.note}>{note}</Text>}
@@ -451,17 +468,17 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               accessibilityState={{ disabled: routineSaved }}
               style={[styles.action, routineSaved && styles.spent]}
             >
-              <SlashPanel color={loud.panel} style={styles.button}>
+              <View style={[styles.button, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
                 <Text style={[styles.buttonLabel, { color: loud.figure }]}>
                   {routineSaved ? 'ROUTINE SAVED' : 'SAVE AS ROUTINE'}
                 </Text>
-              </SlashPanel>
+              </View>
             </Tappable>
           )}
           <Tappable onPress={leave} scaleTo={0.97} style={styles.action}>
-            <SlashPanel color={loud.panel} style={styles.button}>
+            <View style={[styles.button, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
               <Text style={[styles.buttonLabel, { color: loud.figure }]}>DONE</Text>
-            </SlashPanel>
+            </View>
           </Tappable>
         </View>
       </View>
@@ -519,7 +536,7 @@ const styles = StyleSheet.create({
   caption: { minHeight: 64, maxHeight: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm, fontFamily: font.ui, fontSize: 14, textAlignVertical: 'top', marginBottom: space.sm },
   action: { marginTop: space.sm },
   spent: { opacity: 0.6 },
-  button: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  button: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg },
   buttonLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6 },
   note: { fontFamily: font.ui, fontSize: 12, color: loud.figureMuted, textAlign: 'center', marginTop: space.xs },
 });

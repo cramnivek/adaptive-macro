@@ -34,7 +34,6 @@ import { CountUp } from '../src/components/CountUp';
 import { Screen } from '../src/components/Screen';
 import { ImpactFrame } from '../src/components/ImpactFrame';
 import { PRCelebration, type PRCelebrationData } from '../src/components/PRCelebration';
-import { SlashPanel } from '../src/components/SlashPanel';
 import { MilestoneSheet } from '../src/components/MilestoneSheet';
 import { SessionOptionsSheet } from '../src/components/SessionOptionsSheet';
 import { RestBar } from '../src/components/RestBar';
@@ -1623,18 +1622,18 @@ export default function SessionScreen() {
           Start an empty workout, or pick one of your routines.
         </Text>
         <Tappable onPress={() => router.replace('/session?start=blank')} scaleTo={0.97}>
-          <SlashPanel color={loud.loud} style={styles.slab}>
+          <View style={[styles.slab, { backgroundColor: loud.loud }]}>
             <Text style={[styles.slabLabel, { color: loud.onLoud }]}>START AN EMPTY WORKOUT</Text>
-          </SlashPanel>
+          </View>
         </Tappable>
         {routines.map((routine, index) => (
           <FadeIn key={routine.id} delay={Math.min(index, 5) * 40}>
             <Tappable onPress={() => router.replace(`/session?routine=${routine.id}`)} scaleTo={0.97}>
-              <SlashPanel color={loud.panel} style={styles.slab}>
+              <View style={[styles.slab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
                 <Text style={[styles.slabLabel, { color: loud.figure }]}>
                   {routine.name.toUpperCase()}
                 </Text>
-              </SlashPanel>
+              </View>
             </Tappable>
           </FadeIn>
         ))}
@@ -1708,11 +1707,11 @@ export default function SessionScreen() {
           </View>
         </View>
         <Tappable onPress={() => void finish()} scaleTo={0.93}>
-          <SlashPanel color={loud.loud} style={styles.finish}>
+          <View style={styles.finish}>
             <Text style={styles.finishLabel}>
               {getEventCopy('workout.finish_btn', { personality: settings.personality })}
             </Text>
-          </SlashPanel>
+          </View>
         </Tappable>
       </View>
 
@@ -1778,22 +1777,22 @@ export default function SessionScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`How to do ${block.name}`}
                 >
-                  <SlashPanel color={loud.loud} style={styles.glyphTab}>
+                  <View style={styles.glyphBadge}>
                     <ExerciseIcon
                       pattern={patterns[block.name]}
                       isCardio={block.isCardio}
                       size={18}
                       color={loud.onLoud}
                     />
-                  </SlashPanel>
-                  <SlashPanel color={loud.panel} style={styles.nameSlab}>
+                  </View>
+                  <View style={styles.nameContainer}>
                     <View style={styles.nameSlabRow}>
                       <Text style={styles.blockName} numberOfLines={1}>
                         {block.name.toUpperCase()}
                       </Text>
                       <Ionicons name="information-circle-outline" size={15} color={loud.figureMuted} />
                     </View>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
 
                 <Tappable
@@ -2355,9 +2354,9 @@ export default function SessionScreen() {
             style={{ flex: 1 }}
             scaleTo={0.97}
           >
-            <SlashPanel color={loud.panel} style={styles.slab}>
+            <View style={[styles.slab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
               <Text style={[styles.slabLabel, { color: loud.figure }]}>+ ADD EXERCISE</Text>
-            </SlashPanel>
+            </View>
           </Tappable>
           <Tappable
             onPress={() => {
@@ -2367,9 +2366,9 @@ export default function SessionScreen() {
             style={{ flex: 1 }}
             scaleTo={0.97}
           >
-            <SlashPanel color={loud.loud} style={styles.slab}>
+            <View style={[styles.slab, { backgroundColor: loud.loud }]}>
               <Text style={[styles.slabLabel, { color: loud.onLoud }]}>+ ADD CARDIO</Text>
-            </SlashPanel>
+            </View>
           </Tappable>
         </View>
       )}
@@ -2621,18 +2620,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg + 2,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: loud.loud,
   },
   finishLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6, color: loud.onLoud },
 
-  block: { marginBottom: space.xl },
-  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  blockTitle: { flex: 1, flexDirection: 'row', alignItems: 'stretch', gap: 3, minHeight: 38 },
-  glyphTab: { width: 38, alignItems: 'center', justifyContent: 'center' },
-  nameSlab: { flex: 1, justifyContent: 'center', paddingHorizontal: space.md },
+  block: {
+    marginBottom: space.lg,
+    backgroundColor: loud.panel,
+    borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    padding: space.md,
+  },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: space.xs },
+  blockTitle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 38 },
+  glyphBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: loud.loud,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameContainer: { flex: 1, justifyContent: 'center' },
   nameSlabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.xs,
   },
   blockName: { flex: 1, fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
@@ -2652,12 +2666,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-    backgroundColor: loud.panel,
+    backgroundColor: loud.ground,
   },
   actionPillText: {
     fontFamily: font.display,
@@ -2675,7 +2689,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     paddingHorizontal: space.sm,
     backgroundColor: '#111318',
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#1E2433',
     alignSelf: 'flex-start',
@@ -2706,9 +2720,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
   },
   supersetBadgeText: {
@@ -2745,10 +2759,10 @@ const styles = StyleSheet.create({
   },
   cardioModeChip: {
     flex: 1,
-    paddingVertical: 6,
+    paddingVertical: 7,
     paddingHorizontal: 8,
-    borderRadius: radius.sm,
-    backgroundColor: loud.panel,
+    borderRadius: radius.pill,
+    backgroundColor: loud.ground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     alignItems: 'center',
@@ -2774,10 +2788,10 @@ const styles = StyleSheet.create({
   },
   cardioLiveBadge: {
     alignSelf: 'flex-end',
-    backgroundColor: loud.panel,
+    backgroundColor: loud.ground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: -2,
@@ -2818,7 +2832,7 @@ const styles = StyleSheet.create({
   prRowBadge: {
     alignSelf: 'flex-end',
     borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: -2,
@@ -2877,7 +2891,7 @@ const styles = StyleSheet.create({
     minWidth: 36,
     paddingHorizontal: 3,
     paddingVertical: 4,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2887,13 +2901,13 @@ const styles = StyleSheet.create({
   rpeChipEmpty: { borderColor: 'rgba(255,255,255,0.45)', borderStyle: 'dashed' },
   input: {
     minHeight: TOUCH_TARGET - 10,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 6,
     textAlign: 'center',
     fontFamily: font.figure,
   },
-  inputOnGround: { backgroundColor: loud.panel, borderColor: loud.rule },
+  inputOnGround: { backgroundColor: loud.ground, borderColor: loud.rule },
   // On an inverted row the boxes have to lift off the red without introducing
   // a fourth colour, so they are the same white at low opacity.
   inputOnLoud: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)' },
@@ -2906,7 +2920,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
     borderColor: loud.rule,
-    marginTop: 2,
+    marginTop: 4,
   },
   addSetLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.6, color: loud.loud },
 
@@ -2915,6 +2929,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.lg,
+    borderRadius: radius.lg,
     marginBottom: space.sm,
   },
   slabLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, textAlign: 'center' },

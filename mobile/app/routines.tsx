@@ -4,7 +4,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { ExercisePicker } from '../src/components/ExercisePicker';
-import { SlashPanel } from '../src/components/SlashPanel';
 import { Tappable } from '../src/components/Tappable';
 import { Screen } from '../src/components/Screen';
 import {
@@ -24,7 +23,7 @@ import { warmCatalogueCache } from '../src/exerciseSearch';
 import { confirm, notify } from '../src/dialog';
 import { useApp } from '../src/state/AppStore';
 import { formatDate } from '../src/format';
-import { font, space } from '../src/theme';
+import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
 type Draft = {
@@ -287,11 +286,11 @@ export default function RoutinesScreen() {
                 scaleTo={0.97}
                 style={{ flex: 1 }}
               >
-                <SlashPanel color={loud.panel} style={styles.addSlab}>
+                <View style={[styles.addSlab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
                   <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.figure }}>
                     + EXERCISE
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
               <Tappable
                 onPress={() => {
@@ -301,11 +300,11 @@ export default function RoutinesScreen() {
                 scaleTo={0.97}
                 style={{ flex: 1 }}
               >
-                <SlashPanel color={loud.loud} style={styles.addSlab}>
+                <View style={[styles.addSlab, { backgroundColor: loud.loud }]}>
                   <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.onLoud }}>
                     + CARDIO
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
             </View>
           )}
@@ -429,5 +428,5 @@ const styles = StyleSheet.create({
   },
   addButtonsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
   addExercise: { marginTop: space.sm },
-  addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
+  addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg },
 });

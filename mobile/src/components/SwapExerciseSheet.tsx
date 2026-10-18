@@ -25,7 +25,6 @@ import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { TOUCH_TARGET } from './Controls';
 import { ExerciseIcon } from './ExerciseIcon';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 export type SwapMode = 'swap-remaining' | 'swap-all';
@@ -349,9 +348,9 @@ export const SwapExerciseSheet = ({
 
         {/* Cancel Button */}
         <Tappable onPress={onClose} scaleTo={0.97}>
-          <SlashPanel color={loud.panel} style={styles.cancelSlab}>
+          <View style={[styles.cancelSlab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
             <Text style={styles.cancelText}>CANCEL</Text>
-          </SlashPanel>
+          </View>
         </Tappable>
       </View>
     </Modal>
@@ -572,8 +571,8 @@ const styles = StyleSheet.create({
     backgroundColor: loud.panel,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.loud,
-    borderRadius: radius.sm,
-    paddingHorizontal: 8,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
     paddingVertical: 4,
   },
   swapActionText: {
@@ -586,6 +585,7 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET - 6,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.lg,
   },
   cancelText: {
     fontFamily: font.display,

@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogueEntry } from '../db';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { ExerciseIcon } from './ExerciseIcon';
 import { motionFor } from '../exerciseMotion';
@@ -300,9 +299,9 @@ export const ExerciseInfoSheet = ({ entry, onClose }: ExerciseInfoSheetProps) =>
 
             <View style={{ height: space.md }} />
             <Tappable onPress={onClose} scaleTo={0.97}>
-              <SlashPanel color={loud.loud} style={styles.close}>
+              <View style={styles.close}>
                 <Text style={styles.closeLabel}>CLOSE</Text>
-              </SlashPanel>
+              </View>
             </Tappable>
           </ScrollView>
         )}
@@ -337,13 +336,13 @@ const styles = StyleSheet.create({
   legendSecondary: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
   step: { flexDirection: 'row', gap: space.sm, marginBottom: space.sm },
   stepNumber: { fontFamily: font.figure, fontSize: 13, minWidth: 14 },
-  close: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  close: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg, backgroundColor: loud.loud },
   closeLabel: { fontFamily: font.display, fontSize: 13, letterSpacing: 1.4, color: loud.onLoud },
   stepText: { flex: 1, fontFamily: font.ui, fontSize: 14, lineHeight: 21 },
   sectionTabs: {
     flexDirection: 'row',
     backgroundColor: 'rgba(9, 10, 13, 0.6)',
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     padding: 3,
     marginBottom: space.md,
     borderWidth: StyleSheet.hairlineWidth,
@@ -354,7 +353,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
   },
   sectionTabActive: {
     backgroundColor: loud.ground,

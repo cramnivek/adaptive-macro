@@ -3,10 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { displayWeight, formatDayMonth, weightUnit } from '../format';
 import { formatDuration } from '../social/postPayload';
 import type { UnitSystem } from '../state/settings';
-import { font, space } from '../theme';
+import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import type { WeekTotal } from '../weeklyTraining';
-import { SlashPanel } from './SlashPanel';
+import { TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
 
 type Metric = 'time' | 'volume' | 'sets';
@@ -73,18 +73,16 @@ export const WeeklyBars = ({ weeks, units }: WeeklyBarsProps) => {
               key={option.key}
               onPress={() => setMetric(option.key)}
               scaleTo={0.97}
-              style={styles.switchItem}
+              style={[styles.switchItem, active && styles.switchItemActive]}
               accessibilityLabel={`Show ${option.noun.toLowerCase()} per week`}
               accessibilityRole="button"
               accessibilityState={{ selected: option.key === metric }}
             >
-              <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
-                <Text
-                  style={[styles.switchLabel, { color: active ? loud.onLoud : loud.figureMuted }]}
-                >
-                  {option.label}
-                </Text>
-              </SlashPanel>
+              <Text
+                style={[styles.switchLabel, { color: active ? loud.onLoud : loud.figureMuted }]}
+              >
+                {option.label}
+              </Text>
             </Tappable>
           );
         })}
@@ -130,9 +128,26 @@ export const WeeklyBars = ({ weeks, units }: WeeklyBarsProps) => {
 // The switcher's styles match the overview's period switcher on purpose; they
 // live in that screen's StyleSheet, which is not exported.
 const styles = StyleSheet.create({
-  switcher: { flexDirection: 'row', gap: space.sm, marginBottom: space.md },
-  switchItem: { flex: 1 },
-  switchPanel: { minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  switcher: {
+    flexDirection: 'row',
+    backgroundColor: loud.panel,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    padding: 3,
+    marginBottom: space.md,
+  },
+  switchItem: {
+    flex: 1,
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xs,
+  },
+  switchItemActive: {
+    backgroundColor: loud.loud,
+  },
   switchLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.4 },
 
   summary: { fontFamily: font.ui, fontSize: 13, color: loud.figureMuted, marginBottom: space.md },

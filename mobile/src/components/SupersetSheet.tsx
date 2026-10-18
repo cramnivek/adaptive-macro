@@ -3,7 +3,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 import { TOUCH_TARGET } from './Controls';
 
@@ -156,12 +155,12 @@ export const SupersetSheet = ({
                   }}
                   scaleTo={0.96}
                 >
-                  <SlashPanel color={loud.panel} style={styles.actionBtn}>
+                  <View style={[styles.actionBtn, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
                     <Ionicons name="close-circle-outline" size={16} color={loud.figure} />
                     <Text style={styles.actionBtnText}>
                       REMOVE {currentBlock.name.toUpperCase()}
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
 
                 <Tappable
@@ -171,12 +170,12 @@ export const SupersetSheet = ({
                   }}
                   scaleTo={0.96}
                 >
-                  <SlashPanel color="rgba(255, 59, 48, 0.15)" style={styles.disbandBtn}>
+                  <View style={[styles.disbandBtn, { backgroundColor: 'rgba(255, 59, 48, 0.15)' }]}>
                     <Ionicons name="trash-outline" size={16} color={loud.warn} />
                     <Text style={[styles.actionBtnText, { color: loud.warn }]}>
                       DISBAND {isGiantSet ? 'GIANT SET' : 'SUPERSET'} {currentGroup}
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
               </View>
             </>
@@ -389,6 +388,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingHorizontal: space.md,
+    borderRadius: radius.lg,
   },
   disbandBtn: {
     minHeight: TOUCH_TARGET,
@@ -399,6 +399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderWidth: 1,
     borderColor: 'rgba(255, 59, 48, 0.4)',
+    borderRadius: radius.lg,
   },
   actionBtnText: {
     fontFamily: font.display,
@@ -414,7 +415,7 @@ const styles = StyleSheet.create({
   },
   optionCard: {
     padding: 12,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     backgroundColor: loud.panel,
   },

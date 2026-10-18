@@ -102,8 +102,8 @@ export default function TrainScreen() {
   return (
     <Screen title="Train" tone="loud">
       {open ? (
-        <Card loud title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
+        <Card loud variant="featured" title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
+          <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
             {open.sets.length} sets logged so far.
           </Text>
           <Button
@@ -115,6 +115,7 @@ export default function TrainScreen() {
       ) : (
         <Card
           loud
+          variant="featured"
           title={getEventCopy('workout.start_title', {
             personality: settings.personality,
             seed: routines.length,
@@ -140,30 +141,32 @@ export default function TrainScreen() {
       )}
 
       {headline.length > 0 && (
-        <Card loud title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
-          {headline.map(({ name, last }) => (
-            <Pressable
-              key={name}
-              onPress={() => router.push('/progression')}
-              style={[styles.row, { borderColor: loud.rule }]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text style={[styles.note, { color: loud.figureFaint }]}>
-                  {last
-                    ? `${displayWeight(last.heaviestWorkingSetKg, settings.units).toFixed(1)} ${unit} · ${formatDate(last.date)}`
-                    : 'nothing scoreable yet'}
-                </Text>
-              </View>
-              {last?.isRecord && (
-                <View style={styles.prBadge}>
-                  <Text style={styles.prBadgeText}>NEW PR</Text>
+        <Card loud variant="featured" title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
+          <View style={styles.listStack}>
+            {headline.map(({ name, last }) => (
+              <Pressable
+                key={name}
+                onPress={() => router.push('/progression')}
+                style={[styles.row, { borderColor: loud.rule }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure }} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  <Text style={[styles.note, { color: loud.figureFaint }]}>
+                    {last
+                      ? `${displayWeight(last.heaviestWorkingSetKg, settings.units).toFixed(1)} ${unit} · ${formatDate(last.date)}`
+                      : 'nothing scoreable yet'}
+                  </Text>
                 </View>
-              )}
-            </Pressable>
-          ))}
+                {last?.isRecord && (
+                  <View style={styles.prBadge}>
+                    <Text style={styles.prBadgeText}>NEW PR</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
           <Button
             tone="loud"
             label="See progression"
@@ -174,25 +177,27 @@ export default function TrainScreen() {
       )}
 
       {recent.length > 0 && (
-        <Card loud title="Recent sessions">
-          {recent.slice(0, 5).map((session) => (
-            <Tappable
-              key={session.id}
-              onPress={() => router.push(`/workout?id=${session.id}`)}
-              scaleTo={0.99}
-              style={[styles.row, { borderColor: loud.rule }]}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${session.name}, ${formatDate(session.date)}`}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
-                <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
-                  {formatDate(session.date)} · {session.exercises.join(', ')}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={loud.figureFaint} />
-            </Tappable>
-          ))}
+        <Card loud variant="featured" title="Recent sessions">
+          <View style={styles.listStack}>
+            {recent.slice(0, 5).map((session) => (
+              <Tappable
+                key={session.id}
+                onPress={() => router.push(`/workout?id=${session.id}`)}
+                scaleTo={0.99}
+                style={[styles.row, { borderColor: loud.rule }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${session.name}, ${formatDate(session.date)}`}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
+                  <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
+                    {formatDate(session.date)} · {session.exercises.join(', ')}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={loud.figureFaint} />
+              </Tappable>
+            ))}
+          </View>
           <Button
             tone="loud"
             label="All workouts"
@@ -202,21 +207,33 @@ export default function TrainScreen() {
         </Card>
       )}
 
-      <Card loud title="Routines">
+      <Card loud variant="featured" title="Routines">
         {routines.length === 0 ? (
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
+          <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
             A routine is a named list of exercises in the order you do them. You can build one
             from a session you have already done.
           </Text>
         ) : (
-          <View style={styles.chips}>
+          <View style={styles.routineList}>
             {routines.map((routine) => (
-              <View
+              <Tappable
                 key={routine.id}
-                style={[styles.chip, { backgroundColor: loud.panel, borderColor: loud.rule }]}
+                onPress={() => router.push(`/session?routine=${routine.id}`)}
+                scaleTo={0.98}
+                style={[styles.routineRow, { backgroundColor: loud.ground, borderColor: loud.rule }]}
               >
-                <Text style={{ fontFamily: font.ui, color: loud.figure, fontSize: 13 }}>{routine.name}</Text>
-              </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure, fontSize: 14 }}>
+                    {routine.name}
+                  </Text>
+                  <Text style={[styles.note, { color: loud.figureFaint, marginTop: 2 }]}>
+                    {routine.exercises.length} exercise{routine.exercises.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+                <View style={[styles.routinePlayBtn, { backgroundColor: loud.loud }]}>
+                  <Ionicons name="play" size={13} color={loud.onLoud} />
+                </View>
+              </Tappable>
             ))}
           </View>
         )}
@@ -241,27 +258,50 @@ export default function TrainScreen() {
 }
 
 const styles = StyleSheet.create({
-  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
+  note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17 },
+  listStack: { gap: space.xs, marginBottom: space.md },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: TOUCH_TARGET,
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingVertical: space.sm,
-    paddingHorizontal: space.xs,
-    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: loud.ground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
   },
   prBadge: {
-    paddingHorizontal: space.xs + 2,
-    paddingVertical: 2,
-    borderRadius: radius.xs,
-    backgroundColor: 'rgba(255, 77, 0, 0.15)',
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(232, 53, 42, 0.15)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(232, 53, 42, 0.4)',
   },
   prBadgeText: {
     fontFamily: font.uiStrong,
     color: loud.loud,
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.8,
+  },
+  routineList: { gap: space.xs, marginBottom: space.md },
+  routineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 52,
+  },
+  routinePlayBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   chip: {

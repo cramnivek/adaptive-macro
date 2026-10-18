@@ -16,7 +16,6 @@ import {
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 interface SessionOptionsSheetProps {
@@ -127,11 +126,20 @@ export const SessionOptionsSheet = ({
                 accessibilityLabel="Decrease rest duration by 15 seconds"
                 style={[styles.stepBtnWrap, !canStepDown && styles.btnDisabled]}
               >
-                <SlashPanel color={loud.panel} style={styles.stepBtn}>
+                <View
+                  style={[
+                    styles.stepBtn,
+                    {
+                      backgroundColor: loud.ground,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: loud.rule,
+                    },
+                  ]}
+                >
                   <Text style={[styles.stepBtnText, !canStepDown && styles.stepBtnTextDisabled]}>
                     − 15S
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
 
               <View style={styles.stepperReadout}>
@@ -152,11 +160,20 @@ export const SessionOptionsSheet = ({
                 accessibilityLabel="Increase rest duration by 15 seconds"
                 style={[styles.stepBtnWrap, !canStepUp && styles.btnDisabled]}
               >
-                <SlashPanel color={loud.panel} style={styles.stepBtn}>
+                <View
+                  style={[
+                    styles.stepBtn,
+                    {
+                      backgroundColor: loud.ground,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: loud.rule,
+                    },
+                  ]}
+                >
                   <Text style={[styles.stepBtnText, !canStepUp && styles.stepBtnTextDisabled]}>
                     + 15S
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
             </View>
 
@@ -176,11 +193,20 @@ export const SessionOptionsSheet = ({
                     accessibilityRole="button"
                     accessibilityLabel={`Set rest timer to ${formatRest(preset)}`}
                   >
-                    <SlashPanel color={active ? loud.loud : loud.panel} style={styles.presetPanel}>
+                    <View
+                      style={[
+                        styles.presetPanel,
+                        {
+                          backgroundColor: active ? loud.loud : loud.panel,
+                          borderWidth: StyleSheet.hairlineWidth,
+                          borderColor: active ? loud.loud : loud.rule,
+                        },
+                      ]}
+                    >
                       <Text style={[styles.presetText, { color: active ? loud.onLoud : loud.figureMuted }]}>
                         {formatPresetLabel(preset)}
                       </Text>
-                    </SlashPanel>
+                    </View>
                   </Tappable>
                 );
               })}
@@ -200,7 +226,16 @@ export const SessionOptionsSheet = ({
               accessibilityState={{ checked: restSound }}
               accessibilityLabel={restSound ? 'Rest chime on' : 'Rest chime off'}
             >
-              <SlashPanel color={loud.panel} style={styles.alertRow}>
+              <View
+                style={[
+                  styles.alertRow,
+                  {
+                    backgroundColor: loud.panel,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: loud.rule,
+                  },
+                ]}
+              >
                 <View style={styles.alertLeft}>
                   <Ionicons
                     name={restSound ? 'notifications' : 'notifications-off-outline'}
@@ -219,7 +254,7 @@ export const SessionOptionsSheet = ({
                     {restSound ? 'ON' : 'OFF'}
                   </Text>
                 </View>
-              </SlashPanel>
+              </View>
             </Tappable>
 
             {/* Chime Tone Selector */}
@@ -300,11 +335,20 @@ export const SessionOptionsSheet = ({
                   accessibilityRole="button"
                   accessibilityLabel="Kilograms (kg)"
                 >
-                  <SlashPanel color={units === 'metric' ? loud.loud : loud.panel} style={styles.panel}>
+                  <View
+                    style={[
+                      styles.panel,
+                      {
+                        backgroundColor: units === 'metric' ? loud.loud : loud.panel,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: units === 'metric' ? loud.loud : loud.rule,
+                      },
+                    ]}
+                  >
                     <Text style={[styles.toggleText, { color: units === 'metric' ? loud.onLoud : loud.figureMuted }]}>
                       KG (METRIC)
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
 
                 <Tappable
@@ -319,11 +363,20 @@ export const SessionOptionsSheet = ({
                   accessibilityRole="button"
                   accessibilityLabel="Pounds (lbs)"
                 >
-                  <SlashPanel color={units === 'imperial' ? loud.loud : loud.panel} style={styles.panel}>
+                  <View
+                    style={[
+                      styles.panel,
+                      {
+                        backgroundColor: units === 'imperial' ? loud.loud : loud.panel,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: units === 'imperial' ? loud.loud : loud.rule,
+                      },
+                    ]}
+                  >
                     <Text style={[styles.toggleText, { color: units === 'imperial' ? loud.onLoud : loud.figureMuted }]}>
                       LBS (IMPERIAL)
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
               </View>
             </View>
@@ -345,11 +398,20 @@ export const SessionOptionsSheet = ({
                   accessibilityRole="button"
                   accessibilityLabel="Kilometres per hour (kph)"
                 >
-                  <SlashPanel color={speedUnit === 'kph' ? loud.loud : loud.panel} style={styles.panel}>
+                  <View
+                    style={[
+                      styles.panel,
+                      {
+                        backgroundColor: speedUnit === 'kph' ? loud.loud : loud.panel,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: speedUnit === 'kph' ? loud.loud : loud.rule,
+                      },
+                    ]}
+                  >
                     <Text style={[styles.toggleText, { color: speedUnit === 'kph' ? loud.onLoud : loud.figureMuted }]}>
                       KPH
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
 
                 <Tappable
@@ -364,11 +426,20 @@ export const SessionOptionsSheet = ({
                   accessibilityRole="button"
                   accessibilityLabel="Miles per hour (mph)"
                 >
-                  <SlashPanel color={speedUnit === 'mph' ? loud.loud : loud.panel} style={styles.panel}>
+                  <View
+                    style={[
+                      styles.panel,
+                      {
+                        backgroundColor: speedUnit === 'mph' ? loud.loud : loud.panel,
+                        borderWidth: StyleSheet.hairlineWidth,
+                        borderColor: speedUnit === 'mph' ? loud.loud : loud.rule,
+                      },
+                    ]}
+                  >
                     <Text style={[styles.toggleText, { color: speedUnit === 'mph' ? loud.onLoud : loud.figureMuted }]}>
                       MPH
                     </Text>
-                  </SlashPanel>
+                  </View>
                 </Tappable>
               </View>
             </View>
@@ -376,9 +447,9 @@ export const SessionOptionsSheet = ({
 
           {/* Close/Done button */}
           <Tappable onPress={onClose} scaleTo={0.97} style={styles.doneWrapper}>
-            <SlashPanel color={loud.loud} style={styles.donePanel}>
+            <View style={[styles.donePanel, { backgroundColor: loud.loud }]}>
               <Text style={styles.doneLabel}>DONE</Text>
-            </SlashPanel>
+            </View>
           </Tappable>
         </ScrollView>
       </View>
@@ -455,7 +526,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: loud.panel,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
     padding: space.xs,
@@ -472,6 +543,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.md,
   },
   stepBtnText: {
     fontFamily: font.display,
@@ -517,6 +589,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.xs,
+    borderRadius: radius.md,
   },
   presetText: {
     fontFamily: font.display,
@@ -531,6 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     marginTop: space.sm,
     minHeight: 52,
+    borderRadius: radius.md,
   },
   alertLeft: {
     flexDirection: 'row',
@@ -721,6 +795,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.pill,
   },
   toggleText: {
     fontFamily: font.display,
@@ -735,6 +810,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.lg,
   },
   doneLabel: {
     fontFamily: font.display,

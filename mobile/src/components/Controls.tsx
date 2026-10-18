@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 interface ButtonProps {
@@ -44,19 +43,19 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: 
 
   return (
     // `Tappable` rather than `Pressable`: the press sinks now.
-    // In loud/training mode, the primary action carries the signature lean.
-    // In quiet instrument mode, primary and secondary controls use the soft
-    // rounded style (radius.md) for visual consistency with inputs and cards.
+    // Consistent with "Calm when tracking. Focused when training. Loud when celebrating",
+    // primary action buttons use athletic rounded styling (radius.lg = 16px) across
+    // both everyday and training modes, reserving angular cuts strictly for celebrations.
     <Tappable onPress={onPress} disabled={disabled} style={[styles.buttonSpacing, { opacity: disabled ? 0.4 : 1 }]}>
-      {variant === 'primary' && isLoud ? (
-        <SlashPanel color={background} style={styles.button}>
-          <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
-        </SlashPanel>
-      ) : (
-        <View style={[styles.button, styles.rounded, { backgroundColor: background }]}>
-          <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
-        </View>
-      )}
+      <View
+        style={[
+          styles.button,
+          variant === 'primary' ? styles.primaryRounded : styles.rounded,
+          { backgroundColor: background },
+        ]}
+      >
+        <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
+      </View>
     </Tappable>
   );
 };
@@ -300,6 +299,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   rounded: { borderRadius: radius.md },
+  primaryRounded: { borderRadius: radius.lg },
   squared: { borderRadius: radius.md },
   buttonSpacing: { marginBottom: space.md },
   buttonLabel: { fontFamily: font.uiStrong, fontSize: 15 },

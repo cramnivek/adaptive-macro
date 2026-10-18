@@ -15,7 +15,6 @@ import { generateWarmupRamp, type WarmupSet } from '../warmup';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { SlashPanel } from './SlashPanel';
 import { Tappable } from './Tappable';
 
 interface PlateSheetProps {
@@ -238,11 +237,20 @@ export const PlateSheet = ({
               scaleTo={0.96}
               style={{ flex: 1 }}
             >
-              <SlashPanel color={mode === 'plates' ? loud.loud : loud.panel} style={styles.tabBtn}>
+              <View
+                style={[
+                  styles.tabBtn,
+                  {
+                    backgroundColor: mode === 'plates' ? loud.loud : loud.panel,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: mode === 'plates' ? loud.loud : loud.rule,
+                  },
+                ]}
+              >
                 <Text style={[styles.tabLabel, { color: mode === 'plates' ? loud.onLoud : loud.figureMuted }]}>
                   LOAD PLATES
                 </Text>
-              </SlashPanel>
+              </View>
             </Tappable>
 
             <Tappable
@@ -253,7 +261,16 @@ export const PlateSheet = ({
               scaleTo={0.96}
               style={{ flex: 1 }}
             >
-              <SlashPanel color={mode === 'warmup' ? loud.loud : loud.panel} style={styles.tabBtn}>
+              <View
+                style={[
+                  styles.tabBtn,
+                  {
+                    backgroundColor: mode === 'warmup' ? loud.loud : loud.panel,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: mode === 'warmup' ? loud.loud : loud.rule,
+                  },
+                ]}
+              >
                 <View style={styles.tabBadgeRow}>
                   <Text style={[styles.tabLabel, { color: mode === 'warmup' ? loud.onLoud : loud.figureMuted }]}>
                     WARM-UP RAMP
@@ -266,7 +283,7 @@ export const PlateSheet = ({
                     </View>
                   )}
                 </View>
-              </SlashPanel>
+              </View>
             </Tappable>
           </View>
         )}
@@ -336,11 +353,20 @@ export const PlateSheet = ({
                 const on = bar === choice;
                 return (
                   <Tappable key={choice} onPress={() => onBarChange(choice)} scaleTo={0.95} style={{ flex: 1 }}>
-                    <SlashPanel color={on ? loud.loud : loud.panel} style={styles.barChoice}>
+                    <View
+                      style={[
+                        styles.barChoice,
+                        {
+                          backgroundColor: on ? loud.loud : loud.panel,
+                          borderWidth: StyleSheet.hairlineWidth,
+                          borderColor: on ? loud.loud : loud.rule,
+                        },
+                      ]}
+                    >
                       <Text style={[styles.barLabel, { color: on ? loud.onLoud : loud.figureMuted }]}>
                         {BAR_WEIGHT[units][choice]} {unit.toUpperCase()} {choice === 'standard' ? 'STANDARD' : 'LIGHT'}
                       </Text>
-                    </SlashPanel>
+                    </View>
                   </Tappable>
                 );
               })}
@@ -402,9 +428,9 @@ export const PlateSheet = ({
                       scaleTo={0.94}
                       style={styles.customAddBtn}
                     >
-                      <SlashPanel color={loud.loud} style={styles.customAddSlab}>
+                      <View style={[styles.customAddSlab, { backgroundColor: loud.loud }]}>
                         <Text style={styles.customAddText}>+ ADD</Text>
-                      </SlashPanel>
+                      </View>
                     </Tappable>
                   </View>
                   {customError && <Text style={styles.customErrorText}>{customError}</Text>}
@@ -580,9 +606,15 @@ export const PlateSheet = ({
                 scaleTo={0.97}
                 style={styles.mainActionBtn}
               >
-                <SlashPanel
-                  color={onInsertWarmups && warmups.length > 0 ? loud.loud : loud.panel}
-                  style={styles.actionSlab}
+                <View
+                  style={[
+                    styles.actionSlab,
+                    {
+                      backgroundColor: onInsertWarmups && warmups.length > 0 ? loud.loud : loud.panel,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: onInsertWarmups && warmups.length > 0 ? loud.loud : loud.rule,
+                    },
+                  ]}
                 >
                   <Text
                     style={[
@@ -592,7 +624,7 @@ export const PlateSheet = ({
                   >
                     {onInsertWarmups && warmups.length > 0 ? `INSERT ${warmups.length} WARM-UPS` : 'DONE'}
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
             </>
           ) : (
@@ -607,11 +639,20 @@ export const PlateSheet = ({
                 scaleTo={0.97}
                 style={styles.mainActionBtn}
               >
-                <SlashPanel color={onApplyWeight ? loud.loud : loud.panel} style={styles.actionSlab}>
+                <View
+                  style={[
+                    styles.actionSlab,
+                    {
+                      backgroundColor: onApplyWeight ? loud.loud : loud.panel,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: onApplyWeight ? loud.loud : loud.rule,
+                    },
+                  ]}
+                >
                   <Text style={[styles.actionLabel, { color: onApplyWeight ? loud.onLoud : loud.figure }]}>
                     {onApplyWeight ? `APPLY ${total} ${unit.toUpperCase()}` : 'DONE'}
                   </Text>
-                </SlashPanel>
+                </View>
               </Tappable>
             </>
           )}
@@ -744,6 +785,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.pill,
   },
   barLabel: {
     fontFamily: font.display,
@@ -837,6 +879,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.md,
   },
   customAddText: {
     fontFamily: font.display,
@@ -936,6 +979,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.lg,
   },
   actionLabel: {
     fontFamily: font.display,
@@ -952,6 +996,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
   },
   tabLabel: {
     fontFamily: font.display,

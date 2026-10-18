@@ -18,7 +18,7 @@ import { MuscleFigure } from '../src/components/MuscleFigure';
 import { REGION_LABELS } from '../src/components/muscleMap';
 import type { MuscleRegion } from '../src/components/muscleMap';
 import { Screen } from '../src/components/Screen';
-import { SlashPanel } from '../src/components/SlashPanel';
+import { TOUCH_TARGET } from '../src/components/Controls';
 import { Tappable } from '../src/components/Tappable';
 import { VolumeLandmarksCard } from '../src/components/VolumeLandmarksCard';
 import { WeeklyReviewCard } from '../src/components/WeeklyReviewCard';
@@ -295,18 +295,16 @@ export default function OverviewScreen() {
               key={option.days}
               onPress={() => setPeriodIndex(index)}
               scaleTo={0.97}
-              style={styles.switchItem}
+              style={[styles.switchItem, active && styles.switchItemActive]}
               accessibilityLabel={`Show the ${option.label.toLowerCase()}`}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
-              <SlashPanel color={active ? loud.loud : loud.panel} style={styles.switchPanel}>
-                <Text
-                  style={[styles.switchLabel, { color: active ? loud.onLoud : loud.figureMuted }]}
-                >
-                  {option.label}
-                </Text>
-              </SlashPanel>
+              <Text
+                style={[styles.switchLabel, { color: active ? loud.onLoud : loud.figureMuted }]}
+              >
+                {option.label}
+              </Text>
             </Tappable>
           );
         })}
@@ -560,9 +558,26 @@ const Stat = ({ label, value, suffix, accent = false, signed = false }: StatProp
 );
 
 const styles = StyleSheet.create({
-  switcher: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
-  switchItem: { flex: 1 },
-  switchPanel: { minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  switcher: {
+    flexDirection: 'row',
+    backgroundColor: loud.panel,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
+    padding: 3,
+    marginBottom: space.lg,
+  },
+  switchItem: {
+    flex: 1,
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xs,
+  },
+  switchItemActive: {
+    backgroundColor: loud.loud,
+  },
   switchLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.4 },
 
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, color: loud.figureFaint, marginTop: 4 },
