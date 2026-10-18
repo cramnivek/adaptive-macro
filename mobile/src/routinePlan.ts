@@ -44,3 +44,50 @@ export const resumeOrder = (planned: string[], logged: string[]): string[] => {
 /** The line under an exercise's name saying what the routine asks for. */
 export const targetLabel = (sets: number, reps: string | null): string =>
   reps === null ? `TARGET ${sets} SETS` : `TARGET ${sets} × ${reps.toUpperCase()}`;
+
+export interface LoggedSetLike {
+  id?: string;
+  weightKg: number | null;
+  reps: number;
+  setType: string;
+  rpe?: number | null;
+  isCardio?: boolean;
+  speedKph?: number | null;
+  inclinePct?: number | null;
+  durationSeconds?: number | null;
+  distanceKm?: number | null;
+}
+
+export interface RowLike {
+  setType: string;
+  isCardio?: boolean;
+}
+
+/**
+ * Resolves the matching set from the previous session for a row.
+ * Separates warm-ups from working sets:
+ * - A warm-up row matches against the previous session's warm-ups at that warm-up index.
+ * - A working set row matches against the previous session's working sets at that working set index.
+ *   If the lifter is performing more working sets than last time, it falls back to the last working set.
+ */
+export const previousSetFor = <T extends LoggedSetLike>(
+  previousSets: T[] | undefined,
+  rows: RowLike[],
+  rowIndex: number,
+  setType: string = rows[rowIndex]?.setType ?? 'normal',
+): T | undefined => {
+  if (!previousSets || previousSets.length === 0) return undefined;
+
+  if (setType === 'warmup') {
+    const warmupIndex = rows.slice(0, rowIndex).filter((r) => r.setType === 'warmup').length;
+    const prevWarmups = previousSets.filter((s) => s.setType === 'warmup');
+    return prevWarmups[warmupIndex];
+  }
+
+  // Working sets:
+  const workingIndex = rows.slice(0, rowIndex).filter((r) => r.setType !== 'warmup').length;
+  const prevWorking = previousSets.filter((s) => s.setType !== 'warmup');
+  if (prevWorking.length === 0) return undefined;
+  return prevWorking[workingIndex] ?? prevWorking[prevWorking.length - 1];
+};
+

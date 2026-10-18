@@ -11,6 +11,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   StyleSheet,
   Text,
   TextInput,
@@ -77,7 +78,8 @@ import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet
 import { generateWarmupRamp, type WarmupSet } from '../src/warmup';
 import { laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
-import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
+import { draftsToAdd, previousSetFor, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
+import { clearWorkoutDraft, loadWorkoutDraft, saveWorkoutDraft } from '../src/sessionDraft';
 import { formatRpe } from '../src/rpe';
 import { useApp } from '../src/state/AppStore';
 import {
@@ -575,9 +577,12 @@ export default function SessionScreen() {
       if (target === null) return block;
       const start = block.rows.length;
       const warmupCount = block.rows.filter((r) => r.setType === 'warmup').length;
-      const drafts: Row[] = Array.from({ length: draftsToAdd(target.sets, start, warmupCount) }, (_, offset) => {
-        const previous = block.previous[start + offset];
-        return {
+      const numDrafts = draftsToAdd(target.sets, start, warmupCount);
+      const drafts: Row[] = [];
+      for (let offset = 0; offset < numDrafts; offset++) {
+        const dummyRows: Row[] = [...block.rows, ...drafts];
+        const previous = previousSetFor(block.previous, dummyRows, dummyRows.length, 'normal');
+        drafts.push({
           key: newKey(),
           id: null,
           weight:
@@ -588,8 +593,8 @@ export default function SessionScreen() {
           setType: 'normal',
           rpe: null,
           done: false,
-        };
-      });
+        });
+      }
       return { ...block, rows: [...block.rows, ...drafts] };
     },
     [workoutUnits, speedUnit],
@@ -682,7 +687,38 @@ export default function SessionScreen() {
         // and reopening it used to lose everything not yet started.
         const routine = loadedRoutines.find((r) => r.id === existing.routineId);
         setSession(existing);
-        setBlocks(await blocksFromSession(existing, routine?.exercises ?? []));
+
+        const draft = await loadWorkoutDraft(existing.id);
+        if (draft && draft.length > 0) {
+          const hydrated: Block[] = await Promise.all(
+            draft.map(async (b) => {
+              const previous = await lastSessionSets(b.name);
+              const bestPR = await exerciseBestPR(b.name, b.bodyweightBased, series, currentBodyweightKg);
+              const written = existing.sets.filter((s) => s.exerciseName === b.name);
+              const rows: Row[] = b.rows.map((r) => {
+                if (r.id) {
+                  const match = written.find((s) => s.id === r.id);
+                  if (match) return { ...r, done: true };
+                }
+                return r;
+              });
+              return {
+                name: b.name,
+                bodyweightBased: b.bodyweightBased,
+                isCardio: b.isCardio,
+                cardioMode: b.cardioMode,
+                supersetGroup: b.supersetGroup,
+                target: b.target,
+                previous,
+                bestPR,
+                rows,
+              };
+            }),
+          );
+          setBlocks(hydrated);
+        } else {
+          setBlocks(await blocksFromSession(existing, routine?.exercises ?? []));
+        }
       } else if (!started.current && (params.start === 'blank' || params.routine)) {
         started.current = true;
         const routine = loadedRoutines.find((r) => r.id === params.routine);
@@ -720,6 +756,44 @@ export default function SessionScreen() {
       setLoading(false);
     })();
   }, [params.start, params.routine, params.cardio, blockFor, blocksFromSession, withTargetRows]);
+
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+
+  // Auto-save active workout draft whenever blocks change
+  useEffect(() => {
+    if (!session?.id || blocks.length === 0) return;
+    const timer = setTimeout(() => {
+      void saveWorkoutDraft(session.id, blocks);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [session?.id, blocks]);
+
+  // Immediately flush draft to storage when app is backgrounded or tab hidden
+  useEffect(() => {
+    if (!session?.id) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' && session?.id && blocksRef.current.length > 0) {
+        void saveWorkoutDraft(session.id, blocksRef.current);
+      }
+    });
+
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden' && session?.id && blocksRef.current.length > 0) {
+        void saveWorkoutDraft(session.id, blocksRef.current);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    return () => {
+      sub.remove();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+    };
+  }, [session?.id]);
 
   const editRow = (blockIndex: number, rowIndex: number, patch: Partial<Row>) =>
     setBlocks((current) =>
@@ -763,7 +837,7 @@ export default function SessionScreen() {
         }
         // A new row copies the one above, because the next set is usually the
         // same weight; failing that, the previous session's set at that index.
-        const previous = block.previous[block.rows.length];
+        const previous = previousSetFor(block.previous, block.rows, block.rows.length, 'normal');
         return {
           ...block,
           rows: [
@@ -1454,7 +1528,7 @@ export default function SessionScreen() {
             cardioMode,
           };
         }
-        const prev = newPrevious[idx];
+        const prev = previousSetFor(newPrevious, targetBlock.rows, idx, row.setType);
         return {
           ...row,
           weight:
@@ -1494,7 +1568,7 @@ export default function SessionScreen() {
       const remainingCount = Math.max(1, remainingDrafts.length);
 
       const newDraftRows: Row[] = Array.from({ length: remainingCount }, (_, offset) => {
-        const prev = newPrevious[offset];
+        const prev = previousSetFor(newPrevious, newDraftRows, offset, 'normal');
         return {
           key: newKey(),
           id: null,
@@ -1557,11 +1631,13 @@ export default function SessionScreen() {
         destructive: true,
       });
       if (!sure) return;
+      await clearWorkoutDraft(session.id);
       await discardSession(session.id);
       router.back();
       return;
     }
 
+    await clearWorkoutDraft(session.id);
     await finishSession(session.id);
 
     /*
@@ -2054,7 +2130,7 @@ export default function SessionScreen() {
             )}
 
             {block.rows.map((row, rowIndex) => {
-                const previous = block.previous[rowIndex];
+                const previous = previousSetFor(block.previous, block.rows, rowIndex, row.setType);
                 const previousLabel = previous
                   ? block.isCardio
                     ? formatCardioEffort(previous, speedUnit)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { draftsToAdd, repsPrefill, resumeOrder, targetLabel } from '../routinePlan';
+import { draftsToAdd, previousSetFor, repsPrefill, resumeOrder, targetLabel } from '../routinePlan';
 
 describe('draftsToAdd', () => {
   it('fills an untouched exercise to its target', () => {
@@ -65,5 +65,62 @@ describe('targetLabel', () => {
 
   it('states sets alone when the routine gave no rep target', () => {
     expect(targetLabel(3, null)).toBe('TARGET 3 SETS');
+  });
+});
+
+describe('previousSetFor', () => {
+  const previousWorking = [
+    { weightKg: 89.4, reps: 6, setType: 'normal' },
+    { weightKg: 89.4, reps: 6, setType: 'normal' },
+    { weightKg: 89.4, reps: 5, setType: 'normal' },
+  ];
+
+  it('matches working sets by working-set index when warmups are prepended', () => {
+    const rows = [
+      { setType: 'warmup' },
+      { setType: 'warmup' },
+      { setType: 'warmup' },
+      { setType: 'normal' },
+      { setType: 'normal' },
+      { setType: 'normal' },
+      { setType: 'normal' },
+    ];
+
+    // Warmups do not steal working set numbers:
+    expect(previousSetFor(previousWorking, rows, 0, 'warmup')).toBeUndefined();
+    expect(previousSetFor(previousWorking, rows, 1, 'warmup')).toBeUndefined();
+    expect(previousSetFor(previousWorking, rows, 2, 'warmup')).toBeUndefined();
+
+    // Working sets match against working sets:
+    expect(previousSetFor(previousWorking, rows, 3, 'normal')).toEqual(previousWorking[0]);
+    expect(previousSetFor(previousWorking, rows, 4, 'normal')).toEqual(previousWorking[1]);
+    expect(previousSetFor(previousWorking, rows, 5, 'normal')).toEqual(previousWorking[2]);
+    // Extra working set beyond previous session count falls back to last working set:
+    expect(previousSetFor(previousWorking, rows, 6, 'normal')).toEqual(previousWorking[2]);
+  });
+
+  it('matches warmups against previous warmups if previously logged', () => {
+    const previousMixed = [
+      { weightKg: 20, reps: 10, setType: 'warmup' },
+      { weightKg: 40, reps: 5, setType: 'warmup' },
+      { weightKg: 90, reps: 6, setType: 'normal' },
+      { weightKg: 90, reps: 6, setType: 'normal' },
+    ];
+    const rows = [
+      { setType: 'warmup' },
+      { setType: 'warmup' },
+      { setType: 'normal' },
+      { setType: 'normal' },
+    ];
+
+    expect(previousSetFor(previousMixed, rows, 0, 'warmup')).toEqual(previousMixed[0]);
+    expect(previousSetFor(previousMixed, rows, 1, 'warmup')).toEqual(previousMixed[1]);
+    expect(previousSetFor(previousMixed, rows, 2, 'normal')).toEqual(previousMixed[2]);
+    expect(previousSetFor(previousMixed, rows, 3, 'normal')).toEqual(previousMixed[3]);
+  });
+
+  it('returns undefined if previous sets are empty', () => {
+    expect(previousSetFor([], [{ setType: 'normal' }], 0, 'normal')).toBeUndefined();
+    expect(previousSetFor(undefined, [{ setType: 'normal' }], 0, 'normal')).toBeUndefined();
   });
 });
