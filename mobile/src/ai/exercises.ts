@@ -13,7 +13,8 @@
  * a press loads is general knowledge, so this is one structured call.
  */
 
-import { MUSCLE_REGIONS, normaliseRegion, type MuscleRegion } from '../components/muscleMap';
+import { MUSCLE_REGIONS, normaliseRegion } from '../components/muscleMap';
+import type { MuscleRegion } from '../components/muscleMap';
 
 /** The patterns an icon exists for. Anything else is normalised into `isolation`. */
 export const MOVEMENT_PATTERNS = [

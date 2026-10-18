@@ -23,7 +23,7 @@ import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
-import { FeatureInterestOnboardingBanner } from '../../src/components/FeatureInterestOnboardingBanner';
+import { MissionBanner } from '../../src/components/MissionBanner';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -155,7 +155,7 @@ export default function TodayScreen() {
       <HomeScreenNotice />
       <ActiveWorkoutBanner />
       <FirstWeekCalibrationCard />
-      <FeatureInterestOnboardingBanner />
+      <MissionBanner />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
@@ -187,8 +187,8 @@ export default function TodayScreen() {
         </Pressable>
       </View>
 
-      {/* Strength & Workout Shortcut if Strength feature enabled */}
-      {(settings.featureInterests?.includes('strength') ?? true) && (
+      {/* When Workouts Spotlight is active, lead with Workout Routine */}
+      {settings.dashboardSpotlight === 'workouts' && (
         <Pressable
           onPress={() => router.push('/train')}
           style={({ pressed }) => [
@@ -224,6 +224,7 @@ export default function TodayScreen() {
         </Pressable>
       )}
 
+      {/* Daily Macro Targets Card */}
       <Card>
         <MacroSummary consumed={totals} target={program.macros} />
         <View style={styles.macroCardFooter}>
@@ -232,26 +233,24 @@ export default function TodayScreen() {
             {program.calories.adjustmentKcal !== 0 &&
               ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
           </Text>
-          {(settings.featureInterests?.includes('story_stickers') ?? true) && (
-            <Pressable
-              onPress={() => setShowStickerModal(true)}
-              style={({ pressed }) => [
-                styles.stickerPill,
-                {
-                  backgroundColor: colors.surfaceRaised,
-                  borderColor: colors.border,
-                  opacity: pressed ? 0.75 : 1,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Export nutrition sticker for stories"
-            >
-              <Ionicons name="sparkles" size={12} color="#F59E0B" />
-              <Text style={[styles.stickerPillText, { color: colors.text }]}>
-                Story Sticker ✨
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => setShowStickerModal(true)}
+            style={({ pressed }) => [
+              styles.stickerPill,
+              {
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Export nutrition sticker for stories"
+          >
+            <Ionicons name="sparkles" size={12} color="#F59E0B" />
+            <Text style={[styles.stickerPillText, { color: colors.text }]}>
+              Story Sticker ✨
+            </Text>
+          </Pressable>
         </View>
         {/*
           A day missing a meal reads to the estimator as a deficit the scale
@@ -273,15 +272,52 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      {(settings.featureInterests?.includes('nutrition') ?? true) && (
-        <NutritionQualityCard
-          consumed={totals}
-          entries={entries}
-          profile={settings.profile}
-        />
+      {/* When Balanced or Nutrition Spotlight, workout shortcut sits neatly below macros */}
+      {settings.dashboardSpotlight !== 'workouts' && (
+        <Pressable
+          onPress={() => router.push('/train')}
+          style={({ pressed }) => [
+            styles.trainingShortcut,
+            {
+              backgroundColor: colors.surfaceRaised,
+              borderColor: colors.border,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Open workout routines"
+        >
+          <View style={styles.trainingShortcutLeft}>
+            <View style={[styles.trainingIconBubble, { backgroundColor: '#FF6B4A22', borderColor: '#FF6B4A55' }]}>
+              <Ionicons name="barbell-outline" size={18} color="#FF6B4A" />
+            </View>
+            <View style={{ gap: 2, flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
+                  Workout & Routines
+                </Text>
+                <View style={[styles.trainingTag, { backgroundColor: '#FF6B4A20' }]}>
+                  <Text style={styles.trainingTagText}>TRAIN</Text>
+                </View>
+              </View>
+              <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
+                Track session, log reps & crush your PRs →
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
       )}
 
-      {isToday && (settings.featureInterests?.includes('body_comp') ?? true) && <CheckInCard />}
+      {/* Clinical Micronutrient DRI Quality Card (Always Active) */}
+      <NutritionQualityCard
+        consumed={totals}
+        entries={entries}
+        profile={settings.profile}
+      />
+
+      {/* Morning Scale Weight & Check-in (Always Active) */}
+      {isToday && <CheckInCard />}
 
       {askAboutYesterday && yesterdayKcal !== undefined && (
         <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>

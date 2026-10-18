@@ -5,6 +5,11 @@ import {
   FEATURE_PRESETS,
   getFeatureReaction,
 } from '../../features/featureInterests';
+import {
+  MISSION_LIST,
+  SPOTLIGHT_OPTIONS,
+  getMissionPraise,
+} from '../../features/missionFocus';
 
 describe('First-week calibration and returning user helpers', () => {
   it('calculates 7-day calibration progress correctly from raw observations', () => {
@@ -117,7 +122,7 @@ describe('First-week calibration and returning user helpers', () => {
   });
 
   it('merges stored partial feature preferences with defaults cleanly', () => {
-    const resolveFeatures = (stored?: { featureInterests?: typeof ALL_FEATURE_INTERESTS; featureOnboardingDismissed?: boolean }) => ({
+    const resolveFeatures = (stored?: { featureInterests?: string[]; featureOnboardingDismissed?: boolean }) => ({
       featureInterests:
         Array.isArray(stored?.featureInterests) && stored.featureInterests.length > 0
           ? stored.featureInterests
@@ -149,5 +154,63 @@ describe('First-week calibration and returning user helpers', () => {
     expect(getFeatureReaction(2, ['nutrition', 'ai_coach'])).toContain('Nutrition Scientist');
     expect(getFeatureReaction(3, ['strength', 'nutrition', 'body_comp'])).toContain('Hybrid Athlete');
     expect(getFeatureReaction(4, ['strength', 'nutrition', 'form_kinematics', 'body_comp'])).toContain('Powerhouse');
+  });
+
+  it('validates all training missions and spotlight options with complete metadata', () => {
+    expect(MISSION_LIST).toHaveLength(4);
+    const missionIds = MISSION_LIST.map((m) => m.id);
+    expect(missionIds).toEqual(['hybrid', 'hypertrophy', 'fat_loss', 'nutrition']);
+
+    for (const mission of MISSION_LIST) {
+      expect(mission.name.length).toBeGreaterThan(0);
+      expect(mission.emoji.length).toBeGreaterThan(0);
+      expect(mission.badge.length).toBeGreaterThan(0);
+      expect(mission.tagline.length).toBeGreaterThan(0);
+      expect(mission.description.length).toBeGreaterThan(0);
+      expect(mission.accentColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
+
+    expect(SPOTLIGHT_OPTIONS).toHaveLength(3);
+    const spotlightIds = SPOTLIGHT_OPTIONS.map((s) => s.id);
+    expect(spotlightIds).toEqual(['balanced', 'workouts', 'nutrition']);
+
+    for (const spot of SPOTLIGHT_OPTIONS) {
+      expect(spot.label.length).toBeGreaterThan(0);
+      expect(spot.emoji.length).toBeGreaterThan(0);
+      expect(spot.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns motivating mission praise copy for each user mission', () => {
+    expect(getMissionPraise('hybrid')).toContain('Complete Hybrid Athlete');
+    expect(getMissionPraise('hypertrophy')).toContain('Iron Focus');
+    expect(getMissionPraise('fat_loss')).toContain('Deficit Precision');
+    expect(getMissionPraise('nutrition')).toContain('Nutrition Mastery');
+  });
+
+  it('merges stored partial mission and spotlight settings with defaults cleanly', () => {
+    const resolveMissionSettings = (stored?: {
+      userMission?: string;
+      dashboardSpotlight?: string;
+      missionOnboardingDismissed?: boolean;
+    }) => ({
+      userMission: stored?.userMission ?? 'hybrid',
+      dashboardSpotlight: stored?.dashboardSpotlight ?? 'balanced',
+      missionOnboardingDismissed: stored?.missionOnboardingDismissed ?? false,
+    });
+
+    const fromEmpty = resolveMissionSettings({});
+    expect(fromEmpty.userMission).toBe('hybrid');
+    expect(fromEmpty.dashboardSpotlight).toBe('balanced');
+    expect(fromEmpty.missionOnboardingDismissed).toBe(false);
+
+    const fromCustom = resolveMissionSettings({
+      userMission: 'hypertrophy',
+      dashboardSpotlight: 'workouts',
+      missionOnboardingDismissed: true,
+    });
+    expect(fromCustom.userMission).toBe('hypertrophy');
+    expect(fromCustom.dashboardSpotlight).toBe('workouts');
+    expect(fromCustom.missionOnboardingDismissed).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
-import { BAR_WEIGHT, type BarChoice, describePlates, platesFor } from './plates';
+import { BAR_WEIGHT, describePlates, platesFor } from './plates';
+import type { BarChoice } from './plates';
 import type { UnitSystem } from './state/settings';
 
 export interface WarmupSet {

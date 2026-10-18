@@ -25,8 +25,8 @@ import { font, radius, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { isPersonalityV2Enabled } from '../../src/flags';
 import { getEventCopy } from '../../src/copy/personality';
-import { FeatureInterestModal } from '../../src/components/FeatureInterestModal';
-import { FEATURE_LIST } from '../../src/features/featureInterests';
+import { MissionModal } from '../../src/components/MissionModal';
+import { MISSIONS, SPOTLIGHT_OPTIONS } from '../../src/features/missionFocus';
 
 /**
  * A numeric setting that edits as free text and only commits on blur.
@@ -124,7 +124,7 @@ export default function SettingsScreen() {
   // hundreds of inserts, long enough that an unchanged button reads as a
   // no-op and invites a second tap.
   const [busy, setBusy] = useState<string | null>(null);
-  const [featureModalOpen, setFeatureModalOpen] = useState(false);
+  const [missionModalOpen, setMissionModalOpen] = useState(false);
 
   const runBulk = async (label: string, work: () => Promise<void>) => {
     setBusy(label);
@@ -326,55 +326,72 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Feature Focus & Dashboard" initiallyOpen>
-        <Card subtitle="Personalize which tools, widgets, and daily coaching features are prioritized.">
-          <View style={styles.featureChipsContainer}>
-            {FEATURE_LIST.map((feat) => {
-              const active = settings.featureInterests?.includes(feat.id) ?? true;
-              return (
+      <Section title="Training Mission & Dashboard Spotlight" initiallyOpen>
+        <Card subtitle="Tailor daily priorities to your current training phase. All Ascend features remain fully unlocked.">
+          {(() => {
+            const currentMission = MISSIONS[settings.userMission ?? 'hybrid'] ?? MISSIONS.hybrid;
+            const currentSpotlight =
+              SPOTLIGHT_OPTIONS.find((s) => s.id === (settings.dashboardSpotlight ?? 'balanced')) ??
+              SPOTLIGHT_OPTIONS[0];
+            return (
+              <View style={styles.missionSummaryBox}>
                 <View
-                  key={feat.id}
                   style={[
-                    styles.featureChip,
+                    styles.missionActiveCard,
                     {
-                      backgroundColor: active ? `${feat.accentColor}18` : colors.surfaceRaised,
-                      borderColor: active ? feat.accentColor : colors.border,
+                      backgroundColor: `${currentMission.accentColor}15`,
+                      borderColor: currentMission.accentColor,
                     },
                   ]}
                 >
-                  <Text style={styles.featureChipEmoji}>{feat.emoji}</Text>
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <Text
-                      style={[
-                        styles.featureChipText,
-                        { color: active ? colors.text : colors.textFaint },
-                      ]}
-                    >
-                      {feat.name}
+                  <Text style={styles.missionActiveEmoji}>{currentMission.emoji}</Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <View style={styles.missionBadgePill}>
+                      <Text style={[styles.missionBadgeText, { color: currentMission.accentColor }]}>
+                        {currentMission.badge}
+                      </Text>
+                    </View>
+                    <Text style={[styles.missionActiveName, { color: colors.text }]}>
+                      {currentMission.name}
                     </Text>
-                    <Text
-                      style={[
-                        styles.featureChipTagline,
-                        { color: active ? colors.textMuted : colors.textFaint },
-                      ]}
-                    >
-                      {feat.tagline}
+                    <Text style={[styles.missionActiveTagline, { color: colors.textMuted }]}>
+                      {currentMission.tagline}
                     </Text>
                   </View>
-                  {active ? (
-                    <Ionicons name="checkmark-circle" size={16} color={feat.accentColor} />
-                  ) : (
-                    <Ionicons name="ellipse-outline" size={16} color={colors.textFaint} />
-                  )}
                 </View>
-              );
-            })}
-          </View>
-          <View style={{ height: space.sm }} />
-          <Button
-            label="CUSTOMIZE FEATURE FOCUS 🎯"
-            onPress={() => setFeatureModalOpen(true)}
-          />
+
+                <View
+                  style={[
+                    styles.spotlightRow,
+                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+                  ]}
+                >
+                  <Text style={styles.spotlightEmoji}>{currentSpotlight.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.spotlightLabel, { color: colors.text }]}>
+                      Home Spotlight: {currentSpotlight.label}
+                    </Text>
+                    <Text style={[styles.spotlightDesc, { color: colors.textFaint }]}>
+                      {currentSpotlight.description}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.allUnlockedBanner}>
+                  <Ionicons name="checkmark-done-circle" size={16} color={colors.positive} />
+                  <Text style={[styles.allUnlockedText, { color: colors.textFaint }]}>
+                    3D Kinematics, Kalman trends, Story Stickers & DRI scores are always active.
+                  </Text>
+                </View>
+
+                <View style={{ height: space.xs }} />
+                <Button
+                  label="CHANGE TRAINING MISSION 🎯"
+                  onPress={() => setMissionModalOpen(true)}
+                />
+              </View>
+            );
+          })()}
         </Card>
       </Section>
 
@@ -625,9 +642,9 @@ export default function SettingsScreen() {
         </Section>
       )}
 
-      <FeatureInterestModal
-        visible={featureModalOpen}
-        onClose={() => setFeatureModalOpen(false)}
+      <MissionModal
+        visible={missionModalOpen}
+        onClose={() => setMissionModalOpen(false)}
       />
     </Screen>
   );
@@ -644,30 +661,69 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionTitle: { fontFamily: font.uiStrong, fontSize: 15 },
-  featureChipsContainer: {
-    gap: space.xs + 2,
+  missionSummaryBox: {
+    gap: space.sm,
     marginTop: space.xs,
   },
-  featureChip: {
+  missionActiveCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.sm + 4,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+  },
+  missionActiveEmoji: {
+    fontSize: 28,
+  },
+  missionBadgePill: {
+    alignSelf: 'flex-start',
+  },
+  missionBadgeText: {
+    fontFamily: font.uiStrong,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  missionActiveName: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+  },
+  missionActiveTagline: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  spotlightRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.sm + 2,
     paddingVertical: space.xs + 4,
-    borderRadius: radius.lg,
-    borderWidth: 1,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  featureChipEmoji: {
-    fontSize: 16,
+  spotlightEmoji: {
+    fontSize: 18,
   },
-  featureChipText: {
+  spotlightLabel: {
     fontFamily: font.uiStrong,
     fontSize: 12,
   },
-  featureChipTagline: {
+  spotlightDesc: {
     fontFamily: font.ui,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 11,
+  },
+  allUnlockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 2,
+    paddingVertical: 2,
+  },
+  allUnlockedText: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    flex: 1,
   },
   previewBox: {
     padding: space.md,

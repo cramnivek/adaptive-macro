@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Toaster } from '../src/components/Toaster';
+import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
 import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
@@ -57,6 +58,7 @@ export default function RootLayout() {
       <AppProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Toaster />
+        <ConfirmDialog />
         <SocialProvider>
           {/* Inside AppProvider, because it reads the load error from the store. */}
           <StorageGate>

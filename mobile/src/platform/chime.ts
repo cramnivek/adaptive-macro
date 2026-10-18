@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
-import { type ChimeChoice, chimeWav } from './chimeSound';
+import { chimeWav } from './chimeSound';
+import type { ChimeChoice } from './chimeSound';
 
 /**
  * The rest-is-up chime, on the web build.

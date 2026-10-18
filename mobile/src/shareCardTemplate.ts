@@ -11,7 +11,8 @@
  * read them without importing the drawing.
  */
 
-import { ALL_BLOCKS, type CardBlock, type CardBlocks, type Placement } from './shareCardPlacement';
+import { ALL_BLOCKS } from './shareCardPlacement';
+import type { CardBlock, CardBlocks, Placement } from './shareCardPlacement';
 
 export const TEMPLATE_IDS = ['block', 'bar', 'tag', 'figure'] as const;
 

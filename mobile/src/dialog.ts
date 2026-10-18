@@ -13,26 +13,55 @@ import { Alert, Platform } from 'react-native';
  * and falls back to the browser's own dialogs on web.
  */
 
-interface ConfirmOptions {
+export interface ConfirmOptions {
   title: string;
   message?: string;
   /** Label for the confirming action. Defaults to "OK". */
   confirmLabel?: string;
-  /** Styles the confirm action as destructive on native. */
+  /** Label for the cancelling action. Defaults to "Cancel". */
+  cancelLabel?: string;
+  /** Styles the confirm action as destructive (red). */
   destructive?: boolean;
 }
+
+export interface ConfirmRequest extends ConfirmOptions {
+  id: number;
+  resolve: (value: boolean) => void;
+}
+
+type ConfirmListener = (request: ConfirmRequest | null) => void;
+let confirmListener: ConfirmListener | null = null;
+
+export const subscribeToConfirm = (listener: ConfirmListener): (() => void) => {
+  confirmListener = listener;
+  return () => {
+    if (confirmListener === listener) confirmListener = null;
+  };
+};
 
 /** Resolves true when the user confirms, false when they cancel or dismiss. */
 export const confirm = ({
   title,
   message,
   confirmLabel = 'OK',
+  cancelLabel = 'Cancel',
   destructive = false,
 }: ConfirmOptions): Promise<boolean> => {
+  if (confirmListener !== null) {
+    return new Promise<boolean>((resolve) => {
+      confirmListener!({
+        id: Date.now() + Math.random(),
+        title,
+        message,
+        confirmLabel,
+        cancelLabel,
+        destructive,
+        resolve,
+      });
+    });
+  }
+
   if (Platform.OS === 'web') {
-    // `window.confirm` is synchronous and blocks the page, but it is the only
-    // dialog a browser offers without building one, and these are rare
-    // deliberate actions rather than anything on a hot path.
     const combined = message ? `${title}\n\n${message}` : title;
     return Promise.resolve(
       typeof window !== 'undefined' && typeof window.confirm === 'function'
@@ -43,7 +72,7 @@ export const confirm = ({
 
   return new Promise((resolve) => {
     Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: cancelLabel, style: 'cancel', onPress: () => resolve(false) },
       {
         text: confirmLabel,
         style: destructive ? 'destructive' : 'default',

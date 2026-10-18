@@ -1,4 +1,5 @@
-import { isFuzzyMatch, type Food } from '@adaptive-macros/engine';
+import { isFuzzyMatch } from '@adaptive-macros/engine';
+import type { Food } from '@adaptive-macros/engine';
 
 /**
  * Curated offline catalogue of verified core foods.

@@ -6,12 +6,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { GoalDirection, Sex } from '@adaptive-macros/engine';
 import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
-import { ALL_FEATURE_INTERESTS, type FeatureInterest, type UnitSystem } from '../state/settings';
+import type { DashboardSpotlight, UnitSystem, UserMission } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
 import { Card } from './Card';
 import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
-import { FeatureInterestPicker } from './FeatureInterestPicker';
+import { MissionPicker } from './MissionPicker';
 
 const CALIBRATION_DISMISSED_KEY = 'ascend_first_week_calibration_dismissed';
 
@@ -36,9 +36,12 @@ export const FirstWeekCalibrationCard = () => {
   };
 
   // Local state for initial onboarding fields
-  const [onboardingStep, setOnboardingStep] = useState<'interests' | 'baseline'>('interests');
-  const [selectedInterests, setSelectedInterests] = useState<FeatureInterest[]>(
-    settings.featureInterests ?? [...ALL_FEATURE_INTERESTS],
+  const [onboardingStep, setOnboardingStep] = useState<'mission' | 'baseline'>('mission');
+  const [selectedMission, setSelectedMission] = useState<UserMission>(
+    settings.userMission ?? 'hybrid',
+  );
+  const [selectedSpotlight, setSelectedSpotlight] = useState<DashboardSpotlight>(
+    settings.dashboardSpotlight ?? 'balanced',
   );
   const [units, setUnits] = useState<UnitSystem>(settings.units);
   const [sex, setSex] = useState<Sex>(settings.profile.sex);
@@ -79,7 +82,9 @@ export const FirstWeekCalibrationCard = () => {
 
       await updateSettings({
         onboarded: true,
-        featureInterests: selectedInterests,
+        userMission: selectedMission,
+        dashboardSpotlight: selectedSpotlight,
+        missionOnboardingDismissed: true,
         featureOnboardingDismissed: true,
         units,
         profile: {
@@ -95,7 +100,7 @@ export const FirstWeekCalibrationCard = () => {
       });
     };
 
-    if (onboardingStep === 'interests') {
+    if (onboardingStep === 'mission') {
       return (
         <FadeIn>
           <Card variant="featured" style={styles.card}>
@@ -103,7 +108,7 @@ export const FirstWeekCalibrationCard = () => {
               <View style={styles.badgeLeft}>
                 <Ionicons name="sparkles" size={14} color={colors.accent} />
                 <Text style={[styles.badgeText, { color: colors.accent }]}>
-                  STEP 1 OF 2 · WHAT EXCITES YOU?
+                  STEP 1 OF 2 · WHAT IS YOUR MISSION?
                 </Text>
               </View>
               <Pressable
@@ -122,16 +127,17 @@ export const FirstWeekCalibrationCard = () => {
             </View>
 
             <Text style={[styles.title, { color: colors.text }]}>
-              Pick the features you want to see
+              Choose your primary training mission
             </Text>
             <Text style={[styles.desc, { color: colors.textMuted }]}>
-              Choose your superpowers. We'll tailor your daily dashboard, workouts, and AI coaching to what matters to you.
+              Ascend personalizes your daily dashboard spotlight and coaching advice to match your mission.
             </Text>
 
-            <FeatureInterestPicker
-              selectedInterests={selectedInterests}
-              onChange={setSelectedInterests}
-              showPresets={true}
+            <MissionPicker
+              selectedMission={selectedMission}
+              selectedSpotlight={selectedSpotlight}
+              onChangeMission={setSelectedMission}
+              onChangeSpotlight={setSelectedSpotlight}
             />
 
             <View style={{ marginTop: space.sm }}>
@@ -161,14 +167,14 @@ export const FirstWeekCalibrationCard = () => {
             <Pressable
               onPress={() => {
                 thud('light');
-                setOnboardingStep('interests');
+                setOnboardingStep('mission');
               }}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Back to feature preferences"
+              accessibilityLabel="Back to mission focus"
             >
               <Text style={[styles.skipLink, { color: colors.accent }]}>
-                ← EDIT FOCUS
+                ← EDIT MISSION
               </Text>
             </Pressable>
           </View>

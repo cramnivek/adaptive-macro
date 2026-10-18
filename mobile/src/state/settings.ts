@@ -20,8 +20,9 @@ export type AppPersonality = 'classic' | 'ascend' | 'gymrat';
 
 import { ALL_FEATURE_INTERESTS } from '../features/featureInterests';
 import type { FeatureInterest } from '../features/featureInterests';
+import type { UserMission, DashboardSpotlight } from '../features/missionFocus';
 export { ALL_FEATURE_INTERESTS };
-export type { FeatureInterest };
+export type { FeatureInterest, UserMission, DashboardSpotlight };
 
 export interface AppSettings {
   profile: UserProfile;
@@ -29,7 +30,13 @@ export interface AppSettings {
   goal: Goal;
   /** App personality voice preference ('classic' | 'ascend' | 'gymrat'). Defaults to 'ascend'. */
   personality: AppPersonality;
-  /** Features the user is interested in seeing. Configurable during onboarding and in Settings. */
+  /** Primary athletic mission ('hybrid' | 'hypertrophy' | 'fat_loss' | 'nutrition'). Defaults to 'hybrid'. */
+  userMission: UserMission;
+  /** Which domain leads the Today home screen ('balanced' | 'workouts' | 'nutrition'). Defaults to 'balanced'. */
+  dashboardSpotlight: DashboardSpotlight;
+  /** Whether the user has completed or dismissed the mission focus prompt. */
+  missionOnboardingDismissed: boolean;
+  /** Features the user is interested in seeing. */
   featureInterests: FeatureInterest[];
   /** Whether the user has completed or dismissed the feature interest onboarding prompt. */
   featureOnboardingDismissed: boolean;
@@ -162,6 +169,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restChimeChoice: 'chime',
   postWorkouts: false,
   personality: 'ascend',
+  userMission: 'hybrid',
+  dashboardSpotlight: 'balanced',
+  missionOnboardingDismissed: false,
   featureInterests: [...ALL_FEATURE_INTERESTS],
   featureOnboardingDismissed: false,
   cardBlocks: ALL_BLOCKS,
@@ -183,6 +193,10 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
   ...DEFAULT_SETTINGS,
   ...stored,
   personality: stored?.personality ?? DEFAULT_SETTINGS.personality,
+  userMission: stored?.userMission ?? DEFAULT_SETTINGS.userMission,
+  dashboardSpotlight: stored?.dashboardSpotlight ?? DEFAULT_SETTINGS.dashboardSpotlight,
+  missionOnboardingDismissed:
+    stored?.missionOnboardingDismissed ?? DEFAULT_SETTINGS.missionOnboardingDismissed,
   featureInterests:
     Array.isArray(stored?.featureInterests) && stored!.featureInterests.length > 0
       ? stored!.featureInterests

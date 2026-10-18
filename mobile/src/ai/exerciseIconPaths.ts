@@ -1,4 +1,5 @@
-import { normalisePattern, type MovementPattern } from './exercises';
+import { normalisePattern } from './exercises';
+import type { MovementPattern } from './exercises';
 
 /**
  * One glyph per movement pattern, on a 24x24 grid.
