@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { GoalDirection, Sex } from '@adaptive-macros/engine';
 import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
@@ -11,10 +12,27 @@ import { Card } from './Card';
 import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
 
+const CALIBRATION_DISMISSED_KEY = 'ascend_first_week_calibration_dismissed';
+
 export const FirstWeekCalibrationCard = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, observations, usingSeedEstimate } = useApp();
+  const { settings, updateSettings, observations, usingSeedEstimate, latest } = useApp();
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(CALIBRATION_DISMISSED_KEY).then((val) => {
+      if (val === 'true') {
+        setIsDismissed(true);
+      }
+    });
+  }, []);
+
+  const handleDismiss = async () => {
+    thud('light');
+    setIsDismissed(true);
+    await AsyncStorage.setItem(CALIBRATION_DISMISSED_KEY, 'true');
+  };
 
   // Local state for initial onboarding fields
   const [units, setUnits] = useState<UnitSystem>(settings.units);
@@ -35,8 +53,13 @@ export const FirstWeekCalibrationCard = () => {
     return Math.min(7, withData.length);
   }, [observations]);
 
-  // If already onboarded and adaptive engine has completed calibration (not using seed estimate), nothing to show
-  if (settings.onboarded && !usingSeedEstimate) {
+  const weightDays = useMemo(() => {
+    return observations.filter((o) => o.weightKg !== undefined && o.weightKg > 0).length;
+  }, [observations]);
+
+  // If already onboarded and adaptive engine has completed calibration (not using seed estimate),
+  // or if user explicitly dismissed the card, nothing to show.
+  if (settings.onboarded && (!usingSeedEstimate || isDismissed)) {
     return null;
   }
 
@@ -160,23 +183,55 @@ export const FirstWeekCalibrationCard = () => {
   }
 
   // State 2: Onboarded, but still calibrating in the first week
+  const isSevenDaysLogged = calibratedDays >= 7;
+  const needsWeight = isSevenDaysLogged && weightDays < 3;
   const progressPct = Math.min(100, Math.round((calibratedDays / 7) * 100));
+
+  const badgeIcon = isSevenDaysLogged
+    ? needsWeight
+      ? 'scale-outline'
+      : 'checkmark-circle'
+    : 'speedometer-outline';
+
+  const badgeColor = isSevenDaysLogged && !needsWeight ? colors.positive : colors.accent;
+
+  const badgeLabel = isSevenDaysLogged
+    ? needsWeight
+      ? '7 DAYS LOGGED · WEIGH-INS NEEDED'
+      : '7-DAY BASELINE REACHED · FINALIZING'
+    : 'FIRST-WEEK CALIBRATION';
+
+  const titleText = isSevenDaysLogged
+    ? needsWeight
+      ? 'Add morning weigh-ins to finalize'
+      : '7-day baseline established'
+    : 'Learning your metabolic burn rate';
 
   return (
     <FadeIn>
       <Card variant="featured" style={styles.card}>
-        <View style={styles.badgeRow}>
-          <Ionicons name="speedometer-outline" size={14} color={colors.accent} />
-          <Text style={[styles.badgeText, { color: colors.accent }]}>FIRST-WEEK CALIBRATION</Text>
+        <View style={styles.badgeRowBetween}>
+          <View style={styles.badgeLeft}>
+            <Ionicons name={badgeIcon} size={14} color={badgeColor} />
+            <Text style={[styles.badgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+          </View>
+          <Pressable
+            onPress={handleDismiss}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Hide calibration notice"
+          >
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
         </View>
 
         <View style={styles.calibHeader}>
           <Text style={[styles.title, { color: colors.text }]}>
-            Learning your metabolic burn rate
+            {titleText}
           </Text>
           <View style={[styles.pill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-            <Text style={[styles.pillText, { color: colors.accent }]}>
-              {calibratedDays} / 7 DAYS
+            <Text style={[styles.pillText, { color: badgeColor }]}>
+              {calibratedDays} / 7 DAYS{isSevenDaysLogged && !needsWeight ? ' ✓' : ''}
             </Text>
           </View>
         </View>
@@ -186,35 +241,85 @@ export const FirstWeekCalibrationCard = () => {
           <View
             style={[
               styles.barFill,
-              { width: `${progressPct}%`, backgroundColor: colors.accent },
+              { width: `${progressPct}%`, backgroundColor: badgeColor },
             ]}
           />
         </View>
 
-        <Text style={[styles.desc, { color: colors.textMuted }]}>
-          Your daily targets currently use a formula estimate. Log your morning weight and meals each day to calibrate your true expenditure.
-        </Text>
-
-        <View style={styles.tips}>
-          <View style={styles.tipRow}>
-            <Ionicons name="sunny-outline" size={15} color={colors.accent} />
-            <Text style={[styles.tipText, { color: colors.textMuted }]}>
-              Weigh in each morning before eating or drinking.
+        {isSevenDaysLogged ? (
+          needsWeight ? (
+            <>
+              <Text style={[styles.desc, { color: colors.textMuted }]}>
+                You have completed 7 days of nutrition logging! To compute your true metabolic expenditure, the adaptive engine needs a few morning weigh-ins so it can compare your calorie intake against your body weight trend.
+              </Text>
+              <View style={styles.actionRow}>
+                <View style={styles.actionCol}>
+                  <Button
+                    label="LOG MORNING WEIGHT"
+                    variant="primary"
+                    onPress={() => router.push('/weight')}
+                  />
+                </View>
+                <View style={styles.actionCol}>
+                  <Button
+                    label="GOT IT"
+                    variant="subtle"
+                    onPress={handleDismiss}
+                  />
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.desc, { color: colors.textMuted }]}>
+                Your first week of baseline data is recorded! The Kalman filter is actively narrowing down your true metabolic expenditure{latest?.expenditureSdKcal ? ` (current uncertainty: ±${Math.round(latest.expenditureSdKcal)} kcal)` : ''}. Over your next few days of tracking, your targets will automatically lock in.
+              </Text>
+              <View style={styles.actionRow}>
+                <View style={styles.actionCol}>
+                  <Button
+                    label="VIEW TRENDS"
+                    variant="subtle"
+                    onPress={() => router.push('/trends')}
+                  />
+                </View>
+                <View style={styles.actionCol}>
+                  <Button
+                    label="GOT IT"
+                    variant="subtle"
+                    onPress={handleDismiss}
+                  />
+                </View>
+              </View>
+            </>
+          )
+        ) : (
+          <>
+            <Text style={[styles.desc, { color: colors.textMuted }]}>
+              Your daily targets currently use a formula estimate. Log your morning weight and meals each day to calibrate your true expenditure.
             </Text>
-          </View>
-          <View style={styles.tipRow}>
-            <Ionicons name="restaurant-outline" size={15} color={colors.accent} />
-            <Text style={[styles.tipText, { color: colors.textMuted }]}>
-              Log everything you eat (or exclude untracked days to keep math clean).
-            </Text>
-          </View>
-        </View>
 
-        <Button
-          label="VIEW TRENDS & EXPENDITURE"
-          variant="subtle"
-          onPress={() => router.push('/trends')}
-        />
+            <View style={styles.tips}>
+              <View style={styles.tipRow}>
+                <Ionicons name="sunny-outline" size={15} color={colors.accent} />
+                <Text style={[styles.tipText, { color: colors.textMuted }]}>
+                  Weigh in each morning before eating or drinking.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <Ionicons name="restaurant-outline" size={15} color={colors.accent} />
+                <Text style={[styles.tipText, { color: colors.textMuted }]}>
+                  Log everything you eat (or exclude untracked days to keep math clean).
+                </Text>
+              </View>
+            </View>
+
+            <Button
+              label="VIEW TRENDS & EXPENDITURE"
+              variant="subtle"
+              onPress={() => router.push('/trends')}
+            />
+          </>
+        )}
       </Card>
     </FadeIn>
   );
@@ -230,6 +335,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
     marginBottom: space.xs,
+  },
+  badgeRowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.xs,
+  },
+  badgeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
   },
   badgeText: {
     fontFamily: font.figure,
@@ -275,6 +391,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: space.xs,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    marginTop: space.sm,
+  },
+  actionCol: {
+    flex: 1,
   },
   form: {
     marginTop: space.sm,

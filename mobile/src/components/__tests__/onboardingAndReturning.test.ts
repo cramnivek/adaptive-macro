@@ -49,4 +49,42 @@ describe('First-week calibration and returning user helpers', () => {
     expect(formatSetsLabel(1)).toBe('1 set recorded');
     expect(formatSetsLabel(4)).toBe('4 sets recorded');
   });
+
+  it('differentiates 7-day calibration states: needs weight vs finalizing baseline', () => {
+    // Scenario A: 7 days of food logged, but only 1 weigh-in
+    const foodOnlyObs = Array.from({ length: 7 }, (_, i) => ({
+      date: `2026-10-${String(i + 1).padStart(2, '0')}`,
+      intakeKcal: 2000,
+      weightKg: i === 0 ? 80 : undefined,
+    }));
+
+    const foodOnlyWithData = foodOnlyObs.filter(
+      (o) => (o.intakeKcal !== undefined && o.intakeKcal > 0) || (o.weightKg !== undefined && o.weightKg > 0),
+    );
+    const foodOnlyCalibratedDays = Math.min(7, foodOnlyWithData.length);
+    const foodOnlyWeightDays = foodOnlyObs.filter((o) => o.weightKg !== undefined && o.weightKg > 0).length;
+
+    expect(foodOnlyCalibratedDays).toBe(7);
+    expect(foodOnlyWeightDays).toBe(1);
+    const needsWeightA = foodOnlyCalibratedDays >= 7 && foodOnlyWeightDays < 3;
+    expect(needsWeightA).toBe(true);
+
+    // Scenario B: 7 days of paired logs (food + daily scale weight)
+    const pairedObs = Array.from({ length: 7 }, (_, i) => ({
+      date: `2026-10-${String(i + 1).padStart(2, '0')}`,
+      intakeKcal: 2000,
+      weightKg: 80 - i * 0.1,
+    }));
+
+    const pairedWithData = pairedObs.filter(
+      (o) => (o.intakeKcal !== undefined && o.intakeKcal > 0) || (o.weightKg !== undefined && o.weightKg > 0),
+    );
+    const pairedCalibratedDays = Math.min(7, pairedWithData.length);
+    const pairedWeightDays = pairedObs.filter((o) => o.weightKg !== undefined && o.weightKg > 0).length;
+
+    expect(pairedCalibratedDays).toBe(7);
+    expect(pairedWeightDays).toBe(7);
+    const needsWeightB = pairedCalibratedDays >= 7 && pairedWeightDays < 3;
+    expect(needsWeightB).toBe(false);
+  });
 });
