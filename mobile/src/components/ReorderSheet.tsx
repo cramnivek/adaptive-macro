@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -19,6 +19,8 @@ interface ReorderSheetProps {
   items: ReorderItem[];
   onMove: (fromIndex: number, toIndex: number) => void;
   onClose: () => void;
+  /** Opens with this exercise already picked up, when a card's own handle opened the sheet. */
+  initialPick?: number | null;
 }
 
 /**
@@ -30,14 +32,38 @@ export const ReorderSheet: React.FC<ReorderSheetProps> = ({
   items,
   onMove,
   onClose,
+  initialPick = null,
 }) => {
   const insets = useSafeAreaInsets();
+  /**
+   * Tap one exercise to pick it up, tap another to put it in that place. A move
+   * from last to first was five taps on the arrows; it is two this way, and
+   * there is no drag library in the app to do it any other way. The arrows stay
+   * for the one-place nudge they are good at.
+   */
+  const [picked, setPicked] = useState<number | null>(null);
+  useEffect(() => {
+    if (open) setPicked(initialPick);
+  }, [open, initialPick]);
+
+  const handleTap = (index: number) => {
+    if (picked === null) {
+      setPicked(index);
+      return;
+    }
+    if (picked !== index) {
+      thud('light');
+      onMove(picked, index);
+    }
+    setPicked(null);
+  };
 
   const handleMove = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= items.length) return;
     thud('light');
     onMove(index, target);
+    setPicked(null);
   };
 
   return (
@@ -51,8 +77,10 @@ export const ReorderSheet: React.FC<ReorderSheetProps> = ({
             </View>
             <View>
               <Text style={styles.title}>REORDER EXERCISES</Text>
-              <Text style={styles.subtitle}>
-                Move exercises up or down to adjust your workout order.
+              <Text style={styles.subtitle} numberOfLines={2}>
+                {picked !== null && items[picked]
+                  ? `Tap where ${items[picked].name} should go.`
+                  : 'Tap an exercise, then tap where it goes.'}
               </Text>
             </View>
           </View>
@@ -76,35 +104,58 @@ export const ReorderSheet: React.FC<ReorderSheetProps> = ({
           {items.map((item, index) => {
             const isFirst = index === 0;
             const isLast = index === items.length - 1;
+            const isPicked = picked === index;
 
             return (
-              <View key={`${item.name}-${index}`} style={styles.itemRow}>
-                <View style={styles.indexBadge}>
-                  <Text style={styles.indexText}>{index + 1}</Text>
-                </View>
-
-                <View style={styles.nameBlock}>
-                  <View style={styles.titleTagRow}>
-                    <Text style={styles.itemName} numberOfLines={1}>
-                      {item.name.toUpperCase()}
-                    </Text>
-                    {item.isCardio && (
-                      <View style={styles.tagCardio}>
-                        <Text style={styles.tagText}>CARDIO</Text>
-                      </View>
-                    )}
-                    {item.supersetGroup && (
-                      <View style={styles.tagSuperset}>
-                        <Text style={styles.tagText}>SUPER {item.supersetGroup}</Text>
-                      </View>
-                    )}
+              <View
+                key={`${item.name}-${index}`}
+                style={[
+                  styles.itemRow,
+                  isPicked && styles.itemRowPicked,
+                  picked !== null && !isPicked && styles.itemRowTarget,
+                ]}
+              >
+                <Tappable
+                  onPress={() => handleTap(index)}
+                  scaleTo={0.98}
+                  style={styles.pickArea}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isPicked }}
+                  accessibilityLabel={
+                    picked === null
+                      ? `Pick up ${item.name}`
+                      : isPicked
+                        ? `Put ${item.name} back`
+                        : `Move ${items[picked]?.name ?? 'exercise'} to position ${index + 1}`
+                  }
+                >
+                  <View style={[styles.indexBadge, isPicked && styles.indexBadgePicked]}>
+                    <Text style={[styles.indexText, isPicked && { color: loud.onLoud }]}>{index + 1}</Text>
                   </View>
-                  <Text style={styles.itemMeta}>
-                    {item.isCardio
-                      ? 'Cardio segment'
-                      : `${item.setCount ?? 0} set${(item.setCount ?? 0) === 1 ? '' : 's'}`}
-                  </Text>
-                </View>
+
+                  <View style={styles.nameBlock}>
+                    <View style={styles.titleTagRow}>
+                      <Text style={styles.itemName} numberOfLines={2}>
+                        {item.name.toUpperCase()}
+                      </Text>
+                      {item.isCardio && (
+                        <View style={styles.tagCardio}>
+                          <Text style={styles.tagText}>CARDIO</Text>
+                        </View>
+                      )}
+                      {item.supersetGroup && (
+                        <View style={styles.tagSuperset}>
+                          <Text style={styles.tagText}>SUPER {item.supersetGroup}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.itemMeta}>
+                      {item.isCardio
+                        ? 'Cardio segment'
+                        : `${item.setCount ?? 0} set${(item.setCount ?? 0) === 1 ? '' : 's'}`}
+                    </Text>
+                  </View>
+                </Tappable>
 
                 <View style={styles.btnGroup}>
                   <Tappable
@@ -237,6 +288,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     gap: space.sm,
   },
+  itemRowPicked: { borderColor: loud.loud, borderWidth: 1.5 },
+  // Every other row is a place the picked exercise can go, so it says so faintly.
+  itemRowTarget: { borderStyle: 'dashed' },
+  pickArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44 },
+  indexBadgePicked: { backgroundColor: loud.loud, borderColor: loud.loud },
   indexBadge: {
     width: 26,
     height: 26,

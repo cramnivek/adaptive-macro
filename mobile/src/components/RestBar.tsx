@@ -73,15 +73,21 @@ export const RestBar = ({
             color={done ? loud.onLoud : soundOn ? loud.figure : loud.figureFaint}
           />
         </Tappable>
-        <Text style={[styles.label, { color: done ? loud.onLoud : loud.figureFaint }]}>
-          {done
-            ? getEventCopy('workout.rest_done_label', { personality, seed: total })
-            : getEventCopy('workout.rest_resting_label', { personality, seed: total })}
-        </Text>
-
-        <Text style={[styles.clock, { color: done ? loud.onLoud : loud.figure }]}>
-          {formatRest(remaining)}
-        </Text>
+        {/*
+          Label over clock in one column that takes the spare width. Side by
+          side, a long label ("REST OVER · TIME TO COOK") was squeezed to a
+          word per line and the buttons were pushed off the right edge.
+        */}
+        <View style={styles.readout}>
+          <Text numberOfLines={2} style={[styles.label, { color: done ? loud.onLoud : loud.figureFaint }]}>
+            {done
+              ? getEventCopy('workout.rest_done_label', { personality, seed: total })
+              : getEventCopy('workout.rest_resting_label', { personality, seed: total })}
+          </Text>
+          <Text style={[styles.clock, { color: done ? loud.onLoud : loud.figure }]}>
+            {formatRest(remaining)}
+          </Text>
+        </View>
 
         <View style={styles.actions}>
           {/*
@@ -89,14 +95,18 @@ export const RestBar = ({
             for +15 is telling you the default is wrong, not that this one set
             was unusual.
           */}
-          <Tappable
-            onPress={() => onAdjust(-1)}
-            scaleTo={0.85}
-            style={styles.step}
-            accessibilityLabel="Fifteen seconds less rest"
-          >
-            <Text style={[styles.stepLabel, { color: done ? loud.onLoud : loud.figure }]}>−15</Text>
-          </Tappable>
+          {/* Nothing is left to take away once the rest is up, and the room
+              goes to the done button's label. */}
+          {!done && (
+            <Tappable
+              onPress={() => onAdjust(-1)}
+              scaleTo={0.85}
+              style={styles.step}
+              accessibilityLabel="Fifteen seconds less rest"
+            >
+              <Text style={[styles.stepLabel, { color: done ? loud.onLoud : loud.figure }]}>−15</Text>
+            </Tappable>
+          )}
           <Tappable
             onPress={() => onAdjust(1)}
             scaleTo={0.85}
@@ -148,13 +158,13 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.md,
   },
+  readout: { flex: 1, minWidth: 0 },
   label: { fontFamily: font.display, fontSize: 10, letterSpacing: 1.6 },
   clock: {
     fontFamily: font.figure,
     fontSize: 20,
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
-    flex: 1,
   },
   actions: { flexDirection: 'row', gap: 6 },
   step: {
