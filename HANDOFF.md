@@ -1,78 +1,46 @@
 # Handoff
 
-State of play on **2026-10-19**. For how the repository works — layout,
+State of play on **2026-10-20**. For how the repository works — layout,
 commands, the security model, the rules — read [AGENTS.md](AGENTS.md) first;
-this file is only what is in flight and what to do next. It goes stale the
-moment branch `claude/updates-overview-y2g5ve` merges. The 2026-10-01 snapshot
-it replaced is [docs/handoff-2026-10-01.md](docs/handoff-2026-10-01.md).
+this file is only what is in flight and what to do next. Earlier snapshots:
+[docs/handoff-2026-10-01.md](docs/handoff-2026-10-01.md); the 2026-10-19 one is
+this file's git history.
 
 ---
 
 ## Where things stand
 
-Branch `claude/updates-overview-y2g5ve` is **five commits ahead of `main`, not
-merged, not deployed**. Nothing on it is live, and nothing on it has reached the
-database.
+**Nothing is in flight.** Everything is merged, live and checked. `main` is
+`e219229` (PR #22), the app is the one the first automatic deploy built
+(`entry-35d4f1ac…`), and the database has every migration in the repository,
+the last being `20261019120000_squad_access.sql`.
 
 1,483 tests pass (`npm test`: engine 207, mobile 1,133, gemini-proxy 143) and
-`npm run typecheck` is clean, both run on the branch head.
+`npm run typecheck` is clean, on `main`.
 
-| Commit | What |
-| --- | --- |
-| `3980858` | Workout screen: floating rest timer and Finish, a tap no longer zeroes a set, dumbbell loading labels, rack hint honest about plates, reorder by tap-to-place |
-| `016ec8d` | Sign-in redesign; its privacy copy made true |
-| `bd09b62` | Onboarding and focus picker: plain copy, the app's own colours, Home banner's nested-button bug |
-| `7438ef2` | **Squad access migration** — the only commit that touches the database |
-| `ad26918` | GitHub Actions: test every PR, deploy `main` to Cloud Run |
+**Deploys are automatic now.** A push to `main` runs
+`.github/workflows/deploy.yml`: test, build, deploy to Cloud Run, verify. Its
+first real run, on the merge of PR #22, passed every step. The Google side signs
+in by Workload Identity Federation — no key stored anywhere — and trusts only
+pushes to `main` of this repository, identified by GitHub's numeric IDs
+(repository `1374033579`, owner `54169123`), not the name. The deploy account
+holds `run.sourceDeveloper`, `serviceUsageConsumer`, and `serviceAccountUser` on
+the one runtime account. Manual deploys from PowerShell still work.
+
+**The squad hole is closed.** Before PR #22, any signed-in user could read
+every squad with its invite code, every member list and every cheer, and join
+any squad without the code — production had run an earlier draft of the squads
+migration. Read from `pg_policies` after the merge, every squad table now allows
+reading only inside the squad and never across a block, and joining only goes
+through `join_squad`. From outside: `in_squad`, `can_see` and
+`check_squad_capacity` over `/rpc` are 404, and a signed-out `join_squad` is
+refused. The one real squad and its two members came through intact.
 
 ---
 
-## Do these, in this order
+## Do these
 
-> **Steps 1 and 2 were done on 2026-10-20**, with one change from what was
-> written: the provider trusts GitHub's numeric repository and owner IDs
-> rather than the repository's name (README updated to match). A flaky timing
-> test that would have skipped the first automatic deploy was fixed in the
-> same commit.
-
-**1. The one-time Google setup for automatic deploys.** PowerShell commands
-under "Deploying from GitHub" in
-[services/gemini-proxy/README.md](services/gemini-proxy/README.md). They end by
-printing three values.
-
-**2. Add those three as GitHub repository *variables*** (Settings → Secrets and
-variables → Actions → Variables): `GCP_PROJECT_ID`,
-`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`. Variables, not
-secrets; none is a credential.
-
-**3. Only then, open a PR from the branch and merge it.** The merge makes
-Supabase apply `20261019120000_squad_access.sql` to production and the workflow
-deploy the matching app from the same push.
-
-> **Do not merge before step 2.** The deploy job skips itself until the
-> variables exist. The migration would go live without the app that matches it,
-> and **joining a squad stays broken** until someone deploys by hand: the old
-> app finds a squad by reading it, which the migration forbids, and the new app
-> joins through `join_squad`, which only the migration creates. Deploying the
-> new app *before* the migration fails the same way in reverse.
-
-**4. Watch the workflow run** (Actions → Test and deploy). Its last step checks
-`/_health` is the text `ok`, the served entry file is the one it built,
-`/api/nonsense` is 404 and a token-less `POST /api/gemini` is 401. It has never
-run for real — the first merge is its first test.
-
-**5. Check the database side by hand:**
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -X POST "$SUPABASE_URL/rest/v1/rpc/in_squad" \
-  -H "apikey: $PUBLISHABLE_KEY" -H "Content-Type: application/json" -d '{}'     # 404: private schema
-curl -s -X POST "$SUPABASE_URL/rest/v1/rpc/join_squad" \
-  -H "apikey: $PUBLISHABLE_KEY" -H "Content-Type: application/json" -d '{"code":"X"}'  # refused: signed out
-```
-
-and the existing `can_see` check in AGENTS.md, which must still be 404.
-
-**6. On a phone, from the home-screen app:**
+**On a phone, from the home-screen app** — the one check nothing here can make:
 
 - Join a squad with its code; a wrong code says no squad has it.
 - Log a workout: Finish and the rest timer float at the bottom and step aside
@@ -84,9 +52,42 @@ and the existing `can_see` check in AGENTS.md, which must still be 404.
   storage) stays signed out. If so, hide the Google button when running
   standalone on iOS and leave the email code.
 
+The squad policies were proved against real Postgres as real roles by
+`social-rls.test.ts`, on both versions of the schema. They could not be proved
+against production as a signed-in stranger: the read-only database connection
+may not switch roles. Joining with a second account from the phone is that proof.
+
 ---
 
-## Found this session, and still open
+## Found on 2026-10-20
+
+- **One timing test could have decided a deploy.** `exerciseSearch`'s speed
+  test timed a single call against 25 ms; it passed alone and failed under the
+  full suite. Since a failed test skips the deploy while Supabase applies the
+  migration anyway, it now keeps the fastest of ten runs. **Any test that reads
+  a clock is a deploy risk here**; prefer the fastest of several runs.
+- **A stored card template the app does not know crashes the finish sheet.**
+  `TEMPLATES[settings.cardTemplate].place` throws for an unknown id, and
+  `withDefaults` in `state/settings.ts` passes the stored value through
+  unchecked. Only the person's own storage can set it, so it is a crash, not an
+  exploit. The fix is to fall back to `DEFAULT_TEMPLATE` there.
+- **A recursive delete that follows links will wipe the main checkout.** npm
+  workspaces put junctions in `node_modules/@adaptive-macros/*` that point at
+  the real `mobile/`, `packages/engine` and `services/gemini-proxy`. Deleting a
+  worktree or a copy of the repo with `robocopy /MIR` from an empty folder
+  followed them and deleted the main working copy's packages on 2026-10-20.
+  Tracked files came back with `git restore`; the git-ignored
+  `mobile/.env.local` did not and was rebuilt from known values. On Windows,
+  delete `node_modules` with `cmd /c rmdir /s /q` (it does not traverse
+  junctions) before removing anything else, or pass robocopy `/XJ`.
+- **Invite codes come from `Math.random`**, six characters from 32, about a
+  billion combinations, and nothing limits how often `join_squad` can be
+  called. Fine for a group of friends; worth `crypto.getRandomValues` and a rate
+  limit before squads are something strangers use.
+
+---
+
+## Found on 2026-10-19, and still open
 
 ### Production had drifted from the repository
 
@@ -146,8 +147,9 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
   on every web load.
 - A few default-voice strings still read as generated, e.g. "Smart food lookup"
   in `app/search.tsx`. The gymrat voice's emoji are deliberate; leave those.
-- AGENTS.md's applied-migration list stops at 2026-10-14 and its test counts are
-  from then; it does not mention squads or that sign-in is required.
+- AGENTS.md's migration list, test counts and deploy rule were brought up to
+  date on 2026-10-20. It still does not describe squads, and still says the
+  core app works signed out — which waits on the sign-in decision above.
 
 ---
 
