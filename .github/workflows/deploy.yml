@@ -87,12 +87,16 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       # No --set-env-vars: it replaces the whole set, and the keys already on
-      # the service survive a deploy untouched.
+      # the service survive a deploy untouched. No --allow-unauthenticated
+      # either: public access is already granted on the service and survives a
+      # deploy, and the flag makes gcloud re-grant it, which the deploy account
+      # may not do — every deploy ended "Setting IAM policy failed". The verify
+      # step below fails if the site ever stops being public.
       - name: Deploy
         run: |
           gcloud run deploy "$SERVICE" --source services/gemini-proxy \
             --project "${{ vars.GCP_PROJECT_ID }}" --region "$REGION" \
-            --allow-unauthenticated --timeout 120 --quiet
+            --timeout 120 --quiet
 
       # The checks from the README. Status alone proves nothing here: every
       # unknown path falls back to index.html with a 200, so a broken image
@@ -106,6 +110,8 @@ jobs:
           built=$(grep -oE 'entry-[a-f0-9]+\.js' services/gemini-proxy/web/index.html | head -1)
           served=$(curl -fsS "$URL/" | grep -oE 'entry-[a-f0-9]+\.js' | head -1)
           [ "$built" = "$served" ] || fail "serving $served, but this run built $built"
+          # The list the next deploy keeps old code files by.
+          curl -fsS "$URL/code-files.json" | grep -q "$built" || fail "code-files.json is missing or does not list $built"
           code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
           [ "$(code "$URL/api/nonsense")" = 404 ] || fail "/api/nonsense is not 404"
           [ "$(code -X POST "$URL/api/gemini" -H 'Content-Type: application/json' -d '{}')" = 401 ] \
