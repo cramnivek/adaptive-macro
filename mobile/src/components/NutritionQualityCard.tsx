@@ -68,7 +68,7 @@ export const NutritionQualityCard = ({
                   </Text>
                 </View>
                 <Text style={[styles.title, { color: colors.text }]}>
-                  Clinical Micronutrients & Health
+                  Micronutrients
                 </Text>
               </View>
             </View>
@@ -101,9 +101,9 @@ export const NutritionQualityCard = ({
             </View>
 
             <View style={[styles.vitalPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>MICRONUTRIENTS</Text>
-              <Text style={[styles.vitalValue, { color: colors.accent }]}>
-                {entries.length > 0 ? 'Full Panel' : 'Ready'}
+              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>FOODS</Text>
+              <Text style={[styles.vitalValue, { color: colors.text }]}>
+                {entries.length > 0 ? `${entries.length} logged` : 'None yet'}
               </Text>
             </View>
           </View>
@@ -111,7 +111,7 @@ export const NutritionQualityCard = ({
           {/* Call to action footer */}
           <View style={styles.footer}>
             <Text style={[styles.footerText, { color: colors.accent }]}>
-              View full clinical panel & AI food recommendations
+              Every nutrient, and swaps to fill the gaps
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.accent} />
           </View>

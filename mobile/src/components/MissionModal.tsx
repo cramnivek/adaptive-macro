@@ -80,15 +80,7 @@ export const MissionModal = ({
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <View style={styles.headerTitleCol}>
-            <View style={styles.badgeRow}>
-              <Ionicons name="sparkles" size={12} color={colors.accent} />
-              <Text style={[styles.badgeText, { color: colors.accent }]}>
-                PERSONALIZE ASCEND
-              </Text>
-            </View>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>
-              Training Mission & Spotlight
-            </Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Your focus</Text>
           </View>
 
           <Pressable
@@ -96,7 +88,7 @@ export const MissionModal = ({
             hitSlop={12}
             style={[styles.closeButton, { backgroundColor: colors.surfaceRaised }]}
             accessibilityRole="button"
-            accessibilityLabel="Close training mission modal"
+            accessibilityLabel="Close"
           >
             <Ionicons name="close" size={20} color={colors.text} />
           </Pressable>
@@ -108,7 +100,7 @@ export const MissionModal = ({
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.introText, { color: colors.textMuted }]}>
-            Set your primary training mission and choose what leads your dashboard. All tools, kinematics cues, and trackers remain 100% active.
+            What you are training for, and what Today shows first.
           </Text>
 
           <MissionPicker
@@ -118,7 +110,7 @@ export const MissionModal = ({
             onChangeSpotlight={setSpotlight}
             onSave={handleSave}
             isSaving={saving}
-            saveButtonLabel="SAVE MISSION & SPOTLIGHT 🚀"
+            saveButtonLabel="Save"
           />
         </ScrollView>
       </View>
@@ -142,23 +134,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-  },
-  badgeText: {
-    fontFamily: font.uiStrong,
-    fontSize: 10,
-    letterSpacing: 1.2,
-  },
   headerTitle: {
     fontFamily: font.uiStrong,
     fontSize: 18,
   },
+  // 44 rather than 32: hitSlop is ignored on web, so the circle is the target.
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',

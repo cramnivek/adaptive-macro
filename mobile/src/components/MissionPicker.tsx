@@ -40,7 +40,7 @@ export const MissionPicker = ({
   onChangeSpotlight,
   onSave,
   isSaving = false,
-  saveButtonLabel = 'LOCK IN MY MISSION 🚀',
+  saveButtonLabel = 'Save',
   style,
   compact = false,
   hidePraiseBox = false,
@@ -81,12 +81,7 @@ export const MissionPicker = ({
             },
           ]}
         >
-          <View style={styles.praiseBadgeRow}>
-            <Ionicons name="sparkles" size={13} color={colors.accent} />
-            <Text style={[styles.praiseBadgeText, { color: colors.accent }]}>
-              YOUR TRAINING MISSION
-            </Text>
-          </View>
+          <Text style={[styles.praiseBadgeText, { color: colors.textFaint }]}>YOUR FOCUS</Text>
           <Text style={[styles.praiseMessage, { color: colors.text }]}>
             {praise}
           </Text>
@@ -107,7 +102,7 @@ export const MissionPicker = ({
                 compact && styles.compactMissionCard,
                 {
                   backgroundColor: isSelected ? colors.surfaceRaised : colors.surface,
-                  borderColor: isSelected ? item.accentColor : colors.border,
+                  borderColor: isSelected ? colors.accent : colors.border,
                   opacity: pressed ? 0.85 : 1,
                   transform: [{ scale: pressed ? 0.985 : 1 }],
                 },
@@ -119,30 +114,19 @@ export const MissionPicker = ({
               <View style={[styles.cardHeader, compact && styles.compactCardHeader]}>
                 <View
                   style={[
-                    styles.emojiBubble,
-                    compact && styles.compactEmojiBubble,
-                    {
-                      backgroundColor: `${item.accentColor}22`,
-                      borderColor: `${item.accentColor}55`,
-                    },
+                    styles.glyphBox,
+                    compact && styles.compactGlyphBox,
+                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
                   ]}
                 >
-                  <Text style={[styles.emojiText, compact && styles.compactEmojiText]}>
-                    {item.emoji}
-                  </Text>
+                  <Ionicons
+                    name={item.icon}
+                    size={compact ? 16 : 18}
+                    color={isSelected ? colors.text : colors.textMuted}
+                  />
                 </View>
 
                 <View style={styles.headerInfo}>
-                  {!compact && (
-                    <Text
-                      style={[
-                        styles.badgeTag,
-                        { color: isSelected ? item.accentColor : colors.textFaint },
-                      ]}
-                    >
-                      {item.badge}
-                    </Text>
-                  )}
                   <Text
                     style={[
                       styles.cardTitle,
@@ -166,8 +150,8 @@ export const MissionPicker = ({
                     compact && styles.compactRadioCircle,
                     isSelected
                       ? {
-                          backgroundColor: item.accentColor,
-                          borderColor: item.accentColor,
+                          backgroundColor: colors.accent,
+                          borderColor: colors.accent,
                         }
                       : {
                           backgroundColor: 'transparent',
@@ -176,7 +160,7 @@ export const MissionPicker = ({
                   ]}
                 >
                   {isSelected && (
-                    <Ionicons name="checkmark" size={compact ? 12 : 14} color="#FFFFFF" />
+                    <Ionicons name="checkmark" size={compact ? 12 : 14} color={colors.onFill} />
                   )}
                 </View>
               </View>
@@ -201,10 +185,10 @@ export const MissionPicker = ({
         <View style={styles.spotlightSection}>
           <View style={styles.spotlightHeader}>
             <Text style={[styles.spotlightTitle, { color: colors.text }]}>
-              Home Screen Spotlight
+              Home screen
             </Text>
             <Text style={[styles.spotlightSubtitle, { color: colors.textMuted }]}>
-              Choose what your daily dashboard leads with.
+              What Today shows first.
             </Text>
           </View>
 
@@ -226,7 +210,6 @@ export const MissionPicker = ({
                   accessibilityRole="button"
                   accessibilityLabel={opt.label}
                 >
-                  <Text style={styles.spotlightEmoji}>{opt.emoji}</Text>
                   <Text
                     style={[
                       styles.spotlightText,
@@ -242,14 +225,12 @@ export const MissionPicker = ({
         </View>
       )}
 
-      {/* Guarantee Badge */}
+      {/* Said plainly because it is the question a picker like this raises:
+          does choosing one switch something else off? It does not. */}
       {!compact && (
-        <View style={[styles.guaranteeBox, { backgroundColor: colors.surfaceRaised }]}>
-          <Ionicons name="shield-checkmark" size={14} color={colors.accent} />
-          <Text style={[styles.guaranteeText, { color: colors.textMuted }]}>
-            All features (3D Kinematics, Scale Weight, Story Stickers, AI Coach & DRI Panel) are always 100% active and unlocked.
-          </Text>
-        </View>
+        <Text style={[styles.guaranteeText, { color: colors.textFaint }]}>
+          Every feature stays on whichever you pick.
+        </Text>
       )}
 
       {/* Save Button */}
@@ -274,11 +255,6 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: space.xs,
-  },
-  praiseBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: space.xs,
   },
   praiseBadgeText: {
@@ -318,7 +294,7 @@ const styles = StyleSheet.create({
   compactCardHeader: {
     gap: space.sm,
   },
-  emojiBubble: {
+  glyphBox: {
     width: 38,
     height: 38,
     borderRadius: radius.md,
@@ -326,25 +302,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  compactEmojiBubble: {
+  compactGlyphBox: {
     width: 34,
     height: 34,
     borderRadius: radius.sm,
   },
-  emojiText: {
-    fontSize: 18,
-  },
-  compactEmojiText: {
-    fontSize: 16,
-  },
   headerInfo: {
     flex: 1,
     gap: 2,
-  },
-  badgeTag: {
-    fontFamily: font.uiStrong,
-    fontSize: 9,
-    letterSpacing: 1,
   },
   cardTitle: {
     fontFamily: font.uiStrong,
@@ -414,25 +379,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  spotlightEmoji: {
-    fontSize: 12,
-  },
   spotlightText: {
     fontFamily: font.uiStrong,
     fontSize: 11,
   },
-  guaranteeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    padding: space.sm + 2,
-    borderRadius: radius.lg,
-  },
   guaranteeText: {
     fontFamily: font.ui,
-    fontSize: 11,
-    lineHeight: 15,
-    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
   },
   saveContainer: {
     marginTop: space.xs,

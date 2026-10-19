@@ -1,52 +1,59 @@
+import type Ionicons from '@expo/vector-icons/Ionicons';
+import type { ComponentProps } from 'react';
+
 export type UserMission = 'hybrid' | 'hypertrophy' | 'fat_loss' | 'nutrition';
 export type DashboardSpotlight = 'balanced' | 'workouts' | 'nutrition';
 
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
+/**
+ * What someone says they are here for.
+ *
+ * Today this changes labels only — every feature is on whichever is picked,
+ * and the goal that actually moves the targets is the lose / maintain / gain
+ * choice on the baseline step. So the copy describes the goal in the words a
+ * lifter would use and promises nothing the app does not do for everyone.
+ *
+ * One glyph, drawn in the text colour, rather than an emoji in a bubble tinted
+ * with a colour of its own. Four stock accent colours on one screen made the
+ * picker look like a template and broke the rule that colour means data.
+ */
 export interface MissionDefinition {
   id: UserMission;
   name: string;
-  emoji: string;
-  badge: string;
+  icon: IconName;
   tagline: string;
   description: string;
-  accentColor: string;
 }
 
 export const MISSIONS: Record<UserMission, MissionDefinition> = {
   hybrid: {
     id: 'hybrid',
-    name: 'The Complete Hybrid Athlete',
-    emoji: '⚡',
-    badge: 'PEAK ATHLETIC PERFORMANCE',
-    tagline: 'Heavy compound lifts & precision fueling',
-    description: 'The definitive Ascend setup: crush PRs with progressive overload while optimizing clinical micronutrients, macro timing & recovery.',
-    accentColor: '#3B82F6',
+    name: 'All-round',
+    icon: 'layers-outline',
+    tagline: 'Lifting and eating, given equal weight.',
+    description: 'Your training and your daily targets share the home screen.',
   },
   hypertrophy: {
     id: 'hypertrophy',
-    name: 'Muscle Growth & Hypertrophy',
-    emoji: '🏋️‍♂️',
-    badge: 'PROGRESSIVE OVERLOAD & FORM',
-    tagline: 'Maximize mechanical tension, 1RMs & volume',
-    description: 'Prioritizes active workout routines, rest timer pacing, 1RM calculators, and 3D biomechanical hypertrophy cues.',
-    accentColor: '#FF6B4A',
+    name: 'Building muscle',
+    icon: 'barbell-outline',
+    tagline: 'Getting stronger, set by set.',
+    description: 'For when the logbook matters most: what you lifted last time, rest between sets, and new bests.',
   },
   fat_loss: {
     id: 'fat_loss',
-    name: 'Lean Cut & Fat Loss',
-    emoji: '🔪',
-    badge: 'METABOLIC EXPENDITURE ENGINE',
-    tagline: 'Kalman-filtered trends, deficit precision & satiety',
-    description: 'Filters out water weight fluctuations, paces your calorie deficit, and preserves hard-earned lean muscle tissue.',
-    accentColor: '#EC4899',
+    name: 'Losing fat',
+    icon: 'trending-down-outline',
+    tagline: 'A steady deficit, without losing strength.',
+    description: 'The weight trend smooths out water and salt, so one bad weigh-in does not read as a bad week.',
   },
   nutrition: {
     id: 'nutrition',
-    name: 'Precision Nutrition & Longevity',
-    emoji: '🥗',
-    badge: '25+ CLINICAL MICRONUTRIENTS',
-    tagline: 'Full clinical DRI panel, fiber & AI meal swaps',
-    description: 'Master your micronutrient density, elevate your Diet Quality Score, and get intelligent Gemini whole-food upgrades.',
-    accentColor: '#10B981',
+    name: 'Eating well',
+    icon: 'leaf-outline',
+    tagline: 'What is in your food, not only the calories.',
+    description: 'Fibre, vitamins and minerals from what you log, next to your macros.',
   },
 };
 
@@ -60,41 +67,45 @@ export const MISSION_LIST: MissionDefinition[] = [
 export interface SpotlightDefinition {
   id: DashboardSpotlight;
   label: string;
-  emoji: string;
   description: string;
 }
 
+/**
+ * What the home screen leads with.
+ *
+ * `balanced` and `nutrition` currently lay Today out the same way — targets
+ * first, training shortcut under them — and the descriptions say so rather
+ * than inventing a difference.
+ */
 export const SPOTLIGHT_OPTIONS: SpotlightDefinition[] = [
   {
     id: 'balanced',
     label: 'Balanced',
-    emoji: '⚡',
-    description: 'Balanced athletic overview of training and nutrition',
+    description: 'Your targets first, with the training shortcut under them.',
   },
   {
     id: 'workouts',
-    label: 'Workouts First',
-    emoji: '🏋️‍♂️',
-    description: 'Prioritizes routine launcher & lifting session at top',
+    label: 'Training first',
+    description: 'The training shortcut sits above your targets.',
   },
   {
     id: 'nutrition',
-    label: 'Nutrition First',
-    emoji: '🥗',
-    description: 'Prioritizes macros, calorie target & clinical DRI scores',
+    label: 'Food first',
+    description: 'Your targets first, with the training shortcut under them.',
   },
 ];
 
+/** One plain line confirming the choice, shown above the picker in Settings. */
 export function getMissionPraise(mission: UserMission): string {
   switch (mission) {
     case 'hypertrophy':
-      return 'Iron Focus Activated · Time to chase those PRs! 🏋️‍♂️💥';
+      return 'Building muscle. Every set shows what you lifted last time.';
     case 'fat_loss':
-      return 'Deficit Precision Locked · Protecting your hard-earned muscle! 🔪🔥';
+      return 'Losing fat. Watch the trend line, not the daily number.';
     case 'nutrition':
-      return 'Nutrition Mastery · Every micronutrient and electrolyte dialed in! 🔬🥗';
+      return 'Eating well. Log meals and the nutrients add up on Today.';
     case 'hybrid':
     default:
-      return 'Complete Hybrid Athlete · Maximum performance, zero compromise! ⚡🥇';
+      return 'All-round. Training and food get equal room.';
   }
 }

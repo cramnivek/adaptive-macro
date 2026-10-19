@@ -326,8 +326,8 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Training Mission & Dashboard Spotlight" initiallyOpen>
-        <Card subtitle="Tailor daily priorities to your current training phase. All Ascend features remain fully unlocked.">
+      <Section title="Focus & home screen" initiallyOpen>
+        <Card subtitle="What you are training for, and what Today shows first.">
           {(() => {
             const currentMission = MISSIONS[settings.userMission ?? 'hybrid'] ?? MISSIONS.hybrid;
             const currentSpotlight =
@@ -338,19 +338,11 @@ export default function SettingsScreen() {
                 <View
                   style={[
                     styles.missionActiveCard,
-                    {
-                      backgroundColor: `${currentMission.accentColor}15`,
-                      borderColor: currentMission.accentColor,
-                    },
+                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
                   ]}
                 >
-                  <Text style={styles.missionActiveEmoji}>{currentMission.emoji}</Text>
+                  <Ionicons name={currentMission.icon} size={20} color={colors.text} />
                   <View style={{ flex: 1, gap: 2 }}>
-                    <View style={styles.missionBadgePill}>
-                      <Text style={[styles.missionBadgeText, { color: currentMission.accentColor }]}>
-                        {currentMission.badge}
-                      </Text>
-                    </View>
                     <Text style={[styles.missionActiveName, { color: colors.text }]}>
                       {currentMission.name}
                     </Text>
@@ -366,10 +358,10 @@ export default function SettingsScreen() {
                     { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
                   ]}
                 >
-                  <Text style={styles.spotlightEmoji}>{currentSpotlight.emoji}</Text>
+                  <Ionicons name="home-outline" size={18} color={colors.textMuted} />
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.spotlightLabel, { color: colors.text }]}>
-                      Home Spotlight: {currentSpotlight.label}
+                      Home screen: {currentSpotlight.label}
                     </Text>
                     <Text style={[styles.spotlightDesc, { color: colors.textFaint }]}>
                       {currentSpotlight.description}
@@ -377,16 +369,13 @@ export default function SettingsScreen() {
                   </View>
                 </View>
 
-                <View style={styles.allUnlockedBanner}>
-                  <Ionicons name="checkmark-done-circle" size={16} color={colors.positive} />
-                  <Text style={[styles.allUnlockedText, { color: colors.textFaint }]}>
-                    3D Kinematics, Kalman trends, Story Stickers & DRI scores are always active.
-                  </Text>
-                </View>
+                <Text style={[styles.allUnlockedText, { color: colors.textFaint }]}>
+                  Every feature stays on whichever you pick.
+                </Text>
 
                 <View style={{ height: space.xs }} />
                 <Button
-                  label="CHANGE TRAINING MISSION 🎯"
+                  label="Change focus"
                   onPress={() => setMissionModalOpen(true)}
                 />
               </View>
@@ -405,7 +394,7 @@ export default function SettingsScreen() {
               options={[
                 { value: 'classic', label: 'Classic' },
                 { value: 'ascend', label: 'Ascend' },
-                { value: 'gymrat', label: 'Gymrat 🔥' },
+                { value: 'gymrat', label: 'Gymrat' },
               ]}
             />
             <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
@@ -553,7 +542,7 @@ export default function SettingsScreen() {
           />
         </Card>
 
-        <Card title="Smart Food Search & Macro Estimation" subtitle="Automatic food recognition and restaurant menu lookup.">
+        <Card title="Food search" subtitle="Looking up foods, packaged items and restaurant dishes.">
           <Text style={[styles.note, { color: colors.textFaint }]}>
             Works automatically with zero setup using the built-in hosted service. If you prefer to supply a custom API key for dedicated quota, enter it below.
           </Text>
@@ -695,18 +684,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1.5,
   },
-  missionActiveEmoji: {
-    fontSize: 28,
-  },
-  missionBadgePill: {
-    alignSelf: 'flex-start',
-  },
-  missionBadgeText: {
-    fontFamily: font.uiStrong,
-    fontSize: 9,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
   missionActiveName: {
     fontFamily: font.uiStrong,
     fontSize: 14,
@@ -725,9 +702,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  spotlightEmoji: {
-    fontSize: 18,
-  },
   spotlightLabel: {
     fontFamily: font.uiStrong,
     fontSize: 12,
@@ -735,12 +709,6 @@ const styles = StyleSheet.create({
   spotlightDesc: {
     fontFamily: font.ui,
     fontSize: 11,
-  },
-  allUnlockedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs + 2,
-    paddingVertical: 2,
   },
   allUnlockedText: {
     fontFamily: font.ui,
