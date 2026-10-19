@@ -24,7 +24,8 @@ import {
   signInWithGoogle,
   SignInCancelled,
 } from '../src/social/socialSignIn';
-import { SKEW, font, radius, space, useTheme } from '../src/theme';
+import { TOUCH_TARGET } from '../src/components/Controls';
+import { font, radius, space, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
 /** Official 4-color Google 'G' brand mark */
@@ -52,15 +53,19 @@ function GoogleLogo({ size = 20 }: { size?: number }) {
 }
 
 /**
- * Sign in screen with one-tap Google and Apple sign-in, plus email magic code fallback.
+ * The door into the app, and the first thing anyone sees of it.
  *
- * Infused with Ascend's signature aggressive athletic visual identity:
- * - Official split-ring logo emblem with skewed energy backdrop (`SKEW = -8deg`).
- * - Signature `ASCEND ///` wordmark with loud red brand strokes (`#E8352A`).
- * - Skewed motto slab: "ADAPTIVE NUTRITION & TRAINING".
- * - Brand philosophy: "Calm when tracking. Focused when training. Built for serious lifters."
- * - Balanced OLED dark mode card with 1-tap Google, Apple, and OTP email auth.
- * - Reassuring local-first offline privacy badge.
+ * Built to the house rule — calm when tracking, focused when training, loud
+ * when celebrating. Signing in is none of the loud moments, so the screen is
+ * the quiet palette with exactly one hit of red: the three strokes after the
+ * wordmark, drawn the way every share card draws them. The skewed slab and the
+ * red ring that used to sit here are the celebration's shapes, and spending
+ * them on a login form left nothing for the PR that earns them.
+ *
+ * What it says about data has to be true. Food and workout logs never leave
+ * the phone; the profile and starting targets do, to the account, so that a
+ * new phone can be set up from them (`social/baselineSync.ts`). The old copy
+ * said "100% on this device", twice, and that stopped being so.
  */
 export default function SignInScreen() {
   const { colors, isDark } = useTheme();
@@ -80,6 +85,10 @@ export default function SignInScreen() {
   useEffect(() => {
     void appleAvailable().then(setCanApple);
   }, []);
+
+  // Something, an @, something, a dot, something. Loose on purpose: the server
+  // is the real check, this only decides whether the button is worth lighting.
+  const emailLooksRight = /^\S+@\S+\.\S+$/.test(email.trim());
 
   const finishSignIn = async () => {
     const profile = await refreshProfile().catch(() => undefined);
@@ -119,12 +128,23 @@ export default function SignInScreen() {
       setCode('');
     });
 
-  const verify = () =>
+  // Takes the code as an argument so typing the sixth digit can submit it
+  // directly, without waiting a render for the state to catch up.
+  const verify = (entered: string = code) =>
     run(async () => {
       if (sentTo === null) return;
-      await verifyCode(sentTo, code);
+      await verifyCode(sentTo, entered);
       await finishSignIn();
     });
+
+  const onCodeChange = (text: string) => {
+    // Digits only: a code pasted from Mail arrives as "123 456" often enough.
+    const digits = text.replace(/\D/g, '').slice(0, 6);
+    setCode(digits);
+    // The sixth digit is the only thing anyone would do before tapping Verify,
+    // so it is the tap. iOS autofill from Mail lands all six at once.
+    if (digits.length === 6 && !busy) void verify(digits);
+  };
 
   return (
     <KeyboardAvoidingView
@@ -135,7 +155,7 @@ export default function SignInScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: insets.top + space.lg,
+            paddingTop: insets.top + space.xl,
             paddingBottom: insets.bottom + space.xl,
           },
         ]}
@@ -143,75 +163,42 @@ export default function SignInScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.inner}>
-          {/* Aggressive Brand Hero Header */}
-          <View style={styles.heroHeader}>
-            {/* Logo Emblem */}
-            <View
-              style={[
-                styles.emblemContainer,
-                {
-                  borderColor: 'rgba(232, 53, 42, 0.65)',
-                  backgroundColor: '#0A0A0B',
-                },
-              ]}
-            >
-              <Image
-                source={require('../assets/icon.png')}
-                style={styles.brandLogo}
-                resizeMode="contain"
-              />
+          {/*
+            The mark, smaller than it was. At 68 px plus a two-line motto the
+            header took a third of the screen, and on a small phone the keyboard
+            then covered the field you had just tapped.
+          */}
+          <View style={styles.brand}>
+            <Image source={require('../assets/icon.png')} style={styles.brandLogo} resizeMode="contain" />
+            <View style={styles.wordmarkRow} accessibilityRole="header" accessibilityLabel="Ascend">
+              <Text style={[styles.wordmark, { color: colors.text }]}>ASCEND</Text>
+              <Text style={[styles.wordmark, styles.slashes, { color: loud.loud }]}>///</Text>
             </View>
-
-            {/* Signature ASCEND /// Wordmark */}
-            <View style={styles.wordmarkRow}>
-              <Text style={[styles.brandTitle, { color: colors.text }]}>ASCEND</Text>
-              <Text style={[styles.brandSlashes, { color: loud.loud }]}>///</Text>
-            </View>
-
-            {/* Skewed Motto Slab Badge */}
-            <View style={styles.mottoTagWrapper}>
-              <View
-                style={[
-                  styles.mottoTagBg,
-                  {
-                    backgroundColor: 'rgba(232, 53, 42, 0.14)',
-                    borderColor: 'rgba(232, 53, 42, 0.45)',
-                    transform: [{ skewX: SKEW }],
-                  },
-                ]}
-              />
-              <Text style={[styles.mottoText, { color: loud.loud }]}>
-                ADAPTIVE NUTRITION & TRAINING
-              </Text>
-            </View>
-
-            {/* Core Philosophy */}
-            <Text style={[styles.brandTagline, { color: colors.textMuted }]}>
-              Calm when tracking. Focused when training. Built for serious lifters.
-            </Text>
+            <Text style={[styles.descriptor, { color: colors.textFaint }]}>ADAPTIVE NUTRITION & TRAINING</Text>
           </View>
 
-          {/* Elevated Authentication Card */}
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            {/* Card Title & Instructions */}
-            <View style={styles.cardHeader}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>
-                {sentTo ? 'Check your email' : 'Sign In'}
+          {/* The motto as the app states it elsewhere, one beat per line. */}
+          <View style={styles.motto}>
+            {[
+              ['CALM', 'when tracking.'],
+              ['FOCUSED', 'when training.'],
+              ['LOUD', 'when celebrating.'],
+            ].map(([word, rest]) => (
+              <Text key={word} style={[styles.mottoLine, { color: colors.textMuted }]}>
+                <Text style={[styles.mottoWord, { color: colors.text }]}>{word}</Text> {rest}
               </Text>
-              <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
-                {sentTo
-                  ? `Enter the 6-digit code we sent to ${sentTo}`
-                  : 'Link your account once. Your workout and nutrition logs stay 100% on this device.'}
-              </Text>
-            </View>
+            ))}
+          </View>
+
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              {sentTo ? 'Check your email' : 'Sign in'}
+            </Text>
+            <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+              {sentTo
+                ? 'Enter the six-digit code from the email we just sent.'
+                : 'One account for the feed, your squad, and picking up on a new phone.'}
+            </Text>
 
             {problem && (
               <View
@@ -222,6 +209,7 @@ export default function SignInScreen() {
                     borderColor: colors.danger,
                   },
                 ]}
+                accessibilityLiveRegion="polite"
               >
                 <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
                 <Text style={[styles.errorText, { color: colors.danger }]}>{problem}</Text>
@@ -230,33 +218,22 @@ export default function SignInScreen() {
 
             {sentTo === null ? (
               <>
-                {/* 1-Tap Social Auth Section */}
                 <View style={styles.socialGroup}>
                   <Tappable
                     onPress={() => void handleGoogle()}
                     disabled={busy}
                     style={{ opacity: busy ? 0.6 : 1 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google"
                   >
                     <View
                       style={[
                         styles.socialButton,
-                        {
-                          backgroundColor: isDark ? colors.surfaceRaised : '#FFFFFF',
-                          borderColor: isDark ? colors.border : '#E2E2DC',
-                        },
+                        { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
                       ]}
                     >
                       <GoogleLogo size={20} />
-                      <Text style={[styles.socialButtonText, { color: colors.text }]}>
-                        Continue with Google
-                      </Text>
-                      {busy && (
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.text}
-                          style={styles.spinner}
-                        />
-                      )}
+                      <Text style={[styles.socialButtonText, { color: colors.text }]}>Continue with Google</Text>
                     </View>
                   </Tappable>
 
@@ -277,184 +254,210 @@ export default function SignInScreen() {
                   )}
                 </View>
 
-                {/* Clean Divider */}
                 <View style={styles.dividerRow}>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-                  <Text style={[styles.dividerText, { color: colors.textFaint }]}>
-                    OR USE EMAIL
-                  </Text>
+                  <Text style={[styles.microLabel, { color: colors.textFaint }]}>OR WITH EMAIL</Text>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                 </View>
 
-                {/* Email Magic Code Input */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                    EMAIL ADDRESS
-                  </Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      {
-                        backgroundColor: colors.surfaceRaised,
-                        borderColor: isEmailFocused ? colors.accent : colors.border,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="mail-outline"
-                      size={18}
-                      color={isEmailFocused ? colors.text : colors.textFaint}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      value={email}
-                      onChangeText={setEmail}
-                      onFocus={() => setIsEmailFocused(true)}
-                      onBlur={() => setIsEmailFocused(false)}
-                      placeholder="you@example.com"
-                      placeholderTextColor={colors.textFaint}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!busy}
-                    />
-                  </View>
-                </View>
-
-                {/* Send Code Button */}
-                <Tappable
-                  onPress={() => void send()}
-                  disabled={busy || !email.includes('@')}
-                  style={{ opacity: busy || !email.includes('@') ? 0.45 : 1 }}
-                >
-                  <View style={[styles.submitButton, { backgroundColor: colors.accent }]}>
-                    {busy ? (
-                      <ActivityIndicator size="small" color={colors.onFill} />
-                    ) : (
-                      <View style={styles.buttonContentRow}>
-                        <Text style={[styles.submitButtonText, { color: colors.onFill }]}>
-                          Send Login Code
-                        </Text>
-                        <Ionicons name="arrow-forward" size={18} color={colors.onFill} />
-                      </View>
-                    )}
-                  </View>
-                </Tappable>
-              </>
-            ) : (
-              <>
-                {/* Email Target Indicator & Change Link */}
                 <View
                   style={[
-                    styles.sentTargetBadge,
+                    styles.inputWrapper,
                     {
                       backgroundColor: colors.surfaceRaised,
-                      borderColor: colors.border,
+                      borderColor: isEmailFocused ? colors.accent : colors.border,
                     },
                   ]}
                 >
-                  <Ionicons name="paper-plane-outline" size={16} color={colors.carbs} />
-                  <Text
-                    style={[styles.sentTargetText, { color: colors.text }]}
-                    numberOfLines={1}
-                  >
-                    Sent to <Text style={{ fontFamily: font.uiStrong }}>{sentTo}</Text>
+                  <Ionicons
+                    name="mail-outline"
+                    size={18}
+                    color={isEmailFocused ? colors.text : colors.textFaint}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, { color: colors.text }]}
+                    value={email}
+                    onChangeText={setEmail}
+                    onFocus={() => setIsEmailFocused(true)}
+                    onBlur={() => setIsEmailFocused(false)}
+                    onSubmitEditing={() => emailLooksRight && !busy && void send()}
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.textFaint}
+                    keyboardType="email-address"
+                    // So the phone offers the address it already knows instead
+                    // of making someone type it with sweaty thumbs.
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    returnKeyType="send"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!busy}
+                    accessibilityLabel="Email address"
+                  />
+                </View>
+
+                <PrimaryAction
+                  label="Email me a code"
+                  ready={emailLooksRight}
+                  busy={busy}
+                  onPress={() => void send()}
+                />
+              </>
+            ) : (
+              <>
+                <View style={[styles.sentRow, { borderColor: colors.border }]}>
+                  <Text style={[styles.sentText, { color: colors.textMuted }]} numberOfLines={1}>
+                    Sent to <Text style={{ fontFamily: font.uiStrong, color: colors.text }}>{sentTo}</Text>
                   </Text>
                   <Tappable
                     onPress={() => {
                       setSentTo(null);
                       setProblem(null);
                     }}
+                    style={styles.textAction}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use a different email"
                   >
-                    <Text style={[styles.changeActionText, { color: colors.carbs }]}>
-                      Change
-                    </Text>
+                    <Text style={[styles.textActionLabel, { color: colors.text }]}>Change</Text>
                   </Tappable>
                 </View>
 
-                {/* 6-Digit Code Input */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                    6-DIGIT VERIFICATION CODE
-                  </Text>
-                  <View
-                    style={[
-                      styles.codeInputWrapper,
-                      {
-                        backgroundColor: colors.surfaceRaised,
-                        borderColor: isCodeFocused ? colors.accent : colors.border,
-                      },
-                    ]}
-                  >
-                    <TextInput
-                      style={[styles.codeInput, { color: colors.text }]}
-                      value={code}
-                      onChangeText={setCode}
-                      onFocus={() => setIsCodeFocused(true)}
-                      onBlur={() => setIsCodeFocused(false)}
-                      placeholder="000000"
-                      placeholderTextColor={colors.textFaint}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      autoFocus
-                      editable={!busy}
-                    />
-                  </View>
+                <View
+                  style={[
+                    styles.codeInputWrapper,
+                    {
+                      backgroundColor: colors.surfaceRaised,
+                      borderColor: isCodeFocused ? colors.accent : colors.border,
+                    },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.codeInput, { color: colors.text }]}
+                    value={code}
+                    onChangeText={onCodeChange}
+                    onFocus={() => setIsCodeFocused(true)}
+                    onBlur={() => setIsCodeFocused(false)}
+                    placeholder="000000"
+                    placeholderTextColor={colors.textFaint}
+                    keyboardType="number-pad"
+                    // iOS offers the code from Mail above the keyboard with
+                    // these, Android from its SMS/email retriever.
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    maxLength={6}
+                    autoFocus
+                    editable={!busy}
+                    accessibilityLabel="Six-digit code"
+                  />
                 </View>
 
-                {/* Verify Button */}
-                <Tappable
+                <PrimaryAction
+                  label="Verify and sign in"
+                  ready={code.length === 6}
+                  busy={busy}
                   onPress={() => void verify()}
-                  disabled={busy || code.trim().length !== 6}
-                  style={{ opacity: busy || code.trim().length !== 6 ? 0.45 : 1 }}
-                >
-                  <View style={[styles.submitButton, { backgroundColor: colors.accent }]}>
-                    {busy ? (
-                      <ActivityIndicator size="small" color={colors.onFill} />
-                    ) : (
-                      <View style={styles.buttonContentRow}>
-                        <Text style={[styles.submitButtonText, { color: colors.onFill }]}>
-                          Verify & Sign In
-                        </Text>
-                        <Ionicons name="arrow-forward" size={18} color={colors.onFill} />
-                      </View>
-                    )}
-                  </View>
-                </Tappable>
+                />
 
-                {/* Resend Link */}
                 <View style={styles.resendRow}>
-                  <Text style={[styles.resendLabel, { color: colors.textMuted }]}>
-                    Didn't get the code?
-                  </Text>
-                  <Tappable onPress={() => void send()} disabled={busy}>
-                    <Text style={[styles.resendAction, { color: colors.accent }]}>
-                      Resend
-                    </Text>
+                  <Text style={[styles.resendLabel, { color: colors.textMuted }]}>No code? Check spam, or</Text>
+                  <Tappable
+                    onPress={() => void send()}
+                    disabled={busy}
+                    style={styles.textAction}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send the code again"
+                  >
+                    <Text style={[styles.textActionLabel, { color: colors.text }]}>send it again</Text>
                   </Tappable>
                 </View>
               </>
             )}
           </View>
 
-          {/* Privacy & Local-First Assurance Badge */}
-          <View style={styles.trustBadge}>
-            <View style={styles.trustTitleRow}>
-              <Ionicons name="shield-checkmark-outline" size={15} color={colors.positive} />
-              <Text style={[styles.trustTitle, { color: colors.textMuted }]}>
-                100% Local-First & Offline Ready
-              </Text>
-            </View>
-            <Text style={[styles.trustDescription, { color: colors.textFaint }]}>
-              Your workouts, macro targets, and personal logs stay securely stored on this device.
+          {/*
+            One honest line about where things live, in place of the two
+            "100% on this device" claims. The policy is a public route, so it
+            opens without signing in.
+          */}
+          <View style={styles.trust}>
+            <View style={[styles.trustRule, { backgroundColor: colors.border }]} />
+            <Text style={[styles.trustText, { color: colors.textFaint }]}>
+              Your food and workout logs stay on this phone. Your account keeps your profile, starting weight and
+              goal, so a new phone can pick up where you left off.
             </Text>
+            <Tappable
+              onPress={() => router.push('/privacy')}
+              style={styles.textAction}
+              accessibilityRole="link"
+              accessibilityLabel="Read the privacy policy"
+            >
+              <Text style={[styles.textActionLabel, { color: colors.textMuted }]}>Privacy policy</Text>
+            </Tappable>
           </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+/**
+ * The form's one primary button.
+ *
+ * Not ready is drawn as an outline rather than the filled button at 45%
+ * opacity: faded near-white on near-black is a large grey slab, which read as
+ * broken and was the loudest thing on the screen before anyone had typed. The
+ * outline says "next step, once you have filled this in", and fills the moment
+ * it can be pressed.
+ */
+const PrimaryAction = ({
+  label,
+  ready,
+  busy,
+  onPress,
+}: {
+  label: string;
+  ready: boolean;
+  busy: boolean;
+  onPress: () => void;
+}) => {
+  const { colors } = useTheme();
+  const live = ready && !busy;
+  return (
+    <Tappable
+      onPress={onPress}
+      disabled={!live}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !live, busy }}
+    >
+      <View
+        style={[
+          styles.submitButton,
+          ready
+            ? { backgroundColor: colors.accent, borderColor: colors.accent }
+            : { backgroundColor: 'transparent', borderColor: colors.border },
+        ]}
+      >
+        {busy ? (
+          <ActivityIndicator size="small" color={ready ? colors.onFill : colors.textMuted} />
+        ) : (
+          <View style={styles.buttonContentRow}>
+            <Text style={[styles.submitButtonText, { color: ready ? colors.onFill : colors.textFaint }]}>
+              {label}
+            </Text>
+            <Ionicons name="arrow-forward" size={18} color={ready ? colors.onFill : colors.textFaint} />
+          </View>
+        )}
+      </View>
+    </Tappable>
+  );
+};
+
+// The browser's own focus box drew a second, black outline inside the field's
+// wrapper. The wrapper already brightens its border on focus, so focus stays
+// visible without it.
+const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {};
 
 const styles = StyleSheet.create({
   container: {
@@ -463,7 +466,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: space.lg,
   },
   inner: {
@@ -471,80 +473,60 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: 'center',
   },
-  heroHeader: {
+  brand: {
     alignItems: 'center',
-    marginBottom: space.xl,
-  },
-  emblemContainer: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    marginBottom: space.md,
+    marginBottom: space.lg,
   },
   brandLogo: {
-    width: 68,
-    height: 68,
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    marginBottom: space.md,
   },
   wordmarkRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginBottom: 6,
+    alignItems: 'baseline',
   },
-  brandTitle: {
+  wordmark: {
     fontFamily: font.display,
-    fontSize: 34,
-    fontWeight: '800',
+    fontSize: 30,
     letterSpacing: 3,
   },
-  brandSlashes: {
-    fontFamily: font.display,
-    fontSize: 34,
-    fontWeight: '900',
+  // The same 0.4em gap the share card leaves before the strokes.
+  slashes: {
+    marginLeft: 12,
     letterSpacing: 1,
   },
-  mottoTagWrapper: {
-    position: 'relative',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: space.sm,
-    alignSelf: 'center',
-  },
-  mottoTagBg: {
-    borderRadius: 4,
-    borderWidth: 1,
-  },
-  mottoText: {
+  descriptor: {
     fontFamily: font.figure,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 1.6,
+    marginTop: space.xs,
   },
-  brandTagline: {
+  motto: {
+    alignItems: 'center',
+    gap: 2,
+    marginBottom: space.xl,
+  },
+  mottoLine: {
     fontFamily: font.ui,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-    maxWidth: 320,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  mottoWord: {
+    fontFamily: font.uiStrong,
+    letterSpacing: 1.2,
   },
   card: {
-    borderRadius: radius['2xl'],
+    borderRadius: radius.xl,
     borderWidth: 1,
     padding: space.xl,
-    marginBottom: space.lg,
-  },
-  cardHeader: {
-    marginBottom: space.lg,
+    marginBottom: space.xl,
   },
   cardTitle: {
     fontFamily: font.display,
-    fontSize: 20,
+    fontSize: 22,
+    lineHeight: 28,
     letterSpacing: -0.3,
     marginBottom: 4,
   },
@@ -552,6 +534,7 @@ const styles = StyleSheet.create({
     fontFamily: font.ui,
     fontSize: 13,
     lineHeight: 18,
+    marginBottom: space.lg,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -586,9 +569,6 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 15,
   },
-  spinner: {
-    marginLeft: space.xs,
-  },
   appleButtonContainer: {
     width: '100%',
     height: 50,
@@ -607,21 +587,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
   },
-  dividerText: {
+  microLabel: {
     fontFamily: font.figure,
     fontSize: 10,
-    fontWeight: '700',
     letterSpacing: 1.4,
-  },
-  formGroup: {
-    marginBottom: space.md,
-  },
-  fieldLabel: {
-    fontFamily: font.figure,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: space.xs,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -630,6 +599,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     paddingHorizontal: space.md,
+    marginBottom: space.md,
   },
   inputIcon: {
     marginRight: space.sm,
@@ -638,11 +608,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     fontFamily: font.ui,
-    fontSize: 15,
+    fontSize: 16,
+    ...webNoOutline,
   },
   submitButton: {
     height: 50,
     borderRadius: radius.lg,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -655,76 +627,72 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 15,
   },
-  sentTargetBadge: {
+  sentRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     marginBottom: space.md,
   },
-  sentTargetText: {
+  sentText: {
     flex: 1,
     fontFamily: font.ui,
     fontSize: 13,
   },
-  changeActionText: {
+  // Text links get a full touch target's height: hitSlop does nothing on web.
+  textAction: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingHorizontal: space.xs,
+  },
+  textActionLabel: {
     fontFamily: font.uiStrong,
-    fontSize: 12,
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   codeInputWrapper: {
-    height: 56,
+    height: 60,
     borderRadius: radius.lg,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: space.md,
+    marginBottom: space.md,
   },
   codeInput: {
     width: '100%',
     textAlign: 'center',
     fontFamily: font.figure,
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 26,
     letterSpacing: 10,
+    ...webNoOutline,
   },
   resendRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.xs,
-    marginTop: space.md,
+    flexWrap: 'wrap',
+    marginTop: space.xs,
   },
   resendLabel: {
     fontFamily: font.ui,
     fontSize: 13,
   },
-  resendAction: {
-    fontFamily: font.uiStrong,
-    fontSize: 13,
-    textDecorationLine: 'underline',
-  },
-  trustBadge: {
+  trust: {
     alignItems: 'center',
     paddingHorizontal: space.md,
-    gap: 4,
   },
-  trustTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  trustRule: {
+    width: 32,
+    height: 2,
+    borderRadius: radius.pill,
+    marginBottom: space.md,
   },
-  trustTitle: {
-    fontFamily: font.uiStrong,
-    fontSize: 12,
-  },
-  trustDescription: {
+  trustText: {
     fontFamily: font.ui,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 17,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 340,
   },
 });
