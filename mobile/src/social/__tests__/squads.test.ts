@@ -261,67 +261,38 @@ describe('Training Squads - Supabase Multiplayer integration', () => {
     expect(squad?.recentActivity[0].cheersCount).toBe(1);
   });
 
-  it('enforces 6-member capacity check when joining squad on Supabase', async () => {
+  // Joining is one server call now; these check the app turns each refusal the
+  // database can give into its own sentence. What the database does is proven in
+  // social-rls.test.ts against the real migrations.
+  const joinRefusedWith = (message: string) => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message, code: 'P0001' } });
     mockSupabase.current = {
       auth: {
         getSession: vi.fn().mockResolvedValue({
           data: { session: { user: { id: mockUser.id } } },
         }),
       },
-      from: vi.fn((table: string) => {
-        if (table === 'squads') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            maybeSingle: vi.fn().mockResolvedValue({ data: fakeSquad, error: null }),
-          };
-        }
-        if (table === 'squad_members') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockResolvedValue({ count: 6, error: null }),
-          };
-        }
-        return {
-          select: vi.fn().mockReturnThis(),
-        };
+      rpc,
+      from: vi.fn(() => {
+        throw new Error('joining must not read or write tables directly');
       }),
     };
+    return rpc;
+  };
 
-    await expect(
-      joinSquadByCode({
-        inviteCode: 'APEX26',
-        user: mockUser,
-      }),
-    ).rejects.toThrow(/full capacity/);
+  it('joins through join_squad with the cleaned-up code', async () => {
+    const rpc = joinRefusedWith('squad_full');
+    await expect(joinSquadByCode({ inviteCode: ' apex26 ', user: mockUser })).rejects.toThrow();
+    expect(rpc).toHaveBeenCalledWith('join_squad', { code: 'APEX26' });
   });
 
-  it('throws error when squad code does not exist on Supabase', async () => {
-    mockSupabase.current = {
-      auth: {
-        getSession: vi.fn().mockResolvedValue({
-          data: { session: { user: { id: mockUser.id } } },
-        }),
-      },
-      from: vi.fn((table: string) => {
-        if (table === 'squads') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-          };
-        }
-        return {
-          select: vi.fn().mockReturnThis(),
-        };
-      }),
-    };
+  it('says so when the squad is full', async () => {
+    joinRefusedWith('squad_full');
+    await expect(joinSquadByCode({ inviteCode: 'APEX26', user: mockUser })).rejects.toThrow(/full/);
+  });
 
-    await expect(
-      joinSquadByCode({
-        inviteCode: 'UNKNOWN',
-        user: mockUser,
-      }),
-    ).rejects.toThrow(/was not found/);
+  it('says so when no squad has the code', async () => {
+    joinRefusedWith('squad_not_found');
+    await expect(joinSquadByCode({ inviteCode: 'UNKNOWN', user: mockUser })).rejects.toThrow(/No squad has the code "UNKNOWN"/);
   });
 });
