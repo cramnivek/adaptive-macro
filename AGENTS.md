@@ -4,18 +4,22 @@ Written for an agent arriving with no history: what this is, where things live,
 what will bite you, and what counts as done here. If you read one section, read
 **Before you touch anything**.
 
-Last verified 2026-10-14 against `main` at `2ed42fd`. Commands were run, not
-remembered: 1,150 tests pass (`npm test`) and `npm run typecheck` is clean.
+Last verified 2026-10-20 against `main` at `e219229`. Commands were run, not
+remembered: 1,483 tests pass (`npm test`) and `npm run typecheck` is clean.
+The rest of this file was last read through on 2026-10-14; where it and
+`HANDOFF.md` disagree, the handoff is newer.
 
 ---
 
 ## Before you touch anything
 
-**1. A push to `main` changes a live production database.** Supabase's GitHub
-integration applies every new file under `supabase/migrations/` the moment it
-lands on `main`. There is no staging copy and no review step. Real people's
-workouts are in that database. Treat a migration the way you would treat a
-deployment, because it is one.
+**1. A push to `main` changes the live database and deploys the live app.**
+Supabase's GitHub integration applies every new file under
+`supabase/migrations/` the moment it lands on `main`, and the same push runs
+`.github/workflows/deploy.yml`, which tests and then deploys to Cloud Run.
+There is no staging copy and no review step. Real people's workouts are in that
+database. Treat a merge the way you would treat a deployment, because it is two.
+If the tests fail, the deploy is skipped and the migration still applies.
 
 **2. An applied migration is frozen.** Never edit a file under
 `supabase/migrations/` that has already run — even a comment. Write a new one.
@@ -28,6 +32,21 @@ The applied set as of today:
 20261012140000_feed.sql                  feed_posts view, feed_page RPC
 20261012150000_reports_and_filter.sql    reports, hiding, word filter, blocked list
 20261014120000_word_filter_boundaries.sql short words match whole words only
+20261018120000_training_squads.sql        squads, members, check-ins, cheers  (see below)
+20261018230000_profile_avatars_and_bio.sql avatars, bio, training focus
+20261019120000_squad_access.sql           squads private to members, join_squad
+```
+
+`20261018120000_training_squads.sql` is the rule broken once already: it was
+edited after it had run, so the file does not say what production ran.
+Production's real version is
+`mobile/src/social/__tests__/fixtures/training_squads_as_applied.sql`. Before
+writing a migration, compare against what production actually ran, not the
+files:
+
+```sql
+select version, md5(array_to_string(statements, E'\n'))
+  from supabase_migrations.schema_migrations order by version;
 ```
 
 **3. The security model is subtle and the tests are the specification.**
@@ -168,7 +187,7 @@ key is not used anywhere and must never enter the repo or a bundle.
 
 ## Deploying
 
-Once its one-time setup is done, a push to `main` deploys itself:
+A push to `main` deploys itself — set up and first run on 2026-10-20:
 `.github/workflows/deploy.yml` runs the tests, builds, deploys and verifies,
 from the same push that makes Supabase apply any new migration. Setup and
 details are under "Deploying from GitHub" in `services/gemini-proxy/README.md`.
