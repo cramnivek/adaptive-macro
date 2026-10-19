@@ -134,7 +134,10 @@ request never arrived and co-hosting did not take effect.
 
 `.github/workflows/deploy.yml` tests every pull request, and on every push to
 `main` builds the web app, keeps the live site's code files beside it
-(`tools/keep-live-chunks.mjs`), deploys, and runs the checks above. Supabase
+(`tools/keep-live-chunks.mjs`), deploys, and runs the checks above. Each build
+carries `/code-files.json`, listing its code files and the date each first went
+live; the next deploy keeps every listed file younger than 30 days, so a page
+opened before a deploy can still load what it needs. Supabase
 applies migrations from the same push, so the database and the app that
 matches it go live minutes apart instead of whenever someone next deploys.
 

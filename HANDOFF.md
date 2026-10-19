@@ -80,6 +80,15 @@ may not switch roles. Joining with a second account from the phone is that proof
   `mobile/.env.local` did not and was rebuilt from known values. On Windows,
   delete `node_modules` with `cmd /c rmdir /s /q` (it does not traverse
   junctions) before removing anything else, or pass robocopy `/XJ`.
+- **Automatic deploys were losing the previous build's code files.** The
+  keeper found old files only through the live index.html, and files kept by
+  one deploy are not linked from it, so the docs-only deploy of PR #23 logged
+  "Kept 0 of 8" and dropped the pre-PR-#22 build's files (its entry now 404s).
+  Fixed after this snapshot: every deploy now publishes `/code-files.json`,
+  each file with the date it first went live, and the next deploy keeps every
+  listed file younger than 30 days. The deploy also no longer passes
+  `--allow-unauthenticated`, which only produced "Setting IAM policy failed";
+  public access survives deploys on its own.
 - **Invite codes come from `Math.random`**, six characters from 32, about a
   billion combinations, and nothing limits how often `join_squad` can be
   called. Fine for a group of friends; worth `crypto.getRandomValues` and a rate
