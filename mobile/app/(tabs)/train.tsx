@@ -16,10 +16,10 @@ import {
 } from '../../src/db';
 import type { ActiveSession, Routine } from '../../src/db';
 import { displayWeight, formatDate, weightUnit } from '../../src/format';
-import { thud } from '../../src/platform/haptics';
 import type { UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
 import { PlateSheet } from '../../src/components/PlateSheet';
+import { thud } from '../../src/platform/haptics';
 import { font, radius, space } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
 import { getEventCopy } from '../../src/copy/personality';
@@ -106,64 +106,7 @@ export default function TrainScreen() {
   }
 
   return (
-    <Screen
-      title="Train"
-      tone="loud"
-      action={
-        <View style={styles.unitToggleWrap}>
-          <Pressable
-            onPress={() => {
-              if (workoutUnits !== 'metric') {
-                thud('light');
-                void updateSettings({ workoutUnits: 'metric' });
-              }
-            }}
-            style={[
-              styles.unitPill,
-              workoutUnits === 'metric'
-                ? { backgroundColor: loud.loud, borderColor: loud.loud }
-                : { backgroundColor: loud.panel, borderColor: loud.rule },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Switch workouts to kilograms"
-          >
-            <Text
-              style={[
-                styles.unitPillText,
-                { color: workoutUnits === 'metric' ? loud.onLoud : loud.figureMuted },
-              ]}
-            >
-              KG
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              if (workoutUnits !== 'imperial') {
-                thud('light');
-                void updateSettings({ workoutUnits: 'imperial' });
-              }
-            }}
-            style={[
-              styles.unitPill,
-              workoutUnits === 'imperial'
-                ? { backgroundColor: loud.loud, borderColor: loud.loud }
-                : { backgroundColor: loud.panel, borderColor: loud.rule },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Switch workouts to pounds"
-          >
-            <Text
-              style={[
-                styles.unitPillText,
-                { color: workoutUnits === 'imperial' ? loud.onLoud : loud.figureMuted },
-              ]}
-            >
-              LBS
-            </Text>
-          </Pressable>
-        </View>
-      }
-    >
+    <Screen title="Train" tone="loud">
       {open ? (
         <Card loud variant="featured" title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
           <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
@@ -433,37 +376,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
-  chip: {
-    minHeight: TOUCH_TARGET - 16,
-    justifyContent: 'center',
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  unitToggleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: loud.panel,
-    padding: 3,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: loud.rule,
-  },
-  unitPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    minHeight: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unitPillText: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
-    letterSpacing: 0.5,
   },
 });

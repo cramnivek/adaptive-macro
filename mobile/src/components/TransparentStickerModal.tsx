@@ -181,9 +181,9 @@ export const TransparentStickerModal = ({
                   <Image
                     source={{ uri: sticker.url }}
                     style={{
-                      width: '100%',
+                      height: 260,
+                      maxHeight: '100%',
                       aspectRatio: sticker.width / sticker.height,
-                      maxHeight: 280,
                     }}
                     resizeMode="contain"
                     accessibilityLabel="Transparent sticker preview"
@@ -398,12 +398,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F1014',
     padding: space.md,
     position: 'relative',
+    overflow: 'hidden',
     ...(Platform.OS === 'web'
       ? {
           backgroundImage:
             'linear-gradient(45deg, #181920 25%, transparent 25%), linear-gradient(-45deg, #181920 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #181920 75%), linear-gradient(-45deg, transparent 75%, #181920 75%)',
           backgroundSize: '24px 24px',
-          backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0px',
+          backgroundPosition: '0 0',
         }
       : {}),
   },

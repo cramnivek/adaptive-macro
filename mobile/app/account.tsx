@@ -13,6 +13,7 @@ import { useSocial } from '../src/social/session';
 import { loadHealthSyncConfig } from '../src/health/healthSync';
 import type { HealthSyncConfig } from '../src/health/types';
 import { todayISO } from '@adaptive-macros/engine';
+import { forgetGoogleAccount } from '../src/social/socialSignIn';
 import { font, radius, space, useTheme } from '../src/theme';
 import { thud } from '../src/platform/haptics';
 
@@ -33,6 +34,7 @@ export default function AccountScreen() {
     setBusy(true);
     try {
       await step();
+      await forgetGoogleAccount().catch(() => undefined);
     } catch (error) {
       notify(failure, (error as Error).message);
     } finally {
@@ -134,6 +136,7 @@ export default function AccountScreen() {
           <Button label="Blocked people" variant="subtle" onPress={() => router.push('/blocked')} />
         </Card>
         <Card>
+          {note('Your food and workout logs stay on this device after signing out.')}
           <Button label="Sign out" variant="subtle" disabled={busy} onPress={() => void leave(signOut, 'Could not sign out')} />
           <Button label="Delete account" variant="danger" disabled={busy} onPress={() => void remove()} />
         </Card>

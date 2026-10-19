@@ -3,23 +3,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { GoalDirection, Sex } from '@adaptive-macros/engine';
 import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
-import type { DashboardSpotlight, UnitSystem, UserMission } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
-import { notify } from '../dialog';
 import { Card } from './Card';
-import { Button, Field, Segmented } from './Controls';
+import { Button } from './Controls';
 import { FadeIn } from './FadeIn';
-import { MissionPicker } from './MissionPicker';
+import { OnboardingWizard } from './OnboardingWizard';
 
 const CALIBRATION_DISMISSED_KEY = 'ascend_first_week_calibration_dismissed';
 
 export const FirstWeekCalibrationCard = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, observations, usingSeedEstimate, latest } = useApp();
+  const { settings, observations, usingSeedEstimate, latest } = useApp();
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
@@ -35,20 +32,6 @@ export const FirstWeekCalibrationCard = () => {
     setIsDismissed(true);
     await AsyncStorage.setItem(CALIBRATION_DISMISSED_KEY, 'true');
   };
-
-  // Local state for initial onboarding fields
-  const [onboardingStep, setOnboardingStep] = useState<'mission' | 'baseline'>('mission');
-  const [selectedMission, setSelectedMission] = useState<UserMission>(
-    settings.userMission ?? 'hybrid',
-  );
-  const [selectedSpotlight, setSelectedSpotlight] = useState<DashboardSpotlight>(
-    settings.dashboardSpotlight ?? 'balanced',
-  );
-  const [units, setUnits] = useState<UnitSystem>(settings.units);
-  const [sex, setSex] = useState<Sex>(settings.profile.sex);
-  const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
-  const [heightStr, setHeightStr] = useState('');
-  const [weightStr, setWeightStr] = useState('');
 
   // Calibration days logged in the last 14 days
   const calibratedDays = useMemo(() => {
@@ -70,215 +53,7 @@ export const FirstWeekCalibrationCard = () => {
 
   // State 1: Brand new user has not completed initial onboarding
   if (!settings.onboarded) {
-    const handleSaveProfile = async () => {
-      const heightNum = Number.parseFloat(heightStr);
-      const weightNum = Number.parseFloat(weightStr);
-      if (!Number.isFinite(heightNum) || heightNum <= 0 || !Number.isFinite(weightNum) || weightNum <= 0) {
-        notify('Baseline required', 'Please enter your height and weight to establish your starting baseline.');
-        return;
-      }
-      thud('heavy');
-      const weightKg = units === 'imperial' ? weightNum / 2.20462 : weightNum;
-      const heightCm = units === 'imperial' ? heightNum * 2.54 : heightNum;
-
-      await updateSettings({
-        onboarded: true,
-        userMission: selectedMission,
-        dashboardSpotlight: selectedSpotlight,
-        missionOnboardingDismissed: true,
-        featureOnboardingDismissed: true,
-        units,
-        workoutUnits: units,
-        profile: {
-          ...settings.profile,
-          sex,
-          heightCm: Math.round(heightCm),
-        },
-        goal: {
-          direction: goalDir,
-          rateKgPerWeek: goalDir === 'maintain' ? 0 : 0.5,
-        },
-        goalWeightKg: goalDir === 'maintain' ? weightKg : null,
-      });
-    };
-
-    if (onboardingStep === 'mission') {
-      return (
-        <FadeIn>
-          <Card variant="featured" style={styles.card}>
-            <View style={styles.badgeRowBetween}>
-              <View style={styles.badgeLeft}>
-                <Ionicons name="sparkles" size={14} color={colors.accent} />
-                <Text style={[styles.badgeText, { color: colors.accent }]}>
-                  STEP 1 OF 2 · WHAT IS YOUR MISSION?
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => {
-                  thud('light');
-                  setOnboardingStep('baseline');
-                }}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Skip to baseline metrics"
-              >
-                <Text style={[styles.skipLink, { color: colors.textMuted }]}>
-                  SKIP TO STATS →
-                </Text>
-              </Pressable>
-            </View>
-
-            <Text style={[styles.title, { color: colors.text }]}>
-              Choose your primary training mission
-            </Text>
-            <Text style={[styles.desc, { color: colors.textMuted }]}>
-              Ascend personalizes your daily dashboard spotlight and coaching advice to match your mission.
-            </Text>
-
-            <MissionPicker
-              selectedMission={selectedMission}
-              selectedSpotlight={selectedSpotlight}
-              onChangeMission={setSelectedMission}
-              onChangeSpotlight={setSelectedSpotlight}
-            />
-
-            <View style={{ marginTop: space.sm }}>
-              <Button
-                label="NEXT: SET BASELINE STATS →"
-                onPress={() => {
-                  thud('heavy');
-                  setOnboardingStep('baseline');
-                }}
-              />
-            </View>
-          </Card>
-        </FadeIn>
-      );
-    }
-
-    return (
-      <FadeIn>
-        <Card variant="featured" style={styles.card}>
-          <View style={styles.badgeRowBetween}>
-            <View style={styles.badgeLeft}>
-              <Ionicons name="speedometer-outline" size={14} color={colors.accent} />
-              <Text style={[styles.badgeText, { color: colors.accent }]}>
-                STEP 2 OF 2 · DAY 1 BASELINE
-              </Text>
-            </View>
-            <Pressable
-              onPress={() => {
-                thud('light');
-                setOnboardingStep('mission');
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Back to mission focus"
-            >
-              <Text style={[styles.skipLink, { color: colors.accent }]}>
-                ← EDIT MISSION
-              </Text>
-            </Pressable>
-          </View>
-
-          <Text style={[styles.title, { color: colors.text }]}>
-            Set your Day 1 baseline
-          </Text>
-          <Text style={[styles.desc, { color: colors.textMuted }]}>
-            Your answers establish your starting target. Over your first 7 days, our adaptive model learns your actual metabolic rate from your logged meals and weight.
-          </Text>
-
-          <View style={styles.form}>
-            <Segmented<UnitSystem>
-              label="UNITS"
-              value={units}
-              onChange={(u) => {
-                thud('light');
-                const prev = units;
-                setUnits(u);
-                if (heightStr.trim()) {
-                  const h = Number.parseFloat(heightStr);
-                  if (Number.isFinite(h) && h > 0) {
-                    if (u === 'imperial' && prev === 'metric') {
-                      setHeightStr(String(Math.round(h / 2.54)));
-                    } else if (u === 'metric' && prev === 'imperial') {
-                      setHeightStr(String(Math.round(h * 2.54)));
-                    }
-                  }
-                }
-                if (weightStr.trim()) {
-                  const w = Number.parseFloat(weightStr);
-                  if (Number.isFinite(w) && w > 0) {
-                    if (u === 'imperial' && prev === 'metric') {
-                      setWeightStr((w * 2.20462).toFixed(1));
-                    } else if (u === 'metric' && prev === 'imperial') {
-                      setWeightStr((w / 2.20462).toFixed(1));
-                    }
-                  }
-                }
-              }}
-              options={[
-                { value: 'metric', label: 'Metric (kg · cm)' },
-                { value: 'imperial', label: 'Imperial (lb · in)' },
-              ]}
-            />
-
-            <Segmented<Sex>
-              label="BIOLOGICAL SEX"
-              value={sex}
-              onChange={(s) => {
-                thud('light');
-                setSex(s);
-              }}
-              options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
-              ]}
-            />
-
-            <Segmented<GoalDirection>
-              label="PRIMARY GOAL"
-              value={goalDir}
-              onChange={(g) => {
-                thud('light');
-                setGoalDir(g);
-              }}
-              options={[
-                { value: 'lose', label: 'Fat Loss' },
-                { value: 'maintain', label: 'Maintain' },
-                { value: 'gain', label: 'Muscle Gain' },
-              ]}
-            />
-
-            <View style={styles.twoCol}>
-              <View style={styles.col}>
-                <Field
-                  label={`HEIGHT (${units === 'imperial' ? 'IN' : 'CM'})`}
-                  value={heightStr}
-                  onChangeText={setHeightStr}
-                  keyboardType="numeric"
-                  placeholder={units === 'imperial' ? 'e.g. 68' : 'e.g. 175'}
-                />
-              </View>
-              <View style={styles.col}>
-                <Field
-                  label={`WEIGHT (${units === 'imperial' ? 'LB' : 'KG'})`}
-                  value={weightStr}
-                  onChangeText={setWeightStr}
-                  keyboardType="numeric"
-                  placeholder={units === 'imperial' ? 'e.g. 155' : 'e.g. 70'}
-                />
-              </View>
-            </View>
-
-            <Button
-              label="START ASCEND JOURNEY 🚀"
-              onPress={handleSaveProfile}
-            />
-          </View>
-        </Card>
-      </FadeIn>
-    );
+    return <OnboardingWizard />;
   }
 
   // State 2: Onboarded, but still calibrating in the first week

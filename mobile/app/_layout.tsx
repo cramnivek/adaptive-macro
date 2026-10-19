@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Toaster } from '../src/components/Toaster';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
+import { AuthGate } from '../src/components/AuthGate';
 import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
@@ -62,7 +63,8 @@ export default function RootLayout() {
         <SocialProvider>
           {/* Inside AppProvider, because it reads the load error from the store. */}
           <StorageGate>
-            <Stack
+            <AuthGate>
+              <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: colors.background },
@@ -222,21 +224,25 @@ export default function RootLayout() {
               <Stack.Screen
                 name="sign-in"
                 options={{
-                  presentation: 'modal',
-                  headerShown: true,
-                  title: 'Sign in',
-                  headerStyle: { backgroundColor: colors.surface },
-                  headerTintColor: colors.text,
+                  headerShown: false,
+                  gestureEnabled: false,
                 }}
               />
               <Stack.Screen
                 name="profile-setup"
                 options={{
-                  presentation: 'modal',
                   headerShown: true,
                   title: 'Your profile',
+                  gestureEnabled: false,
                   headerStyle: { backgroundColor: colors.surface },
                   headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="onboard"
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
                 }}
               />
               <Stack.Screen
@@ -309,7 +315,8 @@ export default function RootLayout() {
                   headerTintColor: colors.text,
                 }}
               />
-            </Stack>
+              </Stack>
+            </AuthGate>
           </StorageGate>
         </SocialProvider>
       </AppProvider>

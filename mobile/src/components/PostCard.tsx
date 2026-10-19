@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -256,10 +257,6 @@ export const PostCard = ({
     if (!displayCardUrl) void generateCard();
   };
 
-  const handleShareWorkout = async () => {
-    handleOpenModal();
-  };
-
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Header: Author Avatar & Byline */}
@@ -506,8 +503,10 @@ export const PostCard = ({
                   }}
                 />
                 <View style={styles.expandPill}>
-                  <Ionicons name="expand-outline" size={13} color="#ffffff" />
-                  <Text style={styles.expandPillText}>Tap to open full card & share</Text>
+                  <Ionicons name="expand-outline" size={12} color="#ffffff" />
+                  <Text style={styles.expandPillText} numberOfLines={1}>
+                    Tap to expand & share
+                  </Text>
                 </View>
               </View>
             </Tappable>
@@ -564,51 +563,42 @@ export const PostCard = ({
             }}
             accessibilityRole="button"
             accessibilityLabel="Fist bump cheer"
-            hitSlop={8}
+            accessibilityState={{ selected: cheered }}
             style={[styles.actionBtn, cheered && styles.actionBtnActive]}
           >
-            <Text style={styles.emojiIcon}>{cheered ? '🔥' : '👊'}</Text>
+            <Ionicons
+              name={cheered ? 'flame' : 'flame-outline'}
+              size={20}
+              color={cheered ? colors.accent : colors.textMuted}
+            />
             <Text style={[styles.actionText, { color: cheered ? colors.accent : colors.textMuted }]}>
               {cheered ? 'Fired up!' : 'Cheer'}
             </Text>
           </Tappable>
+        </View>
 
-          {/* Copy Workout Quick Action */}
+        {/* Utilities are icon-only so all three fit beside the reactions on a
+            narrow card. Each keeps a full 44pt target and a spoken label. */}
+        <View style={styles.tools}>
           {hasExercises && (
             <Tappable
               onPress={() => setCopyOpen(true)}
               accessibilityRole="button"
               accessibilityLabel="Copy workout"
-              hitSlop={8}
-              style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+              style={styles.toolBtn}
             >
-              <Ionicons name="copy-outline" size={15} color={colors.textMuted} />
-              <Text style={[styles.actionText, { color: colors.text }]}>Copy</Text>
+              <Ionicons name="copy-outline" size={20} color={colors.textMuted} />
             </Tappable>
           )}
-
-          {/* Story Card Quick Button */}
           <Tappable
             onPress={handleOpenModal}
             accessibilityRole="button"
-            accessibilityLabel="View story card"
-            hitSlop={8}
-            style={[styles.actionBtn, { backgroundColor: colors.surfaceRaised }]}
+            accessibilityLabel="Share story card"
+            style={styles.toolBtn}
           >
-            <Ionicons name="image-outline" size={15} color={colors.accent} />
-            <Text style={[styles.actionText, { color: colors.text }]}>Story Card</Text>
+            <Ionicons name="share-outline" size={20} color={colors.accent} />
           </Tappable>
         </View>
-
-        <Tappable
-          onPress={() => void handleShareWorkout()}
-          accessibilityRole="button"
-          accessibilityLabel="Share workout options"
-          hitSlop={8}
-          style={styles.shareBtn}
-        >
-          <Ionicons name="share-outline" size={19} color={colors.textMuted} />
-        </Tappable>
       </View>
 
       {onDelete && (
@@ -639,7 +629,12 @@ export const PostCard = ({
               </Tappable>
             </View>
 
-            {/* High-Res Preview */}
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* High-Res Preview */}
             <View style={styles.modalPreview}>
               {displayCardUrl ? (
                 <Image
@@ -788,9 +783,10 @@ export const PostCard = ({
                 </Tappable>
               )}
             </View>
-          </View>
+          </ScrollView>
         </View>
-      </Modal>
+      </View>
+    </Modal>
 
       <TransparentStickerModal
         visible={stickerModalOpen}
@@ -995,7 +991,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardPreviewFrame: {
-    height: 340,
+    width: '100%',
+    maxWidth: 240,
     aspectRatio: 9 / 16,
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -1010,21 +1007,22 @@ const styles = StyleSheet.create({
   },
   expandPill: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 8,
     alignSelf: 'center',
+    maxWidth: '88%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   expandPillText: {
     fontFamily: font.ui,
-    fontSize: 11,
+    fontSize: 10,
     color: '#ffffff',
   },
   cardLoadingFrame: {
@@ -1049,15 +1047,25 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   interactions: {
+    // Reactions take the space the tools leave. Wrapping is only a fallback for
+    // very narrow cards or large text; without it a pill ran past the border.
+    flex: 1,
+    flexShrink: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  tools: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    flexShrink: 0,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 6,
+    gap: 6,
+    minHeight: TOUCH_TARGET,
     paddingHorizontal: 10,
     borderRadius: radius.pill,
   },
@@ -1068,10 +1076,7 @@ const styles = StyleSheet.create({
     fontFamily: font.figure,
     fontSize: 13,
   },
-  emojiIcon: {
-    fontSize: 15,
-  },
-  shareBtn: {
+  toolBtn: {
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
     alignItems: 'center',
@@ -1092,18 +1097,26 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     maxWidth: 420,
-    maxHeight: '94%',
+    maxHeight: '92%',
     borderRadius: radius['2xl'],
     borderWidth: 1,
-    padding: space.lg,
-    display: 'flex',
-    flexDirection: 'column',
+    paddingTop: space.md,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
+    overflow: 'hidden',
+  },
+  modalScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: space.md,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
   modalHeaderTitle: {
     flex: 1,
@@ -1128,7 +1141,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalPreview: {
-    height: 380,
+    height: 320,
+    maxHeight: 340,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: space.xs,
@@ -1137,6 +1151,7 @@ const styles = StyleSheet.create({
     height: '100%',
     aspectRatio: 9 / 16,
     borderRadius: radius.md,
+    overflow: 'hidden',
   },
   modalLoading: {
     alignItems: 'center',

@@ -83,7 +83,7 @@ describe('Personality System v2 - getEventCopy', () => {
 
     // Empty session title
     expect(getEventCopy('workout.empty_session_title', { personality: 'classic' })).toContain('Add an exercise');
-    expect(getEventCopy('workout.empty_session_title', { personality: 'gymrat' })).toMatch(/COOK|EXERCISE/);
+    expect(getEventCopy('workout.empty_session_title', { personality: 'gymrat' })).toMatch(/COOK|WHAT ARE WE LIFTING|EXERCISE/);
 
     // Milestone dismiss
     expect(getEventCopy('milestone.dismiss_btn', { personality: 'classic' })).toBe('OK');

@@ -32,6 +32,7 @@ import React, {
   useState,
 } from 'react';
 import * as db from '../db';
+import { pushBaselineToCloud } from '../social/baselineSync';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
 
@@ -195,6 +196,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       setSettings((current) => {
         const next = withDefaults({ ...current, ...patch });
         void db.writeSetting(SETTINGS_KEY, next);
+        if (next.onboarded) {
+          void pushBaselineToCloud(next);
+        }
         return next;
       });
     },
