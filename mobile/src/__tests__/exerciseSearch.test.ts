@@ -267,16 +267,26 @@ describe('exerciseSearch - fast search engine', () => {
     // Warm up JIT
     searchExercisesFast({ query: 'barbell', catalogue: largeCatalogue, known });
 
-    const t0 = performance.now();
-    const results = searchExercisesFast({
-      query: 'barbell press',
-      catalogue: largeCatalogue,
-      known,
-    });
-    const t1 = performance.now();
+    // The fastest of several runs, not one run. A single timing measures
+    // whatever else the machine was doing at that moment: run alone this
+    // passed every time, and under the full suite it failed. That matters
+    // more than it looks, because a failed test skips the deploy while
+    // Supabase still applies the migration. The fastest run is what the code
+    // costs, and a search that had really slowed down would be slow every time.
+    let fastest = Infinity;
+    let results: ReturnType<typeof searchExercisesFast> = [];
+    for (let run = 0; run < 10; run++) {
+      const t0 = performance.now();
+      results = searchExercisesFast({
+        query: 'barbell press',
+        catalogue: largeCatalogue,
+        known,
+      });
+      fastest = Math.min(fastest, performance.now() - t0);
+    }
 
     expect(results.length).toBeGreaterThan(0);
-    expect(t1 - t0).toBeLessThan(25); // sub-5ms in JS engines, allow 25ms for CI/test runner jitter
+    expect(fastest).toBeLessThan(25); // sub-5ms in JS engines
   });
 });
 

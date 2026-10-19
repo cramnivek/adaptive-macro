@@ -29,6 +29,12 @@ database.
 
 ## Do these, in this order
 
+> **Steps 1 and 2 were done on 2026-10-20**, with one change from what was
+> written: the provider trusts GitHub's numeric repository and owner IDs
+> rather than the repository's name (README updated to match). A flaky timing
+> test that would have skipped the first automatic deploy was fixed in the
+> same commit.
+
 **1. The one-time Google setup for automatic deploys.** PowerShell commands
 under "Deploying from GitHub" in
 [services/gemini-proxy/README.md](services/gemini-proxy/README.md). They end by

@@ -148,8 +148,13 @@ deploy job is skipped, not failed, until the setup below is done.
 ```powershell
 $PROJECT = gcloud config get-value project
 $NUMBER  = gcloud projects describe $PROJECT --format="value(projectNumber)"
-$REPO    = "cramnivek/adaptive-macro"
 $SA      = "github-deploy@$PROJECT.iam.gserviceaccount.com"
+# GitHub's numbers for the repository and its owner, from
+# `gh api repos/cramnivek/adaptive-macro --jq '.id, .owner.id'`. Trusted
+# instead of the name: a name can be registered again by someone else if the
+# account is ever renamed, and a number cannot.
+$REPO_ID  = "1374033579"
+$OWNER_ID = "54169123"
 
 gcloud services enable iamcredentials.googleapis.com sts.googleapis.com `
   cloudbuild.googleapis.com run.googleapis.com artifactregistry.googleapis.com
@@ -174,16 +179,19 @@ gcloud iam workload-identity-pools create github --location global --display-nam
 gcloud iam workload-identity-pools providers create-oidc adaptive-macro `
   --location global --workload-identity-pool github `
   --issuer-uri "https://token.actions.githubusercontent.com" `
-  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" `
-  --attribute-condition "assertion.repository == '$REPO' && assertion.ref == 'refs/heads/main'"
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.ref=assertion.ref" `
+  --attribute-condition "assertion.repository_id == '$REPO_ID' && assertion.repository_owner_id == '$OWNER_ID' && assertion.ref == 'refs/heads/main'"
 gcloud iam service-accounts add-iam-policy-binding $SA --role roles/iam.workloadIdentityUser `
-  --member "principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+  --member "principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository_id/$REPO_ID"
 
 # The three values GitHub needs:
 "GCP_PROJECT_ID                 = $PROJECT"
 "GCP_WORKLOAD_IDENTITY_PROVIDER = projects/$NUMBER/locations/global/workloadIdentityPools/github/providers/adaptive-macro"
 "GCP_DEPLOY_SERVICE_ACCOUNT     = $SA"
 ```
+
+Done on 2026-10-20, as above: the pool, the provider and the account exist,
+and the three variables are set.
 
 Then in GitHub: the repository's **Settings → Secrets and variables → Actions →
 Variables**, add those three as repository *variables* (not secrets — none of
