@@ -1,0 +1,113 @@
+# Tests every pull request, and deploys main to Cloud Run.
+#
+# Why this exists: Supabase applies a new migration the moment it lands on main,
+# and until now the app that matches it shipped whenever someone remembered to
+# deploy from their own machine. A migration that changes what the client may
+# do (squads, 2026-10-19) breaks the live app for exactly that gap. Deploying
+# from the same push keeps the two minutes apart instead of hours.
+#
+# It signs in to Google with Workload Identity Federation, so no key is stored
+# in GitHub. The deploy job is skipped, not failed, until the three repository
+# variables below exist; setting them is the one-time step in
+# services/gemini-proxy/README.md ("Deploying from GitHub").
+#
+#   GCP_PROJECT_ID                  e.g. my-project-123
+#   GCP_WORKLOAD_IDENTITY_PROVIDER  projects/<number>/locations/global/workloadIdentityPools/github/providers/adaptive-macro
+#   GCP_DEPLOY_SERVICE_ACCOUNT      github-deploy@<project>.iam.gserviceaccount.com
+
+name: Test and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+    runs-on: ubuntu-latest
+    # One deploy at a time, and never cancel one halfway: two merges in quick
+    # succession deploy in order.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SERVICE: gemini-proxy
+      REGION: asia-southeast1
+      URL: https://gemini-proxy-297164004726.asia-southeast1.run.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # The app's public settings (Supabase URL and publishable key, proxy
+      # token) fall back to the values compiled into the source, which are the
+      # ones the live bundle carries — checked against it on 2026-10-19. No
+      # .env.local exists here, and none is needed.
+      - name: Build the web app
+        working-directory: mobile
+        run: npx expo export --platform web
+        env:
+          CI: '1'
+
+      # It must be web/ and not dist/: .gcloudignore leaves out dist/.
+      - name: Stage the build, keeping the code files the live site serves
+        run: |
+          rm -rf services/gemini-proxy/web
+          cp -r mobile/dist services/gemini-proxy/web
+          node tools/keep-live-chunks.mjs "$URL" services/gemini-proxy/web
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # No --set-env-vars: it replaces the whole set, and the keys already on
+      # the service survive a deploy untouched.
+      - name: Deploy
+        run: |
+          gcloud run deploy "$SERVICE" --source services/gemini-proxy \
+            --project "${{ vars.GCP_PROJECT_ID }}" --region "$REGION" \
+            --allow-unauthenticated --timeout 120 --quiet
+
+      # The checks from the README. Status alone proves nothing here: every
+      # unknown path falls back to index.html with a 200, so a broken image
+      # still answers /_health — with HTML.
+      - name: Verify the deploy
+        run: |
+          set -e
+          fail() { echo "::error::$1"; exit 1; }
+          health=$(curl -fsS "$URL/_health")
+          [ "$health" = "ok" ] || fail "/_health answered '$health', not 'ok'"
+          built=$(grep -oE 'entry-[a-f0-9]+\.js' services/gemini-proxy/web/index.html | head -1)
+          served=$(curl -fsS "$URL/" | grep -oE 'entry-[a-f0-9]+\.js' | head -1)
+          [ "$built" = "$served" ] || fail "serving $served, but this run built $built"
+          code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+          [ "$(code "$URL/api/nonsense")" = 404 ] || fail "/api/nonsense is not 404"
+          [ "$(code -X POST "$URL/api/gemini" -H 'Content-Type: application/json' -d '{}')" = 401 ] \
+            || fail "a token-less POST /api/gemini is not 401"
+          echo "Live: $served"

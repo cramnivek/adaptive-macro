@@ -130,6 +130,80 @@ await fetch('/api/gemini', { method: 'POST', headers: { 'Content-Type': 'applica
 `401` proves the page reached the API same-origin. A `TypeError` means the
 request never arrived and co-hosting did not take effect.
 
+## Deploying from GitHub
+
+`.github/workflows/deploy.yml` tests every pull request, and on every push to
+`main` builds the web app, keeps the live site's code files beside it
+(`tools/keep-live-chunks.mjs`), deploys, and runs the checks above. Supabase
+applies migrations from the same push, so the database and the app that
+matches it go live minutes apart instead of whenever someone next deploys.
+
+It signs in to Google with Workload Identity Federation: GitHub proves which
+repository and branch a run belongs to, and Google lets only `main` of this
+repository act as one narrow deploy account. No key is stored anywhere. The
+deploy job is skipped, not failed, until the setup below is done.
+
+### One-time setup, from PowerShell
+
+```powershell
+$PROJECT = gcloud config get-value project
+$NUMBER  = gcloud projects describe $PROJECT --format="value(projectNumber)"
+$REPO    = "cramnivek/adaptive-macro"
+$SA      = "github-deploy@$PROJECT.iam.gserviceaccount.com"
+
+gcloud services enable iamcredentials.googleapis.com sts.googleapis.com `
+  cloudbuild.googleapis.com run.googleapis.com artifactregistry.googleapis.com
+
+# The account GitHub acts as. It may deploy from source, and nothing else.
+gcloud iam service-accounts create github-deploy --display-name "GitHub deploy"
+gcloud projects add-iam-policy-binding $PROJECT --member "serviceAccount:$SA" `
+  --role roles/run.sourceDeveloper --condition None
+gcloud projects add-iam-policy-binding $PROJECT --member "serviceAccount:$SA" `
+  --role roles/serviceusage.serviceUsageConsumer --condition None
+
+# It must be able to run the service, and the build, as the account they
+# already run as. Granted on that one account, not on every account in the project.
+$RUNTIME = gcloud run services describe gemini-proxy --region asia-southeast1 `
+  --format="value(spec.template.spec.serviceAccountName)"
+if (-not $RUNTIME) { $RUNTIME = "$NUMBER-compute@developer.gserviceaccount.com" }
+gcloud iam service-accounts add-iam-policy-binding $RUNTIME `
+  --member "serviceAccount:$SA" --role roles/iam.serviceAccountUser
+
+# Trust GitHub's sign-in, for pushes to main of this repository only.
+gcloud iam workload-identity-pools create github --location global --display-name "GitHub"
+gcloud iam workload-identity-pools providers create-oidc adaptive-macro `
+  --location global --workload-identity-pool github `
+  --issuer-uri "https://token.actions.githubusercontent.com" `
+  --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" `
+  --attribute-condition "assertion.repository == '$REPO' && assertion.ref == 'refs/heads/main'"
+gcloud iam service-accounts add-iam-policy-binding $SA --role roles/iam.workloadIdentityUser `
+  --member "principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+
+# The three values GitHub needs:
+"GCP_PROJECT_ID                 = $PROJECT"
+"GCP_WORKLOAD_IDENTITY_PROVIDER = projects/$NUMBER/locations/global/workloadIdentityPools/github/providers/adaptive-macro"
+"GCP_DEPLOY_SERVICE_ACCOUNT     = $SA"
+```
+
+Then in GitHub: the repository's **Settings → Secrets and variables → Actions →
+Variables**, add those three as repository *variables* (not secrets — none of
+them is a credential). The next push to `main` deploys; **Actions → Test and
+deploy → Run workflow** deploys `main` without one.
+
+If `roles/run.sourceDeveloper` is refused as an unknown role, the project
+predates it: grant `roles/run.admin`, `roles/cloudbuild.builds.editor`,
+`roles/artifactregistry.writer` and `roles/storage.admin` to `$SA` instead.
+
+If the build step fails with a permission error naming the compute account,
+the build account is missing `roles/run.builder`. Manual deploys from this
+project already build, so it should be there; Google lists it as required for
+source deploys:
+
+```powershell
+gcloud projects add-iam-policy-binding $PROJECT --role roles/run.builder `
+  --member "serviceAccount:$NUMBER-compute@developer.gserviceaccount.com" --condition None
+```
+
 ## Things a future reader will otherwise learn the hard way
 
 - The model allowlist in `geminiProxy.ts` (`ALLOWED_MODELS`) must stay in
