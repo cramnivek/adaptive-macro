@@ -168,6 +168,12 @@ key is not used anywhere and must never enter the repo or a bundle.
 
 ## Deploying
 
+Once its one-time setup is done, a push to `main` deploys itself:
+`.github/workflows/deploy.yml` runs the tests, builds, deploys and verifies,
+from the same push that makes Supabase apply any new migration. Setup and
+details are under "Deploying from GitHub" in `services/gemini-proxy/README.md`.
+The manual steps below still work and are the fallback.
+
 One Cloud Run service serves both the API and the exported web app from a single
 origin, so there is no CORS. The web build is **not committed** — stage it first
 or you deploy whatever `web/` happened to hold.
@@ -256,8 +262,11 @@ Look at `git log` before writing one.
 
 `docs/superpowers/specs/` holds design documents, `docs/superpowers/plans/` the
 implementation plans written from them. The two most recent describe the social
-feature that shipped on 2026-10-14. `HANDOFF.md` is a snapshot from 2026-10-01
-and is out of date; this file supersedes it.
+feature that shipped on 2026-10-14. `HANDOFF.md` is the state of play as of
+2026-10-19 — what is unmerged, what to do next and in what order — and goes
+stale the moment its branch merges; this file is the lasting reference. The
+2026-10-01 snapshot it replaced is `docs/handoff-2026-10-01.md`, which older
+specs and plans mean when they say `HANDOFF.md`.
 
 Open threads, in the owner's priority order: a Hevy-style share-card composer
 (transparent overlay, drag, resize, choose which blocks show); subject

@@ -185,11 +185,9 @@ describe('First-week calibration and returning user helpers', () => {
 
     for (const mission of MISSION_LIST) {
       expect(mission.name.length).toBeGreaterThan(0);
-      expect(mission.emoji.length).toBeGreaterThan(0);
-      expect(mission.badge.length).toBeGreaterThan(0);
+      expect(mission.icon.length).toBeGreaterThan(0);
       expect(mission.tagline.length).toBeGreaterThan(0);
       expect(mission.description.length).toBeGreaterThan(0);
-      expect(mission.accentColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
     }
 
     expect(SPOTLIGHT_OPTIONS).toHaveLength(3);
@@ -198,16 +196,17 @@ describe('First-week calibration and returning user helpers', () => {
 
     for (const spot of SPOTLIGHT_OPTIONS) {
       expect(spot.label.length).toBeGreaterThan(0);
-      expect(spot.emoji.length).toBeGreaterThan(0);
       expect(spot.description.length).toBeGreaterThan(0);
     }
   });
 
-  it('returns motivating mission praise copy for each user mission', () => {
-    expect(getMissionPraise('hybrid')).toContain('Complete Hybrid Athlete');
-    expect(getMissionPraise('hypertrophy')).toContain('Iron Focus');
-    expect(getMissionPraise('fat_loss')).toContain('Deficit Precision');
-    expect(getMissionPraise('nutrition')).toContain('Nutrition Mastery');
+  it('confirms each mission in its own plain line, with no emoji', () => {
+    const lines = MISSION_LIST.map((m) => getMissionPraise(m.id));
+    expect(new Set(lines).size).toBe(MISSION_LIST.length);
+    for (const [i, line] of lines.entries()) {
+      expect(line.startsWith(MISSION_LIST[i].name)).toBe(true);
+      expect(line).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
   });
 
   it('merges stored partial mission and spotlight settings with defaults cleanly', () => {

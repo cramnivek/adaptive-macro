@@ -1,5 +1,6 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { as, freshDatabase, USER_A, USER_B, USER_C, USER_D } from './postgres';
 
 const profile = (db: PGlite, user: string, username: string, isPrivate = true) =>
@@ -591,6 +592,29 @@ describe('training squads RLS and multiplayer constraints', () => {
     return squadId;
   };
 
+  const join = async (user: string, code: string) =>
+    (await as<{ join_squad: string }>(db, user, `select join_squad($1)`, [code]))[0].join_squad;
+
+  const membersSeenBy = async (user: string, squadId: string) =>
+    (await as<{ user_id: string }>(db, user, `select user_id from squad_members where squad_id = $1`, [squadId]))
+      .map((m) => m.user_id)
+      .sort();
+
+  const squadOf = async (user: string) =>
+    (await db.query<{ squad_id: string }>(`select squad_id from squad_members where user_id = $1`, [user])).rows[0]
+      ?.squad_id ?? null;
+
+  const checkin = async (user: string, squadId: string, workout = 'w1') =>
+    (
+      await as<{ id: string }>(
+        db,
+        user,
+        `insert into squad_checkins (squad_id, user_id, workout_id, performed_on)
+         values ($1, $2, $3, '2026-10-18') returning id`,
+        [squadId, user, workout],
+      )
+    )[0].id;
+
   it('owner can create a squad and is recorded as owner', async () => {
     const squadId = await createSquadSql(USER_A, 'Apex Club', 'APEX22');
     const squads = await as<{ name: string; created_by: string }>(db, USER_A, `select name, created_by from squads where id = $1`, [squadId]);
@@ -605,42 +629,67 @@ describe('training squads RLS and multiplayer constraints', () => {
     ).rejects.toThrow(/row-level security/);
   });
 
-  it('users can join a squad using its id', async () => {
+  it('is invisible to people outside it, invite code included', async () => {
     const squadId = await createSquadSql(USER_A, 'Apex Club', 'APEX23');
-    await as(db, USER_B, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'member')`, [squadId, USER_B]);
-
-    const members = await as<{ user_id: string }>(db, USER_B, `select user_id from squad_members where squad_id = $1`, [squadId]);
-    expect(members.map((m) => m.user_id)).toContain(USER_B);
+    expect(await as(db, USER_B, `select invite_code from squads`)).toHaveLength(0);
+    expect(await membersSeenBy(USER_B, squadId)).toEqual([]);
+    expect(await as(db, null, `select id from squads`)).toHaveLength(0);
   });
 
-  it('cannot join a squad in someone else’s name', async () => {
+  it('cannot be joined by its id alone', async () => {
     const squadId = await createSquadSql(USER_A, 'Apex Club', 'APEX24');
     await expect(
-      as(db, USER_B, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'member')`, [squadId, USER_C]),
+      as(db, USER_B, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'member')`, [squadId, USER_B]),
+    ).rejects.toThrow(/row-level security/);
+    expect(await squadOf(USER_B)).toBeNull();
+  });
+
+  it('cannot be taken over by inserting yourself as its owner', async () => {
+    const squadId = await createSquadSql(USER_A, 'Apex Club', 'APEX25');
+    await expect(
+      as(db, USER_B, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'owner')`, [squadId, USER_B]),
     ).rejects.toThrow(/row-level security/);
   });
 
-  it('enforces single squad per user constraint', async () => {
-    const squad1 = await createSquadSql(USER_A, 'Squad 1', 'SQ2222');
-    const squad2 = await createSquadSql(USER_B, 'Squad 2', 'SQ3333');
-
-    // Carol joins squad 1
-    await as(db, USER_C, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'member')`, [squad1, USER_C]);
-
-    // Carol attempts to join squad 2 without leaving squad 1
-    await expect(
-      as(db, USER_C, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'member')`, [squad2, USER_C]),
-    ).rejects.toThrow(/unique constraint|duplicate key/i);
+  it('is joined with its invite code, in any case and with stray spaces', async () => {
+    const squadId = await createSquadSql(USER_A, 'Apex Club', 'APEX26');
+    expect(await join(USER_B, ' apex26 ')).toBe(squadId);
+    expect(await membersSeenBy(USER_B, squadId)).toEqual([USER_A, USER_B].sort());
+    const roles = await db.query<{ role: string }>(`select role from squad_members where user_id = $1`, [USER_B]);
+    expect(roles.rows[0].role).toBe('member');
   });
 
-  it('enforces 6-member squad capacity limit via database trigger', async () => {
-    const squadId = await createSquadSql(USER_A, 'Full Squad', 'FULL22');
-    // Add members B, C, D (total now 4)
-    await as(db, USER_B, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, USER_B]);
-    await as(db, USER_C, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, USER_C]);
-    await as(db, USER_D, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, USER_D]);
+  it('says plainly when a code matches no squad', async () => {
+    await createSquadSql(USER_A, 'Apex Club', 'APEX27');
+    await expect(join(USER_B, 'NOPE22')).rejects.toThrow(/squad_not_found/);
+  });
 
-    // Create 3 extra auth users and profiles in db
+  it('cannot be joined by someone signed out', async () => {
+    await createSquadSql(USER_A, 'Apex Club', 'APEX28');
+    await expect(as(db, null, `select join_squad('APEX28')`)).rejects.toThrow(/permission denied/);
+  });
+
+  it('moves you from your old squad when you join a new one, and joining twice is harmless', async () => {
+    const squad1 = await createSquadSql(USER_A, 'Squad 1', 'SQ2222');
+    const squad2 = await createSquadSql(USER_B, 'Squad 2', 'SQ3333');
+    await join(USER_C, 'SQ2222');
+    expect(await squadOf(USER_C)).toBe(squad1);
+    await join(USER_C, 'SQ3333');
+    expect(await squadOf(USER_C)).toBe(squad2);
+    await join(USER_C, 'SQ3333');
+    expect(await squadOf(USER_C)).toBe(squad2);
+  });
+
+  it('still allows one squad per person at the table level', async () => {
+    const squad1 = await createSquadSql(USER_A, 'Squad 1', 'SQ4444');
+    await expect(createSquadSql(USER_A, 'Squad 2', 'SQ5555')).rejects.toThrow(/unique constraint|duplicate key/i);
+    expect(await squadOf(USER_A)).toBe(squad1);
+  });
+
+  it('stops at six members, counting people the joiner cannot see, and keeps the old squad on a refusal', async () => {
+    await createSquadSql(USER_A, 'Full Squad', 'FULL22');
+    await join(USER_B, 'FULL22');
+    await join(USER_C, 'FULL22');
     const u5 = '00000000-0000-4000-8000-000000000005';
     const u6 = '00000000-0000-4000-8000-000000000006';
     const u7 = '00000000-0000-4000-8000-000000000007';
@@ -648,23 +697,20 @@ describe('training squads RLS and multiplayer constraints', () => {
     await profile(db, u5, 'lifter5');
     await profile(db, u6, 'lifter6');
     await profile(db, u7, 'lifter7');
+    await join(u5, 'FULL22');
+    await join(u6, 'FULL22');
+    await join(u7, 'FULL22'); // Alice, Bob, Carol and three more: six
 
-    // 5th member joins
-    await as(db, u5, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, u5]);
-    // 6th member joins (reaches 6 capacity)
-    await as(db, u6, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, u6]);
-
-    // 7th member attempts to join -> trigger raises squad_full
-    await expect(
-      as(db, u7, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, u7]),
-    ).rejects.toThrow(/squad_full/);
+    // Dave has his own squad, and is outside FULL22 so can read none of its members.
+    const daves = await createSquadSql(USER_D, 'Dave Squad', 'DAVE22');
+    expect(await membersSeenBy(USER_D, (await db.query<{ id: string }>(`select id from squads where invite_code = 'FULL22'`)).rows[0].id)).toEqual([]);
+    await expect(join(USER_D, 'FULL22')).rejects.toThrow(/squad_full/);
+    expect(await squadOf(USER_D)).toBe(daves);
   });
 
-  it('squad checkins are readable only by squad members', async () => {
+  it('check-ins are readable only by squad members', async () => {
     const squadId = await createSquadSql(USER_A, 'Secret Squad', 'SECR22');
-    await as(db, USER_B, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, USER_B]);
-
-    // Alice logs a checkin
+    await join(USER_B, 'SECR22');
     await as(
       db,
       USER_A,
@@ -673,65 +719,157 @@ describe('training squads RLS and multiplayer constraints', () => {
       [squadId, USER_A],
     );
 
-    // Member Bob can read the checkin
     const bobSees = await as(db, USER_B, `select pr_highlight from squad_checkins where squad_id = $1`, [squadId]);
     expect(bobSees).toHaveLength(1);
     expect(bobSees[0].pr_highlight).toBe('Squat 140kg');
-
-    // Non-member Carol cannot read the checkin (RLS returns empty)
-    const carolSees = await as(db, USER_C, `select pr_highlight from squad_checkins where squad_id = $1`, [squadId]);
-    expect(carolSees).toHaveLength(0);
+    expect(await as(db, USER_C, `select pr_highlight from squad_checkins where squad_id = $1`, [squadId])).toHaveLength(0);
   });
 
-  it('non-members cannot post checkins into another squad', async () => {
+  it('non-members cannot post check-ins into another squad', async () => {
     const squadId = await createSquadSql(USER_A, 'Members Only', 'MEMB22');
-
-    // Carol is not a member of Alice's squad
-    await expect(
-      as(
-        db,
-        USER_C,
-        `insert into squad_checkins (squad_id, user_id, workout_id, performed_on)
-         values ($1, $2, 'w2', '2026-10-18')`,
-        [squadId, USER_C],
-      ),
-    ).rejects.toThrow(/row-level security/);
+    await expect(checkin(USER_C, squadId, 'w2')).rejects.toThrow(/row-level security/);
   });
 
   it('cheers are restricted to squad members', async () => {
     const squadId = await createSquadSql(USER_A, 'Cheer Squad', 'CHER22');
-    await as(db, USER_B, `insert into squad_members (squad_id, user_id) values ($1, $2)`, [squadId, USER_B]);
+    await join(USER_B, 'CHER22');
+    const id = await checkin(USER_A, squadId, 'w3');
 
+    await as(db, USER_B, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [squadId, id, USER_B]);
+    expect(await as(db, USER_A, `select user_id from squad_cheers where checkin_id = $1`, [id])).toHaveLength(1);
+
+    await expect(
+      as(db, USER_C, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [squadId, id, USER_C]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('cannot cheer another squad’s check-in by naming your own squad', async () => {
+    const theirs = await createSquadSql(USER_A, 'Theirs', 'THRS22');
+    const mine = await createSquadSql(USER_C, 'Mine', 'MINE22');
+    const id = await checkin(USER_A, theirs, 'w4');
+    await expect(
+      as(db, USER_C, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [mine, id, USER_C]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('hides people on either side of a block from each other inside a shared squad', async () => {
+    const squadId = await createSquadSql(USER_A, 'Shared', 'SHRD22');
+    await join(USER_B, 'SHRD22');
+    await as(db, USER_C, `insert into blocks (blocker_id, blocked_id) values ($1, $2)`, [USER_C, USER_B]);
+    // The join succeeds, because refusing it would tell Carol's blockee about the block.
+    await join(USER_C, 'SHRD22');
+
+    const bobsCheckin = await checkin(USER_B, squadId, 'wb');
+    const carolsCheckin = await checkin(USER_C, squadId, 'wc');
+    await as(db, USER_A, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [squadId, bobsCheckin, USER_A]);
+    await as(db, USER_B, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [squadId, bobsCheckin, USER_B]);
+
+    // Alice, blocked by nobody, sees everyone.
+    expect(await membersSeenBy(USER_A, squadId)).toEqual([USER_A, USER_B, USER_C].sort());
+    // Bob and Carol see the squad without each other, whichever of them blocked.
+    expect(await membersSeenBy(USER_B, squadId)).toEqual([USER_A, USER_B].sort());
+    expect(await membersSeenBy(USER_C, squadId)).toEqual([USER_A, USER_C].sort());
+
+    const checkinsSeenBy = async (user: string) =>
+      (await as<{ id: string }>(db, user, `select id from squad_checkins where squad_id = $1`, [squadId])).map((r) => r.id);
+    expect(await checkinsSeenBy(USER_C)).toEqual([carolsCheckin]);
+    expect(await checkinsSeenBy(USER_B)).toEqual([bobsCheckin]);
+
+    // Carol cannot see Bob's cheers, nor cheer the check-in she cannot see.
+    const cheersCarolSees = await as<{ user_id: string }>(db, USER_C, `select user_id from squad_cheers`);
+    expect(cheersCarolSees.map((c) => c.user_id)).toEqual([USER_A]);
+    await expect(
+      as(db, USER_C, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [squadId, bobsCheckin, USER_C]),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('leaves nothing new callable over /rpc but the join', async () => {
+    const can = async (fn: string) =>
+      (
+        await db.query<{ ok: boolean }>(`select has_function_privilege('authenticated', $1, 'execute') as ok`, [fn])
+      ).rows[0].ok;
+    expect(await can('public.check_squad_capacity()')).toBe(false);
+    expect(await can('public.join_squad(text)')).toBe(true);
+    const anonCan = (
+      await db.query<{ ok: boolean }>(`select has_function_privilege('anon', 'public.join_squad(text)', 'execute') as ok`)
+    ).rows[0].ok;
+    expect(anonCan).toBe(false);
+    const inPublic = await db.query(`select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                                      where n.nspname = 'public' and p.proname = 'in_squad'`);
+    expect(inPublic.rows).toHaveLength(0);
+  });
+});
+
+describe('the squad access migration on the database production really has', () => {
+  // Production ran an earlier draft of the squads migration: no capacity
+  // trigger, no one-squad index, cheers open to all. The fix must land there too.
+  const asApplied = {
+    '20261018120000_training_squads.sql': fileURLToPath(
+      new URL('./fixtures/training_squads_as_applied.sql', import.meta.url),
+    ),
+  };
+  let db: PGlite;
+  beforeEach(async () => {
+    db = await freshDatabase(asApplied);
+    await profile(db, USER_A, 'alice');
+    await profile(db, USER_B, 'bob');
+    await profile(db, USER_C, 'carol');
+    await profile(db, USER_D, 'dave');
+  });
+
+  const create = async (owner: string, code: string) => {
+    const id = (
+      await as<{ id: string }>(db, owner, `insert into squads (name, invite_code, created_by) values ('Squad', $1, $2) returning id`, [
+        code,
+        owner,
+      ])
+    )[0].id;
+    await as(db, owner, `insert into squad_members (squad_id, user_id, role) values ($1, $2, 'owner')`, [id, owner]);
+    return id;
+  };
+  const join = (user: string, code: string) => as(db, user, `select join_squad($1)`, [code]);
+
+  it('gains the six-member limit it never had', async () => {
+    await create(USER_A, 'PROD22');
+    await join(USER_B, 'PROD22');
+    await join(USER_C, 'PROD22');
+    await join(USER_D, 'PROD22');
+    const extra = ['5', '6', '7'].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
+    await db.exec(`insert into auth.users (id) values ${extra.map((u) => `('${u}')`).join(', ')}`);
+    for (const [i, u] of extra.entries()) await profile(db, u, `lifter${i}`);
+    await join(extra[0], 'PROD22');
+    await join(extra[1], 'PROD22');
+    await expect(join(extra[2], 'PROD22')).rejects.toThrow(/squad_full/);
+  });
+
+  it('gains the one-squad-per-person rule it never had', async () => {
+    await create(USER_A, 'PROD23');
+    await expect(create(USER_A, 'PROD24')).rejects.toThrow(/unique constraint|duplicate key/i);
+  });
+
+  it('closes the open cheers: unreadable outside the squad, and only for check-ins in it', async () => {
+    const theirs = await create(USER_A, 'PROD25');
+    const mine = await create(USER_C, 'PROD26');
+    await join(USER_B, 'PROD25');
     const checkin = (
       await as<{ id: string }>(
         db,
         USER_A,
-        `insert into squad_checkins (squad_id, user_id, workout_id, performed_on)
-         values ($1, $2, 'w3', '2026-10-18') returning id`,
-        [squadId, USER_A],
+        `insert into squad_checkins (squad_id, user_id, workout_id) values ($1, $2, 'w') returning id`,
+        [theirs, USER_A],
       )
-    )[0];
+    )[0].id;
+    await as(db, USER_B, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [theirs, checkin, USER_B]);
 
-    // Member Bob can cheer
-    await as(
-      db,
-      USER_B,
-      `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`,
-      [squadId, checkin.id, USER_B],
-    );
-
-    const cheers = await as(db, USER_A, `select user_id from squad_cheers where checkin_id = $1`, [checkin.id]);
-    expect(cheers).toHaveLength(1);
-
-    // Non-member Carol cannot cheer
+    expect(await as(db, USER_C, `select id from squad_cheers`)).toHaveLength(0);
     await expect(
-      as(
-        db,
-        USER_C,
-        `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`,
-        [squadId, checkin.id, USER_C],
-      ),
+      as(db, USER_C, `insert into squad_cheers (squad_id, checkin_id, user_id) values ($1, $2, $3)`, [mine, checkin, USER_C]),
     ).rejects.toThrow(/row-level security/);
+  });
+
+  it('hides squads and codes from outsiders there as well', async () => {
+    await create(USER_A, 'PROD27');
+    expect(await as(db, USER_B, `select invite_code from squads`)).toHaveLength(0);
   });
 });
 

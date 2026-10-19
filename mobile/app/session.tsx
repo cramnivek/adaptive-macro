@@ -12,7 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
+  Keyboard,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -72,6 +74,7 @@ import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch'
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
+import { dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../src/dumbbellLoad';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
@@ -111,6 +114,7 @@ import {
   parseSpeed,
 } from '../src/cardio';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, radius, space } from '../src/theme';
 import type { UnitSystem } from '../src/state/settings';
 // Aliased: `session` is already the active-workout state in this component.
@@ -185,6 +189,12 @@ const handleWorkoutNumberInput = (text: string): string => {
   return text;
 };
 
+/** "192" rather than "192.0", but "32.5" kept: the decimal only when it says something. */
+const compactWeight = (value: number): string => {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+};
+
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
   const seconds = Math.max(0, Math.floor((now - started) / 1000));
@@ -245,6 +255,8 @@ export default function SessionScreen() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   /** Whether the bird's-eye exercise reorder sheet is open. */
   const [reorderOpen, setReorderOpen] = useState(false);
+  /** The exercise the reorder sheet opens already holding, when a card's handle opened it. */
+  const [reorderPick, setReorderPick] = useState<number | null>(null);
   /** Active target for the barbell plate calculator; null when closed. */
   const [calcTarget, setCalcTarget] = useState<{
     blockIndex: number | null;
@@ -303,6 +315,57 @@ export default function SessionScreen() {
   useEffect(() => {
     void cataloguePatternsByExerciseName().then(setPatterns);
   }, [blocks.length]);
+
+  /**
+   * Catalogue equipment per name, canonical and recorded, so a dumbbell
+   * exercise whose name does not say "dumbbell" still gets its loading label.
+   */
+  const equipmentByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const entry of catalogue) {
+      map[entry.canonicalName] = entry.equipment;
+      if (entry.recordedName) map[entry.recordedName] = entry.equipment;
+    }
+    return map;
+  }, [catalogue]);
+
+  /**
+   * Whether the on-screen keyboard is up, so the floating dock can step aside.
+   * On Android the page shrinks to sit above the keyboard and the dock would
+   * otherwise ride up with it and cover the very row being typed into. The web
+   * build has no keyboard events, so focus on any input stands in for one.
+   */
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      if (typeof document === 'undefined') return;
+      const isField = (t: EventTarget | null) =>
+        t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+      const onIn = (e: FocusEvent) => {
+        if (isField(e.target)) setTyping(true);
+      };
+      // Focus moving from one input straight to the next fires focusout then
+      // focusin; relatedTarget says where it went, so the dock does not flicker.
+      const onOut = (e: FocusEvent) => {
+        if (!isField(e.relatedTarget)) setTyping(false);
+      };
+      document.addEventListener('focusin', onIn);
+      document.addEventListener('focusout', onOut);
+      return () => {
+        document.removeEventListener('focusin', onIn);
+        document.removeEventListener('focusout', onOut);
+      };
+    }
+    const show = Keyboard.addListener('keyboardDidShow', () => setTyping(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setTyping(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const insets = useSafeAreaInsets();
+  /** Measured height of the floating dock, reserved at the foot of the scroll. */
+  const [dockHeight, setDockHeight] = useState(0);
 
   // The header clock. One second is the resolution anyone reads it at.
   useEffect(() => {
@@ -1461,6 +1524,26 @@ export default function SessionScreen() {
   };
 
   /** Keeps an already-written set in step with an edited row. */
+  /**
+   * What a weight or reps field held before focusing it set it to 0.
+   *
+   * The 0 is there so typing replaces the old number instead of appending to
+   * it, which iOS Safari's unreliable select-on-focus would otherwise do. But a
+   * tap just to read the number, then a tap away, left the 0 behind — and on a
+   * ticked set, saved it. Leaving the field untouched puts the number back.
+   */
+  const blankedOnFocus = useRef<{ key: string; field: 'weight' | 'reps'; value: string } | null>(null);
+
+  const blurNumber = (blockIndex: number, rowIndex: number, row: Row) => {
+    const blanked = blankedOnFocus.current;
+    blankedOnFocus.current = null;
+    if (blanked && blanked.key === row.key && row[blanked.field] === '0' && blanked.value.trim() && blanked.value !== '0') {
+      editRow(blockIndex, rowIndex, { [blanked.field]: blanked.value });
+      return;
+    }
+    void commitEdit(blockIndex, rowIndex);
+  };
+
   const commitEdit = async (blockIndex: number, rowIndex: number) => {
     const row = blocks[blockIndex].rows[rowIndex];
     if (!row.done || !row.id) return;
@@ -1564,23 +1647,16 @@ export default function SessionScreen() {
     editRow(blockIndex, rowIndex, { rpe });
   };
 
-  const moveExercise = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= blocks.length) return;
-    thud('light');
-    setBlocks((current) => {
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
+  // Lifts the exercise out and drops it at the new place, so a move of several
+  // places keeps everything in between in order. A swap did the same for a move
+  // of one, and scrambled the middle for anything longer. The sheet gives the
+  // haptic itself, so there is none here to double it.
   const reorderExercises = (fromIndex: number, toIndex: number) => {
     if (fromIndex < 0 || fromIndex >= blocks.length || toIndex < 0 || toIndex >= blocks.length) return;
-    thud('light');
     setBlocks((current) => {
       const next = [...current];
-      [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
       return next;
     });
   };
@@ -1978,32 +2054,7 @@ export default function SessionScreen() {
             )}
           </View>
         </View>
-        <Tappable onPress={() => void finish()} scaleTo={0.93}>
-          <View style={styles.finish}>
-            <Text style={styles.finishLabel}>
-              {getEventCopy('workout.finish_btn', { personality: settings.personality })}
-            </Text>
-          </View>
-        </Tappable>
       </View>
-
-      {/*
-        Above the exercises rather than pinned to the screen: it belongs to the
-        set you just finished, and the thing you look at next is the row under
-        it. A floating bar would cover a row at the exact moment you want to
-        read it.
-      */}
-      {rest !== null && restRemaining !== null && (
-        <RestBar
-          remaining={restRemaining}
-          total={rest.total}
-          onAdjust={nudgeRest}
-          onSkip={() => setRest(null)}
-          soundOn={settings.restSound}
-          onToggleSound={toggleAlert}
-          personality={settings.personality}
-        />
-      )}
 
       {blocks.length === 0 && (
         <View style={styles.emptySessionWrap}>
@@ -2059,7 +2110,10 @@ export default function SessionScreen() {
                   </View>
                   <View style={styles.nameContainer}>
                     <View style={styles.nameSlabRow}>
-                      <Text style={styles.blockName} numberOfLines={1}>
+                      {/* Two lines, because the part a one-line name loses is the
+                          equipment in brackets — the half that tells a barbell
+                          squat from a Smith one. */}
+                      <Text style={styles.blockName} numberOfLines={2}>
                         {block.name.toUpperCase()}
                       </Text>
                       <Ionicons name="information-circle-outline" size={15} color={loud.figureMuted} />
@@ -2068,40 +2122,26 @@ export default function SessionScreen() {
                 </Tappable>
 
                 <View style={styles.blockHeaderControls}>
+                  {/*
+                    One handle instead of an up and a down arrow on every card.
+                    The arrows cost the name a third of its width, and moving
+                    an exercise three places took three taps on three cards that
+                    jumped under your thumb. The sheet opens with this exercise
+                    picked, so the next tap is where it goes.
+                  */}
                   {blocks.length > 1 && (
-                    <>
-                      <Tappable
-                        onPress={() => moveExercise(blockIndex, -1)}
-                        style={[styles.reorderBtn, blockIndex === 0 && styles.reorderBtnDisabled]}
-                        disabled={blockIndex === 0}
-                        scaleTo={0.85}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Move ${block.name} up`}
-                      >
-                        <Ionicons
-                          name="chevron-up"
-                          size={18}
-                          color={blockIndex === 0 ? loud.rule : loud.figureMuted}
-                        />
-                      </Tappable>
-                      <Tappable
-                        onPress={() => moveExercise(blockIndex, 1)}
-                        style={[
-                          styles.reorderBtn,
-                          blockIndex === blocks.length - 1 && styles.reorderBtnDisabled,
-                        ]}
-                        disabled={blockIndex === blocks.length - 1}
-                        scaleTo={0.85}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Move ${block.name} down`}
-                      >
-                        <Ionicons
-                          name="chevron-down"
-                          size={18}
-                          color={blockIndex === blocks.length - 1 ? loud.rule : loud.figureMuted}
-                        />
-                      </Tappable>
-                    </>
+                    <Tappable
+                      onPress={() => {
+                        setReorderPick(blockIndex);
+                        setReorderOpen(true);
+                      }}
+                      style={styles.reorderBtn}
+                      scaleTo={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Move ${block.name}`}
+                    >
+                      <Ionicons name="swap-vertical" size={18} color={loud.figureMuted} />
+                    </Tappable>
                   )}
 
                   <Tappable
@@ -2116,8 +2156,18 @@ export default function SessionScreen() {
                 </View>
               </View>
 
-              {/* Compact exercise action bar: How-To, Warm-up, Plates, Swap, Superset */}
-              <View style={styles.blockActionsRow}>
+              {/*
+                One line that scrolls sideways rather than wrapping: a barbell
+                exercise has five pills, and the fifth falling onto its own row
+                pushed every set down by a pill's height on just those cards.
+              */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={styles.blockActionsScroll}
+                contentContainerStyle={styles.blockActionsRow}
+              >
                 <Tappable
                   onPress={() => void showInfoFor(block.name)}
                   style={styles.actionPillBtn}
@@ -2221,7 +2271,7 @@ export default function SessionScreen() {
                     </View>
                   </Tappable>
                 )}
-              </View>
+              </ScrollView>
 
             {block.isCardio && (
               <View style={styles.cardioModeRow}>
@@ -2262,6 +2312,11 @@ export default function SessionScreen() {
               </View>
             )}
 
+            {!block.isCardio && !block.bodyweightBased && (() => {
+              const load = dumbbellLoad(block.name, equipmentByName[block.name]);
+              return load ? <Text style={styles.loadNote}>{dumbbellNote(load)}</Text> : null;
+            })()}
+
             {!block.isCardio && (() => {
               const best = effectiveBestPRFor(block);
               const targetText = block.target ? targetLabel(block.target.sets, block.target.reps) : null;
@@ -2297,8 +2352,19 @@ export default function SessionScreen() {
               <View style={styles.columns}>
                 <Text style={[styles.col, styles.colSet]}>SET</Text>
                 <Text style={[styles.col, styles.colPrev]}>PREVIOUS</Text>
-                <Text style={[styles.col, styles.colNum]}>{unit.toUpperCase()}</Text>
-                <Text style={[styles.col, styles.colNum]}>REPS</Text>
+                {(() => {
+                  const load = block.bodyweightBased ? null : dumbbellLoad(block.name, equipmentByName[block.name]);
+                  return (
+                    <>
+                      <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
+                        {weightColumnLabel(unit, load)}
+                      </Text>
+                      <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
+                        {repsColumnLabel(load)}
+                      </Text>
+                    </>
+                  );
+                })()}
                 <Text style={[styles.col, styles.colRpe]}>RPE</Text>
                 <View style={styles.colTick} />
                 <View style={styles.colDel} />
@@ -2334,7 +2400,7 @@ export default function SessionScreen() {
                     : `${
                         previous.weightKg === null
                           ? 'BW'
-                          : displayWeight(previous.weightKg, workoutUnits).toFixed(1)
+                          : compactWeight(displayWeight(previous.weightKg, workoutUnits))
                       } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
                   : '—';
                 const on = row.done ? loud.onLoud : loud.figure;
@@ -2398,7 +2464,7 @@ export default function SessionScreen() {
                           styles.colPrev,
                           { color: row.done ? loud.onLoud : loud.figureFaint },
                         ]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                       >
                         {previousLabel}
                       </Text>
@@ -2504,6 +2570,7 @@ export default function SessionScreen() {
                               editRow(blockIndex, rowIndex, { weight: handleWorkoutNumberInput(weight) })
                             }
                             onFocus={(e) => {
+                              blankedOnFocus.current = { key: row.key, field: 'weight', value: row.weight };
                               editRow(blockIndex, rowIndex, { weight: '0' });
                               if (Platform.OS === 'web') {
                                 setTimeout(() => {
@@ -2514,7 +2581,7 @@ export default function SessionScreen() {
                               }
                             }}
                             selectTextOnFocus
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            onBlur={() => blurNumber(blockIndex, rowIndex, row)}
                             {...NOT_A_LOGIN}
                             keyboardType="decimal-pad"
                             placeholder={block.bodyweightBased ? 'BW' : '0'}
@@ -2532,6 +2599,7 @@ export default function SessionScreen() {
                               editRow(blockIndex, rowIndex, { reps: handleWorkoutNumberInput(reps) })
                             }
                             onFocus={(e) => {
+                              blankedOnFocus.current = { key: row.key, field: 'reps', value: row.reps };
                               editRow(blockIndex, rowIndex, { reps: '0' });
                               if (Platform.OS === 'web') {
                                 setTimeout(() => {
@@ -2542,7 +2610,7 @@ export default function SessionScreen() {
                               }
                             }}
                             selectTextOnFocus
-                            onBlur={() => void commitEdit(blockIndex, rowIndex)}
+                            onBlur={() => blurNumber(blockIndex, rowIndex, row)}
                             {...NOT_A_LOGIN}
                             keyboardType="number-pad"
                             placeholder="0"
@@ -2630,6 +2698,12 @@ export default function SessionScreen() {
                           <Ionicons name="barbell-outline" size={11} color="#00E5FF" style={{ marginRight: 4 }} />
                           <Text style={styles.plateRowText}>
                             RACK: <Text style={styles.plateRowTextLoud}>{describePlates(p.perSide)}</Text> / side ({p.bar} {unit} bar)
+                            {/* Your plates cannot always make the number typed — 192 on
+                                pound plates loads 190 — and a hint that keeps quiet about
+                                it sends you to the bar with the wrong weight. */}
+                            {Math.abs(p.loaded - rowWeightNum) > 0.01 && (
+                              <Text style={styles.plateRowShort}> = {compactWeight(p.loaded)} {unit}</Text>
+                            )}
                           </Text>
                         </Tappable>
                       );
@@ -2768,22 +2842,6 @@ export default function SessionScreen() {
             </Tappable>
           )}
 
-          {blocks.length > 0 && (
-            <Tappable
-              onPress={() => void finish()}
-              scaleTo={0.96}
-              style={styles.bottomFinishWrapper}
-              accessibilityRole="button"
-              accessibilityLabel="Finish workout"
-            >
-              <View style={styles.bottomFinishBtn}>
-                <Ionicons name="checkmark-done-circle" size={22} color={loud.onLoud} />
-                <Text style={styles.bottomFinishLabel}>
-                  {getEventCopy('workout.finish_btn', { personality: settings.personality })}
-                </Text>
-              </View>
-            </Tappable>
-          )}
         </>
       )}
 
@@ -2878,6 +2936,7 @@ export default function SessionScreen() {
 
       <ReorderSheet
         open={reorderOpen}
+        initialPick={reorderPick}
         items={blocks.map((b) => ({
           name: b.name,
           isCardio: b.isCardio,
@@ -2885,14 +2944,63 @@ export default function SessionScreen() {
           setCount: b.rows.length,
         }))}
         onMove={reorderExercises}
-        onClose={() => setReorderOpen(false)}
+        onClose={() => {
+          setReorderOpen(false);
+          setReorderPick(null);
+        }}
       />
 
       <Text style={[styles.note, { marginBottom: space.xxl }]}>
         Tick a set to record it. Tap the set number to mark it a warmup. Leaving without
         finishing keeps this workout open.
       </Text>
+      {/* Room for the dock, so the last card can scroll clear of it. */}
+      <View style={{ height: dockHeight }} />
     </Screen>
+
+    {/*
+      The rest timer and Finish float over the bottom of the screen. Finish was
+      at the top of the page and again at the very end of it, so from the middle
+      of a workout either was a long scroll away; the rest timer sat above the
+      first exercise, out of sight by the second. Down here both are under the
+      thumb wherever you are. The spacer above means the dock covers nothing for
+      good — any row under it scrolls out — and it steps aside while you type,
+      so it never sits over the field you are filling in.
+    */}
+    {!typing && (
+      <View
+        style={[styles.dock, { paddingBottom: Math.max(insets.bottom, space.sm) }]}
+        onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
+        pointerEvents="box-none"
+      >
+        {rest !== null && restRemaining !== null && (
+          <RestBar
+            remaining={restRemaining}
+            total={rest.total}
+            onAdjust={nudgeRest}
+            onSkip={() => setRest(null)}
+            soundOn={settings.restSound}
+            onToggleSound={toggleAlert}
+            personality={settings.personality}
+          />
+        )}
+        {blocks.length > 0 && (
+          <Tappable
+            onPress={() => void finish()}
+            scaleTo={0.96}
+            accessibilityRole="button"
+            accessibilityLabel="Finish workout"
+          >
+            <View style={styles.bottomFinishBtn}>
+              <Ionicons name="checkmark-done-circle" size={22} color={loud.onLoud} />
+              <Text style={styles.bottomFinishLabel}>
+                {getEventCopy('workout.finish_btn', { personality: settings.personality })}
+              </Text>
+            </View>
+          </Tappable>
+        )}
+      </View>
+    )}
 
     <PlateSheet
       open={calcTarget !== null}
@@ -3061,15 +3169,6 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   countLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 2, color: loud.figureFaint },
-  finish: {
-    minHeight: TOUCH_TARGET,
-    paddingHorizontal: space.lg + 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: loud.loud,
-  },
-  finishLabel: { fontFamily: font.display, fontSize: 14, letterSpacing: 1.6, color: loud.onLoud },
 
   block: {
     marginBottom: space.lg,
@@ -3097,12 +3196,11 @@ const styles = StyleSheet.create({
   },
   blockName: { flex: 1, fontFamily: font.display, fontSize: 17, letterSpacing: 0.2, color: loud.figure },
   remove: { color: loud.figureFaint, fontSize: 15 },
+  blockActionsScroll: { marginBottom: space.xs, flexGrow: 0 },
   blockActionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
-    marginBottom: space.xs,
   },
   actionPillBtn: {
     minHeight: 32,
@@ -3144,6 +3242,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 0.6,
     color: '#00E5FF',
+  },
+  plateRowShort: { color: loud.warn },
+  loadNote: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    color: loud.figureMuted,
+    marginBottom: space.xs,
   },
   plateRowTextLoud: {
     color: '#FFFFFF',
@@ -3389,18 +3494,22 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   reorderBtn: {
-    width: 32,
-    height: 36,
+    // Full touch size now there are two of these rather than three.
+    width: TOUCH_TARGET,
+    height: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reorderBtnDisabled: {
-    opacity: 0.25,
-  },
-  bottomFinishWrapper: {
-    width: '100%',
-    marginTop: space.xs,
-    marginBottom: space.lg,
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: loud.ground,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: loud.rule,
   },
   bottomFinishBtn: {
     minHeight: 52,

@@ -23,6 +23,7 @@ import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
+import { session as loud } from '../../src/theme/sessionTheme';
 import { MissionBanner } from '../../src/components/MissionBanner';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 import { StepLogModal } from '../../src/components/StepLogModal';
@@ -219,20 +220,17 @@ export default function TodayScreen() {
           accessibilityLabel="Open workout routines"
         >
           <View style={styles.trainingShortcutLeft}>
-            <View style={[styles.trainingIconBubble, { backgroundColor: '#FF6B4A22', borderColor: '#FF6B4A55' }]}>
-              <Ionicons name="barbell-outline" size={18} color="#FF6B4A" />
+            <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
+              <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
             </View>
             <View style={{ gap: 2, flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
                   Workout & Routines
                 </Text>
-                <View style={[styles.trainingTag, { backgroundColor: '#FF6B4A20' }]}>
-                  <Text style={styles.trainingTagText}>TRAIN</Text>
-                </View>
               </View>
               <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
-                Track session, log reps & crush your PRs →
+                Start a workout or pick up a routine.
               </Text>
             </View>
           </View>
@@ -304,20 +302,17 @@ export default function TodayScreen() {
           accessibilityLabel="Open workout routines"
         >
           <View style={styles.trainingShortcutLeft}>
-            <View style={[styles.trainingIconBubble, { backgroundColor: '#FF6B4A22', borderColor: '#FF6B4A55' }]}>
-              <Ionicons name="barbell-outline" size={18} color="#FF6B4A" />
+            <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
+              <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
             </View>
             <View style={{ gap: 2, flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
                   Workout & Routines
                 </Text>
-                <View style={[styles.trainingTag, { backgroundColor: '#FF6B4A20' }]}>
-                  <Text style={styles.trainingTagText}>TRAIN</Text>
-                </View>
               </View>
               <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
-                Track session, log reps & crush your PRs →
+                Start a workout or pick up a routine.
               </Text>
             </View>
           </View>
@@ -325,7 +320,7 @@ export default function TodayScreen() {
         </Pressable>
       )}
 
-      {/* Clinical Micronutrient DRI Quality Card (Always Active) */}
+      {/* Micronutrients from what was logged today, against the reference intakes. */}
       <NutritionQualityCard
         consumed={totals}
         entries={entries}
@@ -621,17 +616,6 @@ const styles = StyleSheet.create({
   trainingShortcutTitle: {
     fontFamily: font.uiStrong,
     fontSize: 14,
-  },
-  trainingTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radius.pill,
-  },
-  trainingTagText: {
-    fontFamily: font.uiStrong,
-    fontSize: 9,
-    color: '#FF6B4A',
-    letterSpacing: 1,
   },
   trainingShortcutSubtitle: {
     fontFamily: font.ui,

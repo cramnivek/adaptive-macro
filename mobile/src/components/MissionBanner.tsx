@@ -38,54 +38,44 @@ export const MissionBanner = () => {
   return (
     <>
       <FadeIn>
-        <Pressable
-          onPress={handleOpenModal}
-          style={({ pressed }) => [
-            styles.banner,
-            {
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.accent,
-              opacity: pressed ? 0.92 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Customize your training mission"
-        >
+        {/*
+          The banner is a plain container with two separate buttons in it. It
+          used to be one big button holding the dismiss button, and a button
+          inside a button is invalid HTML on web — React warns about it on every
+          load of Today, and screen readers announce the pair as one control.
+        */}
+        <View style={[styles.banner, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
           <View style={styles.headerRow}>
-            <View style={styles.badgeLeft}>
-              <Ionicons name="sparkles" size={13} color={colors.accent} />
-              <Text style={[styles.badgeText, { color: colors.accent }]}>
-                TRAINING MISSION & SPOTLIGHT
-              </Text>
-            </View>
+            <Text style={[styles.badgeText, { color: colors.textFaint }]}>YOUR FOCUS</Text>
             <Pressable
               onPress={handleDismiss}
-              hitSlop={12}
+              style={styles.dismiss}
               accessibilityRole="button"
-              accessibilityLabel="Dismiss mission banner"
+              accessibilityLabel="Dismiss"
             >
               <Ionicons name="close" size={18} color={colors.textMuted} />
             </Pressable>
           </View>
 
-          <View style={styles.contentCol}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              {currentMission.emoji} {currentMission.name}
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Tailor your dashboard spotlight and AI coaching advice to your primary goal. All tools remain 100% active.
-            </Text>
-          </View>
-
-          <View style={styles.footerRow}>
-            <View style={[styles.actionBtn, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.actionBtnText, { color: colors.onFill }]}>
-                CUSTOMIZE MISSION 🎯
-              </Text>
-              <Ionicons name="arrow-forward" size={14} color={colors.onFill} />
+          <Pressable
+            onPress={handleOpenModal}
+            style={({ pressed }) => [styles.contentCol, { opacity: pressed ? 0.7 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Your focus is ${currentMission.name}. Change it.`}
+          >
+            <View style={styles.titleRow}>
+              <Ionicons name={currentMission.icon} size={18} color={colors.text} />
+              <Text style={[styles.title, { color: colors.text }]}>{currentMission.name}</Text>
             </View>
-          </View>
-        </Pressable>
+            <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+              You picked this during setup. Change it, or what Today shows first, any time.
+            </Text>
+            <View style={styles.footerRow}>
+              <Text style={[styles.actionLink, { color: colors.text }]}>Change</Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.text} />
+            </View>
+          </Pressable>
+        </View>
       </FadeIn>
 
       <MissionModal
@@ -98,10 +88,10 @@ export const MissionBanner = () => {
 
 const styles = StyleSheet.create({
   banner: {
-    padding: space.md,
+    paddingHorizontal: space.md,
+    paddingBottom: space.md,
     borderRadius: radius.xl,
-    borderWidth: 1.5,
-    gap: space.sm,
+    borderWidth: 1,
     marginBottom: space.sm,
   },
   headerRow: {
@@ -109,18 +99,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  badgeLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-  },
   badgeText: {
     fontFamily: font.uiStrong,
     fontSize: 10,
     letterSpacing: 1.2,
   },
+  // The full 44-point square: hitSlop is ignored on web.
+  dismiss: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -space.sm,
+  },
   contentCol: {
-    gap: 2,
+    gap: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  actionLink: {
+    fontFamily: font.uiStrong,
+    fontSize: 13,
   },
   title: {
     fontFamily: font.uiStrong,
@@ -135,20 +137,7 @@ const styles = StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginTop: 2,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs + 3,
-    borderRadius: radius.pill,
-  },
-  actionBtnText: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
-    letterSpacing: 1,
+    gap: 4,
+    minHeight: 32,
   },
 });

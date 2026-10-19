@@ -450,41 +450,17 @@ export const joinSquadByCode = async (params: {
     throw new Error('Please sign in to join a training squad.');
   }
 
-  // 1. Find squad by invite code
-  const { data: foundSquad, error: findErr } = await supabase
-    .from('squads')
-    .select('id, name, invite_code, weekly_target, created_by, created_at')
-    .eq('invite_code', cleanCode)
-    .maybeSingle();
-
-  if (findErr) throw new Error(messageFor(findErr));
-  if (!foundSquad) {
-    throw new Error(`Squad with code "${cleanCode}" was not found. Please verify the code.`);
-  }
-
-  // 2. Check 6-member squad capacity
-  const { count } = await supabase
-    .from('squad_members')
-    .select('*', { count: 'exact', head: true })
-    .eq('squad_id', foundSquad.id);
-
-  if (count !== null && count >= 6) {
-    throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
-  }
-
-  // 3. Clear any existing membership in another squad before joining
-  await supabase.from('squad_members').delete().eq('user_id', authUserId);
-
-  // 4. Insert membership into the target squad
-  const { error: joinErr } = await supabase.from('squad_members').insert({
-    squad_id: foundSquad.id,
-    user_id: authUserId,
-    role: 'member',
-  });
-
+  // One call does the lot: the code is checked on the server, the old squad is
+  // left and the new one joined in one transaction, and capacity is counted
+  // there. The client can no longer read a squad, or count its members, until
+  // it is in it, so none of that can happen here any more.
+  const { error: joinErr } = await supabase.rpc('join_squad', { code: cleanCode });
   if (joinErr) {
-    if (joinErr.message?.includes('squad_full') || joinErr.code === 'P0001') {
-      throw new Error(`Squad "${foundSquad.name}" is already at full capacity (6 lifters max).`);
+    if (joinErr.message?.includes('squad_not_found')) {
+      throw new Error(`No squad has the code "${cleanCode}". Check it with whoever sent it.`);
+    }
+    if (joinErr.message?.includes('squad_full')) {
+      throw new Error('That squad is full. Squads hold six lifters at most.');
     }
     throw new Error(messageFor(joinErr));
   }

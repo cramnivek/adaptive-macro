@@ -159,7 +159,7 @@ export const NutritionQualityModal = ({
               <Ionicons name="nutrition" size={20} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.headerSubtitle, { color: colors.accent }]}>CLINICAL NUTRITION</Text>
+              <Text style={[styles.headerSubtitle, { color: colors.textFaint }]}>NUTRITION</Text>
               <Text style={[styles.headerTitle, { color: colors.text }]}>Quality & Micronutrients</Text>
             </View>
           </View>
@@ -400,7 +400,7 @@ export const NutritionQualityModal = ({
                       <View style={styles.loadingWrap}>
                         <ActivityIndicator color={colors.accent} size="small" />
                         <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-                          Consulting clinical nutrition engine...
+                          Looking at what you have eaten…
                         </Text>
                       </View>
                     ) : (

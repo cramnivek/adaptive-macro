@@ -16,7 +16,7 @@ import {
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
-import { Button, Field, Segmented } from './Controls';
+import { Button, Field, Segmented, TOUCH_TARGET } from './Controls';
 import { FadeIn } from './FadeIn';
 import { MissionPicker } from './MissionPicker';
 
@@ -151,26 +151,11 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     <FadeIn>
       <View style={styles.container}>
         <Card variant="featured" style={styles.card}>
-          {/* Top Header Row: Responsive Step Pill + Spacious Action Link */}
+          {/* Step count as a plain label; the red progress bar under it already carries the brand. */}
           <View style={styles.stepHeaderRow}>
-            <View
-              style={[
-                styles.stepBadge,
-                {
-                  backgroundColor: 'rgba(232, 53, 42, 0.12)',
-                  borderColor: 'rgba(232, 53, 42, 0.35)',
-                },
-              ]}
-            >
-              <Ionicons
-                name={isMissionStep ? 'sparkles' : 'speedometer-outline'}
-                size={12}
-                color={loud.loud}
-              />
-              <Text style={[styles.stepBadgeText, { color: loud.loud }]}>
-                {isMissionStep ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
-              </Text>
-            </View>
+            <Text style={[styles.stepBadgeText, { color: colors.textFaint }]}>
+              {isMissionStep ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
+            </Text>
 
             {isMissionStep ? (
               <Pressable
@@ -181,10 +166,10 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
                 hitSlop={12}
                 style={styles.actionLinkWrapper}
                 accessibilityRole="button"
-                accessibilityLabel="Skip to baseline metrics"
+                accessibilityLabel="Skip to your numbers"
               >
                 <Text style={[styles.skipLink, { color: colors.textMuted }]}>
-                  SKIP TO STATS →
+                  Skip
                 </Text>
               </Pressable>
             ) : (
@@ -196,10 +181,10 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
                 hitSlop={12}
                 style={styles.actionLinkWrapper}
                 accessibilityRole="button"
-                accessibilityLabel="Back to mission focus"
+                accessibilityLabel="Back"
               >
                 <Text style={[styles.skipLink, { color: colors.accent }]}>
-                  ← EDIT MISSION
+                  ← Back
                 </Text>
               </Pressable>
             )}
@@ -218,12 +203,12 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
 
           {/* Title & Concise Subtitle */}
           <Text style={[styles.title, { color: colors.text }]}>
-            {isMissionStep ? 'Choose your training mission' : 'Set your Day 1 baseline'}
+            {isMissionStep ? 'What are you here for?' : 'A few numbers to start from'}
           </Text>
           <Text style={[styles.desc, { color: colors.textMuted }]}>
             {isMissionStep
-              ? 'Ascend personalizes your daily dashboard spotlight and coaching advice to match your mission.'
-              : 'Your baseline seeds your initial expenditure model. Over your first 7 days, it learns your exact metabolic rate from your logs.'}
+              ? 'Pick the closest. It only changes a few labels, and you can switch in Settings.'
+              : 'These set your first targets. Once you have logged food and weight for a week or two, the estimate comes from your own numbers instead.'}
           </Text>
 
           {isMissionStep ? (
@@ -243,7 +228,7 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
               {/* Next Button */}
               <View style={styles.nextButtonWrapper}>
                 <Button
-                  label="NEXT: SET BASELINE STATS →"
+                  label="Next"
                   onPress={() => {
                     thud('heavy');
                     setOnboardingStep('baseline');
@@ -357,7 +342,7 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
               {/* Finish CTA */}
               <View style={styles.finishButtonWrapper}>
                 <Button
-                  label="START ASCEND JOURNEY 🚀"
+                  label="Start"
                   onPress={() => void handleSaveProfile()}
                 />
               </View>
@@ -387,23 +372,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: space.sm,
   },
-  stepBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: space.sm + 2,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
   stepBadgeText: {
     fontFamily: font.figure,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.2,
   },
+  // A full touch target's height: hitSlop is ignored on web, where this ships.
   actionLinkWrapper: {
-    paddingVertical: 4,
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
     paddingLeft: space.sm,
   },
   skipLink: {
