@@ -1,4 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -203,6 +204,35 @@ export default function RoutinesScreen() {
       setBusy(false);
     }
   };
+
+  // The editor is a mode of this screen, not a screen of its own, so the
+  // header's back arrow used to leave Routines altogether: a routine not yet
+  // created was gone, and so was an edit still inside the save delay. Back now
+  // closes the editor, saving an existing routine first and asking before a
+  // new one with anything in it is thrown away.
+  usePreventRemove(editing !== null, () => {
+    void (async () => {
+      if (editing === 'new') {
+        const started = draftName.trim() !== '' || draft.length > 0;
+        if (
+          started &&
+          !(await confirm({
+            title: 'Discard this routine?',
+            message: 'It has not been created yet.',
+            confirmLabel: 'Discard',
+            destructive: true,
+          }))
+        )
+          return;
+        setEditing(null);
+      } else if (draftName.trim() && draft.length > 0) {
+        await save();
+      } else {
+        // Nothing the save would accept; the routine keeps what it last saved.
+        setEditing(null);
+      }
+    })();
+  });
 
   const remove = async (routine: Routine) => {
     const sure = await confirm({
@@ -566,7 +596,7 @@ const WAYS = [
 const planSummary = (exercises: { isCardio?: boolean; targetSets: number }[]): string => {
   const sets = exercises.filter((e) => !e.isCardio).reduce((sum, e) => sum + e.targetSets, 0);
   const parts = [`${exercises.length} ${exercises.length === 1 ? 'exercise' : 'exercises'}`];
-  if (sets > 0) parts.push(`${sets} sets`, `about ${estimateMinutes(sets)} min`);
+  if (sets > 0) parts.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`, `about ${estimateMinutes(sets)} min`);
   return parts.join(' · ');
 };
 

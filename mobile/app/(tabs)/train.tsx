@@ -110,7 +110,7 @@ export default function TrainScreen() {
       {open ? (
         <Card loud variant="featured" title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
           <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
-            {open.sets.length} sets logged so far.
+            {open.sets.length} {open.sets.length === 1 ? 'set' : 'sets'} logged so far.
           </Text>
           <Button
             tone="loud"

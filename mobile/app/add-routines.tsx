@@ -320,7 +320,7 @@ export default function AddRoutinesScreen() {
                 subtitle={(() => {
                   // Of the exercises still kept, so dropping one shows what it saves.
                   const sets = routine.exercises.filter((e) => e.include).reduce((sum, e) => sum + e.sets, 0);
-                  return `${sets} sets · about ${estimateMinutes(sets)} min`;
+                  return `${sets} ${sets === 1 ? 'set' : 'sets'} · about ${estimateMinutes(sets)} min`;
                 })()}
                 right={
                   <Tappable

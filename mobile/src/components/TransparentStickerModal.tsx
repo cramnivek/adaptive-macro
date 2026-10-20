@@ -180,9 +180,13 @@ export const TransparentStickerModal = ({
                 <View style={styles.stickerWrap}>
                   <Image
                     source={{ uri: sticker.url }}
+                    // Sized from the width and capped in height, never the
+                    // other way: a fixed 260 high made a 760-wide sticker
+                    // wider than a phone's stage, and both sides were cut off.
+                    // `contain` keeps the proportions when the cap applies.
                     style={{
-                      height: 260,
-                      maxHeight: '100%',
+                      width: '100%',
+                      maxHeight: 268,
                       aspectRatio: sticker.width / sticker.height,
                     }}
                     resizeMode="contain"
