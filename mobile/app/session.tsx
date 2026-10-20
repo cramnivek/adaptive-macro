@@ -77,7 +77,7 @@ import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
 import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../src/dumbbellLoad';
 import { moveKeepingSupersets } from '../src/blockOrder';
-import { playChime, primeChime, primeEffect } from '../src/platform/chime';
+import { playChime, playEffect, primeChime, primeEffect } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
@@ -1493,6 +1493,14 @@ export default function SessionScreen() {
       return;
     }
 
+    // The tick plays on the tap itself, which is when a browser allows sound;
+    // the PR sting is primed now for the same reason, as whether this set is a
+    // record is only known once it is written.
+    if (settings.effectSounds) {
+      playEffect('tick');
+      primeEffect('pr');
+    }
+
     await addSetToSession(session.id, {
       exerciseName: block.name,
       bodyweightBased: block.bodyweightBased,
@@ -1521,6 +1529,7 @@ export default function SessionScreen() {
 
     if (isNewPR) {
       thud('heavy');
+      if (settings.effectSounds) playEffect('pr');
       const e1rm = estimate1RM(effectiveKg, reps);
       const targetE1rm = currentBestPR?.e1rm ?? 0;
       const delta = targetE1rm > 0 ? Math.max(0, e1rm - targetE1rm) : 0;
@@ -1879,7 +1888,10 @@ export default function SessionScreen() {
     if (!session) return;
     // Primed on this tap so the PR sting may play once the session is saved,
     // a moment later and with no tap of its own.
-    if (settings.effectSounds) primeEffect('pr');
+    if (settings.effectSounds) {
+      primeEffect('pr');
+      primeEffect('finish');
+    }
     const logged = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
     if (logged === 0) {
@@ -1953,7 +1965,9 @@ export default function SessionScreen() {
       const allSets = await listAllSets();
       const bodyweightByDate = bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true });
       const reached = milestonesOn(allSets, bodyweightByDate, session.date, laddersFor(workoutUnits));
+      // A milestone brings its own sting; an ordinary finish gets the chord.
       if (reached[0] !== undefined) setMilestone(reached[0]);
+      else if (settings.effectSounds) playEffect('finish');
       // The milestone's celebration comes first; the share sheet waits behind it.
       const workout: FinishedWorkout = {
         sessionId: session.id,
