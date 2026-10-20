@@ -89,10 +89,12 @@ may not switch roles. Joining with a second account from the phone is that proof
   listed file younger than 30 days. The deploy also no longer passes
   `--allow-unauthenticated`, which only produced "Setting IAM policy failed";
   public access survives deploys on its own.
-- **Invite codes come from `Math.random`**, six characters from 32, about a
-  billion combinations, and nothing limits how often `join_squad` can be
-  called. Fine for a group of friends; worth `crypto.getRandomValues` and a rate
-  limit before squads are something strangers use.
+- **Invite codes came from `Math.random`**, and nothing limited how often
+  `join_squad` could be called. Fixed after this snapshot: codes come from
+  `expo-crypto`, and `20261020120000_squad_join_limit.sql` allows twenty tries
+  per person per hour, wrong guesses counted. To count them, an unknown code
+  now returns null instead of raising — a raise would roll the logged attempt
+  back.
 
 ---
 
@@ -122,15 +124,17 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
 
 ### Decisions that are the owner's, not yet made
 
-- **The app now requires sign-in** (`AuthGate.tsx`, PR #19). AGENTS.md still says
-  nothing in the core app may depend on being signed in. One of the two needs
-  to change; nothing records which was intended.
+- **Decided 2026-10-20: the account is optional again.** The sign-in screen
+  offers "Use Ascend without an account", which sets `accountSkipped`, and
+  `AuthGate` then stops sending a signed-out person to sign-in. The social
+  screens already ask for an account on their own. AGENTS.md's "everything
+  works signed out" is true again.
 - **Sign-in uploads the baseline** — profile, starting weight, goal, units — to
   Supabase `user_metadata` (`social/baselineSync.ts`). The sign-in screen now
   says so. The privacy policy should be checked against it.
-- **The onboarding "focus" step changes labels only.** The lose / maintain /
-  gain choice on step 2 is what sets targets. Either make the focus do something
-  or drop it from first run and leave it in Settings.
+- **Decided 2026-10-20: the focus step left onboarding.** First run is one
+  screen of numbers. The focus is still in Settings, still label-only, and the
+  Today banner that promoted it is gone.
 - **Home "Balanced" and "Food first" lay Today out identically.** The copy now
   admits it; the behaviour is unchanged.
 
@@ -142,23 +146,23 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
 - **Reordering can split a superset**; the sheet does not move a group together.
 - **A deliberately typed lone `0` over a prefilled weight is put back** on blur,
   the cost of stopping a look-and-leave tap from zeroing a set. Clearing the
-  field (BW) still works.
+  field (BW) still works. Ticking a set straight from such a field also takes
+  the old number: on iOS Safari the tick can land before the field's blur.
+- **One-sided dumbbell work assumes both sides match.** One weight and rep
+  count is logged, and the row shows `L 105 × 13 · R 105 × 13`; a pair shows its
+  total. Sides that differ cannot be logged yet.
 - **A squad can read as full because of a member you cannot see** across a
   block — the accepted leak, documented in the migration.
 
 ### Small, low-risk follow-ups
 
-- Delete `FeatureInterestPicker`, `FeatureInterestModal` and
-  `FeatureInterestOnboardingBanner` (and `features/featureInterests.ts` if
-  nothing else uses it): not mounted anywhere, and still in the old
-  multi-colour look.
-- `TransparentStickerModal.tsx` logs `Invalid style property of "backgroundPosition"`
-  on every web load.
-- A few default-voice strings still read as generated, e.g. "Smart food lookup"
-  in `app/search.tsx`. The gymrat voice's emoji are deliberate; leave those.
-- AGENTS.md's migration list, test counts and deploy rule were brought up to
-  date on 2026-10-20. It still does not describe squads, and still says the
-  core app works signed out — which waits on the sign-in decision above.
+- Done on 2026-10-20: the unused feature-interest components are deleted
+  (`features/featureInterests.ts` stays; settings still store the field), the
+  sticker modal's `backgroundPosition` error is gone, an unknown stored card
+  template falls back to the default, the workflow's actions run on Node 24,
+  and the remaining generated-sounding default copy was reworded.
+- AGENTS.md does not describe squads yet, and its applied-migration list gains
+  `20261020120000_squad_join_limit.sql` once that merges.
 
 ---
 
