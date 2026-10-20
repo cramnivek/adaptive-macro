@@ -15,16 +15,22 @@
 export type DumbbellLoad =
   /** One in each hand, both working together: bench press, curls. */
   | 'pair'
-  /** A single bell, whether held in both hands or worked one arm at a time. */
+  /** A single bell held in both hands: goblet squat, pullover. */
   | 'single'
-  /** One side at a time — split squats, lunges, alternating curls — so reps are per side. */
+  /**
+   * One side at a time — single-arm rows, split squats, lunges, alternating
+   * curls — so the weight and reps logged are one side's, and the other side
+   * is assumed to match.
+   */
   | 'perSide';
 
 const DUMBBELL = /\b(dumbbells?|db)\b/i;
-// A single bell: held in both hands (goblet, pullover) or one arm at a time.
-// "Dumbbell Row" and "Meadows Row" are one-arm movements by convention.
-const SINGLE = /\b(goblet|pullover|concentration|single[- ]arm|one[- ]arm|meadows)\b|^dumbbell row$|^row \(dumbbell\)$/i;
-const PER_SIDE = /\b(split squat|lunges?|step[- ]ups?|single[- ]leg|one[- ]leg|alternating|alternate)\b/i;
+// One bell held in both hands.
+const SINGLE = /\b(goblet|pullover)\b/i;
+// One side, then the other. "Dumbbell Row" and "Meadows Row" are one-arm
+// movements by convention, so they count here even without saying so.
+const PER_SIDE =
+  /\b(split squat|lunges?|step[- ]ups?|single[- ]leg|one[- ]leg|single[- ]arm|one[- ]arm|alternating|alternate|concentration|meadows)\b|^dumbbell row$|^row \(dumbbell\)$/i;
 
 export const dumbbellLoad = (exerciseName: string, equipment?: string | null): DumbbellLoad | null => {
   const name = exerciseName.trim();
@@ -32,6 +38,28 @@ export const dumbbellLoad = (exerciseName: string, equipment?: string | null): D
   if (SINGLE.test(name)) return 'single';
   if (PER_SIDE.test(name)) return 'perSide';
   return 'pair';
+};
+
+/**
+ * The other side of what was typed, worked out, so nobody has to do the sum
+ * in their head between sets: a pair's total, or both sides of a one-sided
+ * movement. Null when there is nothing to add — no weight yet, or a single
+ * bell, where the number typed is already the whole load.
+ */
+export const dumbbellBreakdown = (
+  load: DumbbellLoad | null,
+  weight: string,
+  reps: string,
+  unit: string,
+): string | null => {
+  // In whatever unit the session is in; nothing here converts.
+  const each = Number.parseFloat(weight.replace(',', '.'));
+  if (load === null || load === 'single' || !Number.isFinite(each) || each <= 0) return null;
+  const shown = (n: number) => String(Math.round(n * 10) / 10);
+  if (load === 'pair') return `= ${shown(each * 2)} ${unit.toLowerCase()} total, both dumbbells`;
+  const r = Number.parseInt(reps, 10);
+  const side = Number.isFinite(r) && r > 0 ? `${shown(each)} × ${r}` : shown(each);
+  return `L ${side} · R ${side}`;
 };
 
 /** Heading for the weight column: "LB EACH" makes clear a pair is not summed. */
@@ -48,6 +76,6 @@ export const dumbbellNote = (load: DumbbellLoad): string => {
     case 'single':
       return 'Log the weight of the one dumbbell you hold.';
     case 'perSide':
-      return 'Log one dumbbell’s weight and the reps for one side.';
+      return 'Log one side. The other side is assumed to match.';
   }
 };

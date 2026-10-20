@@ -74,11 +74,11 @@ import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch'
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
-import { dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../src/dumbbellLoad';
+import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../src/dumbbellLoad';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
-import { BAR_WEIGHT, describePlates, platesFor, usesBarbell } from '../src/plates';
+import { usesBarbell } from '../src/plates';
 import { PlateSheet } from '../src/components/PlateSheet';
 import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
 import type { WarmupSet } from '../src/warmup';
@@ -1320,10 +1320,36 @@ export default function SessionScreen() {
   );
 
   /** Ticking writes the set; unticking removes it. */
+  /**
+   * What a weight or reps field held before focusing it set it to 0.
+   *
+   * The 0 is there so typing replaces the old number instead of appending to
+   * it, which iOS Safari's unreliable select-on-focus would otherwise do. But a
+   * tap just to read the number, then a tap away, left the 0 behind — and on a
+   * ticked set, saved it. Leaving the field untouched puts the number back.
+   */
+  const blankedOnFocus = useRef<{ key: string; field: 'weight' | 'reps'; value: string } | null>(null);
+
   const toggleRow = async (blockIndex: number, rowIndex: number) => {
     if (!session) return;
     const block = blocks[blockIndex];
-    const row = block.rows[rowIndex];
+    let row = block.rows[rowIndex];
+
+    // Ticking straight from a field that focus set to 0. On iOS Safari the
+    // tick's press can land before the field's blur, so the row here still
+    // reads 0 and the set would be logged at zero. Take the number it held.
+    const blanked = blankedOnFocus.current;
+    if (
+      blanked &&
+      blanked.key === row.key &&
+      row[blanked.field] === '0' &&
+      blanked.value.trim() &&
+      blanked.value !== '0'
+    ) {
+      blankedOnFocus.current = null;
+      row = { ...row, [blanked.field]: blanked.value };
+      editRow(blockIndex, rowIndex, { [blanked.field]: blanked.value });
+    }
 
     if (row.done && row.id) {
       await deleteSet(row.id);
@@ -1524,16 +1550,6 @@ export default function SessionScreen() {
   };
 
   /** Keeps an already-written set in step with an edited row. */
-  /**
-   * What a weight or reps field held before focusing it set it to 0.
-   *
-   * The 0 is there so typing replaces the old number instead of appending to
-   * it, which iOS Safari's unreliable select-on-focus would otherwise do. But a
-   * tap just to read the number, then a tap away, left the 0 behind — and on a
-   * ticked set, saved it. Leaving the field untouched puts the number back.
-   */
-  const blankedOnFocus = useRef<{ key: string; field: 'weight' | 'reps'; value: string } | null>(null);
-
   const blurNumber = (blockIndex: number, rowIndex: number, row: Row) => {
     const blanked = blankedOnFocus.current;
     blankedOnFocus.current = null;
@@ -2680,33 +2696,22 @@ export default function SessionScreen() {
                       )}
                     </View>
 
-                    {!block.isCardio && (() => {
-                      const rowWeightNum = parseFloat(row.weight);
-                      const isBb = usesBarbell(block.name);
-                      if (!isBb || !Number.isFinite(rowWeightNum) || rowWeightNum < BAR_WEIGHT[workoutUnits][settings.barbell]) {
-                        return null;
-                      }
-                      const p = platesFor(rowWeightNum, workoutUnits, settings.barbell, settings.customPlates?.[workoutUnits]);
-                      if (!p || p.perSide.length === 0 || row.done) return null;
-                      return (
-                        <Tappable
-                          onPress={() => openPlates(block, blockIndex, 'plates')}
-                          style={styles.plateRowTag}
-                          scaleTo={0.97}
-                          accessibilityLabel={`Barbell rack load for ${block.name}: ${describePlates(p.perSide)} per side`}
-                        >
-                          <Ionicons name="barbell-outline" size={11} color="#00E5FF" style={{ marginRight: 4 }} />
-                          <Text style={styles.plateRowText}>
-                            RACK: <Text style={styles.plateRowTextLoud}>{describePlates(p.perSide)}</Text> / side ({p.bar} {unit} bar)
-                            {/* Your plates cannot always make the number typed — 192 on
-                                pound plates loads 190 — and a hint that keeps quiet about
-                                it sends you to the bar with the wrong weight. */}
-                            {Math.abs(p.loaded - rowWeightNum) > 0.01 && (
-                              <Text style={styles.plateRowShort}> = {compactWeight(p.loaded)} {unit}</Text>
-                            )}
-                          </Text>
-                        </Tappable>
+                    {/*
+                      The other side of a dumbbell set, worked out: a pair's
+                      total, or both sides of a one-arm or one-leg movement,
+                      so the number typed is never left to mental arithmetic.
+                      It takes the place of the plate-loading hint that sat
+                      here; that is still one tap away under PLATES, and under
+                      every set it was more noise than help.
+                    */}
+                    {!block.isCardio && !block.bodyweightBased && (() => {
+                      const line = dumbbellBreakdown(
+                        dumbbellLoad(block.name, equipmentByName[block.name]),
+                        row.weight,
+                        row.reps,
+                        unit,
                       );
+                      return line ? <Text style={styles.breakdown}>{line}</Text> : null;
                     })()}
 
                     {block.isCardio && liveEstimate ? (
@@ -3223,37 +3228,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: loud.figureMuted,
   },
-  plateRowTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 3,
-    paddingHorizontal: space.sm,
-    backgroundColor: '#111318',
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#1E2433',
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    marginBottom: 4,
+  breakdown: {
+    fontFamily: font.figure,
+    fontSize: 11,
+    color: loud.figureMuted,
+    // Tucked under its row, starting where the previous-set column does.
     marginLeft: 32,
+    marginTop: -2,
+    marginBottom: space.xs,
   },
-  plateRowText: {
-    fontFamily: font.display,
-    fontSize: 10,
-    letterSpacing: 0.6,
-    color: '#00E5FF',
-  },
-  plateRowShort: { color: loud.warn },
   loadNote: {
     fontFamily: font.ui,
     fontSize: 12,
     color: loud.figureMuted,
     marginBottom: space.xs,
-  },
-  plateRowTextLoud: {
-    color: '#FFFFFF',
-    fontFamily: font.figure,
-    fontWeight: 'bold',
   },
   blockMetaRow: {
     flexDirection: 'row',
