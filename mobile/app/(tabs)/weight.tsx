@@ -1,6 +1,7 @@
 import { diffDays, rateVerdict, todayISO } from '@adaptive-macros/engine';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BodyMeasurementsCard } from '../../src/components/BodyMeasurementsCard';
 import { Card } from '../../src/components/Card';
 import { Button, Stepper, TOUCH_TARGET } from '../../src/components/Controls';
 import { LineChart } from '../../src/components/LineChart';
@@ -246,6 +247,12 @@ export default function WeightScreen() {
         />
         )}
       </Card>
+
+      {/* Body fat sets how much energy a kilo of change holds, so the place to
+          log it sits beside the trend it feeds. It used to live only on the
+          overview screen, which nothing has opened since its Train-tab
+          button was removed. */}
+      <BodyMeasurementsCard units={units} />
 
       <Card title="Recent weigh-ins" subtitle={recent.length ? 'Hold an entry to remove it' : undefined}>
         {recent.length === 0 && (
