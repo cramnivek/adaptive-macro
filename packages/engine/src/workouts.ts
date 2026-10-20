@@ -659,6 +659,70 @@ export const bestHistoricalE1RM = (
   return best;
 };
 
+/** The one set of a lift in a session that beat everything it had done before. */
+export interface SetRecord {
+  exerciseName: string;
+  setId: string;
+  e1rm: number;
+  /** The best estimated 1RM before this session, which `e1rm` beat. */
+  previousE1rm: number;
+}
+
+/**
+ * Which sets in a session were all-time records, at most one per lift.
+ *
+ * Judged on estimated 1RM, the same measure the logger's own PR badge uses, so
+ * a set marked in the results is the set that was celebrated mid-workout. Only
+ * the session's best set of each lift is marked: three sets that each edged
+ * the old best are one record, and a medal on every row would mean nothing.
+ *
+ * A lift with no history before the session has no record. It is a baseline,
+ * which the logger already says, and a medal for the first time anyone does a
+ * lift would hand one out with every new exercise.
+ *
+ * "Before" is by date, as milestones are: two sessions on the same day are
+ * each judged against the days before, because the dates are all a set
+ * carries to order them by.
+ */
+export const recordsInSession = (
+  allSets: DatedSet[],
+  bodyweightByDate: ReadonlyMap<ISODate, number>,
+  sessionId: string,
+): SetRecord[] => {
+  const mine = allSets.filter((entry) => entry.set.sessionId === sessionId);
+  if (mine.length === 0) return [];
+  const date = mine[0].date;
+  const before = allSets.filter((entry) => entry.date < date);
+
+  const records: SetRecord[] = [];
+  const names: string[] = [];
+  for (const entry of mine) if (!names.includes(entry.set.exerciseName)) names.push(entry.set.exerciseName);
+
+  for (const name of names) {
+    const previous = bestHistoricalE1RM(before, name, bodyweightByDate);
+    if (previous === null) continue;
+
+    // The first set to reach the session's best wins a tie, as it got there first.
+    let top: { setId: string; e1rm: number } | null = null;
+    const ordered = mine
+      .filter((entry) => entry.set.exerciseName === name)
+      .sort((a, b) => a.set.setIndex - b.set.setIndex);
+    for (const { date: setDate, set } of ordered) {
+      if (!isWorkingSet(set) || set.reps === null || set.reps <= 0) continue;
+      const load = effectiveLoadKg(set, bodyweightByDate.get(setDate) ?? null);
+      if (load === null || load <= 0) continue;
+      const e1rm = estimate1RM(load, set.reps);
+      if (top === null || e1rm > top.e1rm) top = { setId: set.id, e1rm };
+    }
+
+    if (top !== null && top.e1rm > previous.e1rm) {
+      records.push({ exerciseName: name, setId: top.setId, e1rm: top.e1rm, previousE1rm: previous.e1rm });
+    }
+  }
+
+  return records;
+};
+
 export type PRTargetEvaluation =
   | {
       status: 'pr';

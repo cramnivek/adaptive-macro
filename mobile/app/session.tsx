@@ -4,6 +4,7 @@ import {
   evaluatePRTarget,
   lbToKg,
   milestonesOn,
+  recordsInSession,
   todayISO,
 } from '@adaptive-macros/engine';
 import type { ExercisePR, Milestone, SetType } from '@adaptive-macros/engine';
@@ -1917,12 +1918,8 @@ export default function SessionScreen() {
     */
     try {
       const allSets = await listAllSets();
-      const reached = milestonesOn(
-        allSets,
-        bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true }),
-        session.date,
-        laddersFor(workoutUnits),
-      );
+      const bodyweightByDate = bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true });
+      const reached = milestonesOn(allSets, bodyweightByDate, session.date, laddersFor(workoutUnits));
       if (reached[0] !== undefined) setMilestone(reached[0]);
       // The milestone's celebration comes first; the share sheet waits behind it.
       const workout: FinishedWorkout = {
@@ -1933,6 +1930,7 @@ export default function SessionScreen() {
         finishedAt: new Date(),
         sets: await sessionSets(session.id),
         milestone: reached[0] ?? null,
+        records: recordsInSession(allSets, bodyweightByDate, session.id),
       };
       setFinished({
         workout,

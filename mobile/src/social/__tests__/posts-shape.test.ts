@@ -81,6 +81,21 @@ describe('a post’s exercises', () => {
     await expect(addPost(db, { exercises: [lift({ note: 'hi' })] })).rejects.toThrow(/posts_exercises_valid/);
   });
 
+  it('accept a lift marked as a record, written as true', async () => {
+    await addPost(db, { exercises: [lift({ pr: true }), lift({ name: 'Row' })] });
+  });
+
+  it('refuse a record mark that is anything but true', async () => {
+    await expect(addPost(db, { exercises: [lift({ pr: false })] })).rejects.toThrow(/posts_exercises_valid/);
+    await expect(addPost(db, { exercises: [lift({ pr: 'yes' })] })).rejects.toThrow(/posts_exercises_valid/);
+    await expect(addPost(db, { exercises: [lift({ pr: 1 })] })).rejects.toThrow(/posts_exercises_valid/);
+  });
+
+  it('refuse a fifth key that is not the record mark, and a sixth', async () => {
+    await expect(addPost(db, { exercises: [lift({ junk: true })] })).rejects.toThrow(/posts_exercises_valid/);
+    await expect(addPost(db, { exercises: [lift({ pr: true, note: 'hi' })] })).rejects.toThrow(/posts_exercises_valid/);
+  });
+
   it('refuse a missing key', async () => {
     const { best_reps: _gone, ...short } = lift();
     await expect(addPost(db, { exercises: [short] })).rejects.toThrow(/posts_exercises_valid/);
@@ -257,6 +272,17 @@ describe('a post built by the app', () => {
   it('goes in as it is, bodyweight lift and highlight included', async () => {
     await insert(postPayload(workout(), 'felt strong'));
     expect(await as(db, USER_A, `select count(*)::int as n from posts`)).toEqual([{ n: 1 }]);
+  });
+
+  it('goes in with a record set marked', async () => {
+    const sets = [set('Bench Press (Barbell)', 105, 2), set('Bench Press (Barbell)', 100, 8)];
+    const row = postPayload(
+      workout({ sets, milestone: null, records: [{ exerciseName: 'Bench Press (Barbell)', setId: sets[1].id, e1rm: 126.67, previousE1rm: 120 }] }),
+      null,
+    );
+    // The record is quoted, not the heavier set before it.
+    expect(row.exercises).toEqual([{ name: 'Bench Press (Barbell)', sets: 2, best_kg: 100, best_reps: 8, pr: true }]);
+    await insert(row);
   });
 
   it('goes in with no highlight and a bodyweight-only day', async () => {

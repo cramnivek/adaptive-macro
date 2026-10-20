@@ -38,6 +38,7 @@ import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
 import { CopyWorkoutSheet } from './CopyWorkoutSheet';
+import { PRMedal } from './PRMedal';
 import { Tappable } from './Tappable';
 import { TransparentStickerModal } from './TransparentStickerModal';
 import { UserAvatar } from './UserAvatar';
@@ -190,7 +191,7 @@ export const PostCard = ({
     if (view.exercises && view.exercises.length > 0) {
       parts.push('\nExercises:');
       view.exercises.forEach((ex) => {
-        parts.push(`• ${ex.name}: ${ex.sets > 0 ? `${ex.sets}s` : '—'} (${ex.best})`);
+        parts.push(`• ${ex.name}: ${ex.sets > 0 ? `${ex.sets}s` : '—'} (${ex.best})${ex.pr ? ' 🏅 PR' : ''}`);
       });
       if (view.more > 0) parts.push(`+ ${view.more} more`);
     }
@@ -434,6 +435,7 @@ export const PostCard = ({
                       : rx.best_kg === null
                         ? `${rx.best_reps} reps`
                         : `${rx.best_kg} kg × ${rx.best_reps}`,
+                    pr: rx.pr === true && !isCardio,
                   };
                 })
               : view.exercises
@@ -453,6 +455,7 @@ export const PostCard = ({
                 <Text style={[styles.exerciseName, { color: colors.text }]} numberOfLines={1}>
                   {lift.name}
                 </Text>
+                {lift.pr && <PRMedal />}
                 <Text style={[styles.exerciseBest, { color: colors.accent }]}>{lift.best}</Text>
               </View>
             ))}

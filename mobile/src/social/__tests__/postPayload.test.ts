@@ -89,6 +89,28 @@ describe('postView', () => {
     expect(postView(row, 'imperial').highlight?.figure).toMatch(/ lb$/);
   });
 
+  it('marks a record lift, and names it as the headline when no milestone was crossed', () => {
+    const w = workout();
+    const record = w.sets[3];
+    const row = postPayload({ ...w, records: [{ exerciseName: record.exerciseName, setId: record.id, e1rm: 120.33, previousE1rm: 120 }] }, null);
+    const view = postView(row, 'metric');
+    expect(view.exercises[0]).toEqual({ name: 'Bench Press (Barbell)', sets: 3, best: '95 kg × 8', pr: true });
+    expect(view.exercises[1].pr).toBeUndefined();
+    expect(view.highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '95 kg × 8' });
+  });
+
+  it('keeps the milestone as the headline over a record', () => {
+    const w = workout({ milestone: { kind: 'load', value: 100, exercise: 'Bench Press (Barbell)' } });
+    const row = postPayload({ ...w, records: [{ exerciseName: 'Bench Press (Barbell)', setId: w.sets[3].id, e1rm: 120.33, previousE1rm: 120 }] }, null);
+    expect(postView(row, 'metric').highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '100 kg' });
+  });
+
+  it('reads a record mark only when it is true', () => {
+    const row = postPayload(workout(), null);
+    const odd = { ...row, exercises: [{ ...row.exercises[0], pr: 'yes' }] } as unknown as typeof row;
+    expect(postView(odd, 'metric').exercises[0].pr).toBeUndefined();
+  });
+
   it('carries the caption and the duration in words', () => {
     const view = postView(postPayload(workout(), 'felt strong'), 'metric');
     expect(view.caption).toBe('felt strong');
