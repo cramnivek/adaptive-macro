@@ -45,3 +45,35 @@ export const deurenbergBodyFatPct = (weightKg: number, heightCm: number, age: nu
   // Outside this the formula is extrapolating past anyone it was fitted on.
   return Math.min(60, Math.max(3, pct));
 };
+
+/**
+ * Body fat percentage from a tape measure: the US Navy circumference
+ * equations (Hodgdon & Beckett 1984), in their metric form. Men use waist and
+ * neck; women add hips. Against underwater weighing and DXA its error is about
+ * 3–4 points, which is no better than a scale's guess but rests on the
+ * person's own shape rather than on BMI, so it moves as their waist does.
+ *
+ * Null when the measurements cannot describe a body (a waist no wider than the
+ * neck takes the logarithm of nothing), or a woman's hips are missing.
+ */
+export const navyBodyFatPct = (
+  sex: Sex,
+  heightCm: number,
+  waistCm: number,
+  neckCm: number,
+  hipsCm?: number | null,
+): number | null => {
+  if (!(heightCm > 0 && waistCm > 0 && neckCm > 0)) return null;
+  let density: number;
+  if (sex === 'male') {
+    if (waistCm <= neckCm) return null;
+    density = 1.0324 - 0.19077 * Math.log10(waistCm - neckCm) + 0.15456 * Math.log10(heightCm);
+  } else {
+    if (!hipsCm || hipsCm <= 0 || waistCm + hipsCm <= neckCm) return null;
+    density = 1.29579 - 0.35004 * Math.log10(waistCm + hipsCm - neckCm) + 0.221 * Math.log10(heightCm);
+  }
+  const pct = 495 / density - 450;
+  // The same bounds as the fallback above: outside them the inputs are far
+  // more likely mistyped than true.
+  return Math.min(60, Math.max(3, pct));
+};

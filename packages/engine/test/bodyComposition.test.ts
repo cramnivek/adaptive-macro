@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deurenbergBodyFatPct, energyDensityKcalPerKg } from '../src/bodyComposition';
+import { deurenbergBodyFatPct, energyDensityKcalPerKg, navyBodyFatPct } from '../src/bodyComposition';
 
 describe('energyDensityKcalPerKg', () => {
   it('matches Chow & Hall’s model at a few body-fat levels', () => {
@@ -41,5 +41,35 @@ describe('deurenbergBodyFatPct', () => {
   it('stays within what the formula was fitted on', () => {
     expect(deurenbergBodyFatPct(45, 200, 18, 'male')).toBe(3);
     expect(deurenbergBodyFatPct(200, 150, 80, 'female')).toBe(60);
+  });
+});
+
+describe('navyBodyFatPct', () => {
+  it('applies the metric Navy equations', () => {
+    // Man, 178 cm, waist 85, neck 38: 495/(1.0324 − 0.19077·log10(47) + 0.15456·log10(178)) − 450.
+    const man = 495 / (1.0324 - 0.19077 * Math.log10(47) + 0.15456 * Math.log10(178)) - 450;
+    expect(navyBodyFatPct('male', 178, 85, 38)).toBeCloseTo(man, 6);
+    expect(man).toBeGreaterThan(15);
+    expect(man).toBeLessThan(20);
+    // Woman, 165 cm, waist 72, hips 98, neck 33.
+    const woman = 495 / (1.29579 - 0.35004 * Math.log10(137) + 0.221 * Math.log10(165)) - 450;
+    expect(navyBodyFatPct('female', 165, 72, 33, 98)).toBeCloseTo(woman, 6);
+    expect(woman).toBeGreaterThan(22);
+    expect(woman).toBeLessThan(30);
+  });
+
+  it('rises with the waist', () => {
+    expect(navyBodyFatPct('male', 178, 95, 38)!).toBeGreaterThan(navyBodyFatPct('male', 178, 85, 38)!);
+  });
+
+  it('declines measurements that cannot describe a body', () => {
+    expect(navyBodyFatPct('male', 178, 38, 40)).toBeNull();
+    expect(navyBodyFatPct('male', 0, 85, 38)).toBeNull();
+    expect(navyBodyFatPct('female', 165, 72, 33)).toBeNull();
+    expect(navyBodyFatPct('female', 165, 72, 33, null)).toBeNull();
+  });
+
+  it('clamps the extremes', () => {
+    expect(navyBodyFatPct('male', 190, 40, 39)).toBe(3);
   });
 });
