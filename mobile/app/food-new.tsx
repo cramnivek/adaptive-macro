@@ -29,7 +29,10 @@ const parseAmount = (text: string): number | null => {
 export default function NewFoodScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ meal?: string }>();
+  // `barcode` arrives from a scan Open Food Facts could not answer: the food is
+  // saved under it, so scanning the same packet again finds it on this device.
+  const params = useLocalSearchParams<{ meal?: string; barcode?: string }>();
+  const barcode = typeof params.barcode === 'string' && /^\d{8,14}$/.test(params.barcode) ? params.barcode : undefined;
 
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -118,6 +121,7 @@ export default function NewFoodScreen() {
       id: `custom:${Date.now()}`,
       name: trimmedName,
       brand: brand.trim() || undefined,
+      barcode,
       source: 'custom',
       // Calories left blank fall back to what the macros imply, which is a
       // derivation from what was entered rather than an invention.
@@ -144,7 +148,10 @@ export default function NewFoodScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Card title="What is it?">
+      <Card
+        title="What is it?"
+        subtitle={barcode ? `Saved to barcode ${barcode}, so the next scan of it finds this.` : undefined}
+      >
         <Field label="Name" value={name} onChangeText={setName} placeholder="Mum's lasagne" />
         <Field
           label="Brand (optional)"

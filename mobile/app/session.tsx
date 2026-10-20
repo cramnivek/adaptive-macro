@@ -74,7 +74,8 @@ import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch'
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
-import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../src/dumbbellLoad';
+import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../src/dumbbellLoad';
+import { moveKeepingSupersets } from '../src/blockOrder';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
@@ -1665,16 +1666,12 @@ export default function SessionScreen() {
 
   // Lifts the exercise out and drops it at the new place, so a move of several
   // places keeps everything in between in order. A swap did the same for a move
-  // of one, and scrambled the middle for anything longer. The sheet gives the
-  // haptic itself, so there is none here to double it.
+  // of one, and scrambled the middle for anything longer. A superset moves as
+  // one, and nothing is dropped inside another (src/blockOrder.ts). The sheet
+  // gives the haptic itself, so there is none here to double it.
   const reorderExercises = (fromIndex: number, toIndex: number) => {
     if (fromIndex < 0 || fromIndex >= blocks.length || toIndex < 0 || toIndex >= blocks.length) return;
-    setBlocks((current) => {
-      const next = [...current];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
+    setBlocks((current) => moveKeepingSupersets(current, fromIndex, toIndex));
   };
 
   const removeExercise = async (blockIndex: number) => {
@@ -2375,8 +2372,11 @@ export default function SessionScreen() {
                       <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
                         {weightColumnLabel(unit, load)}
                       </Text>
+                      {/* Plain REPS even for one side at a time: REPS/SIDE did not fit
+                          the column and showed as REPS/SI…, and the Left/Right line
+                          under each set already says the reps are per side. */}
                       <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
-                        {repsColumnLabel(load)}
+                        REPS
                       </Text>
                     </>
                   );

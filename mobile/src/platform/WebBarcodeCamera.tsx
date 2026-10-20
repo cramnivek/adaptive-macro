@@ -1,5 +1,9 @@
+import { Asset } from 'expo-asset';
 import { createElement, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+// The decoder itself, bundled with the app as a file Metro copies (wasm is in
+// metro.config.js's assetExts). Pinned to the version barcode-detector expects.
+import readerWasm from 'zxing-wasm/reader/zxing_reader.wasm';
 import { cameraProblem, frameRegionUnder, lacksAutofocus, scanZoom, type LensCapabilities, type Rect } from './scanGeometry';
 
 /**
@@ -26,8 +30,9 @@ type Detector = { detect: (source: CanvasImageSource) => Promise<{ rawValue: str
 /**
  * The browser's own detector where it has one that reads these formats
  * (Chrome on Android), otherwise the same decoder compiled to WebAssembly
- * (Safari, Firefox). The WebAssembly is fetched on first use, so this is the
- * step that fails without a connection.
+ * (Safari, Firefox). The WebAssembly comes from this app's own server, not
+ * the jsDelivr copy the ponyfill fetches by default: one less outside service
+ * the scanner depends on, and the browser caches it with the rest of the app.
  */
 const makeDetector = async (): Promise<Detector> => {
   const Native = (globalThis as { BarcodeDetector?: any }).BarcodeDetector;
@@ -35,7 +40,11 @@ const makeDetector = async (): Promise<Detector> => {
     const supported: string[] = await Native.getSupportedFormats().catch(() => []);
     if (FORMATS.every((f) => supported.includes(f))) return new Native({ formats: FORMATS });
   }
-  const { BarcodeDetector } = await import('barcode-detector/ponyfill');
+  const { BarcodeDetector, setZXingModuleOverrides } = await import('barcode-detector/ponyfill');
+  const wasmUrl = Asset.fromModule(readerWasm as unknown as number | string).uri;
+  setZXingModuleOverrides({
+    locateFile: (path: string, prefix: string) => (path.endsWith('.wasm') ? wasmUrl : prefix + path),
+  });
   return new BarcodeDetector({ formats: FORMATS as any });
 };
 

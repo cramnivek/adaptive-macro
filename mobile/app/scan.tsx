@@ -132,11 +132,18 @@ export default function ScanScreen() {
             <>
               <Text style={[styles.message, { color: colors.text }]}>Barcode {status.code} not found</Text>
               <Text style={[styles.hint, { color: colors.textMuted }]}>
-                Open Food Facts has no usable nutrition data for this product. Search by name, or add it to
-                Open Food Facts so the next person finds it.
+                Open Food Facts has no usable nutrition data for this product. Copy the label in once
+                and this barcode will find it next time.
               </Text>
-              <Button label="Scan again" onPress={resume} />
+              {/* The label is in the person's hand, so copying it in once fixes
+                  this packet for good: the food is saved under the barcode,
+                  and a scan checks this device before Open Food Facts. */}
+              <Button
+                label="Enter it from the label"
+                onPress={() => router.replace({ pathname: '/food-new', params: { meal, barcode: status.code } })}
+              />
               <View style={{ height: space.sm }} />
+              <Button label="Scan again" variant="subtle" onPress={resume} />
               <Button
                 label="Search by name"
                 variant="subtle"
