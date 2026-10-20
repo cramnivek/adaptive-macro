@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getLatestBodyMeasurements, type BodyMeasurementRecord } from '../db';
+import { useApp } from '../state/AppStore';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -20,6 +21,7 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
   const isMetric = units === 'metric';
   const unitLabel = isMetric ? 'cm' : 'in';
 
+  const { refreshAll } = useApp();
   const [records, setRecords] = useState<BodyMeasurementRecord[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<BodyMeasurementRecord | null>(null);
@@ -152,7 +154,12 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         units={units}
-        onSaved={loadData}
+        // A new body-fat figure changes what the expenditure estimate assumes a
+        // kilo of weight is worth, so the store re-reads too.
+        onSaved={() => {
+          void loadData();
+          void refreshAll();
+        }}
         initialRecord={selectedRecord}
       />
     </Card>

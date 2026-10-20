@@ -96,6 +96,7 @@ export default function TrendsScreen() {
     observations,
     totals,
     entries,
+    energyDensity,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
@@ -952,6 +953,17 @@ export default function TrendsScreen() {
               emptyMessage="Log weight and food for a couple of weeks"
               height={190}
             />
+            {/* The assumption the whole estimate scales with, stated rather
+                than hidden: what a kilo of weight change is worth depends on
+                body fat, and an estimated body fat is only a starting point. */}
+            <Text style={styles.note}>
+              Assumes a kilo of weight change holds about{' '}
+              {(Math.round(energyDensity.kcalPerKg / 50) * 50).toLocaleString('en-US')} kcal, from{' '}
+              {energyDensity.measured
+                ? `your logged body fat of ${energyDensity.bodyFatPct.toFixed(0)}%`
+                : `an estimated ${energyDensity.bodyFatPct.toFixed(0)}% body fat. Log a body-fat figure in body measurements to sharpen it`}
+              .
+            </Text>
           </Card>
 
           <Card title="True scale trend weight">
