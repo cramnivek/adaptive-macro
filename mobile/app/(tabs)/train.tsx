@@ -5,7 +5,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { Button, TOUCH_TARGET } from '../../src/components/Controls';
+import { LoadProblem } from '../../src/components/LoadProblem';
 import { Screen } from '../../src/components/Screen';
+import { problemText } from '../../src/loadProblem';
 import { Tappable } from '../../src/components/Tappable';
 import {
   activeSession,
@@ -45,6 +47,10 @@ export default function TrainScreen() {
   const [sets, setSets] = useState<Awaited<ReturnType<typeof listAllSets>>>([]);
   const [top, setTop] = useState<{ name: string; setCount: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Why the last load failed, shown instead of a spinner that would never clear. */
+  const [problem, setProblem] = useState<string | null>(null);
+  /** Bumped by Try again, to rerun the load without leaving the tab. */
+  const [attempt, setAttempt] = useState(0);
   const [plateModalOpen, setPlateModalOpen] = useState(false);
   const [plateWeight, setPlateWeight] = useState<number>(workoutUnits === 'metric' ? 60 : 135);
 
@@ -54,25 +60,30 @@ export default function TrainScreen() {
     useCallback(() => {
       let current = true;
       void (async () => {
-        const [session, sessions, loadedRoutines, allSets, trained] = await Promise.all([
-          activeSession(),
-          recentSessions(8),
-          listRoutines(),
-          listAllSets(),
-          listTrainedExercises(),
-        ]);
-        if (!current) return;
-        setOpen(session);
-        setRecent(sessions);
-        setRoutines(loadedRoutines);
-        setSets(allSets);
-        setTop(trained.slice(0, 3));
-        setLoading(false);
+        try {
+          const [session, sessions, loadedRoutines, allSets, trained] = await Promise.all([
+            activeSession(),
+            recentSessions(8),
+            listRoutines(),
+            listAllSets(),
+            listTrainedExercises(),
+          ]);
+          if (!current) return;
+          setOpen(session);
+          setRecent(sessions);
+          setRoutines(loadedRoutines);
+          setSets(allSets);
+          setTop(trained.slice(0, 3));
+          setProblem(null);
+          setLoading(false);
+        } catch (error) {
+          if (current) setProblem(problemText(error));
+        }
       })();
       return () => {
         current = false;
       };
-    }, []),
+    }, [attempt]),
   );
 
   const bodyweightByDate = useMemo(
@@ -100,7 +111,11 @@ export default function TrainScreen() {
   if (loading) {
     return (
       <Screen title="Train" tone="loud">
-        <ActivityIndicator color={loud.loud} />
+        {problem !== null ? (
+          <LoadProblem tone="loud" message={problem} onRetry={() => setAttempt((n) => n + 1)} />
+        ) : (
+          <ActivityIndicator color={loud.loud} />
+        )}
       </Screen>
     );
   }
