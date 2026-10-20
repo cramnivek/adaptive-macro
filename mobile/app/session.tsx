@@ -1931,7 +1931,16 @@ export default function SessionScreen() {
         sets: await sessionSets(session.id),
         milestone: reached[0] ?? null,
       };
-      setFinished({ workout, summary: shareSummary({ ...workout, units: workoutUnits }) });
+      setFinished({
+        workout,
+        // The trend alone for the energy estimate: currentBodyweightKg falls
+        // back to the goal weight, which is not what the person weighs.
+        summary: shareSummary({
+          ...workout,
+          units: workoutUnits,
+          bodyweightKg: series[series.length - 1]?.trendWeightKg ?? null,
+        }),
+      });
       void recordSquadWorkoutSession({
         title: session.name || 'Workout',
         prHighlight: reached[0] ? (reached[0].exercise ? `${reached[0].exercise} ${reached[0].value}kg` : `${reached[0].value} ${reached[0].kind}`) : null,
