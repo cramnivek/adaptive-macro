@@ -1,13 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { FloatingWorkoutBar } from '../../src/components/FloatingWorkoutBar';
+import { FloatingBarInset, FloatingWorkoutBar } from '../../src/components/FloatingWorkoutBar';
 import { font, useTheme } from '../../src/theme';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
+  const [barInset, setBarInset] = useState(0);
 
   return (
+    <FloatingBarInset.Provider value={barInset}>
     <View style={{ flex: 1 }}>
       <Tabs
         screenOptions={{
@@ -72,7 +75,8 @@ export default function TabsLayout() {
         options={{ title: 'Settings', href: null }}
       />
     </Tabs>
-    <FloatingWorkoutBar />
+    <FloatingWorkoutBar onHeight={setBarInset} />
   </View>
+    </FloatingBarInset.Provider>
   );
 }

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, space, useTheme } from '../theme';
+import { FloatingBarInset } from './FloatingWorkoutBar';
 import { session as loud } from '../theme/sessionTheme';
 
 interface ScreenProps {
@@ -31,13 +32,15 @@ interface ScreenProps {
 export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action }: ScreenProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Room for the floating workout bar, when this is a tab and the bar is up.
+  const barInset = useContext(FloatingBarInset);
 
   return (
     <ScrollView
       style={{ backgroundColor: tone === 'loud' ? loud.ground : colors.background }}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl },
+        { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl + barInset },
       ]}
       keyboardShouldPersistTaps="handled"
       refreshControl={

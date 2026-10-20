@@ -25,6 +25,13 @@ export default function WeightScreen() {
   const { settings, updateSettings, weights, recordWeight, removeWeight, series, latest, trend } = useApp();
   const [input, setInput] = useState('');
   const [seededFrom, setSeededFrom] = useState<string | null>(null);
+  // Whether the box holds a number the person chose (typed, stepped or just
+  // saved). Once it does, the suggestion below never replaces it.
+  const [chosen, setChosen] = useState(false);
+  const enter = (text: string) => {
+    setChosen(true);
+    setInput(text);
+  };
 
   const units = settings.units;
 
@@ -44,9 +51,13 @@ export default function WeightScreen() {
   // Start from the current trend rather than an empty box. Tomorrow's weight is
   // almost always within a kilo of today's, so the common case becomes a couple
   // of taps instead of typing four characters on a keypad. Re-seeded whenever
-  // the trend moves, so it never offers a stale figure.
+  // the trend moves, so it never offers a stale figure — but only until the
+  // person touches the box. It used to re-seed over whatever they had typed:
+  // the trend arrives a moment after the tab opens, and saving moves it, so a
+  // typed 79.4 turned into the trend's 80.1 under their thumb or straight after
+  // saving.
   const suggestion = latest?.trendWeightKg ?? weights[weights.length - 1]?.kg ?? null;
-  if (suggestion !== null && seededFrom !== String(suggestion)) {
+  if (!chosen && suggestion !== null && seededFrom !== String(suggestion)) {
     setSeededFrom(String(suggestion));
     setInput(displayWeight(suggestion, units).toFixed(1));
   }
@@ -58,8 +69,13 @@ export default function WeightScreen() {
       return;
     }
     await recordWeight(todayISO(), kg);
-    setSeededFrom(null);
+    // The box keeps the reading just saved, which is what the person expects
+    // to see there, not the trend it moved.
+    setInput(displayWeight(kg, units).toFixed(1));
+    setChosen(true);
   };
+
+  const today = weights.find((row) => row.date === todayISO());
 
   // Charts are plotted against days-since-first-entry rather than timestamps so
   // gaps in weighing show as real gaps instead of being collapsed to evenly
@@ -154,19 +170,25 @@ export default function WeightScreen() {
         <Stepper
           label={`Weight (${weightUnit(units)})`}
           value={input}
-          onChangeText={setInput}
+          onChangeText={enter}
           suffix={weightUnit(units)}
           step={0.1}
-          hint="Weigh at the same time each day — first thing, after the bathroom, before eating."
+          hint={
+            today
+              ? `Today's reading is ${formatWeight(today.kg, units)}. Saving again replaces it.`
+              : 'Weigh at the same time each day — first thing, after the bathroom, before eating.'
+          }
         />
-        <Button label="Save weigh-in" onPress={() => void save()} />
+        <Button label={today ? 'Update today’s weigh-in' : 'Save weigh-in'} onPress={() => void save()} />
       </Card>
 
       <View style={styles.tiles}>
         <StatTile
           label="Trend"
           value={latest ? formatWeight(latest.trendWeightKg, units) : '—'}
-          hint={latest ? `±${(latest.trendWeightSdKg * 2).toFixed(1)} kg` : 'No data yet'}
+          // Two standard deviations, which is what "likely" means here; the
+          // bare "±1.0 kg" did not say what it was a range of.
+          hint={latest ? `likely within ±${(latest.trendWeightSdKg * 2).toFixed(1)} kg` : 'No data yet'}
         />
         <StatTile
           label="14-day rate"
@@ -184,6 +206,14 @@ export default function WeightScreen() {
             : 'Dots are raw weigh-ins; the line is the filtered trend'
         }
       >
+        {weights.length === 1 ? (
+          // One reading draws a lone dot on an axis from today to today, which
+          // looks broken rather than early.
+          <Text style={[styles.early, { color: colors.textMuted }]}>
+            One weigh-in so far. The trend line starts with the second, and the range under Trend
+            narrows as more mornings come in.
+          </Text>
+        ) : (
         <LineChart
           series={chart ? [{ points: chart.trend, color: colors.accent, strokeWidth: 2.5 }] : []}
           scatter={
@@ -199,6 +229,7 @@ export default function WeightScreen() {
           emptyMessage="Log a few weigh-ins to see your trend"
           height={200}
         />
+        )}
       </Card>
 
       <Card title="Recent weigh-ins" subtitle={recent.length ? 'Hold an entry to remove it' : undefined}>
@@ -241,6 +272,7 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET,
     paddingVertical: space.sm,
   },
+  early: { fontFamily: font.ui, fontSize: 13, lineHeight: 19, paddingVertical: space.md },
   rowValue: { fontFamily: font.figure, fontSize: 14, fontVariant: ['tabular-nums'] },
   unitToggleWrap: {
     flexDirection: 'row',
