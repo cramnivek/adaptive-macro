@@ -69,8 +69,7 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
             {suspect && (
               <View style={[styles.warning, { borderColor: colors.warning, backgroundColor: colors.surfaceRaised }]}>
                 <Text style={[styles.warningText, { color: colors.textMuted }]}>
-                  This entry's calories do not match its own macros. Crowd-sourced data is often wrong — check
-                  the label before logging it.
+                  This entry's calories do not match its own macros. {SUSPECT_REASON[food.source] ?? SUSPECT_REASON.other}
                 </Text>
               </View>
             )}
@@ -136,6 +135,17 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
       </View>
     </Modal>
   );
+};
+
+/**
+ * Why the figures might disagree, by where the food came from. "Crowd-sourced
+ * data is often wrong" was said of every food, including one the person had
+ * just typed in themselves, where the likelier cause is a slip of the thumb.
+ */
+const SUSPECT_REASON: Partial<Record<Food['source'] | 'other', string>> = {
+  openfoodfacts: 'Crowd-sourced data is often wrong — check the label before logging it.',
+  custom: 'A figure may have been mistyped when it was entered — check them against the label.',
+  other: 'Check the figures before logging it.',
 };
 
 const styles = StyleSheet.create({
