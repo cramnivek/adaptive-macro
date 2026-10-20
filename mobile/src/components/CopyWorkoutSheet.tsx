@@ -63,9 +63,12 @@ export const CopyWorkoutSheet = ({
   useEffect(() => {
     if (visible) {
       setName(defaultTitle);
-      void listRoutines().then((routines) => {
-        setExistingRoutines(routines.map((r) => r.name.trim().toLowerCase()));
-      });
+      // Only feeds the duplicate-name warning; unread, saving still works.
+      listRoutines()
+        .then((routines) => {
+          setExistingRoutines(routines.map((r) => r.name.trim().toLowerCase()));
+        })
+        .catch(() => setExistingRoutines([]));
     }
   }, [visible, defaultTitle]);
 

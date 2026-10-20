@@ -108,16 +108,23 @@ export default function SearchScreen() {
   );
 
   useEffect(() => {
-    void listFrequentFoods().then(setFrequent);
+    // Only a shortcut list: if it cannot be read, search still works without it.
+    listFrequentFoods()
+      .then(setFrequent)
+      .catch(() => undefined);
   }, []);
 
   // Arriving back from the create screen: open the portion sheet straight away
   // for the food just made, rather than making the user search for it.
   useEffect(() => {
     if (!params.justCreated) return;
-    void getFoodById(params.justCreated).then((food) => {
-      if (food) setSelected(food);
-    });
+    // A failure here used to leave the new food saved but nothing on screen,
+    // so it read as the create button having done nothing.
+    getFoodById(params.justCreated)
+      .then((food) => {
+        if (food) setSelected(food);
+      })
+      .catch((error) => notify('Your food was saved', `Search for it to log it. ${problemText(error)}`));
   }, [params.justCreated]);
 
   useEffect(() => {
