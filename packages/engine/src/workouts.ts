@@ -359,6 +359,14 @@ export interface Milestone {
   value: number;
   /** Which lift crossed it. Only a `load` milestone has one. */
   exercise?: string;
+  /**
+   * The real figures either side of the landmark, in the same unit as
+   * `value`: the best (or total, or count) before this date, and what this
+   * date reached. The landmark is a round number; these are what happened,
+   * so the celebration can say "102.5 kg, up from 97.5".
+   */
+  previous?: number;
+  reached?: number;
 }
 
 export interface MilestoneLadders {
@@ -428,33 +436,31 @@ export const milestonesOn = (
     const best = (entries: DatedSet[]) =>
       entries.reduce((max, entry) => Math.max(max, loadOf(entry)), 0);
 
-    const rung = crossed(
-      ladders.loadKg,
-      best(mine.filter((entry) => entry.date < date)),
-      best(mine.filter((entry) => entry.date === date)),
-    );
-    if (rung !== null) found.push({ kind: 'load', value: rung, exercise });
+    const previous = best(mine.filter((entry) => entry.date < date));
+    const reached = best(mine.filter((entry) => entry.date === date));
+    const rung = crossed(ladders.loadKg, previous, reached);
+    if (rung !== null) found.push({ kind: 'load', value: rung, exercise, previous, reached });
   }
 
   const volume = (entries: DatedSet[]) =>
     entries.reduce((total, entry) => total + loadOf(entry) * (entry.set.reps ?? 0), 0);
 
-  const volumeRung = crossed(
-    ladders.volumeKg,
-    volume(scored.filter((entry) => entry.date < date)),
-    volume(scored.filter((entry) => entry.date <= date)),
-  );
-  if (volumeRung !== null) found.push({ kind: 'volume', value: volumeRung });
+  const volumeBefore = volume(scored.filter((entry) => entry.date < date));
+  const volumeAfter = volume(scored.filter((entry) => entry.date <= date));
+  const volumeRung = crossed(ladders.volumeKg, volumeBefore, volumeAfter);
+  if (volumeRung !== null) {
+    found.push({ kind: 'volume', value: volumeRung, previous: volumeBefore, reached: volumeAfter });
+  }
 
   const dates = (upTo: (entryDate: ISODate) => boolean) =>
     new Set(scored.filter((entry) => upTo(entry.date)).map((entry) => entry.date)).size;
 
-  const sessionRung = crossed(
-    ladders.sessions,
-    dates((entryDate) => entryDate < date),
-    dates((entryDate) => entryDate <= date),
-  );
-  if (sessionRung !== null) found.push({ kind: 'sessions', value: sessionRung });
+  const sessionsBefore = dates((entryDate) => entryDate < date);
+  const sessionsAfter = dates((entryDate) => entryDate <= date);
+  const sessionRung = crossed(ladders.sessions, sessionsBefore, sessionsAfter);
+  if (sessionRung !== null) {
+    found.push({ kind: 'sessions', value: sessionRung, previous: sessionsBefore, reached: sessionsAfter });
+  }
 
   return found.sort((a, b) => RANK[b.kind] - RANK[a.kind] || b.value - a.value);
 };

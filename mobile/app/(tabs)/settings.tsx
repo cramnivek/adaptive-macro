@@ -18,7 +18,7 @@ import { Screen } from '../../src/components/Screen';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { useSocial } from '../../src/social/session';
-import { playChime, primeChime } from '../../src/platform/chime';
+import { playChime, playEffect, primeChime, primeEffect } from '../../src/platform/chime';
 import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality, UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
 import { font, space, useTheme } from '../../src/theme';
@@ -444,6 +444,25 @@ export default function SettingsScreen() {
             options={[
               { value: 'on' as const, label: 'Alert on' },
               { value: 'off' as const, label: 'Silent' },
+            ]}
+          />
+        </Card>
+
+        {/* Turning it on plays the sting, so the choice is made by ear. */}
+        <Card title="Sounds for big moments" subtitle="A short sting when you set a PR">
+          <Segmented
+            value={settings.effectSounds ? 'on' : 'off'}
+            onChange={(val) => {
+              const on = val === 'on';
+              if (on) {
+                primeEffect('pr');
+                playEffect('pr');
+              }
+              void updateSettings({ effectSounds: on });
+            }}
+            options={[
+              { value: 'on' as const, label: 'On' },
+              { value: 'off' as const, label: 'Off' },
             ]}
           />
         </Card>

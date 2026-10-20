@@ -61,5 +61,20 @@ describe('describeMilestone', () => {
     const copy = describeMilestone({ kind: 'sessions', value: 50 }, 'metric');
     expect(copy.figure).toBe('50');
     expect(copy.label).toBe('SESSIONS');
+    expect(copy.context).toBeNull();
+  });
+
+  it('says what actually happened beside the round number', () => {
+    expect(
+      describeMilestone({ kind: 'load', value: 100, exercise: 'Squat', previous: 97.5, reached: 102.5 }, 'metric')
+        .context,
+    ).toBe('Today 102.5 kg · previous best 97.5 kg (+5 kg)');
+    expect(
+      describeMilestone({ kind: 'load', value: 80, exercise: 'Bench', previous: 0, reached: 80 }, 'metric').context,
+    ).toBe('Today 80 kg · first time on this lift');
+    expect(describeMilestone({ kind: 'load', value: 100, exercise: 'Squat' }, 'metric').context).toBeNull();
+    expect(
+      describeMilestone({ kind: 'volume', value: 100_000, previous: 98_200, reached: 101_000 }, 'metric').context,
+    ).toBe('+2,800 kg today');
   });
 });

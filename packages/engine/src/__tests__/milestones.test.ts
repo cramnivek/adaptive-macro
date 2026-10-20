@@ -40,7 +40,7 @@ describe('milestonesOn — load', () => {
       '2026-01-08',
       LADDERS,
     );
-    expect(found).toContainEqual({ kind: 'load', value: 100, exercise: 'Squat' });
+    expect(found).toContainEqual({ kind: 'load', value: 100, exercise: 'Squat', previous: 95, reached: 100 });
   });
 
   it('does not fire again for a weight already passed', () => {
@@ -61,7 +61,8 @@ describe('milestonesOn — load', () => {
       LADDERS,
     );
     const loads = found.filter((m) => m.kind === 'load');
-    expect(loads).toEqual([{ kind: 'load', value: 100, exercise: 'Squat' }]);
+    // The landmark is the round number; previous and reached are what happened.
+    expect(loads).toEqual([{ kind: 'load', value: 100, exercise: 'Squat', previous: 55, reached: 105 }]);
   });
 
   it('judges each lift on its own history', () => {
@@ -76,7 +77,7 @@ describe('milestonesOn — load', () => {
       LADDERS,
     );
     expect(found.filter((m) => m.kind === 'load')).toEqual([
-      { kind: 'load', value: 80, exercise: 'Bench' },
+      { kind: 'load', value: 80, exercise: 'Bench', previous: 0, reached: 80 },
     ]);
   });
 
@@ -97,7 +98,7 @@ describe('milestonesOn — load', () => {
       '2026-01-08',
       LADDERS,
     );
-    expect(found).toContainEqual({ kind: 'load', value: 100, exercise: 'Pull Up' });
+    expect(found).toContainEqual(expect.objectContaining({ kind: 'load', value: 100, exercise: 'Pull Up' }));
   });
 
   it('does not count a set of zero reps as having lifted the weight', () => {
@@ -120,7 +121,7 @@ describe('milestonesOn — volume and sessions', () => {
       LADDERS,
     );
     // 6,000 kg before; 11,000 after.
-    expect(found).toContainEqual({ kind: 'volume', value: 10_000 });
+    expect(found).toContainEqual(expect.objectContaining({ kind: 'volume', value: 10_000, previous: 6000 }));
   });
 
   it('does not fire for volume already passed on an earlier day', () => {
@@ -144,7 +145,7 @@ describe('milestonesOn — volume and sessions', () => {
       '2026-01-08',
       LADDERS,
     );
-    expect(found).toContainEqual({ kind: 'sessions', value: 2 });
+    expect(found).toContainEqual({ kind: 'sessions', value: 2, previous: 1, reached: 2 });
   });
 });
 

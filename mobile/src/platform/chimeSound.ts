@@ -197,9 +197,45 @@ export const chimeSamples = (choice: ChimeChoice = 'beeps'): Int16Array => {
   }
 };
 
-/** The samples wrapped in a WAV header: a file any audio element can play. */
-export const chimeWav = (choice: ChimeChoice = 'beeps'): Uint8Array => {
-  const samples = chimeSamples(choice);
+/**
+ * The new-PR sting: a quick rising arpeggio, G4 C5 E5, landing on a held G5,
+ * over a short low thump so it arrives with weight rather than as a ringtone.
+ * About 1.1 s, brighter than the rest chimes (second and third harmonics) so a
+ * record never sounds like "rest is over".
+ */
+export const prStingSamples = (): Int16Array => {
+  const totalSamples = Math.round(1.15 * SAMPLE_RATE);
+  const samples = new Int16Array(totalSamples);
+  const notes = [
+    { hz: 392.0, start: 0, decay: 9 },
+    { hz: 523.25, start: Math.round(0.07 * SAMPLE_RATE), decay: 9 },
+    { hz: 659.25, start: Math.round(0.14 * SAMPLE_RATE), decay: 8 },
+    { hz: 783.99, start: Math.round(0.21 * SAMPLE_RATE), decay: 2.6 },
+  ];
+  for (let i = 0; i < totalSamples; i += 1) {
+    const t = i / SAMPLE_RATE;
+    // The thump: a low C that drops in pitch and is gone in about 120 ms.
+    let val = Math.sin(2 * Math.PI * (130.81 - 40 * t) * t) * Math.exp(-28 * t) * 0.5 * Math.min(1, i / 40);
+    for (const note of notes) {
+      if (i < note.start) continue;
+      const nt = (i - note.start) / SAMPLE_RATE;
+      const attack = Math.min(1, (i - note.start) / (0.006 * SAMPLE_RATE));
+      const env = attack * Math.exp(-note.decay * nt);
+      val +=
+        (Math.sin(2 * Math.PI * note.hz * nt) +
+          0.3 * Math.sin(2 * Math.PI * note.hz * 2 * nt) +
+          0.12 * Math.sin(2 * Math.PI * note.hz * 3 * nt)) *
+        env *
+        0.32;
+    }
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
+    samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
+  }
+  return samples;
+};
+
+/** Samples wrapped in a WAV header: a file any audio element can play. */
+export const wavFromSamples = (samples: Int16Array): Uint8Array => {
   const dataBytes = samples.length * 2;
   const buffer = new ArrayBuffer(44 + dataBytes);
   const view = new DataView(buffer);
@@ -223,3 +259,6 @@ export const chimeWav = (choice: ChimeChoice = 'beeps'): Uint8Array => {
   samples.forEach((sample, i) => view.setInt16(44 + i * 2, sample, true));
   return new Uint8Array(buffer);
 };
+
+/** The chosen rest chime as a playable WAV. */
+export const chimeWav = (choice: ChimeChoice = 'beeps'): Uint8Array => wavFromSamples(chimeSamples(choice));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chimeSamples, chimeWav } from '../platform/chimeSound';
+import { chimeSamples, chimeWav, prStingSamples, wavFromSamples } from '../platform/chimeSound';
 
 const ascii = (bytes: Uint8Array, at: number, length: number) =>
   String.fromCharCode(...bytes.slice(at, at + length));
@@ -57,5 +57,20 @@ describe('chimeWav', () => {
       expect(peak).toBeGreaterThan(10000);
       expect(peak).toBeLessThan(32000);
     }
+  });
+});
+
+describe('prStingSamples', () => {
+  it('is short, starts silent, ends without a click, and never clips', () => {
+    const samples = prStingSamples();
+    const seconds = samples.length / 22050;
+    expect(seconds).toBeGreaterThan(0.9);
+    expect(seconds).toBeLessThan(1.3);
+    expect(samples[0]).toBe(0);
+    expect(Math.abs(samples[samples.length - 1])).toBeLessThan(200);
+    const peak = samples.reduce((max, s) => Math.max(max, Math.abs(s)), 0);
+    expect(peak).toBeGreaterThan(10000);
+    expect(peak).toBeLessThan(32767);
+    expect(ascii(wavFromSamples(samples), 0, 4)).toBe('RIFF');
   });
 });

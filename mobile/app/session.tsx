@@ -76,7 +76,7 @@ import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
 import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../src/dumbbellLoad';
 import { moveKeepingSupersets } from '../src/blockOrder';
-import { playChime, primeChime } from '../src/platform/chime';
+import { playChime, primeChime, primeEffect } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
@@ -1843,6 +1843,9 @@ export default function SessionScreen() {
 
   const finish = async () => {
     if (!session) return;
+    // Primed on this tap so the PR sting may play once the session is saved,
+    // a moment later and with no tap of its own.
+    if (settings.effectSounds) primeEffect('pr');
     const logged = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
     if (logged === 0) {
