@@ -430,7 +430,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               style={[styles.editAction, { marginVertical: space.xs }]}
             >
               <Text style={[styles.editLabel, { color: loud.loud }]}>
-                ✨ EXPORT TRANSPARENT STICKER (FOR INSTAGRAM / TIKTOK)
+                SAVE AS A STICKER FOR STORIES
               </Text>
             </Tappable>
           )}
