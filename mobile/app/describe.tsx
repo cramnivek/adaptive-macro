@@ -73,6 +73,9 @@ const scaleItem = (item: EstimatedItem, grams: number): Nutrients => {
   };
 };
 
+/** How long a camera-step estimate may go unanswered before it is taken as stalled; see `run`. */
+const STALLED_CAMERA_ESTIMATE_MS = 30_000;
+
 export default function DescribeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -164,7 +167,7 @@ export default function DescribeScreen() {
     try {
       const shot = await preparePhoto(uri);
       setPhoto(shot);
-      await run(shot);
+      await run(shot, { fromCamera: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -185,7 +188,7 @@ export default function DescribeScreen() {
       if (!shot) return;
       setPhoto(shot);
       setCamera(true);
-      await run(shot);
+      await run(shot, { fromCamera: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -205,7 +208,7 @@ export default function DescribeScreen() {
     }
   };
 
-  const run = async (withPhoto?: MealPhoto) => {
+  const run = async (withPhoto?: MealPhoto, { fromCamera = false }: { fromCamera?: boolean } = {}) => {
     // Taken as an argument because the camera sheet estimates in the same tick
     // it sets the photo, and the state update has not committed by then.
     const image = withPhoto ?? photo ?? undefined;
@@ -218,19 +221,52 @@ export default function DescribeScreen() {
     setEstimate(null);
     setDrafts([]);
 
+    // An estimate sent the moment a shot comes back from the camera can stall:
+    // on Android Chrome it ran to the full 60 seconds and timed out, while the
+    // same photo sent again from this screen came back at once. A Gemini photo
+    // estimate measured at about six seconds through the live service, so one
+    // with no answer after thirty has stalled rather than run long. That first
+    // try is dropped and sent once more with the usual limit, under the same
+    // running clock. Only from the camera, and only for Gemini: a local model
+    // can genuinely take that long.
+    const attempt = async (cutoffMs: number | null) => {
+      const tryController = new AbortController();
+      const forward = () => tryController.abort();
+      controller.signal.addEventListener('abort', forward);
+      let stalled = false;
+      const cutoff =
+        cutoffMs === null
+          ? undefined
+          : setTimeout(() => {
+              stalled = true;
+              tryController.abort();
+            }, cutoffMs);
+      try {
+        return await estimateMeal(
+          text,
+          {
+            provider: settings.aiProvider,
+            geminiApiKey: settings.foodLookup.geminiApiKey,
+            anthropicApiKey: settings.anthropicApiKey,
+            ollamaHost: settings.ollamaHost,
+            ollamaModel: settings.ollamaModel,
+          },
+          image,
+          tryController.signal,
+        );
+      } catch (caught) {
+        if (stalled && !controller.signal.aborted) return null;
+        throw caught;
+      } finally {
+        clearTimeout(cutoff);
+        controller.signal.removeEventListener('abort', forward);
+      }
+    };
+
     try {
-      const result = await estimateMeal(
-        text,
-        {
-          provider: settings.aiProvider,
-          geminiApiKey: settings.foodLookup.geminiApiKey,
-          anthropicApiKey: settings.anthropicApiKey,
-          ollamaHost: settings.ollamaHost,
-          ollamaModel: settings.ollamaModel,
-        },
-        image,
-        controller.signal,
-      );
+      const retriable = fromCamera && !!image && settings.aiProvider === 'gemini';
+      const result = (await attempt(retriable ? STALLED_CAMERA_ESTIMATE_MS : null)) ?? (await attempt(null));
+      if (!result) return;
       if (controller.signal.aborted) return;
       setEstimate(result.estimate);
       setDrafts(
