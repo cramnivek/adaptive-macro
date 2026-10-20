@@ -35,6 +35,7 @@ The applied set as of today:
 20261018120000_training_squads.sql        squads, members, check-ins, cheers  (see below)
 20261018230000_profile_avatars_and_bio.sql avatars, bio, training focus
 20261019120000_squad_access.sql           squads private to members, join_squad
+20261020120000_squad_join_limit.sql       twenty join_squad tries an hour
 ```
 
 `20261018120000_training_squads.sql` is the rule broken once already: it was
@@ -160,6 +161,16 @@ Related invariants, each with tests:
 - A trigger function needs no `execute` grant. Supabase grants one to every new
   function and its advisor then reports each as reachable over `/rpc`; the
   migrations revoke them. Keep doing that.
+
+**Squads** follow the same shape. A squad, its members, check-ins and cheers
+are readable only inside the squad, through `private.in_squad`, and never across
+a block. Nobody inserts a membership directly: joining goes through
+`public.join_squad(code)`, a definer function that checks the invite code, keeps
+one squad per person, and counts every attempt in `private.squad_join_attempts`
+(twenty an hour) before looking the code up, so a wrong guess and a right one
+cost the same. An unknown code returns null rather than raising, because
+raising would roll back the counted attempt. Invite codes come from
+`expo-crypto`, not `Math.random`.
 
 ---
 

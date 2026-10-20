@@ -10,13 +10,17 @@ this file's git history.
 
 ## Where things stand
 
-**Nothing is in flight.** Everything is merged, live and checked. `main` is
-`e219229` (PR #22), the app is the one the first automatic deploy built
-(`entry-35d4f1ac…`), and the database has every migration in the repository,
-the last being `20261019120000_squad_access.sql`.
+**Merged and live since the 2026-10-19 snapshot:** PR #22 (squads private to
+their members, automatic deploys), #24 (old code files kept across deploys),
+#25 (optional account, one-step onboarding, leaner Settings, both sides of a
+dumbbell set, a limit on squad-code guesses) and #26 (the routine screens, and
+a barcode camera that focuses on the web). The database has every migration in
+the repository, the last being `20261020120000_squad_join_limit.sql`.
 
-1,483 tests pass (`npm test`: engine 207, mobile 1,133, gemini-proxy 143) and
-`npm run typecheck` is clean, on `main`.
+**In flight:** branch `claude/updates-overview-y2g5ve`, after #26 — Left/Right
+spelled out under one-sided sets, the sticker preview no longer cropped, the
+routine editor's back arrow, reordering that keeps supersets together, and
+this file. See `git log origin/main..` on it for the exact list.
 
 **Deploys are automatic now.** A push to `main` runs
 `.github/workflows/deploy.yml`: test, build, deploy to Cloud Run, verify. Its
@@ -45,7 +49,11 @@ refused. The one real squad and its two members came through intact.
 - Join a squad with its code; a wrong code says no squad has it.
 - Log a workout: Finish and the rest timer float at the bottom and step aside
   while typing; tapping a weight and leaving it keeps the number; move an
-  exercise several places through the reorder sheet.
+  exercise several places through the reorder sheet, and a superset as one.
+- **Scan a barcode** (#26). Checked only against a simulated camera: the
+  stream is 1920×1080 and a code in the box reads. Sharpness, focus and the 2×
+  zoom (`scanZoom` in `src/platform/scanGeometry.ts`) need a real phone. The
+  decoder's WebAssembly comes from jsDelivr on the first scan in Safari.
 - Sign out, sign in by email code — iOS should offer the code above the keyboard.
 - **Continue with Google from the installed app.** Unverified, and the one that
   may not work: if sign-in finishes in Safari, the installed app (separate
@@ -143,7 +151,10 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
 - **Dumbbell weights are now labelled as one dumbbell's** (`src/dumbbellLoad.ts`),
   but older history may mix conventions — one Bulgarian split squat PR reads
   70 lb against sets logged at 32. Volume counts one dumbbell, not the pair.
-- **Reordering can split a superset**; the sheet does not move a group together.
+- **Fixed: reordering split supersets.** `src/blockOrder.ts` moves a superset
+  as one, gathers members that had drifted apart, and never drops an exercise
+  inside another superset. The routine editor does not keep superset links at
+  all — that was so before and is unchanged.
 - **A deliberately typed lone `0` over a prefilled weight is put back** on blur,
   the cost of stopping a look-and-leave tap from zeroing a set. Clearing the
   field (BW) still works. Ticking a set straight from such a field also takes
@@ -161,8 +172,7 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
   sticker modal's `backgroundPosition` error is gone, an unknown stored card
   template falls back to the default, the workflow's actions run on Node 24,
   and the remaining generated-sounding default copy was reworded.
-- AGENTS.md does not describe squads yet, and its applied-migration list gains
-  `20261020120000_squad_join_limit.sql` once that merges.
+- Done: AGENTS.md describes squads and lists `20261020120000_squad_join_limit.sql`.
 
 ---
 
