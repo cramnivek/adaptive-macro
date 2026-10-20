@@ -24,7 +24,7 @@ export const NutritionQualityCard = ({
   const [modalOpen, setModalOpen] = useState(false);
 
   const quality = useMemo(() => {
-    return computeNutritionQualityScore(consumed, profile.sex);
+    return computeNutritionQualityScore(consumed, profile.sex, profile.age);
   }, [consumed, profile.sex]);
 
   const electrolytes = useMemo(() => {

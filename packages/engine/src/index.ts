@@ -13,3 +13,4 @@ export * from './volumeLandmarks.ts';
 export * from './micronutrients.ts';
 export * from './bodyComposition.ts';
 export * from './liftingEnergy.ts';
+export * from './protein.ts';

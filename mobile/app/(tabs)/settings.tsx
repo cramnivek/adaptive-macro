@@ -1,5 +1,5 @@
 import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine';
-import { cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
+import { DEFAULT_TARGET_OPTIONS, cmToInches, inchesToCm, kgToLb, lbToKg } from '@adaptive-macros/engine';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
@@ -17,6 +17,7 @@ import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Con
 import { Screen } from '../../src/components/Screen';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
+import { proteinExplanation } from '../../src/proteinCopy';
 import { useSocial } from '../../src/social/session';
 import { playChime, playEffect, primeChime, primeEffect } from '../../src/platform/chime';
 import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality, UnitSystem } from '../../src/state/settings';
@@ -115,7 +116,7 @@ const Section = ({
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, refreshAll } = useApp();
+  const { settings, updateSettings, refreshAll, protein, proteinOverrideGPerKg } = useApp();
   const social = useSocial();
   const metric = settings.units === 'metric';
 
@@ -307,14 +308,32 @@ export default function SettingsScreen() {
         </Card>
 
         <Card title="Macros">
+          {/* Recommended from goal, activity, sex and body fat (engine/protein.ts),
+              so it follows the person; a figure typed here replaces it until
+              they go back to the recommendation. */}
+          <Text style={[styles.proteinNote, { color: colors.textMuted }]}>
+            {proteinOverrideGPerKg === null
+              ? `Recommended: ${proteinExplanation(protein, settings.goal.direction, settings.activity, settings.units)}`
+              : `Your own figure. The recommendation would be ${proteinExplanation(protein, settings.goal.direction, settings.activity, settings.units)}`}
+          </Text>
           <NumberSetting
             label="Protein"
-            value={settings.proteinGPerKg}
+            value={proteinOverrideGPerKg ?? protein.gPerKgBodyWeight}
             suffix="g per kg bodyweight"
             decimals={2}
-            onCommit={(proteinGPerKg) => void updateSettings({ proteinGPerKg })}
-            hint="1.6–2.2 g/kg is the range the evidence supports for holding lean mass in a deficit."
+            onCommit={(proteinOverrideGPerKg) => void updateSettings({ proteinOverrideGPerKg })}
+            hint="Change this only to set your own. Most people do best on the recommendation."
           />
+          {proteinOverrideGPerKg !== null && (
+            <Button
+              label="Use the recommendation"
+              variant="subtle"
+              // The old fixed figure is reset too, or a changed one would come back.
+              onPress={() =>
+                void updateSettings({ proteinOverrideGPerKg: null, proteinGPerKg: DEFAULT_TARGET_OPTIONS.proteinGPerKg })
+              }
+            />
+          )}
           <NumberSetting
             label="Minimum fat"
             value={settings.minFatGPerKg}
@@ -593,6 +612,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  proteinNote: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
   sectionHeader: {
     flexDirection: 'row',

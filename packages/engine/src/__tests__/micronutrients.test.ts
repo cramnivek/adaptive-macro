@@ -134,3 +134,36 @@ describe('Clinical Micronutrient Engine', () => {
     expect(vitC?.pctOfRda).toBe(107);
   });
 });
+
+describe('getClinicalRda by age, against the DRI tables', () => {
+  it('uses the adult figures to age 50 and the older ones after', () => {
+    expect(getClinicalRda('male', 30).pyridoxineB6Mg.rda).toBe(1.3);
+    expect(getClinicalRda('male', 60).pyridoxineB6Mg.rda).toBe(1.7);
+    expect(getClinicalRda('female', 30).ironMg.rda).toBe(18);
+    expect(getClinicalRda('female', 55).ironMg.rda).toBe(8);
+    expect(getClinicalRda('female', 55).calciumMg.rda).toBe(1200);
+    expect(getClinicalRda('male', 55).calciumMg.rda).toBe(1000);
+    expect(getClinicalRda('male', 75).calciumMg.rda).toBe(1200);
+  });
+
+  it('gives 600 IU of vitamin D to age 70 and 800 after', () => {
+    expect(getClinicalRda('female', 40).vitaminDIU.rda).toBe(600);
+    expect(getClinicalRda('female', 75).vitaminDIU.rda).toBe(800);
+  });
+
+  it('does not hold food to limits that are about supplements', () => {
+    const rda = getClinicalRda('male', 35);
+    expect(rda.magnesiumMg.upperLimit).toBeUndefined();
+    expect(rda.niacinB3Mg.upperLimit).toBeUndefined();
+    expect(rda.folateB9Mcg.upperLimit).toBeUndefined();
+    expect(rda.vitaminAMcg.upperLimit).toBeUndefined();
+    // So a man eating his 420 mg of magnesium is not "high".
+    const [magnesium] = analyzeMicronutrients({ magnesiumMg: 430 }, 'male', 35).filter((a) => a.key === 'magnesiumMg');
+    expect(magnesium?.status).not.toBe('high');
+  });
+
+  it('takes the sodium target from the adequate intake, with 2,300 as the limit', () => {
+    expect(getClinicalRda('male').sodiumMg.rda).toBe(1500);
+    expect(getClinicalRda('male').sodiumMg.upperLimit).toBe(2300);
+  });
+});

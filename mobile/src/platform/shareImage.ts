@@ -1196,7 +1196,7 @@ export const drawNutritionOverlay = (
   scratch.height = 1000;
   const ctx = scratch.getContext('2d') as CanvasRenderingContext2D;
 
-  const quality = computeNutritionQualityScore(consumed, profile.sex);
+  const quality = computeNutritionQualityScore(consumed, profile.sex, profile.age);
 
   let y = pad;
 

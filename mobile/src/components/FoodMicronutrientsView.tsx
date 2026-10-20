@@ -6,6 +6,7 @@ import {
   MICRONUTRIENT_KEYS,
   getClinicalRda,
 } from '@adaptive-macros/engine';
+import { useApp } from '../state/AppStore';
 import { font, radius, space, useTheme } from '../theme';
 
 export interface FoodMicronutrientsViewProps {
@@ -21,7 +22,7 @@ type CategoryTab = 'all' | 'vitamins' | 'minerals' | 'lipids';
 
 export const FoodMicronutrientsView = ({
   micros,
-  sex = 'male',
+  sex,
   collapsible = true,
   defaultExpanded = true,
   title = 'Micronutrients',
@@ -31,7 +32,12 @@ export const FoodMicronutrientsView = ({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [tab, setTab] = useState<CategoryTab>('all');
 
-  const rdaMap = useMemo(() => getClinicalRda(sex), [sex]);
+  // From the profile unless a caller says otherwise. The log and edit sheets
+  // never passed it, so everyone there was measured against the men's targets.
+  const { settings } = useApp();
+  const profileSex = sex ?? settings.profile.sex;
+  const age = settings.profile.age;
+  const rdaMap = useMemo(() => getClinicalRda(profileSex, age), [profileSex, age]);
 
   const activeKeys = useMemo(() => {
     if (!micros) return [];

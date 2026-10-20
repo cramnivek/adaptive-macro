@@ -48,10 +48,23 @@ export const MICRONUTRIENT_KEYS: (keyof Micronutrients)[] = [
 
 /**
  * NIH / DRI Recommended Dietary Allowances (RDA) & Adequate Intakes (AI)
- * customized by biological sex.
+ * customized by biological sex and age.
+ *
+ * Age matters for a handful: B6, calcium, iron, magnesium, vitamin D and fiber
+ * all change at 30, 50 or 70 in the DRI tables, and the old single figure was
+ * the over-50 B6 for everyone and the over-70 vitamin D for everyone.
+ *
+ * Upper limits are left off where the DRI's limit applies to supplements or
+ * fortified foods only (magnesium, niacin, folic acid) or to preformed vitamin
+ * A only. A food log cannot tell those apart, and applying them to food marked
+ * an ordinary day "high": a man meeting his 420 mg of magnesium was over a
+ * 350 mg limit that is about pills.
  */
-export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, MicronutrientTarget> => {
+export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micronutrients, MicronutrientTarget> => {
   const isFemale = sex === 'female';
+  const over30 = age > 30;
+  const over50 = age > 50;
+  const over70 = age > 70;
 
   return {
     // --- Vitamins ---
@@ -61,7 +74,6 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       unit: 'mcg',
       category: 'vitamins',
       rda: isFemale ? 700 : 900,
-      upperLimit: 3000,
       description: 'Vision, cellular immune defense, and tissue repair.',
     },
     vitaminCMg: {
@@ -78,7 +90,8 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'Vit D',
       unit: 'IU',
       category: 'vitamins',
-      rda: 800,
+      // 600 IU (15 mcg) to age 70, 800 IU after.
+      rda: over70 ? 800 : 600,
       upperLimit: 4000,
       description: 'Bone mineral density, calcium absorption, and muscle force production.',
     },
@@ -121,7 +134,6 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       unit: 'mg',
       category: 'vitamins',
       rda: isFemale ? 14 : 16,
-      upperLimit: 35,
       description: 'NAD+/NADH energy substrate pathway and DNA repair.',
     },
     pantothenicAcidB5Mg: {
@@ -137,7 +149,8 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'B6',
       unit: 'mg',
       category: 'vitamins',
-      rda: isFemale ? 1.5 : 1.7,
+      // 1.3 mg for everyone to age 50; 1.5 (women) and 1.7 (men) after.
+      rda: over50 ? (isFemale ? 1.5 : 1.7) : 1.3,
       upperLimit: 100,
       description: 'Transamination of amino acids, glycogenolysis, and neurotransmitter synthesis.',
     },
@@ -155,7 +168,6 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       unit: 'mcg',
       category: 'vitamins',
       rda: 400,
-      upperLimit: 1000,
       description: 'One-carbon methylation, red blood cell synthesis, and nucleic acid production.',
     },
     cobalaminB12Mcg: {
@@ -182,7 +194,9 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'Sodium',
       unit: 'mg',
       category: 'minerals',
-      rda: 2000, // Athlete target / AI baseline
+      // The DRI's adequate intake is 1,500 mg; 2,300 is the level to stay under.
+      // It used to target 2,000, which marked a lower-sodium day as short of it.
+      rda: 1500,
       upperLimit: 2300,
       description: 'Extracellular fluid volume, muscle action potential transmission, and blood volume.',
     },
@@ -199,8 +213,9 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'Calcium',
       unit: 'mg',
       category: 'minerals',
-      rda: 1000,
-      upperLimit: 2500,
+      // 1,200 mg for women over 50 and men over 70.
+      rda: (isFemale && over50) || over70 ? 1200 : 1000,
+      upperLimit: over50 ? 2000 : 2500,
       description: 'Myofibril cross-bridge contraction, bone hydroxyapatite, and nerve signaling.',
     },
     magnesiumMg: {
@@ -208,8 +223,8 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'Magnesium',
       unit: 'mg',
       category: 'minerals',
-      rda: isFemale ? 320 : 420,
-      upperLimit: 350, // supplemental UL
+      // 310 and 400 mg to age 30, 320 and 420 after.
+      rda: isFemale ? (over30 ? 320 : 310) : over30 ? 420 : 400,
       description: 'Mg-ATP enzymatic substrate, neuromuscular recovery, and sleep quality.',
     },
     phosphorusMg: {
@@ -226,7 +241,8 @@ export const getClinicalRda = (sex: Sex = 'male'): Record<keyof Micronutrients, 
       shortName: 'Iron',
       unit: 'mg',
       category: 'minerals',
-      rda: isFemale ? 18 : 8,
+      // 18 mg for women until menopause, taken in the DRI as age 50; 8 after.
+      rda: isFemale && !over50 ? 18 : 8,
       upperLimit: 45,
       description: 'Hemoglobin and myoglobin oxygen transport, electron transport chain.',
     },
@@ -394,8 +410,9 @@ export interface MicronutrientAnalysis {
 export const analyzeMicronutrients = (
   consumedMicros: Micronutrients = {},
   sex: Sex = 'male',
+  age = 30,
 ): MicronutrientAnalysis[] => {
-  const rdaMap = getClinicalRda(sex);
+  const rdaMap = getClinicalRda(sex, age);
 
   return MICRONUTRIENT_KEYS.map((key) => {
     const target = rdaMap[key];
@@ -466,13 +483,14 @@ export const evaluateElectrolytes = (micros: Micronutrients = {}) => {
 export const computeNutritionQualityScore = (
   nutrients: Nutrients,
   sex: Sex = 'male',
+  age = 30,
 ): {
   score: number;
   grade: 'Elite' | 'Great' | 'Fair' | 'Needs Focus';
   highlights: string[];
 } => {
   const micros = nutrients.micros ?? {};
-  const analyses = analyzeMicronutrients(micros, sex);
+  const analyses = analyzeMicronutrients(micros, sex, age);
 
   // 1. Micronutrient score (out of 40)
   // Evaluates coverage across reported vitamins and minerals with a diversity factor
@@ -488,7 +506,8 @@ export const computeNutritionQualityScore = (
   const microScore = roundTo((avgReportedCoverage / 100) * (20 + 20 * diversityFactor), 1);
 
   // 2. Fiber score (out of 20)
-  const targetFiber = sex === 'female' ? 25 : 38;
+  // The DRI's adequate intake: 25 and 38 g to age 50, 21 and 30 g after.
+  const targetFiber = sex === 'female' ? (age > 50 ? 21 : 25) : age > 50 ? 30 : 38;
   const consumedFiber = nutrients.fiberG ?? 0;
   const fiberScore = roundTo(Math.min(1, consumedFiber / targetFiber) * 20, 1);
 
