@@ -76,3 +76,12 @@ describe('body_measurements table & queries (migration v11)', () => {
     expect(db.prepare("SELECT COUNT(*) AS c FROM body_measurements WHERE id = 'bm_del'").get().c).toBe(0);
   });
 });
+
+describe('body_fat_source (migration v14)', () => {
+  it('adds a nullable source column beside the figure', () => {
+    const info = db.prepare("PRAGMA table_info('body_measurements')").all() as { name: string; notnull: number }[];
+    const column = info.find((col) => col.name === 'body_fat_source');
+    expect(column).toBeDefined();
+    expect(column!.notnull).toBe(0);
+  });
+});

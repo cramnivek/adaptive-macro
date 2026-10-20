@@ -2428,6 +2428,9 @@ export const dailyIntakeBetween = async (
     }));
 };
 
+/** How a body-fat figure was arrived at; see migration v14. */
+export type BodyFatSource = 'entered' | 'tape' | 'photo';
+
 export interface BodyMeasurementInput {
   date: ISODate;
   waistCm?: number | null;
@@ -2439,6 +2442,7 @@ export interface BodyMeasurementInput {
   neckCm?: number | null;
   shouldersCm?: number | null;
   bodyFatPct?: number | null;
+  bodyFatSource?: BodyFatSource | null;
   notes?: string | null;
 }
 
@@ -2452,8 +2456,8 @@ export const logBodyMeasurement = async (input: BodyMeasurementInput): Promise<B
   const id = `bm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
   await db.runAsync(
-    `INSERT INTO body_measurements (id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, notes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO body_measurements (id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, body_fat_source, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.date,
     input.waistCm ?? null,
@@ -2465,6 +2469,8 @@ export const logBodyMeasurement = async (input: BodyMeasurementInput): Promise<B
     input.neckCm ?? null,
     input.shouldersCm ?? null,
     input.bodyFatPct ?? null,
+    // A source means nothing without a figure, so it is stored only beside one.
+    input.bodyFatPct != null ? (input.bodyFatSource ?? 'entered') : null,
     input.notes ?? null,
     now,
   );
@@ -2485,10 +2491,11 @@ export const getLatestBodyMeasurements = async (limit = 50): Promise<BodyMeasure
     neck_cm: number | null;
     shoulders_cm: number | null;
     body_fat_pct: number | null;
+    body_fat_source: string | null;
     notes: string | null;
     created_at: string;
   }>(
-    `SELECT id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, notes, created_at
+    `SELECT id, date, waist_cm, chest_cm, arms_cm, thighs_cm, calves_cm, hips_cm, neck_cm, shoulders_cm, body_fat_pct, body_fat_source, notes, created_at
        FROM body_measurements
       ORDER BY date DESC, created_at DESC
       LIMIT ?`,
@@ -2506,6 +2513,12 @@ export const getLatestBodyMeasurements = async (limit = 50): Promise<BodyMeasure
     neckCm: r.neck_cm,
     shouldersCm: r.shoulders_cm,
     bodyFatPct: r.body_fat_pct,
+    bodyFatSource:
+      r.body_fat_pct == null
+        ? null
+        : r.body_fat_source === 'tape' || r.body_fat_source === 'photo'
+          ? r.body_fat_source
+          : 'entered',
     notes: r.notes,
     createdAt: r.created_at,
   }));

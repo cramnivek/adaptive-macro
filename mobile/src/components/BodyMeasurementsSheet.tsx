@@ -16,6 +16,7 @@ import type { ISODate } from '@adaptive-macros/engine';
 import {
   deleteBodyMeasurement,
   logBodyMeasurement,
+  type BodyFatSource,
   type BodyMeasurementRecord,
 } from '../db';
 import { notify } from '../dialog';
@@ -24,7 +25,6 @@ import { useApp } from '../state/AppStore';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
-import { BodyFatPhotoPanel } from './BodyFatPhotoPanel';
 import { TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
 
@@ -68,6 +68,9 @@ export const BodyMeasurementsSheet = ({
   const [bodyFat, setBodyFat] = useState<string>(
     initialRecord?.bodyFatPct != null ? initialRecord.bodyFatPct.toString() : ''
   );
+  // How the figure in the box got there. Typing always makes it 'entered', so a
+  // tape or photo figure someone then corrects by hand is stored as theirs.
+  const [bodyFatSource, setBodyFatSource] = useState<BodyFatSource>(initialRecord?.bodyFatSource ?? 'entered');
   const [notes, setNotes] = useState<string>(initialRecord?.notes ?? '');
   const [saving, setSaving] = useState(false);
 
@@ -99,7 +102,7 @@ export const BodyMeasurementsSheet = ({
       ? navyBodyFatPct(sex, heightCm, waistNow, neckNow, parseInputToCm(hips))
       : null;
   const navyText = navyEstimate != null ? navyEstimate.toFixed(1) : null;
-  const usingNavy = navyText != null && bodyFat.trim().replace(',', '.') === navyText;
+  const usingNavy = navyText != null && bodyFatSource === 'tape' && bodyFat.trim().replace(',', '.') === navyText;
 
   const handleSave = async () => {
     const waistCm = parseInputToCm(waist);
@@ -142,6 +145,7 @@ export const BodyMeasurementsSheet = ({
         neckCm,
         shouldersCm,
         bodyFatPct,
+        bodyFatSource,
         notes: notes.trim() || null,
       });
 
@@ -218,24 +222,16 @@ export const BodyMeasurementsSheet = ({
                   <TextInput
                     style={styles.input}
                     value={bodyFat}
-                    onChangeText={setBodyFat}
+                    onChangeText={(text) => {
+                      setBodyFat(text);
+                      setBodyFatSource('entered');
+                    }}
                     placeholder="e.g. 15.2"
                     placeholderTextColor={loud.figureMuted}
                     keyboardType="numeric"
                   />
                 </View>
               </View>
-
-              <BodyFatPhotoPanel
-                tapeEstimate={navyText}
-                onUse={(pct, lowPct, highPct) => {
-                  setBodyFat(pct.toFixed(1));
-                  // The figure is stored like any other, so the note is what
-                  // keeps it recognisable later as a reading of photos.
-                  const line = `Body fat is a visual estimate from photos (${lowPct}–${highPct}%).`;
-                  setNotes((current) => (current.trim() ? `${current.trim()}\n${line}` : line));
-                }}
-              />
 
               {/* Core Circumferences */}
               <Text style={styles.sectionHeading}>CORE CIRCUMFERENCES ({unitLabel.toUpperCase()})</Text>
@@ -357,7 +353,10 @@ export const BodyMeasurementsSheet = ({
                     <Text style={styles.estimateUsed}>IN USE</Text>
                   ) : (
                     <Tappable
-                      onPress={() => setBodyFat(navyText)}
+                      onPress={() => {
+                        setBodyFat(navyText);
+                        setBodyFatSource('tape');
+                      }}
                       scaleTo={0.95}
                       style={styles.estimateBtn}
                       accessibilityLabel={`Use ${navyText} percent as body fat`}

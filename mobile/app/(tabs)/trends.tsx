@@ -959,9 +959,7 @@ export default function TrendsScreen() {
             <Text style={styles.note}>
               Assumes a kilo of weight change holds about{' '}
               {(Math.round(energyDensity.kcalPerKg / 50) * 50).toLocaleString('en-US')} kcal, from{' '}
-              {energyDensity.measured
-                ? `your logged body fat of ${energyDensity.bodyFatPct.toFixed(0)}%`
-                : `an estimated ${energyDensity.bodyFatPct.toFixed(0)}% body fat. Log a body-fat figure in body measurements to sharpen it`}
+              {BODY_FAT_BASIS[energyDensity.source ?? 'guess'](energyDensity.bodyFatPct.toFixed(0))}
               .
             </Text>
           </Card>
@@ -1300,6 +1298,20 @@ const GlanceTile = ({
     <Text style={[styles.glanceTileSub, { color: colors.textFaint }]}>{sub}</Text>
   </View>
 );
+
+/**
+ * Where the body fat behind the energy figure came from, in the note's words.
+ * A weaker source says what would sharpen it; measurements live on the
+ * Weight tab.
+ */
+const BODY_FAT_BASIS: Record<'entered' | 'tape' | 'photo' | 'guess', (pct: string) => string> = {
+  entered: (pct) => `your logged body fat of ${pct}%`,
+  tape: (pct) => `your tape-measure estimate of ${pct}% body fat`,
+  photo: (pct) =>
+    `your photo estimate of ${pct}% body fat. A tape measurement in body measurements, on the Weight tab, would sharpen it`,
+  guess: (pct) =>
+    `an estimated ${pct}% body fat. Log a body-fat figure in body measurements, on the Weight tab, to sharpen it`,
+};
 
 const styles = StyleSheet.create({
   coachingBanner: {
