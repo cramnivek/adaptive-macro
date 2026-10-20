@@ -56,7 +56,11 @@ export default function WeightScreen() {
   // the trend arrives a moment after the tab opens, and saving moves it, so a
   // typed 79.4 turned into the trend's 80.1 under their thumb or straight after
   // saving.
-  const suggestion = latest?.trendWeightKg ?? weights[weights.length - 1]?.kg ?? null;
+  // Today's own reading comes first once there is one: offering the trend
+  // beside "Today's reading is 75.4 kg" meant one tap of Update replaced the
+  // real 75.4 with the trend's 75.2.
+  const today = weights.find((row) => row.date === todayISO());
+  const suggestion = today?.kg ?? latest?.trendWeightKg ?? weights[weights.length - 1]?.kg ?? null;
   if (!chosen && suggestion !== null && seededFrom !== String(suggestion)) {
     setSeededFrom(String(suggestion));
     setInput(displayWeight(suggestion, units).toFixed(1));
@@ -74,8 +78,6 @@ export default function WeightScreen() {
     setInput(displayWeight(kg, units).toFixed(1));
     setChosen(true);
   };
-
-  const today = weights.find((row) => row.date === todayISO());
 
   // Charts are plotted against days-since-first-entry rather than timestamps so
   // gaps in weighing show as real gaps instead of being collapsed to evenly
