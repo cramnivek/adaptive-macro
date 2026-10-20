@@ -16,6 +16,13 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
+// expo-crypto is native code the test runner cannot load; Node's own random
+// bytes are the same kind of source.
+vi.mock('expo-crypto', async () => {
+  const { randomBytes } = await import('node:crypto');
+  return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };
+});
+
 const mockSupabase = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('../client', () => ({
   get supabase() {
@@ -291,7 +298,18 @@ describe('Training Squads - Supabase Multiplayer integration', () => {
     await expect(joinSquadByCode({ inviteCode: 'APEX26', user: mockUser })).rejects.toThrow(/full/);
   });
 
-  it('says so when no squad has the code', async () => {
+  it('says so when the server finds no squad for the code', async () => {
+    const rpc = joinRefusedWith('unused');
+    rpc.mockResolvedValue({ data: null, error: null });
+    await expect(joinSquadByCode({ inviteCode: 'UNKNOWN', user: mockUser })).rejects.toThrow(/No squad has the code "UNKNOWN"/);
+  });
+
+  it('says so when too many codes have been tried', async () => {
+    joinRefusedWith('too_many_attempts');
+    await expect(joinSquadByCode({ inviteCode: 'APEX26', user: mockUser })).rejects.toThrow(/Too many codes/);
+  });
+
+  it('still understands the not-found error an older server raised', async () => {
     joinRefusedWith('squad_not_found');
     await expect(joinSquadByCode({ inviteCode: 'UNKNOWN', user: mockUser })).rejects.toThrow(/No squad has the code "UNKNOWN"/);
   });

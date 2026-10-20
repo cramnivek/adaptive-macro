@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { todayISO } from '@adaptive-macros/engine';
+import { getRandomBytes } from 'expo-crypto';
 import { supabase } from './client';
 import { messageFor } from './errors';
 import type { SquadActivity, SquadMember, TrainingSquad } from './squadTypes';
@@ -15,13 +16,12 @@ export const getMondayISO = (dateStr: string = todayISO()): string => {
   return monday.toISOString().slice(0, 10);
 };
 
+// From a cryptographic source rather than Math.random, whose sequence can be
+// predicted from a few outputs. 32 characters divide 256 exactly, so taking a
+// byte modulo 32 favours none of them.
 export const generateInviteCode = (): string => {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+  return Array.from(getRandomBytes(6), (byte) => chars[byte % chars.length]).join('');
 };
 
 export const createDefaultDemoSquad = (user: {
@@ -454,16 +454,21 @@ export const joinSquadByCode = async (params: {
   // left and the new one joined in one transaction, and capacity is counted
   // there. The client can no longer read a squad, or count its members, until
   // it is in it, so none of that can happen here any more.
-  const { error: joinErr } = await supabase.rpc('join_squad', { code: cleanCode });
+  const { data: joinedId, error: joinErr } = await supabase.rpc('join_squad', { code: cleanCode });
+  const notFound = `No squad has the code "${cleanCode}". Check it with whoever sent it.`;
   if (joinErr) {
-    if (joinErr.message?.includes('squad_not_found')) {
-      throw new Error(`No squad has the code "${cleanCode}". Check it with whoever sent it.`);
-    }
+    // squad_not_found is what the server raised before it started counting
+    // attempts; it now answers null instead (see 20261020120000).
+    if (joinErr.message?.includes('squad_not_found')) throw new Error(notFound);
     if (joinErr.message?.includes('squad_full')) {
       throw new Error('That squad is full. Squads hold six lifters at most.');
     }
+    if (joinErr.message?.includes('too_many_attempts')) {
+      throw new Error('Too many codes tried in the last hour. Wait a while, then try again.');
+    }
     throw new Error(messageFor(joinErr));
   }
+  if (joinedId === null) throw new Error(notFound);
 
   const liveSquad = await getMySquad(user);
   if (!liveSquad) {
