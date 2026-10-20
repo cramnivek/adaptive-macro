@@ -3,7 +3,6 @@ import { currentAccessToken } from './api';
 
 const STORAGE_PREFIX = 'adaptive_card_img_';
 const STATUS_PREFIX = 'adaptive_card_status_';
-const GCS_BASE_URL = 'https://storage.googleapis.com/adaptive-macro-card-images';
 
 export interface CardSyncStatus {
   sessionId: string;
@@ -16,13 +15,70 @@ export interface CardSyncStatus {
 export const sanitizeSessionId = (sessionId: string): string =>
   sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
-export const getPublicCardUrl = (sessionId?: string | null, authorId?: string | null): string | null => {
-  if (!sessionId) return null;
-  const safeId = sanitizeSessionId(sessionId);
-  if (authorId) {
-    return `${GCS_BASE_URL}/${encodeURIComponent(authorId)}/${encodeURIComponent(safeId)}.jpg`;
+/**
+ * Where a post's card image is asked for: this app's own server, which answers
+ * only if the viewer may see the post (services/gemini-proxy/src/cardImages.ts).
+ * The bucket behind it is private; its addresses were public before, and the
+ * rules about who sees a post did not reach the picture.
+ *
+ * Null without the author, since images are filed in their author's folder.
+ * Cards uploaded before that, loose at the top of the bucket, are no longer
+ * served, and those posts show their card drawn from the workout instead.
+ */
+export const cardImagePath = (sessionId?: string | null, authorId?: string | null): string | null => {
+  if (!sessionId || !authorId) return null;
+  return `/api/card?author=${encodeURIComponent(authorId)}&session=${encodeURIComponent(sanitizeSessionId(sessionId))}`;
+};
+
+/**
+ * A post's card image as a local object URL, or null when there is none to
+ * show: signed out, not allowed, never uploaded, or unreachable. An <img> tag
+ * cannot send the viewer's sign-in, so the image is fetched with it and handed
+ * over as a blob; the caller revokes the URL when it is done with it.
+ */
+export const fetchCardImage = async (sessionId?: string | null, authorId?: string | null): Promise<string | null> => {
+  const path = cardImagePath(sessionId, authorId);
+  if (!path) return null;
+  const token = await currentAccessToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    return URL.createObjectURL(await res.blob());
+  } catch {
+    return null;
   }
-  return `${GCS_BASE_URL}/${encodeURIComponent(safeId)}.jpg`;
+};
+
+/**
+ * Removes the signed-in person's card for one session from the server. Best
+ * effort: a post deleted while this fails leaves an image nobody can be served,
+ * since the post it would be checked against is gone.
+ */
+export const removeCardImage = async (sessionId: string): Promise<boolean> => {
+  const token = await currentAccessToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`/api/card?session=${encodeURIComponent(sanitizeSessionId(sessionId))}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
+/** Removes every card the signed-in person has on the server; used before the account is deleted. */
+export const removeAllCardImages = async (): Promise<boolean> => {
+  const token = await currentAccessToken();
+  if (!token) return false;
+  try {
+    const res = await fetch('/api/cards', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    return res.ok;
+  } catch {
+    return false;
+  }
 };
 
 /** Convert File or Blob to durable base64 DataURL so it persists across tab closes */

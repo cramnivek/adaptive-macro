@@ -709,7 +709,9 @@ describe('per-user limits', () => {
       expect(uploadedFilename).toBe('alice/workout_123.jpg');
       expect(await res.json()).toEqual({
         ok: true,
-        url: 'https://storage.googleapis.com/test-bucket/alice/workout_123.jpg',
+        // The bucket is private: the address handed back is this service's
+        // checked route, not the bucket's.
+        url: '/api/card?author=alice&session=workout_123',
       });
     });
 

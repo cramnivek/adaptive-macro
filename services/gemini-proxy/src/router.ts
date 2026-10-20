@@ -4,7 +4,8 @@ import { handleUsdaProxy } from './usdaProxy.js';
 import { callerKey, createRateLimiter } from './rateLimit.js';
 import { serveStatic } from './staticFiles.js';
 import { createTokenVerifier } from './userToken.js';
-import { uploadCardToGcs } from './gcsUpload.js';
+import { getGcsToken, uploadCardToGcs } from './gcsUpload.js';
+import { type CardStore, createCardStore, isAuthorId, isSessionId, objectName } from './cardImages.js';
 
 /*
   Gemini is the expensive one and the slow one: a grounded lookup takes most of
@@ -19,6 +20,8 @@ import { uploadCardToGcs } from './gcsUpload.js';
 const GEMINI_LIMIT = { windowMs: 10 * 60_000, max: 20 };
 const LOOKUP_LIMIT = { windowMs: 10 * 60_000, max: 150 };
 const UPLOAD_LIMIT = { windowMs: 10 * 60_000, max: 15 };
+/** A feed page shows a card per post; generous, since each read is one person's scrolling. */
+const CARD_READ_LIMIT = { windowMs: 10 * 60_000, max: 600 };
 
 const detectImageFormat = (buffer: ArrayBuffer): { valid: boolean; contentType: string } => {
   if (!buffer || buffer.byteLength < 4) return { valid: false, contentType: '' };
@@ -122,6 +125,7 @@ export const createRouter = (opts: {
   env: ProxyEnv;
   webRoot: string;
   uploadCardImpl?: (filename: string, buffer: ArrayBuffer | Uint8Array, contentType?: string) => Promise<string | null>;
+  cardStoreImpl?: CardStore;
 }) => {
   // One limiter per route family, held across requests by the closure.
   const signedOutBurstLimiter = createRateLimiter(GEMINI_LIMIT);
@@ -137,6 +141,21 @@ export const createRouter = (opts: {
   const lookupLimiter = createRateLimiter(LOOKUP_LIMIT);
   const uploadLimiter = createRateLimiter(UPLOAD_LIMIT);
   const uploadCard = opts.uploadCardImpl ?? uploadCardToGcs;
+  const cardReadLimiter = createRateLimiter(CARD_READ_LIMIT);
+  const cards: CardStore | null =
+    opts.cardStoreImpl ??
+    (opts.env.supabaseUrl ? createCardStore({ supabaseUrl: opts.env.supabaseUrl, gcsToken: getGcsToken }) : null);
+
+  /** The verified caller, or the response that refuses them. */
+  const signedIn = async (request: Request): Promise<{ userId: string } | Response> => {
+    const who = verifier ? await verifier.check(request.headers.get('authorization')) : null;
+    if (who && 'userId' in who) return { userId: who.userId };
+    const expired = who !== null && 'problem' in who && who.problem === 'expired';
+    return Response.json(
+      { error: expired ? 'Session expired' : 'Sign in to see this' },
+      { status: 401, headers: expired ? { 'x-auth': 'expired' } : {} },
+    );
+  };
 
   return async (request: Request): Promise<Response> => {
     const { pathname } = new URL(request.url);
@@ -215,6 +234,56 @@ export const createRouter = (opts: {
       return handleUsdaProxy(request, opts.env);
     }
 
+    // One card image, for someone allowed to see its post (see cardImages.ts),
+    // or the caller's own card removed. Every refusal past sign-in is the same
+    // 404, so the answer never says whether a post exists or who blocked whom.
+    if (pathname === '/api/card') {
+      if (request.method !== 'GET' && request.method !== 'DELETE') {
+        return new Response('Method not allowed', { status: 405 });
+      }
+      const caller = await signedIn(request);
+      if (caller instanceof Response) return caller;
+      if (!cards) return new Response('Not found', { status: 404 });
+      const params = new URL(request.url).searchParams;
+      const session = params.get('session');
+      if (!isSessionId(session)) return new Response('Not found', { status: 404 });
+
+      if (request.method === 'DELETE') {
+        const gone = await cards.remove(objectName(caller.userId, session));
+        return gone ? new Response(null, { status: 204 }) : Response.json({ error: 'Could not remove' }, { status: 502 });
+      }
+
+      const verdict = cardReadLimiter.check(`card:user:${caller.userId}`);
+      if (!verdict.allowed) return tooMany(verdict.retryAfterSeconds);
+      const author = params.get('author');
+      if (!isAuthorId(author)) return new Response('Not found', { status: 404 });
+      const allowed = await cards.visible(author, session, request.headers.get('authorization') ?? '');
+      if (!allowed) return new Response('Not found', { status: 404 });
+      const image = await cards.read(objectName(author, session));
+      if (!image) return new Response('Not found', { status: 404 });
+      return new Response(image.body, {
+        headers: {
+          'Content-Type': image.contentType,
+          // Private: the answer depends on who asked, so no shared cache may
+          // keep it, and a short life so a block takes hold quickly.
+          'Cache-Control': 'private, max-age=300',
+        },
+      });
+    }
+
+    // Every card the caller has, removed; called before the account goes, while
+    // the token that proves who they are still works.
+    if (pathname === '/api/cards') {
+      if (request.method !== 'DELETE') return new Response('Method not allowed', { status: 405 });
+      const caller = await signedIn(request);
+      if (caller instanceof Response) return caller;
+      if (!cards) return Response.json({ error: 'Could not remove' }, { status: 502 });
+      const removed = await cards.removeFolder(`${caller.userId}/`);
+      return removed === null
+        ? Response.json({ error: 'Could not remove' }, { status: 502 })
+        : Response.json({ removed });
+    }
+
     if (pathname === '/api/upload-card') {
       if (request.method !== 'POST') {
         return new Response('Method not allowed', { status: 405 });
@@ -281,7 +350,9 @@ export const createRouter = (opts: {
       if (!publicUrl) {
         return Response.json({ error: 'Failed to upload' }, { status: 500 });
       }
-      return Response.json({ ok: true, url: publicUrl });
+      // The bucket is private, so the address handed back is this service's,
+      // which checks the viewer before it answers, not the bucket's.
+      return Response.json({ ok: true, url: `/api/card?author=${encodeURIComponent(userId)}&session=${encodeURIComponent(safeId)}` });
     }
 
     // Health check endpoints answered independently of the web build.

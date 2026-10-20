@@ -124,6 +124,8 @@ export interface RoutineExerciseFromPost {
 export type PostView = ShareSummary & {
   caption: string | null;
   sessionId?: string;
+  /** Who posted it, where the row says; card images are filed under it. */
+  authorId?: string;
   rawExercises?: PostExercise[];
 };
 
@@ -208,6 +210,7 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
 
   return {
     sessionId: row.session_id,
+    ...('author_id' in row && typeof row.author_id === 'string' ? { authorId: row.author_id } : {}),
     title: row.title,
     date: formatDateLong(row.performed_on),
     duration: formatDuration(row.duration_min),

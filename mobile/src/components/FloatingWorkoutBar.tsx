@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { thud } from '../platform/haptics';
 import {
@@ -14,7 +14,15 @@ import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Tappable } from './Tappable';
 
-export const FloatingWorkoutBar = () => {
+/**
+ * How much of the bottom of a tab the bar covers, in points; 0 while it is
+ * hidden. The bar floats over every tab, and without this the last thing on
+ * each one (the newest weigh-ins, the end of a list) sat behind it with no way
+ * to scroll it clear. `Screen` adds it to its bottom padding.
+ */
+export const FloatingBarInset = createContext(0);
+
+export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) => void }) => {
   const router = useRouter();
   const { colors } = useTheme();
   const [workoutState, setWorkoutState] = useState<ActiveWorkoutState | null>(null);
@@ -41,7 +49,12 @@ export const FloatingWorkoutBar = () => {
     return () => clearInterval(interval);
   }, [workoutState?.rest]);
 
-  if (!workoutState?.hasActiveSession) {
+  const shown = !!workoutState?.hasActiveSession;
+  useEffect(() => {
+    if (!shown) onHeight?.(0);
+  }, [shown, onHeight]);
+
+  if (!shown) {
     return null;
   }
 
@@ -76,7 +89,11 @@ export const FloatingWorkoutBar = () => {
   const isRestDone = restRemaining === 0;
 
   return (
-    <View style={styles.wrapper}>
+    <View
+      style={styles.wrapper}
+      // The bar's own height plus the gap it keeps above the tab bar's edge.
+      onLayout={(e) => onHeight?.(e.nativeEvent.layout.height + space.sm)}
+    >
       <Pressable
         onPress={handleResume}
         style={[

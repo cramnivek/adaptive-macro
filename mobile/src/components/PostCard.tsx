@@ -28,7 +28,7 @@ import {
   type CardSyncStatus,
   getCustomCardStatus,
   getLocalCustomCard,
-  getPublicCardUrl,
+  fetchCardImage,
   persistCustomCard,
   retryCustomCardUpload,
 } from '../social/customCard';
@@ -115,18 +115,26 @@ export const PostCard = ({
       ? formatTimeAgo(view.date)
       : '';
 
-  // Check for local customized card or cloud GCS card
+  // The card on this device if there is one, otherwise the uploaded one,
+  // fetched as the viewer so the server can check they may see the post.
   useEffect(() => {
     let alive = true;
+    let fetched: string | null = null;
     if (view.sessionId) {
-      void getLocalCustomCard(view.sessionId).then((local) => {
+      void getLocalCustomCard(view.sessionId).then(async (local) => {
         if (!alive) return;
         if (local) {
           setCustomCardUrl(local);
-        } else {
-          const publicUrl = getPublicCardUrl(view.sessionId, (view as any).authorId);
-          if (publicUrl) setCustomCardUrl(publicUrl);
+          return;
         }
+        const remote = await fetchCardImage(view.sessionId, view.authorId);
+        if (!remote) return;
+        if (!alive) {
+          URL.revokeObjectURL(remote);
+          return;
+        }
+        fetched = remote;
+        setCustomCardUrl(remote);
       });
       if (canEditPhoto) {
         void getCustomCardStatus(view.sessionId).then((st) => {
@@ -136,8 +144,10 @@ export const PostCard = ({
     }
     return () => {
       alive = false;
+      // The object URL holds the image in memory until it is released.
+      if (fetched) URL.revokeObjectURL(fetched);
     };
-  }, [view.sessionId, canEditPhoto]);
+  }, [view.sessionId, view.authorId, canEditPhoto]);
 
   const generateCard = useCallback(async (): Promise<{ file: File; url: string } | null> => {
     if (card) return card;
@@ -241,10 +251,10 @@ export const PostCard = ({
     if (!view.sessionId || retrying) return;
     setRetrying(true);
     try {
-      const url = await retryCustomCardUpload(view.sessionId);
-      if (url) {
-        setCustomCardUrl(url);
-      }
+      // The card on screen is already the local copy; what the server hands
+      // back is an address only a signed-in fetch can open, so it is not
+      // swapped in.
+      await retryCustomCardUpload(view.sessionId);
       const st = await getCustomCardStatus(view.sessionId);
       setSyncStatus(st);
     } finally {

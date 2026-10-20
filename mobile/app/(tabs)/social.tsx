@@ -10,6 +10,7 @@ import { SquadHub } from '../../src/components/SquadHub';
 import { Tappable } from '../../src/components/Tappable';
 import { confirm, notify } from '../../src/dialog';
 import { deletePost } from '../../src/social/api';
+import { removeCardImage } from '../../src/social/customCard';
 import {
   cursorAfter,
   explorePage,
@@ -185,6 +186,9 @@ export default function SocialScreen() {
     if (!sure) return;
     try {
       await deletePost(post.id);
+      // Its card image goes with it. Best effort: if this fails, the image
+      // has no post left to be checked against, so it cannot be served.
+      void removeCardImage(post.session_id);
       setPostsByTab((prev) => ({
         ...prev,
         following: prev.following?.filter((p) => p.id !== post.id) ?? null,

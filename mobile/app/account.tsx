@@ -9,6 +9,7 @@ import { UserAvatar } from '../src/components/UserAvatar';
 import { StepLogModal } from '../src/components/StepLogModal';
 import { confirm, notify } from '../src/dialog';
 import { deleteAccount, signOut } from '../src/social/api';
+import { removeAllCardImages } from '../src/social/customCard';
 import { useSocial } from '../src/social/session';
 import { loadHealthSyncConfig } from '../src/health/healthSync';
 import type { HealthSyncConfig } from '../src/health/types';
@@ -51,6 +52,10 @@ export default function AccountScreen() {
     });
     if (!sure) return;
     await leave(async () => {
+      // First, while the sign-in that proves whose they are still works. If it
+      // fails the account still goes: with no posts left to be checked
+      // against, the images can no longer be served to anyone.
+      await removeAllCardImages();
       await deleteAccount();
       notify('Account deleted');
       router.back();
