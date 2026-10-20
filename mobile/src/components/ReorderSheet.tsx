@@ -21,6 +21,8 @@ interface ReorderSheetProps {
   onClose: () => void;
   /** Opens with this exercise already picked up, when a card's own handle opened the sheet. */
   initialPick?: number | null;
+  /** The heading, for lists that are not a session's exercises. */
+  title?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export const ReorderSheet: React.FC<ReorderSheetProps> = ({
   onMove,
   onClose,
   initialPick = null,
+  title = 'Reorder exercises',
 }) => {
   const insets = useSafeAreaInsets();
   /**
@@ -76,11 +79,11 @@ export const ReorderSheet: React.FC<ReorderSheetProps> = ({
               <Ionicons name="swap-vertical" size={16} color={loud.loud} />
             </View>
             <View>
-              <Text style={styles.title}>REORDER EXERCISES</Text>
+              <Text style={styles.title}>{title.toUpperCase()}</Text>
               <Text style={styles.subtitle} numberOfLines={2}>
                 {picked !== null && items[picked]
                   ? `Tap where ${items[picked].name} should go.`
-                  : 'Tap an exercise, then tap where it goes.'}
+                  : 'Tap one, then tap where it goes.'}
               </Text>
             </View>
           </View>

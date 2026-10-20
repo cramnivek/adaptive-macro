@@ -216,8 +216,8 @@ export default function TrainScreen() {
       <Card loud variant="featured" title="Routines">
         {routines.length === 0 ? (
           <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
-            A routine is a named list of exercises in the order you do them. You can build one
-            from a session you have already done.
+            A routine is a named list of exercises in the order you do them. Tell the app your
+            days and equipment and it builds them for you, or make your own.
           </Text>
         ) : (
           <View style={styles.routineList}>
@@ -245,7 +245,7 @@ export default function TrainScreen() {
         )}
         <Button
           tone="loud"
-          label={routines.length ? 'Manage routines' : 'Create a routine'}
+          label={routines.length ? 'Manage routines' : 'Set up routines'}
           variant="subtle"
           onPress={() => router.push('/routines')}
         />

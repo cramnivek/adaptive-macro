@@ -3,18 +3,24 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { thud } from '../src/platform/haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { lookupBarcode } from '../src/api/openfoodfacts';
 import { Button } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { findFoodByBarcode } from '../src/db';
+import { WebBarcodeCamera } from '../src/platform/WebBarcodeCamera';
+import type { Rect } from '../src/platform/scanGeometry';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
 
 /** Formats used on food packaging; QR and the rest are ignored deliberately. */
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
-type Status = { kind: 'scanning' } | { kind: 'looking-up' } | { kind: 'not-found'; code: string };
+type Status =
+  | { kind: 'scanning' }
+  | { kind: 'looking-up' }
+  | { kind: 'not-found'; code: string }
+  | { kind: 'camera-problem'; message: string };
 
 export default function ScanScreen() {
   const { colors } = useTheme();
@@ -26,6 +32,8 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<Status>({ kind: 'scanning' });
   const [found, setFound] = useState<Food | null>(null);
+  // Where the box is drawn, so the web camera decodes what is under it.
+  const [box, setBox] = useState<Rect | null>(null);
 
   // The camera fires this continuously while a barcode is in frame. Without a
   // latch, one scan would trigger dozens of lookups for the same product.
@@ -87,18 +95,30 @@ export default function ScanScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
-        onBarcodeScanned={
-          status.kind === 'scanning' && !found
-            ? (result) => void handleScan(result.data)
-            : undefined
-        }
-      />
+      {Platform.OS === 'web' ? (
+        <WebBarcodeCamera
+          box={box}
+          paused={status.kind !== 'scanning' || found !== null}
+          onScan={(code) => void handleScan(code)}
+          onProblem={(message) => setStatus({ kind: 'camera-problem', message })}
+        />
+      ) : (
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
+          onBarcodeScanned={
+            status.kind === 'scanning' && !found
+              ? (result) => void handleScan(result.data)
+              : undefined
+          }
+        />
+      )}
 
       <View style={styles.overlay} pointerEvents="box-none">
-        <View style={[styles.reticle, { borderColor: colors.accent }]} />
+        <View
+          style={[styles.reticle, { borderColor: colors.accent }]}
+          onLayout={(e) => setBox(e.nativeEvent.layout)}
+        />
 
         <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {status.kind === 'looking-up' && (
@@ -125,9 +145,21 @@ export default function ScanScreen() {
             </>
           )}
 
+          {status.kind === 'camera-problem' && (
+            <>
+              <Text style={[styles.message, { color: colors.text }]}>{status.message}</Text>
+              <Button
+                label="Search by name"
+                variant="subtle"
+                onPress={() => router.replace({ pathname: '/search', params: { meal } })}
+              />
+            </>
+          )}
+
           {status.kind === 'scanning' && !found && (
             <Text style={[styles.hint, { color: colors.textMuted }]}>
-              Point the camera at a barcode on the packaging.
+              Fit the barcode inside the box, about a hand's length away. Closer than that and the
+              camera cannot focus.
             </Text>
           )}
         </View>

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -52,6 +52,11 @@ const kept = (routine: Found) => routine.include && routine.exercises.some((e) =
  */
 export default function AddRoutinesScreen() {
   const router = useRouter();
+  // Which way in the routines screen chose. Each is its own screen to the
+  // person who picked it; with neither, both show, as they always did.
+  const { mode } = useLocalSearchParams<{ mode?: 'build' | 'import' }>();
+  const showBuild = mode !== 'import';
+  const showImport = mode !== 'build';
   const { settings, updateSettings } = useApp();
   const apiKey = settings.foodLookup.geminiApiKey;
 
@@ -200,70 +205,85 @@ export default function AddRoutinesScreen() {
   const count = (n: number) => (n === 1 ? '1 routine' : `${n} routines`);
 
   return (
-    <Screen title="New routines" tone="loud">
+    <Screen
+      title={mode === 'build' ? 'Build my routines' : mode === 'import' ? 'Import a programme' : 'New routines'}
+      tone="loud"
+    >
       {!found && !working && (
         <>
-          <Card loud title="Build them for me">
-            <Text style={[styles.note, { color: loud.figureMuted }]}>
-              Pick the days you want. Each becomes a balanced routine, using the exercises you
-              already do wherever they fit.
-            </Text>
-            <View style={styles.chips}>
-              {ROUTINE_FOCUSES.map((focus) => (
-                <Chip key={focus} label={FOCUS_LABEL[focus]} on={focuses.includes(focus)} onPress={() => toggleFocus(focus)} />
-              ))}
-            </View>
-
-            <Text style={[styles.label, { color: loud.figureMuted }]}>WHAT YOU HAVE</Text>
-            <View style={styles.chips}>
-              {EQUIPMENT_ITEMS.map((item) => (
-                <Chip
-                  key={item}
-                  label={EQUIPMENT_LABEL[item]}
-                  on={equipment.includes(item)}
-                  onPress={() => toggleEquipment(item)}
-                  quiet
-                />
-              ))}
-            </View>
-            {isBodyweightOnly(equipment) && (
-              <Text style={[styles.note, { color: loud.figureFaint }]}>
-                Nothing that adds load, so every exercise will be bodyweight.
+          {showBuild && (
+            <Card loud title={mode === 'build' ? 'Which days?' : 'Build them for me'}>
+              <Text style={[styles.note, { color: loud.figureMuted }]}>
+                Pick the days you want in your week. Each becomes a balanced routine, using the
+                exercises you already do wherever they fit. You see them all before anything is saved.
               </Text>
-            )}
+              <View style={styles.chips}>
+                {ROUTINE_FOCUSES.map((focus) => (
+                  <Chip key={focus} label={FOCUS_LABEL[focus]} on={focuses.includes(focus)} onPress={() => toggleFocus(focus)} />
+                ))}
+              </View>
 
-            <Text style={[styles.label, { color: loud.figureMuted }]}>YOUR LEVEL</Text>
-            <View style={styles.chips}>
-              {TRAINING_LEVELS.map((option) => (
-                <Chip
-                  key={option}
-                  label={LEVEL_LABEL[option]}
-                  on={level === option}
-                  onPress={() => void updateSettings({ trainingLevel: option })}
-                  quiet
-                  radio
-                />
-              ))}
-            </View>
+              <Text style={[styles.label, { color: loud.figureMuted }]}>WHAT YOU HAVE</Text>
+              <View style={styles.chips}>
+                {EQUIPMENT_ITEMS.map((item) => (
+                  <Chip
+                    key={item}
+                    label={EQUIPMENT_LABEL[item]}
+                    on={equipment.includes(item)}
+                    onPress={() => toggleEquipment(item)}
+                    quiet
+                  />
+                ))}
+              </View>
+              {isBodyweightOnly(equipment) && (
+                <Text style={[styles.note, { color: loud.figureFaint }]}>
+                  Nothing that adds load, so every exercise will be bodyweight.
+                </Text>
+              )}
 
-            <Button
-              tone="loud"
-              label={focuses.length === 0 ? 'Pick at least one day' : `Build ${count(focuses.length)}`}
-              onPress={build}
-              disabled={focuses.length === 0}
-            />
-          </Card>
+              <Text style={[styles.label, { color: loud.figureMuted }]}>YOUR LEVEL</Text>
+              <View style={styles.chips}>
+                {TRAINING_LEVELS.map((option) => (
+                  <Chip
+                    key={option}
+                    label={LEVEL_LABEL[option]}
+                    on={level === option}
+                    onPress={() => void updateSettings({ trainingLevel: option })}
+                    quiet
+                    radio
+                  />
+                ))}
+              </View>
 
-          <Card loud title="From a PDF or a screenshot">
-            <Text style={[styles.note, { color: loud.figureMuted }]}>
-              Pick a programme you were given. Each day in it becomes a routine, with its sets and
-              rep targets.
-            </Text>
-            <Text style={[styles.note, { color: loud.figureFaint }]}>
-              A spreadsheet? Save it as a PDF or screenshot it first.
-            </Text>
-            <Button tone="loud" label="Choose a file" variant="subtle" onPress={pick} />
-          </Card>
+              {/* Quiet until there is something to build: a disabled red slab read
+                  as broken rather than as waiting for a choice. */}
+              <Button
+                tone="loud"
+                label={focuses.length === 0 ? 'Pick at least one day' : `Build ${count(focuses.length)}`}
+                onPress={build}
+                disabled={focuses.length === 0}
+                variant={focuses.length === 0 ? 'subtle' : 'primary'}
+              />
+            </Card>
+          )}
+
+          {showImport && (
+            <Card loud title="From a PDF or a screenshot">
+              <Text style={[styles.note, { color: loud.figureMuted }]}>
+                Pick a programme you were given. Each day in it becomes a routine, with its sets and
+                rep targets.
+              </Text>
+              <Text style={[styles.note, { color: loud.figureFaint }]}>
+                A spreadsheet? Save it as a PDF or screenshot it first.
+              </Text>
+              <Button
+                tone="loud"
+                label="Choose a file"
+                variant={mode === 'import' ? 'primary' : 'subtle'}
+                onPress={pick}
+              />
+            </Card>
+          )}
         </>
       )}
 
@@ -423,7 +443,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.2, marginTop: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginVertical: space.sm },
   chip: {
-    minHeight: TOUCH_TARGET - 8,
+    minHeight: TOUCH_TARGET,
     justifyContent: 'center',
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
