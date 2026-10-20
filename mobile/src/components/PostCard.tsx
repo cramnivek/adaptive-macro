@@ -424,20 +424,9 @@ export const PostCard = ({
 
           {/* Formatted Exercise List */}
           <View style={styles.exerciseList}>
-            {(expandedExercises && view.rawExercises && view.rawExercises.length > 0
-              ? view.rawExercises.map((rx) => {
-                  const isCardio = rx.best_kg === null && rx.sets === 0 && rx.best_reps === 0;
-                  return {
-                    name: rx.name,
-                    sets: rx.sets,
-                    best: isCardio
-                      ? 'Cardio'
-                      : rx.best_kg === null
-                        ? `${rx.best_reps} reps`
-                        : `${rx.best_kg} kg × ${rx.best_reps}`,
-                    pr: rx.pr === true && !isCardio,
-                  };
-                })
+            {/* Expanded, every lift in the reader's units; the raw rows are kilos. */}
+            {(expandedExercises && view.allExercises && view.allExercises.length > 0
+              ? view.allExercises
               : view.exercises
             ).map((lift, index, arr) => (
               <View

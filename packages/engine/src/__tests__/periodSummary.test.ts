@@ -27,7 +27,14 @@ const set = (
 const NO_BODYWEIGHT = new Map<string, number>();
 
 describe('summarisePeriod', () => {
-  it('counts sessions by distinct date, not by set', () => {
+  it('counts two workouts on one day as two', () => {
+    const morning = set('2026-01-05', 'Squat', 100, 5);
+    const evening = { ...set('2026-01-05', 'Bench', 60, 8), set: { ...set('2026-01-05', 'Bench', 60, 8).set, sessionId: 'evening' } };
+    const summary = summarisePeriod([morning, evening], NO_BODYWEIGHT, '2026-01-01', '2026-01-31');
+    expect(summary.sessions).toBe(2);
+  });
+
+  it('counts sessions by workout, not by set', () => {
     const summary = summarisePeriod(
       [
         set('2026-01-05', 'Squat', 100, 5),

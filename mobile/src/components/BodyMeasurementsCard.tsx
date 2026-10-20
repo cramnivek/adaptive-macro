@@ -26,6 +26,9 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
   const { refreshAll } = useApp();
   const [records, setRecords] = useState<BodyMeasurementRecord[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Bumped on every open, so the sheet mounts afresh and its fields start from
+  // the record being edited (or empty) instead of whatever was typed last time.
+  const [sheetKey, setSheetKey] = useState(0);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<BodyMeasurementRecord | null>(null);
 
@@ -90,6 +93,7 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
               <Tappable
                 onPress={() => {
                   setSelectedRecord(latest);
+                  setSheetKey((k) => k + 1);
                   setSheetOpen(true);
                 }}
                 scaleTo={0.93}
@@ -143,6 +147,7 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
         <Tappable
           onPress={() => {
             setSelectedRecord(null);
+            setSheetKey((k) => k + 1);
             setSheetOpen(true);
           }}
           scaleTo={0.97}
@@ -167,6 +172,7 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
       </View>
 
       <BodyMeasurementsSheet
+        key={sheetKey}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         units={units}

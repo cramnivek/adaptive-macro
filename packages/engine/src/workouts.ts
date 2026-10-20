@@ -283,7 +283,11 @@ export const bodyweightForDates = (
 };
 
 export interface PeriodSummary {
-  /** Days inside the period with at least one scoreable working set. */
+  /**
+   * Workouts inside the period with at least one scoreable working set.
+   * Counted by session, not by date: a morning and an evening session are two
+   * workouts, and the tiles that show this call them workouts.
+   */
   sessions: number;
   workingSets: number;
   /** Effective load × reps, summed across the period's working sets. */
@@ -315,7 +319,7 @@ export const summarisePeriod = (
 ): PeriodSummary => {
   const within = (date: ISODate) => date >= from && date <= to;
 
-  const dates = new Set<ISODate>();
+  const sessionIds = new Set<string>();
   const exercises: string[] = [];
   let workingSets = 0;
   let volumeKg = 0;
@@ -326,7 +330,7 @@ export const summarisePeriod = (
     const load = effectiveLoadKg(set, bodyweightByDate.get(date) ?? null);
     if (load === null) continue;
 
-    dates.add(date);
+    sessionIds.add(set.sessionId);
     workingSets += 1;
     volumeKg += load * set.reps;
     if (!exercises.includes(set.exerciseName)) exercises.push(set.exerciseName);
@@ -348,7 +352,7 @@ export const summarisePeriod = (
     }
   }
 
-  return { sessions: dates.size, workingSets, volumeKg, records, exercises };
+  return { sessions: sessionIds.size, workingSets, volumeKg, records, exercises };
 };
 
 export type MilestoneKind = 'load' | 'volume' | 'sessions';

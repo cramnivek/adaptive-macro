@@ -718,7 +718,8 @@ export default function TrendsScreen() {
       ? `"${review.headline}"`
       : locked
         ? status
-          ? `${status.current.logged} of ${status.current.needed} logged days this ${span}, ${status.current.daysLeft} to go`
+          ? // "6 to go" read as six more days to log; it is the days left in the period.
+            `${status.current.logged} of ${status.current.needed} days logged · ${status.current.daysLeft} day${status.current.daysLeft === 1 ? '' : 's'} left this ${span}`
           : NOTHING_YET
         : last
           ? `${formatDayMonth(last.from)} to ${formatDayMonth(last.to)} is ready to review`

@@ -105,6 +105,14 @@ describe('postView', () => {
     expect(postView(row, 'metric').highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '100 kg' });
   });
 
+  it('formats every lift for the expanded list in the reader’s units', () => {
+    const many = Array.from({ length: 5 }, (_, i) => set(`Lift ${i}`, 100, 5));
+    const view = postView(postPayload(workout({ sets: many }), null), 'imperial');
+    expect(view.exercises).toHaveLength(3);
+    expect(view.allExercises).toHaveLength(5);
+    expect(view.allExercises?.[4].best).toBe('220.5 lb × 5');
+  });
+
   it('reads a record mark only when it is true', () => {
     const row = postPayload(workout(), null);
     const odd = { ...row, exercises: [{ ...row.exercises[0], pr: 'yes' }] } as unknown as typeof row;

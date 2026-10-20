@@ -144,6 +144,8 @@ export type PostView = ShareSummary & {
   /** Who posted it, where the row says; card images are filed under it. */
   authorId?: string;
   rawExercises?: PostExercise[];
+  /** Every lift, formatted for the reader as `exercises` is; that list stops at `maxExercises`. */
+  allExercises?: ShareExercise[];
 };
 
 /**
@@ -262,5 +264,6 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
     highlight: copy ? { label: copy.label, figure: copy.figure } : recordHighlight(exercises),
     caption: row.caption,
     rawExercises: lifts,
+    allExercises: exercises,
   };
 };

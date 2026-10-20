@@ -84,7 +84,7 @@ import { usesBarbell } from '../src/plates';
 import { PlateSheet } from '../src/components/PlateSheet';
 import { SupersetSheet, getSupersetStyle } from '../src/components/SupersetSheet';
 import type { WarmupSet } from '../src/warmup';
-import { laddersFor } from '../src/milestones';
+import { describeMilestone, laddersFor } from '../src/milestones';
 import { adjustRest, MAX_REST_SECONDS, MIN_REST_SECONDS } from '../src/rest';
 import { draftsToAdd, previousSetFor, repsPrefill, resumeOrder, targetLabel } from '../src/routinePlan';
 import { clearWorkoutDraft, loadWorkoutDraft, saveWorkoutDraft, saveWorkoutDraftSync } from '../src/sessionDraft';
@@ -1932,19 +1932,30 @@ export default function SessionScreen() {
         milestone: reached[0] ?? null,
         records: recordsInSession(allSets, bodyweightByDate, session.id),
       };
-      setFinished({
-        workout,
-        // The trend alone for the energy estimate: currentBodyweightKg falls
-        // back to the goal weight, which is not what the person weighs.
-        summary: shareSummary({
-          ...workout,
-          units: workoutUnits,
-          bodyweightKg: series[series.length - 1]?.trendWeightKg ?? null,
-        }),
+      // The trend alone for the energy estimate: currentBodyweightKg falls
+      // back to the goal weight, which is not what the person weighs.
+      const summary = shareSummary({
+        ...workout,
+        units: workoutUnits,
+        bodyweightKg: series[series.length - 1]?.trendWeightKg ?? null,
       });
+      setFinished({ workout, summary });
+      // What the squad sees, in the lifter's own units and the words the card
+      // uses: a milestone if one was crossed, else the first record set. The
+      // raw milestone value is kilos, so a 225 lb landmark used to read
+      // "102.05828kg".
+      const milestoneCopy = reached[0] ? describeMilestone(reached[0], workoutUnits) : null;
+      const recordLift = summary.exercises.find((exercise) => exercise.pr);
+      const prHighlight = milestoneCopy
+        ? reached[0]?.exercise
+          ? `${reached[0].exercise} ${milestoneCopy.figure}`
+          : `${milestoneCopy.figure} ${milestoneCopy.label.toLowerCase()}`
+        : recordLift
+          ? `${recordLift.name} ${recordLift.best}`
+          : null;
       void recordSquadWorkoutSession({
         title: session.name || 'Workout',
-        prHighlight: reached[0] ? (reached[0].exercise ? `${reached[0].exercise} ${reached[0].value}kg` : `${reached[0].value} ${reached[0].kind}`) : null,
+        prHighlight,
         durationMin: session.startedAt ? Math.max(1, Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000)) : undefined,
         user: {
           id: social.profile?.id ?? 'me',
