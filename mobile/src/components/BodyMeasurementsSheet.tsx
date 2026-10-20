@@ -24,6 +24,7 @@ import { useApp } from '../state/AppStore';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+import { BodyFatPhotoPanel } from './BodyFatPhotoPanel';
 import { TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
 
@@ -224,6 +225,17 @@ export const BodyMeasurementsSheet = ({
                   />
                 </View>
               </View>
+
+              <BodyFatPhotoPanel
+                tapeEstimate={navyText}
+                onUse={(pct, lowPct, highPct) => {
+                  setBodyFat(pct.toFixed(1));
+                  // The figure is stored like any other, so the note is what
+                  // keeps it recognisable later as a reading of photos.
+                  const line = `Body fat is a visual estimate from photos (${lowPct}–${highPct}%).`;
+                  setNotes((current) => (current.trim() ? `${current.trim()}\n${line}` : line));
+                }}
+              />
 
               {/* Core Circumferences */}
               <Text style={styles.sectionHeading}>CORE CIRCUMFERENCES ({unitLabel.toUpperCase()})</Text>
