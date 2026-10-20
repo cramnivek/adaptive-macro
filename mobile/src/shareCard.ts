@@ -1,4 +1,4 @@
-import { liftingEnergyKcal, type LiftingEnergy, type Milestone } from '@adaptive-macros/engine';
+import { liftingEnergyKcal, type LiftingEnergy, type Milestone, type SetRecord } from '@adaptive-macros/engine';
 import {
   type CardioMode,
   calculateCardioSteps,
@@ -13,7 +13,7 @@ import {
 import type { LoggedSet } from './db';
 import { displayWeight, formatDateLong } from './format';
 import { describeMilestone } from './milestones';
-import { formatDuration, trim } from './social/postPayload';
+import { formatDuration, recordHighlight, trim } from './social/postPayload';
 import type { UnitSystem } from './state/settings';
 
 export interface ShareExercise {
@@ -22,6 +22,8 @@ export interface ShareExercise {
   best: string;
   isCardio?: boolean;
   detail?: string;
+  /** This lift set an all-time record today, and `best` is that set. */
+  pr?: boolean;
 }
 
 /**
@@ -111,6 +113,8 @@ export const shareSummary = (input: {
   milestone: Milestone | null;
   /** The trend weight on the day, for the lifting energy estimate; omitted, there is none. */
   bodyweightKg?: number | null;
+  /** The sets that were all-time records, from `recordsInSession`; omitted, none are marked. */
+  records?: SetRecord[];
 }): ShareCard => {
   const working = input.sets.filter((s) => s.setType !== 'warmup');
   const isCardioSet = (s: LoggedSet): boolean => s.isCardio === true || detectCardio(s.exerciseName);
@@ -212,18 +216,24 @@ export const shareSummary = (input: {
       };
     }
 
-    const top = loaded.reduce((a, b) =>
-      (b.weightKg as number) > (a.weightKg as number) ||
-      ((b.weightKg as number) === (a.weightKg as number) && b.reps > a.reps)
-        ? b
-        : a,
-    );
+    // A record set is the one worth quoting, even when a heavier set with fewer
+    // reps came before it; otherwise the heaviest, and of those the most reps.
+    const record = loaded.find((s) => input.records?.some((r) => r.setId === s.id));
+    const top =
+      record ??
+      loaded.reduce((a, b) =>
+        (b.weightKg as number) > (a.weightKg as number) ||
+        ((b.weightKg as number) === (a.weightKg as number) && b.reps > a.reps)
+          ? b
+          : a,
+      );
     const unit = input.units === 'metric' ? 'kg' : 'lb';
     const weightDisplay = trim(Math.round(displayWeight(top.weightKg as number, input.units) * 10) / 10);
     return {
       name,
       sets: mine.length,
       best: `${weightDisplay} ${unit} × ${top.reps}`,
+      ...(record ? { pr: true } : {}),
     };
   });
 
@@ -243,7 +253,9 @@ export const shareSummary = (input: {
         : null,
     exercises: exercises.slice(0, MAX_SHARE_EXERCISES),
     more: Math.max(0, exercises.length - MAX_SHARE_EXERCISES),
-    highlight: milestoneCopy ? { label: milestoneCopy.label, figure: milestoneCopy.figure } : null,
+    highlight: milestoneCopy
+      ? { label: milestoneCopy.label, figure: milestoneCopy.figure }
+      : recordHighlight(exercises),
     steps: totalSteps > 0 ? totalSteps : null,
     cardioDistanceKm: totalDistanceKm > 0 ? totalDistanceKm : null,
     // The session's time, less what was spent on cardio, which has figures of

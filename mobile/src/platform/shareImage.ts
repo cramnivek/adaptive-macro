@@ -58,6 +58,34 @@ const fit = (ctx: CanvasRenderingContext2D, text: string, width: number): string
 };
 
 /**
+ * The record medal, drawn to the left of `right` on the baseline `y`: a gold
+ * disc reading PR, the mark the app puts on a record set everywhere else.
+ * Returns the width it took, gap included, so the lift's name can be fitted
+ * around it. Set in the logger's warn gold, so it reads apart from the red.
+ */
+const prMedal = (ctx: CanvasRenderingContext2D, right: number, y: number, size: number): number => {
+  const r = size / 2;
+  const cx = right - r;
+  // Centred on the figure's x-height rather than its baseline.
+  const cy = y - size * 0.36;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = loud.warn;
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, size * 0.09);
+  ctx.strokeStyle = 'rgba(255, 236, 170, 0.9)';
+  ctx.stroke();
+  ctx.fillStyle = '#2A1E00';
+  ctx.font = `700 ${Math.round(size * 0.38)}px ${font.display}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PR', cx, cy + 1);
+  ctx.restore();
+  return size + size * 0.4;
+};
+
+/**
  * The largest size at which the text still fits the width. Figures are set
  * this way rather than cut: "8,337 lb" shortened to "8,33…" is not a smaller
  * version of the number, it is a wrong one.
@@ -420,7 +448,8 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
     ctx.fillStyle = loud.figure;
     ctx.textAlign = 'right';
     ctx.fillText(exercise.best, right, y);
-    const best = ctx.measureText(exercise.best).width;
+    let best = ctx.measureText(exercise.best).width;
+    if (exercise.pr) best += prMedal(ctx, right - best - 16, y, 40) + 16;
     ctx.textAlign = 'left';
     ctx.font = `600 42px ${font.uiStrong}`;
     ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), panelInner - best - 40), left, y);
@@ -615,7 +644,7 @@ const asText = (summary: ShareCard): string => {
     `${summary.title} — ${summary.date}`,
     meta.join(' · '),
     ...summary.exercises.map((e) =>
-      e.isCardio ? `${e.name}: ${e.best}${e.detail ? ` (${e.detail})` : ''}` : `${e.name}: ${e.best}`,
+      e.isCardio ? `${e.name}: ${e.best}${e.detail ? ` (${e.detail})` : ''}` : `${e.name}: ${e.best}${e.pr ? ' (PR)' : ''}`,
     ),
   ].join('\n');
 };
@@ -870,7 +899,8 @@ const drawBlock = (ctx: CanvasRenderingContext2D, summary: ShareCard, blocks: Ca
       ctx.fillStyle = loud.figure;
       ctx.textAlign = 'right';
       ctx.fillText(exercise.best, right, y);
-      const best = ctx.measureText(exercise.best).width;
+      let best = ctx.measureText(exercise.best).width;
+      if (exercise.pr) best += prMedal(ctx, right - best - 12, y, 30) + 12;
       ctx.textAlign = 'left';
       ctx.font = `600 30px ${font.uiStrong}`;
       ctx.fillText(fit(ctx, liftName(exercise.name).toUpperCase(), BLOCK_INNER - best - 24), left, y);

@@ -1,9 +1,9 @@
-import type { Milestone } from '@adaptive-macros/engine';
+import type { Milestone, SetRecord } from '@adaptive-macros/engine';
 import { detectCardio } from '../cardio';
 import type { LoggedSet } from '../db';
 import { displayWeight, formatDateLong } from '../format';
 import { describeMilestone } from '../milestones';
-import type { ShareSummary } from '../shareCard';
+import type { ShareExercise, ShareSummary } from '../shareCard';
 import type { UnitSystem } from '../state/settings';
 
 /**
@@ -27,6 +27,11 @@ export interface PostExercise {
   /** Null for a lift done with no added load; the reader quotes its reps instead. */
   best_kg: number | null;
   best_reps: number;
+  /**
+   * Present, and true, when the quoted set was an all-time record. Left out
+   * otherwise, so a lift without one is the four-key shape posts always had.
+   */
+  pr?: true;
 }
 
 /** A `posts` row, column for column, less what the server fills in. */
@@ -50,6 +55,8 @@ export interface FinishedWorkout {
   finishedAt: Date;
   sets: LoggedSet[];
   milestone: Milestone | null;
+  /** The sets that were all-time records, from `recordsInSession`. */
+  records?: SetRecord[];
 }
 
 /**
@@ -84,14 +91,24 @@ export const postPayload = (workout: FinishedWorkout, caption: string | null): P
     if (loaded.length === 0) {
       return { name: storedName(name), sets: mine.length, best_kg: null, best_reps: Math.max(...mine.map((set) => set.reps)) };
     }
-    // Heaviest, and of those the most reps: the set someone would quote.
-    const top = loaded.reduce((a, b) =>
-      (b.weightKg as number) > (a.weightKg as number) ||
-      ((b.weightKg as number) === (a.weightKg as number) && b.reps > a.reps)
-        ? b
-        : a,
-    );
-    return { name: storedName(name), sets: mine.length, best_kg: top.weightKg as number, best_reps: top.reps };
+    // A record set if there was one, as the share card quotes it; otherwise the
+    // heaviest, and of those the most reps: the set someone would quote.
+    const record = loaded.find((set) => workout.records?.some((r) => r.setId === set.id));
+    const top =
+      record ??
+      loaded.reduce((a, b) =>
+        (b.weightKg as number) > (a.weightKg as number) ||
+        ((b.weightKg as number) === (a.weightKg as number) && b.reps > a.reps)
+          ? b
+          : a,
+      );
+    return {
+      name: storedName(name),
+      sets: mine.length,
+      best_kg: top.weightKg as number,
+      best_reps: top.reps,
+      ...(record ? { pr: true as const } : {}),
+    };
   });
 
   const volumeKg = strengthSets.reduce((sum, set) => sum + (set.weightKg ?? 0) * set.reps, 0);
@@ -151,6 +168,16 @@ export const formatDuration = (minutes: number): string => {
   return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
 };
 
+/**
+ * The card's headline when no milestone was crossed but a record was set: the
+ * first lift that set one, by the set that did it. A milestone still wins,
+ * because a round number is the rarer thing.
+ */
+export const recordHighlight = (exercises: ShareExercise[]): ShareSummary['highlight'] => {
+  const first = exercises.find((exercise) => exercise.pr);
+  return first ? { label: first.name.toUpperCase(), figure: first.best } : null;
+};
+
 export const trim = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -169,6 +196,7 @@ const readableLifts = (exercises: unknown): PostExercise[] =>
       sets: isNumber(lift.sets) ? lift.sets : 0,
       best_kg: isNumber(lift.best_kg) ? lift.best_kg : null,
       best_reps: isNumber(lift.best_reps) ? lift.best_reps : 0,
+      ...(lift.pr === true ? { pr: true as const } : {}),
     }));
 
 /** The highlight if `describeMilestone` can say something true about it; otherwise none. */
@@ -207,6 +235,16 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
   const lifts = readableLifts(row.exercises);
   const milestone = readableHighlight(row.highlight);
   const copy = milestone ? describeMilestone(milestone, units) : null;
+  const exercises: ShareExercise[] = lifts.map((lift) => {
+    const isCardio = wasCardio(lift);
+    return {
+      name: lift.name,
+      sets: lift.sets,
+      best: best(lift),
+      ...(isCardio ? { isCardio: true, detail: 'Completed' } : {}),
+      ...(lift.pr && !isCardio ? { pr: true } : {}),
+    };
+  });
 
   return {
     sessionId: row.session_id,
@@ -219,17 +257,9 @@ export const postView = (row: PostRow, units: UnitSystem, maxExercises = 3): Pos
       row.volume_kg === null
         ? null
         : `${Math.round(displayWeight(row.volume_kg, units)).toLocaleString('en-US')} ${unit}`,
-    exercises: lifts.slice(0, maxExercises).map((lift) => {
-      const isCardio = wasCardio(lift);
-      return {
-        name: lift.name,
-        sets: lift.sets,
-        best: best(lift),
-        ...(isCardio ? { isCardio: true, detail: 'Completed' } : {}),
-      };
-    }),
+    exercises: exercises.slice(0, maxExercises),
     more: Math.max(0, lifts.length - maxExercises),
-    highlight: copy ? { label: copy.label, figure: copy.figure } : null,
+    highlight: copy ? { label: copy.label, figure: copy.figure } : recordHighlight(exercises),
     caption: row.caption,
     rawExercises: lifts,
   };

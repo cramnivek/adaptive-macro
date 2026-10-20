@@ -1,3 +1,4 @@
+import { bodyweightForDates, recordsInSession, type DatedSet } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -6,19 +7,20 @@ import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { LiftingEnergyNote } from '../src/components/LiftingEnergyNote';
+import { PRMedal } from '../src/components/PRMedal';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
 import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
-import { deleteSet, discardSession, listRoutines, pastSession, sessionSets, updateSetValues } from '../src/db';
+import { deleteSet, discardSession, listAllSets, listRoutines, pastSession, sessionSets, updateSetValues } from '../src/db';
 import type { LoggedSet } from '../src/db';
 import { confirm } from '../src/dialog';
-import { formatDateLong } from '../src/format';
+import { displayWeight, formatDateLong } from '../src/format';
 import { detectCardio } from '../src/cardio';
 import { groupByExercise, setLine } from '../src/pastWorkout';
 import { shareSummary } from '../src/shareCard';
 import { createPost } from '../src/social/api';
 import { persistCustomCard } from '../src/social/customCard';
-import { postPayload } from '../src/social/postPayload';
+import { postPayload, trim } from '../src/social/postPayload';
 import type { FinishedWorkout } from '../src/social/postPayload';
 import { useSocial } from '../src/social/session';
 import { useApp } from '../src/state/AppStore';
@@ -30,6 +32,8 @@ type Past = NonNullable<Awaited<ReturnType<typeof pastSession>>>;
 interface Loaded {
   past: Past | null;
   sets: LoggedSet[];
+  /** Every set ever logged, to tell which of this workout's were records. */
+  history: DatedSet[];
 }
 
 /**
@@ -90,7 +94,9 @@ export default function WorkoutScreen() {
   const load = useCallback(async (): Promise<Loaded> => {
     const past = id ? await pastSession(id) : null;
     const sets = past ? await sessionSets(past.id) : [];
-    return { past, sets };
+    // Records are a decoration: if the history cannot be read, the workout still opens.
+    const history = past ? await listAllSets().catch(() => []) : [];
+    return { past, sets, history };
   }, [id]);
 
   // The same workout comes back as the same objects. Returning from sign-in reloads on
@@ -112,6 +118,21 @@ export default function WorkoutScreen() {
 
   const past = loaded?.past ?? null;
   const sets = loaded?.sets ?? [];
+  const history = loaded?.history;
+
+  // Judged against the history as it stands now, so correcting an old set can
+  // move a medal; the workout is marked the way the log now says it went.
+  const records = useMemo(
+    () =>
+      past === null || history === undefined
+        ? []
+        : recordsInSession(
+            history,
+            bodyweightForDates(series, history.map((entry) => entry.date), { extend: true }),
+            past.id,
+          ),
+    [past, history, series],
+  );
 
   const workout: FinishedWorkout | null = useMemo(
     () =>
@@ -125,8 +146,9 @@ export default function WorkoutScreen() {
             finishedAt: new Date(past.finishedAt),
             sets,
             milestone: null,
+            records,
           },
-    [past, sets],
+    [past, sets, records],
   );
 
   const summary = useMemo(
@@ -141,6 +163,7 @@ export default function WorkoutScreen() {
             sets: workout.sets,
             units: workoutUnits,
             milestone: null,
+            records: workout.records,
             // The trend on the day it was done, or the latest when the history
             // does not reach back that far.
             bodyweightKg:
@@ -231,6 +254,12 @@ export default function WorkoutScreen() {
                     : group.sets.slice(0, index + 1).filter((earlier) => earlier.setType !== 'warmup').length}
                 </Text>
                 <Text style={styles.line}>{setLine(set, workoutUnits)}</Text>
+                {(() => {
+                  const record = records.find((r) => r.setId === set.id);
+                  if (!record) return null;
+                  const gain = Math.round(displayWeight(record.e1rm - record.previousE1rm, workoutUnits) * 10) / 10;
+                  return <PRMedal label={`+${trim(gain)} ${workoutUnits === 'metric' ? 'KG' : 'LB'} E1RM`} />;
+                })()}
               </Tappable>
             ))}
           </Card>

@@ -76,6 +76,18 @@ describe('shareSummary', () => {
     expect(summary.highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '100 kg' });
   });
 
+  it('quotes a record set for its lift and marks it, even under a heavier set', () => {
+    const record = sets[3];
+    const summary = shareSummary({
+      ...base,
+      sets,
+      records: [{ exerciseName: record.exerciseName, setId: record.id, e1rm: 120.33, previousE1rm: 120 }],
+    });
+    expect(summary.exercises[0]).toEqual({ name: 'Bench Press (Barbell)', sets: 3, best: '95 kg × 8', pr: true });
+    expect(summary.exercises[1].pr).toBeUndefined();
+    expect(summary.highlight).toEqual({ label: 'BENCH PRESS (BARBELL)', figure: '95 kg × 8' });
+  });
+
   it('does not count cardio as sets and estimates steps', () => {
     const cardioSet: LoggedSet = {
       id: 'c1',
