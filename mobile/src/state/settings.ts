@@ -1,6 +1,6 @@
 import { ALL_BLOCKS } from '../shareCardPlacement';
 import type { CardBlocks } from '../shareCardPlacement';
-import { DEFAULT_TEMPLATE } from '../shareCardTemplate';
+import { DEFAULT_TEMPLATE, TEMPLATES } from '../shareCardTemplate';
 import type { TemplateId } from '../shareCardTemplate';
 import type { ActivityLevel, Goal, ISODate, UserProfile } from '@adaptive-macros/engine';
 import { DEFAULT_MODEL_OPTIONS, DEFAULT_TARGET_OPTIONS } from '@adaptive-macros/engine';
@@ -102,6 +102,12 @@ export interface AppSettings {
   restSeconds: number;
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
+  /**
+   * True once someone chose to use the app without an account. The sign-in
+   * screen then stops being a gate and becomes something the social screens
+   * offer; signing out clears nothing here, so it stays a choice made once.
+   */
+  accountSkipped: boolean;
   /** The Monday of the last week whose check-in was dismissed, so each is shown once. */
   checkInSeenWeek: ISODate | null;
   /** The bar the plate calculator assumes: 20 kg / 45 lb, or the 15 kg / 35 lb one. */
@@ -161,6 +167,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   foodLookup: { geminiApiKey: '' },
   onboarded: false,
+  accountSkipped: false,
   checkInSeenWeek: null,
   barbell: 'standard',
   customPlates: {
@@ -216,4 +223,11 @@ export const withDefaults = (stored: Partial<AppSettings> | null): AppSettings =
     metric: stored?.customPlates?.metric ?? DEFAULT_SETTINGS.customPlates.metric,
     imperial: stored?.customPlates?.imperial ?? DEFAULT_SETTINGS.customPlates.imperial,
   },
+  // A template id this build does not know — one a later build added, then
+  // rolled back, or a hand-edited backup — crashed the finish sheet, which
+  // looks the template up and reads its layout. The default is always there.
+  cardTemplate:
+    stored?.cardTemplate && Object.hasOwn(TEMPLATES, stored.cardTemplate)
+      ? stored.cardTemplate
+      : DEFAULT_SETTINGS.cardTemplate,
 });
