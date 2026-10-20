@@ -2477,6 +2477,35 @@ export const logBodyMeasurement = async (input: BodyMeasurementInput): Promise<B
   return { id, ...input, createdAt: now };
 };
 
+/**
+ * Rewrites an existing measurement in place, keeping its id and when it was
+ * first logged. Editing used to go through `logBodyMeasurement`, which left
+ * the old row behind and added a second one for the same day.
+ */
+export const updateBodyMeasurement = async (id: string, input: BodyMeasurementInput): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE body_measurements
+        SET date = ?, waist_cm = ?, chest_cm = ?, arms_cm = ?, thighs_cm = ?, calves_cm = ?, hips_cm = ?,
+            neck_cm = ?, shoulders_cm = ?, body_fat_pct = ?, body_fat_source = ?, notes = ?
+      WHERE id = ?`,
+    input.date,
+    input.waistCm ?? null,
+    input.chestCm ?? null,
+    input.armsCm ?? null,
+    input.thighsCm ?? null,
+    input.calvesCm ?? null,
+    input.hipsCm ?? null,
+    input.neckCm ?? null,
+    input.shouldersCm ?? null,
+    input.bodyFatPct ?? null,
+    // As on insert: a source is stored only beside a figure.
+    input.bodyFatPct != null ? (input.bodyFatSource ?? 'entered') : null,
+    input.notes ?? null,
+    id,
+  );
+};
+
 export const getLatestBodyMeasurements = async (limit = 50): Promise<BodyMeasurementRecord[]> => {
   const db = await getDb();
   const rows = await db.getAllAsync<{

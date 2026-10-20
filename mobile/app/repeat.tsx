@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
+import { LoadProblem } from '../src/components/LoadProblem';
+import { problemText } from '../src/loadProblem';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { listLoggedDates, listLogEntries } from '../src/db';
 import { MEAL_LABELS, formatDate } from '../src/format';
@@ -29,9 +31,18 @@ export default function RepeatScreen() {
   const [chosenMeals, setChosenMeals] = useState<Meal[]>([]);
   const [busy, setBusy] = useState(false);
 
+  /** Why the days could not be read; shown in place of a spinner that would never clear. */
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    void listLoggedDates(30, selectedDate).then(setDates);
-  }, [selectedDate]);
+    listLoggedDates(30, selectedDate)
+      .then((loaded) => {
+        setDates(loaded);
+        setProblem(null);
+      })
+      .catch((error) => setProblem(problemText(error)));
+  }, [selectedDate, attempt]);
 
   useEffect(() => {
     if (!chosenDate) return;
@@ -65,7 +76,10 @@ export default function RepeatScreen() {
       contentContainerStyle={styles.content}
     >
       <Card title="Copy a previous day" subtitle={`Onto ${formatDate(selectedDate)}`}>
-        {dates === null && <ActivityIndicator color={colors.accent} />}
+        {problem !== null && dates === null && (
+          <LoadProblem message={problem} onRetry={() => setAttempt((n) => n + 1)} />
+        )}
+        {problem === null && dates === null && <ActivityIndicator color={colors.accent} />}
         {dates?.length === 0 && (
           <Text style={[styles.body, { color: colors.textFaint }]}>
             Nothing logged on any other day yet.

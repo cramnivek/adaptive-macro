@@ -192,7 +192,7 @@ export const MilestoneSheet = ({ milestone, units, onDismiss, personality }: Mil
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(10,10,11,0.94)',
+    backgroundColor: 'rgba(10,10,11,0.985)',
     alignItems: 'stretch',
     justifyContent: 'center',
     padding: space.xl,

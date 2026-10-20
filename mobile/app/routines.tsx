@@ -9,6 +9,8 @@ import { ExercisePicker } from '../src/components/ExercisePicker';
 import { ReorderSheet } from '../src/components/ReorderSheet';
 import { Tappable } from '../src/components/Tappable';
 import { Screen } from '../src/components/Screen';
+import { LoadProblem } from '../src/components/LoadProblem';
+import { problemText } from '../src/loadProblem';
 import {
   cataloguePatternsByExerciseName,
   createRoutine,
@@ -107,8 +109,17 @@ export default function RoutinesScreen() {
     };
   }, [editing, draftName, draft, routines]);
 
+  /** Why the routines could not be read; shown in place of a spinner that would never clear. */
+  const [problem, setProblem] = useState<string | null>(null);
+
   const refresh = async () => {
-    setRoutines(await listRoutines());
+    try {
+      setRoutines(await listRoutines());
+      setProblem(null);
+    } catch (error) {
+      setProblem(problemText(error));
+      return;
+    }
     setKnown(await listExerciseNames());
     setPast(await recentSessions(15));
     setPatterns(await cataloguePatternsByExerciseName());
@@ -249,7 +260,11 @@ export default function RoutinesScreen() {
   if (routines === null) {
     return (
       <Screen title="Routines" tone="loud">
-        <ActivityIndicator color={loud.loud} />
+        {problem !== null ? (
+          <LoadProblem tone="loud" message={problem} onRetry={() => void refresh()} />
+        ) : (
+          <ActivityIndicator color={loud.loud} />
+        )}
       </Screen>
     );
   }

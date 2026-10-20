@@ -8,7 +8,9 @@ import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
 import { LiftingEnergyNote } from '../src/components/LiftingEnergyNote';
 import { PRMedal } from '../src/components/PRMedal';
+import { LoadProblem } from '../src/components/LoadProblem';
 import { Screen } from '../src/components/Screen';
+import { problemText } from '../src/loadProblem';
 import { Tappable } from '../src/components/Tappable';
 import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
 import { deleteSet, discardSession, listAllSets, listRoutines, pastSession, sessionSets, updateSetValues } from '../src/db';
@@ -73,6 +75,9 @@ export default function WorkoutScreen() {
   const workoutUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  /** Why the workout could not be read, shown in place of a spinner that would never clear. */
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   /** The share and post sheet is open. */
   const [sharing, setSharing] = useState(false);
   /** Sign-in is open over the sheet. */
@@ -107,13 +112,20 @@ export default function WorkoutScreen() {
   useFocusEffect(
     useCallback(() => {
       let current = true;
-      void load().then((next) => {
-        if (current) keep(next);
-      });
+      load()
+        .then((next) => {
+          if (current) {
+            keep(next);
+            setProblem(null);
+          }
+        })
+        .catch((error) => {
+          if (current) setProblem(problemText(error));
+        });
       return () => {
         current = false;
       };
-    }, [load]),
+    }, [load, attempt]),
   );
 
   const past = loaded?.past ?? null;
@@ -177,7 +189,11 @@ export default function WorkoutScreen() {
   if (loaded === null) {
     return (
       <Screen tone="loud">
-        <ActivityIndicator color={loud.loud} />
+        {problem !== null ? (
+          <LoadProblem tone="loud" message={problem} onRetry={() => setAttempt((n) => n + 1)} />
+        ) : (
+          <ActivityIndicator color={loud.loud} />
+        )}
       </Screen>
     );
   }

@@ -7,6 +7,8 @@ import { Card } from '../src/components/Card';
 import { ExerciseIcon } from '../src/components/ExerciseIcon';
 import { LineChart } from '../src/components/LineChart';
 import { Screen } from '../src/components/Screen';
+import { LoadProblem } from '../src/components/LoadProblem';
+import { problemText } from '../src/loadProblem';
 import { StatTile } from '../src/components/StatTile';
 import { TOUCH_TARGET } from '../src/components/Controls';
 import { cataloguePatternsByExerciseName, listSetsForExercise, listTrainedExercises } from '../src/db';
@@ -47,13 +49,20 @@ export default function ProgressionScreen() {
     void cataloguePatternsByExerciseName().then(setPatterns);
   }, []);
 
+  /** Why a load failed, shown in place of a spinner that would never clear; Try again bumps `attempt`. */
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
-    void listTrainedExercises().then((loaded) => {
-      setExercises(loaded);
-      // Most-trained first, so the default is the one most likely wanted.
-      setChosen((current) => current ?? loaded[0] ?? null);
-    });
-  }, []);
+    listTrainedExercises()
+      .then((loaded) => {
+        setExercises(loaded);
+        setProblem(null);
+        // Most-trained first, so the default is the one most likely wanted.
+        setChosen((current) => current ?? loaded[0] ?? null);
+      })
+      .catch((error) => setProblem(problemText(error)));
+  }, [attempt]);
 
   useEffect(() => {
     if (!chosen) return;
@@ -62,13 +71,17 @@ export default function ProgressionScreen() {
     // A slower query for an exercise already switched away from must not land
     // and be drawn under the newer one's title and tiles.
     let current = true;
-    void listSetsForExercise(chosen.name).then((loaded) => {
-      if (current) setSets(loaded);
-    });
+    listSetsForExercise(chosen.name)
+      .then((loaded) => {
+        if (current) setSets(loaded);
+      })
+      .catch((error) => {
+        if (current) setProblem(problemText(error));
+      });
     return () => {
       current = false;
     };
-  }, [chosen]);
+  }, [chosen, attempt]);
 
   // The wiring that makes a pull-up mean anything: the filter's own trend
   // weight for each date, which is the load the user actually moved.
@@ -106,7 +119,17 @@ export default function ProgressionScreen() {
 
   return (
     <Screen title="Progression" tone="loud">
-      {exercises === null && <ActivityIndicator color={loud.loud} />}
+      {problem !== null && (
+        <LoadProblem
+          tone="loud"
+          message={problem}
+          onRetry={() => {
+            setProblem(null);
+            setAttempt((n) => n + 1);
+          }}
+        />
+      )}
+      {problem === null && exercises === null && <ActivityIndicator color={loud.loud} />}
 
       {exercises?.length === 0 && (
         <Card loud title="Nothing logged yet">
@@ -149,7 +172,7 @@ export default function ProgressionScreen() {
         </Card>
       )}
 
-      {chosen && sets === null && <ActivityIndicator color={loud.loud} />}
+      {problem === null && chosen && sets === null && <ActivityIndicator color={loud.loud} />}
 
       {/*
         Two different silences, told apart. "No sets" means nothing was ever

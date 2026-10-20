@@ -16,6 +16,7 @@ import type { ISODate } from '@adaptive-macros/engine';
 import {
   deleteBodyMeasurement,
   logBodyMeasurement,
+  updateBodyMeasurement,
   type BodyFatSource,
   type BodyMeasurementRecord,
 } from '../db';
@@ -134,7 +135,7 @@ export const BodyMeasurementsSheet = ({
     try {
       setSaving(true);
       thud('light');
-      await logBodyMeasurement({
+      const measurement = {
         date,
         waistCm,
         chestCm,
@@ -147,9 +148,11 @@ export const BodyMeasurementsSheet = ({
         bodyFatPct,
         bodyFatSource,
         notes: notes.trim() || null,
-      });
+      };
+      if (initialRecord?.id) await updateBodyMeasurement(initialRecord.id, measurement);
+      else await logBodyMeasurement(measurement);
 
-      notify('Measurement Saved', `Logged for ${date}.`);
+      notify('Measurement Saved', `${initialRecord ? 'Updated' : 'Logged'} for ${date}.`);
       onSaved();
       onClose();
     } catch (e) {
