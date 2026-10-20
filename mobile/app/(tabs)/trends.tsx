@@ -53,6 +53,7 @@ import { loggingStrip } from '../../src/loggingStrip';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme, type Palette } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
+import { intakeSummary, ON_TARGET_SHARE, periodCoverage, trendChange } from '../../src/trendsPeriod';
 import { volumeComparison } from '../../src/volume';
 import { weeklyTotals, type SessionTimes } from '../../src/weeklyTraining';
 import {
@@ -669,6 +670,17 @@ export default function TrendsScreen() {
     timeframe === 'week' ? 'past 7 days' : timeframe === 'month' ? 'past 30 days' : 'past year';
   const comparison = volumeComparison(summaryPeriod.volumeKg);
 
+  // The overview tiles and the coverage line follow the selected period.
+  const dataCoverage = useMemo(
+    () => periodCoverage(windowDays, today, firstLogged),
+    [windowDays, today, firstLogged],
+  );
+  const periodChange = useMemo(() => trendChange(series, dataCoverage.from), [series, dataCoverage.from]);
+  const periodIntake = useMemo(
+    () => intakeSummary(intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal ?? null),
+    [intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal],
+  );
+
   // What the check-in card says for the selected view: the weekly check-in on
   // Week, the monthly one on Month, the quarterly one on Year. Until a period
   // has earned its check-in the card shows how far along the current one is,
@@ -777,6 +789,15 @@ export default function TrendsScreen() {
           })}
         </View>
       </View>
+
+      {/* Said only when the view has less data than it covers: with twenty
+          days logged, Month and Year draw the same twenty days. */}
+      {dataCoverage.dataDays > 0 && dataCoverage.dataDays < dataCoverage.windowDays && (
+        <Text style={[styles.coverage, { color: colors.textMuted }]}>
+          Showing {dataCoverage.dataDays} day{dataCoverage.dataDays === 1 ? '' : 's'}, all the data so far (since{' '}
+          {formatDayMonth(dataCoverage.from)}).
+        </Text>
+      )}
 
       {/* High-Visibility Coaching Banner */}
       <FadeIn>
@@ -929,25 +950,41 @@ export default function TrendsScreen() {
       <View style={styles.atAGlanceGrid}>
         {activeTab === 'all' && (
           <>
+            {/* What the trend did over the period, then where it is now. */}
             <GlanceTile
-              label="WEIGHT TREND"
-              value={latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
-              sub={trend ? formatRate(trend.rateKgPerWeek, settings.units) : 'settling'}
+              label="WEIGHT CHANGE"
+              value={
+                periodChange
+                  ? `${periodChange.changeKg < 0 ? '−' : '+'}${formatWeight(Math.abs(periodChange.changeKg), settings.units)}`
+                  : '—'
+              }
+              sub={
+                periodChange && latest
+                  ? `over ${periodChange.days} days · now ${formatWeight(latest.trendWeightKg, settings.units)}`
+                  : 'needs two weigh-ins'
+              }
               colors={colors}
             />
+            {/* Average eaten on the period's counted days, against the target. */}
             <GlanceTile
-              label="CALORIE PLAN"
+              label="AVG EATEN"
               value={
-                program.calories.adjustmentKcal === 0
-                  ? 'Maintenance'
-                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`
+                periodIntake.averageKcal !== null
+                  ? `${Math.round(periodIntake.averageKcal).toLocaleString('en-US')} kcal`
+                  : '—'
               }
-              sub={program?.calories?.kcal ? `${Math.round(program.calories.kcal)} target` : 'target'}
+              sub={
+                periodIntake.countedDays === 0
+                  ? 'no food logged yet'
+                  : periodIntake.onTargetDays !== null && program?.calories?.kcal
+                    ? `${periodIntake.onTargetDays} of ${periodIntake.countedDays} days within ${ON_TARGET_SHARE * 100}% of ${Math.round(program.calories.kcal).toLocaleString('en-US')}`
+                    : `over ${periodIntake.countedDays} logged days`
+              }
               colors={colors}
             />
             <GlanceTile
               label="WORKOUTS"
-              value={`${summaryPeriod.sessions} sessions`}
+              value={`${summaryPeriod.sessions} session${summaryPeriod.sessions === 1 ? '' : 's'}`}
               sub={timeframeLabel}
               colors={colors}
             />
@@ -1007,7 +1044,7 @@ export default function TrendsScreen() {
           <>
             <GlanceTile
               label="WORKOUTS"
-              value={`${summaryPeriod.sessions} sessions`}
+              value={`${summaryPeriod.sessions} session${summaryPeriod.sessions === 1 ? '' : 's'}`}
               sub={timeframeLabel}
               colors={colors}
             />
@@ -1513,6 +1550,14 @@ const styles = StyleSheet.create({
   historyHeadline: {
     fontFamily: font.ui,
     fontSize: 13,
+  },
+  coverage: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -space.xs,
+    marginBottom: space.sm,
+    textAlign: 'center',
   },
   coachingHeadline: {
     fontFamily: font.ui,
