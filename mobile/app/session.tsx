@@ -201,6 +201,19 @@ const compactWeight = (value: number): string => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
+/**
+ * The set boxes are 58 points wide and set in a 14 pt monospace, which holds
+ * five characters. "226.25" or "1102.5" is six, and the box cut it off, so a
+ * longer figure is set smaller rather than shown wrong. Measured by length,
+ * which is exact for a monospace face.
+ */
+const figureFit = (text: string) =>
+  text.length <= 5
+    ? null
+    : text.length === 6
+      ? { fontSize: 12, paddingHorizontal: 3 }
+      : { fontSize: 10.5, paddingHorizontal: 2 };
+
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
   const seconds = Math.max(0, Math.floor((now - started) / 1000));
@@ -490,8 +503,16 @@ export default function SessionScreen() {
           const kg = parseWeight(row.weight, fromUnits);
           if (kg === null) return row;
           const raw = displayWeight(kg, nextUnits);
-          const plateRounded = roundToPlateIncrement(raw, nextUnits);
-          const formatted = plateRounded % 1 === 0 ? plateRounded.toFixed(0) : String(plateRounded);
+          // A set still to do is rounded to something that can be loaded on a
+          // bar. A set already ticked is a record of what was lifted, so it is
+          // only converted: 500 lb used to come back as 226.25 kg, which is
+          // neither what was lifted (226.8) nor short enough to fit its box.
+          const formatted = row.done
+            ? compactWeight(raw)
+            : (() => {
+                const plateRounded = roundToPlateIncrement(raw, nextUnits);
+                return plateRounded % 1 === 0 ? plateRounded.toFixed(0) : String(plateRounded);
+              })();
           return {
             ...row,
             weight: formatted,
@@ -2463,7 +2484,11 @@ export default function SessionScreen() {
                         previous.weightKg === null
                           ? 'BW'
                           : compactWeight(displayWeight(previous.weightKg, workoutUnits))
-                      } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
+                      } × ${previous.reps}${
+                        // On its own line: beside "84.8 × 8" it ran past the column
+                        // and was cut to "84.8 × 8 …".
+                        previous.rpe === null ? '' : `\n@${formatRpe(previous.rpe)}`
+                      }`
                   : '—';
                 const on = row.done ? loud.onLoud : loud.figure;
 
@@ -2653,6 +2678,7 @@ export default function SessionScreen() {
                               styles.colNum,
                               row.done ? styles.inputOnLoud : styles.inputOnGround,
                               { color: on },
+                              figureFit(row.weight),
                             ]}
                           />
                           <TextInput

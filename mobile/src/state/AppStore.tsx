@@ -12,7 +12,6 @@ import {
   DEFAULT_MODEL_OPTIONS,
   DEFAULT_TARGET_OPTIONS,
   sumNutrients,
-  KCAL_PER_KG_TISSUE,
   deurenbergBodyFatPct,
   energyDensityKcalPerKg,
   buildProgram,
@@ -308,15 +307,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // than the flat 7700 (see engine/bodyComposition.ts): the measured body fat
   // when there is one, otherwise an estimate from height, weight, age and sex.
   // Used for the expenditure estimate and the targets alike, so a deficit is
-  // set in the same units it is measured in. A stored value other than the
-  // default is someone's deliberate choice and is kept.
+  // set in the same units it is measured in. A value stored by the old
+  // Advanced settings is no longer honoured: those controls were removed, so an
+  // override would apply where nobody could see or undo it.
   const bodyFatPct =
     loggedBodyFat?.pct ??
     deurenbergBodyFatPct(latestWeightKg ?? 80, settings.profile.heightCm, settings.profile.age, settings.profile.sex);
-  const kcalPerKgChange =
-    settings.kcalPerKgTissue !== KCAL_PER_KG_TISSUE
-      ? settings.kcalPerKgTissue
-      : energyDensityKcalPerKg(((latestWeightKg ?? 80) * bodyFatPct) / 100);
+  const kcalPerKgChange = energyDensityKcalPerKg(((latestWeightKg ?? 80) * bodyFatPct) / 100);
 
   // The whole filter is re-run from scratch whenever the inputs change. Over a
   // multi-year history this is still well under a millisecond, and it removes
@@ -326,8 +323,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       estimateExpenditure(observations, {
         ...DEFAULT_MODEL_OPTIONS,
         kcalPerKgTissue: kcalPerKgChange,
-        scaleNoiseKg: settings.scaleNoiseKg,
-        expenditureVolatilityKcal: settings.expenditureVolatilityKcal,
         initialExpenditureKcal: seedExpenditure(
           settings.profile,
           latestWeightKg ?? 80,
