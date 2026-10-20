@@ -21,10 +21,9 @@ import { useSocial } from '../../src/social/session';
 import { playChime, primeChime } from '../../src/platform/chime';
 import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality, UnitSystem } from '../../src/state/settings';
 import { useApp } from '../../src/state/AppStore';
-import { font, radius, space, useTheme } from '../../src/theme';
+import { font, space, useTheme } from '../../src/theme';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
 import { isPersonalityV2Enabled } from '../../src/flags';
-import { getEventCopy } from '../../src/copy/personality';
 import { MissionModal } from '../../src/components/MissionModal';
 import { MISSIONS, SPOTLIGHT_OPTIONS } from '../../src/features/missionFocus';
 
@@ -246,7 +245,7 @@ export default function SettingsScreen() {
             }
           />
           <Segmented<ActivityLevel>
-            label="Activity (cold start only)"
+            label="Activity"
             value={settings.activity}
             onChange={(activity) => void updateSettings({ activity })}
             options={[
@@ -326,8 +325,12 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Focus & home screen" initiallyOpen>
-        <Card subtitle="What you are training for, and what Today shows first.">
+      {/*
+        Two lines and a button. The focus changes labels only and has left
+        onboarding, so it does not need a card's worth of explanation here.
+      */}
+      <Section title="Focus & home screen">
+        <Card>
           {(() => {
             const currentMission = MISSIONS[settings.userMission ?? 'hybrid'] ?? MISSIONS.hybrid;
             const currentSpotlight =
@@ -335,49 +338,17 @@ export default function SettingsScreen() {
               SPOTLIGHT_OPTIONS[0];
             return (
               <View style={styles.missionSummaryBox}>
-                <View
-                  style={[
-                    styles.missionActiveCard,
-                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-                  ]}
-                >
-                  <Ionicons name={currentMission.icon} size={20} color={colors.text} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[styles.missionActiveName, { color: colors.text }]}>
-                      {currentMission.name}
-                    </Text>
-                    <Text style={[styles.missionActiveTagline, { color: colors.textMuted }]}>
-                      {currentMission.tagline}
-                    </Text>
-                  </View>
+                <View style={styles.focusLine}>
+                  <Ionicons name={currentMission.icon} size={18} color={colors.text} />
+                  <Text style={[styles.missionActiveName, { color: colors.text }]}>{currentMission.name}</Text>
                 </View>
-
-                <View
-                  style={[
-                    styles.spotlightRow,
-                    { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-                  ]}
-                >
+                <View style={styles.focusLine}>
                   <Ionicons name="home-outline" size={18} color={colors.textMuted} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.spotlightLabel, { color: colors.text }]}>
-                      Home screen: {currentSpotlight.label}
-                    </Text>
-                    <Text style={[styles.spotlightDesc, { color: colors.textFaint }]}>
-                      {currentSpotlight.description}
-                    </Text>
-                  </View>
+                  <Text style={[styles.spotlightLabel, { color: colors.textMuted }]}>
+                    Today shows {currentSpotlight.label.toLowerCase()}
+                  </Text>
                 </View>
-
-                <Text style={[styles.allUnlockedText, { color: colors.textFaint }]}>
-                  Every feature stays on whichever you pick.
-                </Text>
-
-                <View style={{ height: space.xs }} />
-                <Button
-                  label="Change focus"
-                  onPress={() => setMissionModalOpen(true)}
-                />
+                <Button label="Change" onPress={() => setMissionModalOpen(true)} variant="subtle" />
               </View>
             );
           })()}
@@ -397,7 +368,7 @@ export default function SettingsScreen() {
                 { value: 'gymrat', label: 'Gymrat' },
               ]}
             />
-            <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
+            <Text style={[styles.note, { color: colors.textFaint }]}>
               {settings.personality === 'classic'
                 ? 'Classic — Keep it clean, straightforward & quiet.'
                 : settings.personality === 'gymrat'
@@ -405,44 +376,6 @@ export default function SettingsScreen() {
                   : 'Ascend (Recommended) — A little hype, a lot of personality. Modern, encouraging, and sharp.'}
             </Text>
 
-            <View style={[styles.previewBox, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <Text style={[styles.previewHeading, { color: colors.textFaint }]}>LIVE PREVIEW</Text>
-
-              <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Verified PR:</Text>
-                <Text style={[styles.previewVal, { color: colors.accent }]}>
-                  {getEventCopy('workout.pr_verified', { personality: settings.personality, seed: 1 })}
-                </Text>
-              </View>
-
-              <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Set Ticked:</Text>
-                <Text style={[styles.previewVal, { color: colors.warning }]}>
-                  {getEventCopy('workout.impact_done', { personality: settings.personality, seed: 1 })}
-                </Text>
-              </View>
-
-              <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Rest Timer:</Text>
-                <Text style={[styles.previewVal, { color: colors.positive }]}>
-                  {getEventCopy('workout.rest_done_label', { personality: settings.personality, seed: 1 })}
-                </Text>
-              </View>
-
-              <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Workout Done:</Text>
-                <Text style={[styles.previewVal, { color: colors.text }]}>
-                  {getEventCopy('workout.completed', { personality: settings.personality, seed: 1 })}
-                </Text>
-              </View>
-
-              <View style={styles.previewRow}>
-                <Text style={[styles.previewLabel, { color: colors.textMuted }]}>Weekly Recap:</Text>
-                <Text style={[styles.previewVal, { color: colors.textMuted }]}>
-                  {getEventCopy('trends.weekly_recap_ready', { personality: settings.personality, seed: 1 })}
-                </Text>
-              </View>
-            </View>
           </Card>
         </Section>
       )}
@@ -450,44 +383,35 @@ export default function SettingsScreen() {
       <Section title="Units & Training" initiallyOpen>
         <Card title="Units">
           <Segmented<UnitSystem>
-            label="Scale Weight Unit"
+            label="Body weight"
             value={settings.units}
             onChange={(units) => void updateSettings({ units })}
             options={[
-              { value: 'metric', label: 'kg (Metric)' },
-              { value: 'imperial', label: 'lb (Imperial)' },
+              { value: 'metric', label: 'kg' },
+              { value: 'imperial', label: 'lb' },
             ]}
           />
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
-            Used for your daily weigh-ins, body weight trends, rate of weight change, and calorie calculations.
-          </Text>
 
           <Segmented<UnitSystem>
-            label="Workout Lifting Unit"
+            label="Lifting"
             value={settings.workoutUnits ?? 'metric'}
             onChange={(workoutUnits) => void updateSettings({ workoutUnits })}
             options={[
-              { value: 'metric', label: 'kg (Kilograms)' },
-              { value: 'imperial', label: 'lb (Pounds)' },
+              { value: 'metric', label: 'kg' },
+              { value: 'imperial', label: 'lb' },
             ]}
           />
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
-            Independent from scale weight. Used for barbells, dumbbells, plate calculations, personal records, and exercise volume.
-          </Text>
 
           <Segmented<WeightUnitSetting>
-            label="In-Workout Unit Switcher"
+            label="kg / lb switch in workouts"
             value={settings.weightUnitSetting ?? 'switchable'}
             onChange={(weightUnitSetting) => void updateSettings({ weightUnitSetting })}
             options={[
-              { value: 'switchable', label: 'Show Switcher' },
+              { value: 'switchable', label: 'Show' },
               { value: 'kg', label: 'Lock kg' },
               { value: 'lbs', label: 'Lock lbs' },
             ]}
           />
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.md }]}>
-            When set to Show Switcher, a 1-tap KG / LB pill is shown in active workouts and on the Train tab.
-          </Text>
 
           <Segmented<SpeedUnitSetting>
             label="Speed unit (treadmill)"
@@ -504,12 +428,9 @@ export default function SettingsScreen() {
               { value: 'mph', label: 'mph' },
             ]}
           />
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            When set to Switchable, a KPH / MPH toggle is available in your active workout sessions. Selecting kph or mph locks the unit and hides the switcher. Outside distance is measured in km.
-          </Text>
         </Card>
 
-        <Card title="Rest timer alert">
+        <Card title="Chime when rest ends">
           <Segmented
             value={settings.restSound ? 'on' : 'off'}
             onChange={(val) => {
@@ -525,39 +446,39 @@ export default function SettingsScreen() {
               { value: 'off' as const, label: 'Silent' },
             ]}
           />
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            Plays a chime every time the rest period finishes between sets. Can also be toggled directly in the session view.
-          </Text>
         </Card>
       </Section>
 
-      <Section title="Food & Estimation">
+      <Section title="Food">
         <Card>
           <Field
             label="Food database country"
             value={settings.foodCountry}
             onChangeText={(foodCountry) => void updateSettings({ foodCountry })}
             placeholder="world"
-            hint="A country code like ph, us, gb, jp — or 'world'. Searches local country products first, then global databases."
+            hint="A country code like ph, us or gb, or 'world'. Products from there come first."
           />
         </Card>
 
-        <Card title="Food search" subtitle="Looking up foods, packaged items and restaurant dishes.">
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            Works automatically with zero setup using the built-in hosted service. If you prefer to supply a custom API key for dedicated quota, enter it below.
-          </Text>
-          <Field
-            label="Custom API key (optional)"
-            value={settings.foodLookup.geminiApiKey}
-            onChangeText={(geminiApiKey) =>
-              void updateSettings({
-                foodLookup: { ...settings.foodLookup, geminiApiKey },
-              })
-            }
-            placeholder="AIza…"
-            hint="Leave blank to use the built-in service."
-          />
-        </Card>
+        {/*
+          A key of one's own is for developers; the built-in service needs
+          none. Shown only to someone who already set one, so it can be cleared.
+        */}
+        {settings.foodLookup.geminiApiKey.trim() !== '' && (
+          <Card title="Custom API key">
+            <Field
+              label="Gemini API key"
+              value={settings.foodLookup.geminiApiKey}
+              onChangeText={(geminiApiKey) =>
+                void updateSettings({
+                  foodLookup: { ...settings.foodLookup, geminiApiKey },
+                })
+              }
+              placeholder="AIza…"
+              hint="Clear it to go back to the built-in service."
+            />
+          </Card>
+        )}
       </Section>
 
       {social.configured && (
@@ -584,7 +505,7 @@ export default function SettingsScreen() {
         <Card subtitle="Your log lives on this device. An account is optional.">
           <Button label="Save a backup" onPress={() => void exportData()} />
           <Button label="Restore from a backup" onPress={() => void restoreData()} variant="subtle" />
-          <Button label="Re-run Onboarding" onPress={() => router.push('/onboard')} variant="subtle" />
+          <Button label="Redo your starting numbers" onPress={() => router.push('/onboard')} variant="subtle" />
           <Text style={[styles.note, { color: colors.textFaint }]}>
             Your food, weight, workouts and settings are kept only on this device, so this file is your
             only copy of the log and your only way onto another device. It holds your weigh-ins, your diary
@@ -607,18 +528,9 @@ export default function SettingsScreen() {
             importing the same file twice changes nothing.
           </Text>
           <Button label="Import from Hevy" onPress={() => router.push('/import-workouts')} />
-          <Text style={[styles.note, { color: colors.textFaint }]}>
-            Logging, routines and progression live on the Train tab.
-          </Text>
         </Card>
 
-        <Card title="Privacy & Legal" subtitle="Transparent, local-first data protection.">
-          <Text style={[styles.note, { color: colors.textFaint, marginBottom: space.sm }]}>
-            Ascend is local-first: your diary, weight, body measurements, and workouts stay on your device.
-            Review our data practices and external API terms.
-          </Text>
-          <Button label="Read Privacy Policy ↗" onPress={() => router.push('/privacy' as any)} variant="subtle" />
-        </Card>
+        <Button label="Privacy policy" onPress={() => router.push('/privacy' as any)} variant="subtle" />
       </Section>
 
       {__DEV__ && (
@@ -676,71 +588,13 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginTop: space.xs,
   },
-  missionActiveCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    padding: space.sm + 4,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-  },
+  focusLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   missionActiveName: {
     fontFamily: font.uiStrong,
     fontSize: 14,
   },
-  missionActiveTagline: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  spotlightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.sm + 2,
-    paddingVertical: space.xs + 4,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   spotlightLabel: {
     fontFamily: font.uiStrong,
     fontSize: 12,
-  },
-  spotlightDesc: {
-    fontFamily: font.ui,
-    fontSize: 11,
-  },
-  allUnlockedText: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    flex: 1,
-  },
-  previewBox: {
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: space.xs,
-    marginTop: space.xs,
-  },
-  previewHeading: {
-    fontFamily: font.uiStrong,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  previewRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: space.sm,
-  },
-  previewLabel: {
-    fontFamily: font.ui,
-    fontSize: 11,
-    minWidth: 88,
-  },
-  previewVal: {
-    fontFamily: font.uiStrong,
-    fontSize: 12,
-    flex: 1,
   },
 });

@@ -24,7 +24,6 @@ import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
-import { MissionBanner } from '../../src/components/MissionBanner';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 import { StepLogModal } from '../../src/components/StepLogModal';
 
@@ -172,7 +171,6 @@ export default function TodayScreen() {
       <HomeScreenNotice />
       <ActiveWorkoutBanner />
       <FirstWeekCalibrationCard />
-      <MissionBanner />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
@@ -260,9 +258,9 @@ export default function TodayScreen() {
             accessibilityRole="button"
             accessibilityLabel="Export nutrition sticker for stories"
           >
-            <Ionicons name="sparkles" size={12} color="#F59E0B" />
+            <Ionicons name="share-outline" size={13} color={colors.textMuted} />
             <Text style={[styles.stickerPillText, { color: colors.text }]}>
-              Story Sticker ✨
+              Share today as a sticker
             </Text>
           </Pressable>
         </View>

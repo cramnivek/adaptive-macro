@@ -2,23 +2,20 @@ import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine'
 import { todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { notify } from '../dialog';
 import { thud } from '../platform/haptics';
 import { pushBaselineToCloud } from '../social/baselineSync';
 import { useApp } from '../state/AppStore';
 import {
-  type DashboardSpotlight,
   type UnitSystem,
-  type UserMission,
   withDefaults,
 } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
-import { Button, Field, Segmented, TOUCH_TARGET } from './Controls';
+import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
-import { MissionPicker } from './MissionPicker';
 
 export interface OnboardingWizardProps {
   onComplete?: () => void;
@@ -28,13 +25,6 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const { colors } = useTheme();
   const { settings, updateSettings, recordWeight } = useApp();
 
-  const [onboardingStep, setOnboardingStep] = useState<'mission' | 'baseline'>('mission');
-  const [selectedMission, setSelectedMission] = useState<UserMission>(
-    settings.userMission ?? 'hybrid',
-  );
-  const [selectedSpotlight, setSelectedSpotlight] = useState<DashboardSpotlight>(
-    settings.dashboardSpotlight ?? 'balanced',
-  );
   const [heightUnit, setHeightUnit] = useState<'cm' | 'in'>(
     settings.units === 'imperial' ? 'in' : 'cm',
   );
@@ -119,8 +109,9 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
 
     const patch = {
       onboarded: true,
-      userMission: selectedMission,
-      dashboardSpotlight: selectedSpotlight,
+      // The focus picker left first run: it only changes labels, and the goal
+      // below is what sets targets. Whatever focus is stored stays, and
+      // Settings is where to change it.
       missionOnboardingDismissed: true,
       featureOnboardingDismissed: true,
       units: effectiveUnits,
@@ -145,98 +136,17 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     onComplete?.();
   };
 
-  const isMissionStep = onboardingStep === 'mission';
-
   return (
     <FadeIn>
       <View style={styles.container}>
         <Card variant="featured" style={styles.card}>
-          {/* Step count as a plain label; the red progress bar under it already carries the brand. */}
-          <View style={styles.stepHeaderRow}>
-            <Text style={[styles.stepBadgeText, { color: colors.textFaint }]}>
-              {isMissionStep ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
-            </Text>
-
-            {isMissionStep ? (
-              <Pressable
-                onPress={() => {
-                  thud('light');
-                  setOnboardingStep('baseline');
-                }}
-                hitSlop={12}
-                style={styles.actionLinkWrapper}
-                accessibilityRole="button"
-                accessibilityLabel="Skip to your numbers"
-              >
-                <Text style={[styles.skipLink, { color: colors.textMuted }]}>
-                  Skip
-                </Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  thud('light');
-                  setOnboardingStep('mission');
-                }}
-                hitSlop={12}
-                style={styles.actionLinkWrapper}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-              >
-                <Text style={[styles.skipLink, { color: colors.accent }]}>
-                  ← Back
-                </Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* Integrated 2-Segment Progress Bar */}
-          <View style={styles.progressBar}>
-            <View style={[styles.progressSegment, { backgroundColor: loud.loud }]} />
-            <View
-              style={[
-                styles.progressSegment,
-                { backgroundColor: !isMissionStep ? loud.loud : colors.border },
-              ]}
-            />
-          </View>
-
           {/* Title & Concise Subtitle */}
-          <Text style={[styles.title, { color: colors.text }]}>
-            {isMissionStep ? 'What are you here for?' : 'A few numbers to start from'}
-          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>A few numbers to start from</Text>
           <Text style={[styles.desc, { color: colors.textMuted }]}>
-            {isMissionStep
-              ? 'Pick the closest. It only changes a few labels, and you can switch in Settings.'
-              : 'These set your first targets. Once you have logged food and weight for a week or two, the estimate comes from your own numbers instead.'}
+            These set your first targets. Once you have logged food and weight for a week or two, the
+            estimate comes from your own numbers instead.
           </Text>
 
-          {isMissionStep ? (
-            <>
-              {/* Compact Mission Picker without top praise clutter */}
-              <View style={styles.missionPickerContainer}>
-                <MissionPicker
-                  compact
-                  hidePraiseBox
-                  selectedMission={selectedMission}
-                  selectedSpotlight={selectedSpotlight}
-                  onChangeMission={setSelectedMission}
-                  onChangeSpotlight={setSelectedSpotlight}
-                />
-              </View>
-
-              {/* Next Button */}
-              <View style={styles.nextButtonWrapper}>
-                <Button
-                  label="Next"
-                  onPress={() => {
-                    thud('heavy');
-                    setOnboardingStep('baseline');
-                  }}
-                />
-              </View>
-            </>
-          ) : (
             <View style={styles.form}>
               {/* Biological Sex */}
               <Segmented<Sex>
@@ -347,7 +257,6 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
                 />
               </View>
             </View>
-          )}
         </Card>
       </View>
     </FadeIn>
@@ -366,39 +275,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: space.xl,
   },
-  stepHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: space.sm,
-  },
-  stepBadgeText: {
-    fontFamily: font.figure,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  // A full touch target's height: hitSlop is ignored on web, where this ships.
-  actionLinkWrapper: {
-    minHeight: TOUCH_TARGET,
-    justifyContent: 'center',
-    paddingLeft: space.sm,
-  },
-  skipLink: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
-    letterSpacing: 0.5,
-  },
-  progressBar: {
-    flexDirection: 'row',
-    gap: space.xs,
-    marginBottom: space.md,
-  },
-  progressSegment: {
-    flex: 1,
-    height: 3,
-    borderRadius: radius.pill,
-  },
   title: {
     fontFamily: font.display,
     fontSize: 22,
@@ -411,12 +287,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginBottom: space.md,
-  },
-  missionPickerContainer: {
-    marginTop: space.xs,
-  },
-  nextButtonWrapper: {
-    marginTop: space.md,
   },
   form: {
     gap: space.md,
