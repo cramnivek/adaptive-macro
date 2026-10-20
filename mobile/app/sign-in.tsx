@@ -18,6 +18,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Tappable } from '../src/components/Tappable';
 import { sendCode, verifyCode } from '../src/social/api';
 import { useSocial } from '../src/social/session';
+import { useApp } from '../src/state/AppStore';
 import {
   appleAvailable,
   signInWithApple,
@@ -72,6 +73,7 @@ export default function SignInScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { refreshProfile } = useSocial();
+  const { updateSettings } = useApp();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -137,6 +139,15 @@ export default function SignInScreen() {
       await finishSignIn();
     });
 
+  // Everything but the feed and squads works on this device alone, so the
+  // account is offered, not required. Back to wherever sent you here (a social
+  // screen's "Sign in"), or into the app when this was the first screen.
+  const skip = async () => {
+    await updateSettings({ accountSkipped: true });
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
   const onCodeChange = (text: string) => {
     // Digits only: a code pasted from Mail arrives as "123 456" often enough.
     const digits = text.replace(/\D/g, '').slice(0, 6);
@@ -197,7 +208,7 @@ export default function SignInScreen() {
             <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
               {sentTo
                 ? 'Enter the six-digit code from the email we just sent.'
-                : 'One account for the feed, your squad, and picking up on a new phone.'}
+                : 'Optional. One account for the feed, your squad, and picking up on a new phone.'}
             </Text>
 
             {problem && (
@@ -374,6 +385,21 @@ export default function SignInScreen() {
               </>
             )}
           </View>
+
+          {sentTo === null && (
+            <Tappable
+              onPress={() => void skip()}
+              disabled={busy}
+              style={styles.skip}
+              accessibilityRole="button"
+              accessibilityLabel="Use Ascend without an account"
+            >
+              <Text style={[styles.skipLabel, { color: colors.text }]}>Use Ascend without an account</Text>
+              <Text style={[styles.skipNote, { color: colors.textFaint }]}>
+                You can sign in later from Settings or the Social tab.
+              </Text>
+            </Tappable>
+          )}
 
           {/*
             One honest line about where things live, in place of the two
@@ -677,6 +703,23 @@ const styles = StyleSheet.create({
   resendLabel: {
     fontFamily: font.ui,
     fontSize: 13,
+  },
+  skip: {
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -space.sm,
+    marginBottom: space.xl,
+    gap: 2,
+  },
+  skipLabel: {
+    fontFamily: font.uiStrong,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  skipNote: {
+    fontFamily: font.ui,
+    fontSize: 12,
   },
   trust: {
     alignItems: 'center',

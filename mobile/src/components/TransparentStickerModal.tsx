@@ -403,8 +403,10 @@ const styles = StyleSheet.create({
       ? {
           backgroundImage:
             'linear-gradient(45deg, #181920 25%, transparent 25%), linear-gradient(-45deg, #181920 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #181920 75%), linear-gradient(-45deg, transparent 75%, #181920 75%)',
+          // No backgroundPosition: '0 0' is the default already, and
+          // react-native-web rejects the two-value form with an error on
+          // every load of the app.
           backgroundSize: '24px 24px',
-          backgroundPosition: '0 0',
         }
       : {}),
   },

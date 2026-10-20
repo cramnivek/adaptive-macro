@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../dumbbellLoad';
+import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../dumbbellLoad';
 
 describe('dumbbellLoad', () => {
   it('leaves non-dumbbell exercises alone', () => {
@@ -13,13 +13,17 @@ describe('dumbbellLoad', () => {
     expect(dumbbellLoad('DB Shoulder Press')).toBe('pair');
   });
 
-  it('recognises single-bell movements', () => {
+  it('recognises one bell held in both hands', () => {
     expect(dumbbellLoad('Goblet Squat (Dumbbell)')).toBe('single');
     expect(dumbbellLoad('Heel-Elevated Goblet Squat')).toBe('single');
     expect(dumbbellLoad('Dumbbell Pullover')).toBe('single');
-    expect(dumbbellLoad('Dumbbell Row')).toBe('single');
-    expect(dumbbellLoad('Single-Arm Row (Dumbbell)')).toBe('single');
-    expect(dumbbellLoad('Concentration Curl (Dumbbell)')).toBe('single');
+  });
+
+  it('counts one-arm movements as one side at a time', () => {
+    expect(dumbbellLoad('Dumbbell Row')).toBe('perSide');
+    expect(dumbbellLoad('Single-Arm Row (Dumbbell)')).toBe('perSide');
+    expect(dumbbellLoad('Concentration Curl (Dumbbell)')).toBe('perSide');
+    expect(dumbbellLoad('Meadows Row (Dumbbell)')).toBe('perSide');
   });
 
   it('keeps chest-supported rows as a pair', () => {
@@ -54,5 +58,27 @@ describe('column labels', () => {
 
   it('has a note for every kind', () => {
     for (const kind of ['pair', 'single', 'perSide'] as const) expect(dumbbellNote(kind).length).toBeGreaterThan(10);
+  });
+});
+
+describe('dumbbellBreakdown', () => {
+  it('totals a pair', () => {
+    expect(dumbbellBreakdown('pair', '32.5', '10', 'LB')).toBe('= 65 lb total, both dumbbells');
+  });
+
+  it('shows both sides of a one-sided movement, with reps when there are some', () => {
+    expect(dumbbellBreakdown('perSide', '105.0', '13', 'lb')).toBe('L 105 × 13 · R 105 × 13');
+    expect(dumbbellBreakdown('perSide', '24', '', 'kg')).toBe('L 24 · R 24');
+  });
+
+  it('adds nothing for a single bell, an empty or zero weight, or a non-dumbbell lift', () => {
+    expect(dumbbellBreakdown('single', '30', '10', 'kg')).toBeNull();
+    expect(dumbbellBreakdown('pair', '', '10', 'kg')).toBeNull();
+    expect(dumbbellBreakdown('pair', '0', '10', 'kg')).toBeNull();
+    expect(dumbbellBreakdown(null, '100', '5', 'kg')).toBeNull();
+  });
+
+  it('reads a decimal comma', () => {
+    expect(dumbbellBreakdown('pair', '12,5', '8', 'kg')).toBe('= 25 kg total, both dumbbells');
   });
 });

@@ -8,6 +8,12 @@ import { useApp } from '../state/AppStore';
 /**
  * Keeps the app behind a one-time sign-in, social profile setup, and baseline onboarding.
  *
+ * The sign-in is a door, not a wall: "Continue without an account" on the
+ * sign-in screen sets `accountSkipped`, and from then on a signed-out person
+ * goes straight to the app. Food, weight and training never needed an account
+ * — they live on this device — and only the feed and squads ask for one, from
+ * their own screens.
+ *
  * Once signed in, the cached session is enough — offline, or with an expired
  * token — because logging a set in a basement gym must never be blocked.
  * Food and training logs live on this device and are not tied to the account,
@@ -71,13 +77,13 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
 
     if (configured) {
       if (session === undefined) return; // session still loading from storage
-      if (session === null) {
+      if (session === null && !settings.accountSkipped) {
         if (!AUTH_PUBLIC_ROUTES.has(rootSegment)) router.replace('/sign-in');
         return;
       }
       // Signed in: only redirect to profile-setup when we positively know profile === null.
       // When offline (`profileFailed`), `profile` stays `undefined` and we do NOT block the user.
-      if (profile === null && rootSegment !== 'profile-setup' && rootSegment !== 'privacy') {
+      if (session && profile === null && rootSegment !== 'profile-setup' && rootSegment !== 'privacy') {
         router.replace('/profile-setup');
         return;
       }
@@ -111,6 +117,8 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
 
   if (!ready) return null;
   if (configured && session === undefined) return null;
-  if (configured && session === null && !AUTH_PUBLIC_ROUTES.has(rootSegment)) return null;
+  if (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment)) {
+    return null;
+  }
   return <>{children}</>;
 };

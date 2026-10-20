@@ -659,9 +659,30 @@ describe('training squads RLS and multiplayer constraints', () => {
     expect(roles.rows[0].role).toBe('member');
   });
 
-  it('says plainly when a code matches no squad', async () => {
+  it('answers null when a code matches no squad', async () => {
     await createSquadSql(USER_A, 'Apex Club', 'APEX27');
-    await expect(join(USER_B, 'NOPE22')).rejects.toThrow(/squad_not_found/);
+    expect(await join(USER_B, 'NOPE22')).toBeNull();
+  });
+
+  it('stops anyone trying a twenty-first code in an hour, wrong guesses counted', async () => {
+    await createSquadSql(USER_A, 'Apex Club', 'APEX29');
+    for (let i = 0; i < 20; i++) expect(await join(USER_B, `NOPE${String(i).padStart(2, '2')}`)).toBeNull();
+    // Even the right code: the limit says nothing about which codes are real.
+    await expect(join(USER_B, 'APEX29')).rejects.toThrow(/too_many_attempts/);
+    // Someone else is unaffected.
+    expect(await join(USER_C, 'APEX29')).not.toBeNull();
+  });
+
+  it('forgets attempts older than an hour', async () => {
+    await createSquadSql(USER_A, 'Apex Club', 'APEX32');
+    await db.exec(`insert into private.squad_join_attempts (user_id, at)
+                   select '${USER_B}', now() - interval '2 hours' from generate_series(1, 25)`);
+    expect(await join(USER_B, 'APEX32')).not.toBeNull();
+  });
+
+  it('keeps the attempt log out of every user’s reach', async () => {
+    await expect(as(db, USER_B, `select * from private.squad_join_attempts`)).rejects.toThrow(/permission denied/);
+    await expect(as(db, USER_B, `delete from private.squad_join_attempts`)).rejects.toThrow(/permission denied/);
   });
 
   it('cannot be joined by someone signed out', async () => {
