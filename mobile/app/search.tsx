@@ -10,6 +10,8 @@ import { Button, Field } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { LookupCandidateSheet } from '../src/components/LookupCandidateSheet';
 import { getFoodById, listFrequentFoods, saveFood } from '../src/db';
+import { notify } from '../src/dialog';
+import { problemText } from '../src/loadProblem';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
 
@@ -167,7 +169,13 @@ export default function SearchScreen() {
 
   const confirm = useCallback(
     async (food: Food, grams: number, chosenMeal: Meal) => {
-      await logFood(food, grams, chosenMeal);
+      // A failed save used to leave the sheet open with no word of why.
+      try {
+        await logFood(food, grams, chosenMeal);
+      } catch (error) {
+        notify('Could not log that food', problemText(error));
+        return;
+      }
       setSelected(null);
       if (router.canGoBack()) router.back();
       else router.replace('/');

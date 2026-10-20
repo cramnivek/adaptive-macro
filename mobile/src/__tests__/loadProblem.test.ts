@@ -12,7 +12,7 @@ describe('problemText', () => {
   });
 
   it('never shows an empty or non-error value as it is', () => {
-    expect(problemText({})).toBe('Something went wrong reading your log.');
-    expect(problemText(new Error('  '))).toBe('Something went wrong reading your log.');
+    expect(problemText({})).toBe('Something went wrong with your log on this device.');
+    expect(problemText(new Error('  '))).toBe('Something went wrong with your log on this device.');
   });
 });

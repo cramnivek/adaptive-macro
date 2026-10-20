@@ -5,7 +5,9 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { Button, Field, Stepper, TOUCH_TARGET } from '../src/components/Controls';
+import { notify } from '../src/dialog';
 import { MEAL_LABELS } from '../src/format';
+import { problemText } from '../src/loadProblem';
 import { useApp } from '../src/state/AppStore';
 import { font, radius, space, useTheme } from '../src/theme';
 
@@ -86,7 +88,12 @@ export default function QuickAddScreen() {
       fetchedAt: new Date().toISOString(),
     };
 
-    await logFood(food, 100, meal);
+    try {
+      await logFood(food, 100, meal);
+    } catch (error) {
+      notify('Could not add that', problemText(error));
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/');
   };

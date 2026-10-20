@@ -8,6 +8,8 @@ import { lookupBarcode } from '../src/api/openfoodfacts';
 import { Button } from '../src/components/Controls';
 import { LogFoodSheet } from '../src/components/LogFoodSheet';
 import { findFoodByBarcode } from '../src/db';
+import { notify } from '../src/dialog';
+import { problemText } from '../src/loadProblem';
 import { WebBarcodeCamera } from '../src/platform/WebBarcodeCamera';
 import type { Rect } from '../src/platform/scanGeometry';
 import { useApp } from '../src/state/AppStore';
@@ -177,7 +179,10 @@ export default function ScanScreen() {
         defaultMeal={meal}
         onCancel={resume}
         onConfirm={(food, grams, chosenMeal) => {
-          void logFood(food, grams, chosenMeal).then(() => router.back());
+          // A failed save used to leave the sheet open with no word of why.
+          logFood(food, grams, chosenMeal)
+            .then(() => router.back())
+            .catch((error) => notify('Could not log that food', problemText(error)));
         }}
       />
     </View>
