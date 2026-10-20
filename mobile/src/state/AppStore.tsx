@@ -12,6 +12,9 @@ import {
   DEFAULT_MODEL_OPTIONS,
   DEFAULT_TARGET_OPTIONS,
   EMPTY_NUTRIENTS,
+  KCAL_PER_KG_TISSUE,
+  deurenbergBodyFatPct,
+  energyDensityKcalPerKg,
   buildProgram,
   estimateExpenditure,
   expenditureConfidence,
@@ -103,6 +106,12 @@ interface AppState {
   /** Re-reads everything, for bulk writes made outside the store's own helpers. */
   refreshAll: () => Promise<void>;
 
+  /**
+   * What the estimate assumes a kilo of weight change is worth, and the body
+   * fat it was worked out from, so the screen can say so rather than hide it.
+   */
+  energyDensity: { kcalPerKg: number; bodyFatPct: number; measured: boolean };
+
   /** Full filtered history, oldest first. Empty until a first weigh-in exists. */
   series: DailyEstimate[];
   latest: DailyEstimate | null;
@@ -131,6 +140,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [selectedDate, setSelectedDate] = useState<ISODate>(todayISO());
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weights, setWeights] = useState<db.WeightRow[]>([]);
+  const [measuredBodyFatPct, setMeasuredBodyFatPct] = useState<number | null>(null);
   const [observations, setObservations] = useState<DailyObservation[]>([]);
   const [dayStatus, setDayStatus] = useState<Map<ISODate, boolean>>(new Map());
 
@@ -143,6 +153,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // patched. The data is small — years of daily logs is a few thousand rows.
   const reloadHistory = useCallback(async () => {
     setWeights(await db.listWeights());
+    const measured = (await db.getLatestBodyMeasurements(20)).find((m) => m.bodyFatPct != null);
+    setMeasuredBodyFatPct(measured?.bodyFatPct ?? null);
     setObservations(await db.loadObservations());
     setDayStatus(await db.listDayStatus());
   }, []);
@@ -297,6 +309,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   const latestWeightKg = weights.length ? weights[weights.length - 1].kg : null;
 
+  // How much energy a kilo of weight change holds, from body composition rather
+  // than the flat 7700 (see engine/bodyComposition.ts): the measured body fat
+  // when there is one, otherwise an estimate from height, weight, age and sex.
+  // Used for the expenditure estimate and the targets alike, so a deficit is
+  // set in the same units it is measured in. A stored value other than the
+  // default is someone's deliberate choice and is kept.
+  const bodyFatPct =
+    measuredBodyFatPct ??
+    deurenbergBodyFatPct(latestWeightKg ?? 80, settings.profile.heightCm, settings.profile.age, settings.profile.sex);
+  const kcalPerKgChange =
+    settings.kcalPerKgTissue !== KCAL_PER_KG_TISSUE
+      ? settings.kcalPerKgTissue
+      : energyDensityKcalPerKg(((latestWeightKg ?? 80) * bodyFatPct) / 100);
+
   // The whole filter is re-run from scratch whenever the inputs change. Over a
   // multi-year history this is still well under a millisecond, and it removes
   // any possibility of the displayed estimate drifting from the stored data.
@@ -304,7 +330,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     () =>
       estimateExpenditure(observations, {
         ...DEFAULT_MODEL_OPTIONS,
-        kcalPerKgTissue: settings.kcalPerKgTissue,
+        kcalPerKgTissue: kcalPerKgChange,
         scaleNoiseKg: settings.scaleNoiseKg,
         expenditureVolatilityKcal: settings.expenditureVolatilityKcal,
         initialExpenditureKcal: seedExpenditure(
@@ -313,7 +339,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           settings.activity,
         ),
       }),
-    [observations, settings, latestWeightKg],
+    [observations, settings, latestWeightKg, kcalPerKgChange],
   );
 
   const trend = useMemo(() => trendRate(series, 14), [series]);
@@ -328,11 +354,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const targetOptions = useMemo(
     () => ({
       ...DEFAULT_TARGET_OPTIONS,
-      kcalPerKgTissue: settings.kcalPerKgTissue,
+      kcalPerKgTissue: kcalPerKgChange,
       proteinGPerKg: settings.proteinGPerKg,
       minFatGPerKg: settings.minFatGPerKg,
     }),
-    [settings.kcalPerKgTissue, settings.proteinGPerKg, settings.minFatGPerKg],
+    [kcalPerKgChange, settings.proteinGPerKg, settings.minFatGPerKg],
   );
 
   // Not while the estimate is still the formula's: "the target moved because
@@ -379,6 +405,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     observations,
     dayStatus,
     markDay,
+    energyDensity: { kcalPerKg: kcalPerKgChange, bodyFatPct, measured: measuredBodyFatPct !== null },
     weights,
     recordWeight,
     removeWeight,

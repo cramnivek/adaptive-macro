@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { todayISO } from '@adaptive-macros/engine';
+import { navyBodyFatPct, todayISO } from '@adaptive-macros/engine';
 import type { ISODate } from '@adaptive-macros/engine';
 import {
   deleteBodyMeasurement,
@@ -20,6 +20,7 @@ import {
 } from '../db';
 import { notify } from '../dialog';
 import { thud } from '../platform/haptics';
+import { useApp } from '../state/AppStore';
 import type { UnitSystem } from '../state/settings';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -44,6 +45,7 @@ export const BodyMeasurementsSheet = ({
   onSaved,
   initialRecord = null,
 }: BodyMeasurementsSheetProps) => {
+  const { settings } = useApp();
   const isMetric = units === 'metric';
   const unitLabel = isMetric ? 'cm' : 'in';
 
@@ -83,6 +85,20 @@ export const BodyMeasurementsSheet = ({
     if (isNaN(num) || num < 2 || num > 70) return null;
     return num;
   };
+
+  // Most people have never had their body fat measured, but most can find a
+  // tape. Once the waist and neck are in (and hips, for women), the Navy
+  // equations give a figure from their own shape, offered rather than filled
+  // in: the box stays theirs, for a scan's number if they have one.
+  const { sex, heightCm } = settings.profile;
+  const waistNow = parseInputToCm(waist);
+  const neckNow = parseInputToCm(neck);
+  const navyEstimate =
+    waistNow != null && neckNow != null
+      ? navyBodyFatPct(sex, heightCm, waistNow, neckNow, parseInputToCm(hips))
+      : null;
+  const navyText = navyEstimate != null ? navyEstimate.toFixed(1) : null;
+  const usingNavy = navyText != null && bodyFat.trim().replace(',', '.') === navyText;
 
   const handleSave = async () => {
     const waistCm = parseInputToCm(waist);
@@ -313,6 +329,39 @@ export const BodyMeasurementsSheet = ({
                 </View>
               </View>
 
+              {navyText != null ? (
+                <View style={styles.estimate}>
+                  <View style={styles.estimateText}>
+                    <Text style={styles.estimateFigure}>About {navyText}% body fat</Text>
+                    <Text style={styles.estimateNote}>
+                      An estimate from your waist, neck{sex === 'female' ? ', hips' : ''} and height (the
+                      US Navy tape method), usually within 3–4 points of a scan.{' '}
+                      {sex === 'female'
+                        ? 'The method measures the waist at its narrowest, the hips at their widest and the neck just below the voice box, relaxed.'
+                        : 'The method measures the waist at the navel and the neck just below the voice box, relaxed.'}
+                    </Text>
+                  </View>
+                  {usingNavy ? (
+                    <Text style={styles.estimateUsed}>IN USE</Text>
+                  ) : (
+                    <Tappable
+                      onPress={() => setBodyFat(navyText)}
+                      scaleTo={0.95}
+                      style={styles.estimateBtn}
+                      accessibilityLabel={`Use ${navyText} percent as body fat`}
+                    >
+                      <Text style={styles.estimateBtnText}>USE IT</Text>
+                    </Tappable>
+                  )}
+                </View>
+              ) : (
+                waistNow != null &&
+                neckNow != null &&
+                sex === 'female' && (
+                  <Text style={styles.estimateNote}>Add your hips to get a body-fat estimate from the tape.</Text>
+                )
+              )}
+
               {/* Notes */}
               <View style={styles.fullCol}>
                 <Text style={styles.label}>NOTES (OPTIONAL)</Text>
@@ -450,6 +499,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
     minHeight: TOUCH_TARGET,
+  },
+  estimate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: loud.rule,
+    backgroundColor: loud.ground,
+  },
+  estimateText: {
+    flex: 1,
+    gap: 2,
+  },
+  estimateFigure: {
+    fontFamily: font.figure,
+    fontSize: 14,
+    fontWeight: '700',
+    color: loud.figure,
+  },
+  estimateNote: {
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 16,
+    color: loud.figureMuted,
+  },
+  estimateBtn: {
+    minHeight: TOUCH_TARGET,
+    minWidth: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: loud.loud,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  estimateBtnText: {
+    fontFamily: font.display,
+    fontSize: 12,
+    fontWeight: '800',
+    color: loud.loud,
+    letterSpacing: 1,
+  },
+  estimateUsed: {
+    fontFamily: font.display,
+    fontSize: 11,
+    fontWeight: '800',
+    color: loud.figureMuted,
+    letterSpacing: 1,
   },
   notesInput: {
     minHeight: 64,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays } from '../src/dates';
 import type { DailyEstimate } from '../src/expenditure';
-import { daysToTarget, projectedDate, trendRate } from '../src/trend';
+import { STEADY_LIMIT_KG, daysToTarget, projectedDate, rateVerdict, trendRate } from '../src/trend';
 
 const series = (weights: number[]): DailyEstimate[] =>
   weights.map((kg, i) => ({
@@ -57,5 +57,41 @@ describe('daysToTarget', () => {
   it('projects a calendar date', () => {
     expect(projectedDate('2026-01-01', 90, 89, -0.5)).toBe('2026-01-15');
     expect(projectedDate('2026-01-01', 90, 89, 0.5)).toBeNull();
+  });
+});
+
+describe('rateVerdict', () => {
+  const readings = (kgs: (number | null)[]) =>
+    kgs.flatMap((kg, i) => (kg === null ? [] : [{ date: addDays('2026-10-01', i), kg }]));
+
+  // The series the weight tab was checked with: about 0.55 kg a week down,
+  // with ordinary day-to-day swings and a two-day gap.
+  const real = [76.0, 76.4, 75.6, 75.9, 76.2, 75.3, 75.8, 75.5, null, null, 74.9, 75.3, 75.0, 74.6, 75.2, 74.8, 74.4, 75.0, 74.5, 74.3];
+
+  it('calls a steady loss that the swings cannot explain', () => {
+    expect(rateVerdict(readings(real))).toBe('losing');
+    expect(rateVerdict(readings(real.map((kg) => (kg === null ? null : 150 - kg))))).toBe('gaining');
+  });
+
+  it('will not call a drift that the swings could explain', () => {
+    // 0.2 kg lower across the fortnight, under swings of half a kilo.
+    expect(rateVerdict(readings([75.5, 75.0, 75.6, 74.9, 75.4, 75.1, 75.6, 74.8, 75.3, 75.2, 74.9, 75.5, 75.0, 75.1]))).toBe('unclear');
+  });
+
+  it('says steady when even the far end of the range is small', () => {
+    expect(rateVerdict(readings([80.0, 80.1, 79.9, 80.0, 80.1, 80.0, 79.9, 80.0, 80.1, 80.0, 79.9, 80.0, 80.1, 80.0]))).toBe('steady');
+    expect(STEADY_LIMIT_KG).toBe(0.5);
+  });
+
+  it('only looks at the last fortnight', () => {
+    // A big early drop, then flat: the window sees only the flat part.
+    const early = Array.from({ length: 10 }, (_, i) => 90 - i);
+    const flat = new Array(14).fill(80).map((kg, i) => kg + (i % 2 ? 0.05 : -0.05));
+    expect(rateVerdict(readings([...early, ...flat]))).toBe('steady');
+  });
+
+  it('gives no verdict on too few weigh-ins', () => {
+    expect(rateVerdict(readings([80, 79, 78, 77]))).toBeNull();
+    expect(rateVerdict([])).toBeNull();
   });
 });
