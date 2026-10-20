@@ -9,7 +9,10 @@ import {
   dataUrlToArrayBuffer,
   getCustomCardStatus,
   getLocalCustomCard,
-  getPublicCardUrl,
+  removeAllCardImages,
+  removeCardImage,
+  cardImagePath,
+  fetchCardImage,
   persistCustomCard,
   removeLocalCustomCard,
   resolveDurableDataUrl,
@@ -41,14 +44,49 @@ describe('customCard persistence & sync', () => {
     expect(sanitizeSessionId('clean-id_123')).toBe('clean-id_123');
   });
 
-  it('constructs public GCS card URLs scoped by authorId when provided', () => {
-    expect(getPublicCardUrl('workout-1', 'user-456')).toBe(
-      'https://storage.googleapis.com/adaptive-macro-card-images/user-456/workout-1.jpg',
-    );
-    expect(getPublicCardUrl('workout-1')).toBe(
-      'https://storage.googleapis.com/adaptive-macro-card-images/workout-1.jpg',
-    );
-    expect(getPublicCardUrl(null)).toBeNull();
+  it('asks this app’s server for a card, never the bucket, and only with an author', () => {
+    expect(cardImagePath('workout-1', 'user-456')).toBe('/api/card?author=user-456&session=workout-1');
+    expect(cardImagePath('workout 1', 'user-456')).toBe('/api/card?author=user-456&session=workout_1');
+    expect(cardImagePath('workout-1')).toBeNull();
+    expect(cardImagePath(null, 'user-456')).toBeNull();
+  });
+
+  it('fetches a card with the viewer’s sign-in and hands back an object URL', async () => {
+    const fetchMock = vi.fn(async () => new Response(new Blob(['img'], { type: 'image/jpeg' })));
+    vi.stubGlobal('fetch', fetchMock);
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card');
+
+    expect(await fetchCardImage('workout-1', 'user-456')).toBe('blob:card');
+    created.mockRestore();
+    expect(fetchMock).toHaveBeenCalledWith('/api/card?author=user-456&session=workout-1', {
+      headers: { Authorization: 'Bearer jwt-mock' },
+    });
+  });
+
+  it('shows nothing for a card the server will not serve, or when signed out', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Not found', { status: 404 })));
+    expect(await fetchCardImage('workout-1', 'user-456')).toBeNull();
+
+    vi.mocked(currentAccessToken).mockResolvedValueOnce(null);
+    const unused = vi.fn();
+    vi.stubGlobal('fetch', unused);
+    expect(await fetchCardImage('workout-1', 'user-456')).toBeNull();
+    expect(unused).not.toHaveBeenCalled();
+  });
+
+  it('removes one card, or all of them, as the signed-in person', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await removeCardImage('workout-1')).toBe(true);
+    expect(await removeAllCardImages()).toBe(true);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/card?session=workout-1', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer jwt-mock' },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/cards', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer jwt-mock' },
+    });
   });
 
   it('converts base64 data URLs to ArrayBuffer accurately', () => {

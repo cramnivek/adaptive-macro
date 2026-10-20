@@ -5,6 +5,7 @@ import { PostCard } from '../src/components/PostCard';
 import { Screen } from '../src/components/Screen';
 import { confirm, notify } from '../src/dialog';
 import { deletePost, myPosts } from '../src/social/api';
+import { removeCardImage } from '../src/social/customCard';
 import { postView } from '../src/social/postPayload';
 import type { Post } from '../src/social/types';
 import { useApp } from '../src/state/AppStore';
@@ -40,6 +41,9 @@ export default function MyPostsScreen() {
     if (!sure) return;
     try {
       await deletePost(post.id);
+      // Its card image goes with it. Best effort: if this fails, the image
+      // has no post left to be checked against, so it cannot be served.
+      void removeCardImage(post.session_id);
       setPosts((current) => current?.filter((p) => p.id !== post.id) ?? null);
     } catch (error) {
       notify('Could not delete the post', (error as Error).message);
