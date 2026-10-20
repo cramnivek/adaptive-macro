@@ -1,4 +1,4 @@
-import { diffDays, todayISO } from '@adaptive-macros/engine';
+import { diffDays, rateVerdict, todayISO } from '@adaptive-macros/engine';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
@@ -97,6 +97,14 @@ export default function WeightScreen() {
     const visible = weights.filter((row) => diffDays(origin, row.date) >= 0);
     return {
       trend: series.map((point) => ({ x: diffDays(origin, point.date), y: point.trendWeightKg })),
+      // Where the trend likely lies (two standard deviations either side): tight
+      // after steady weighing, wider across gaps and in the first days, which a
+      // line alone draws with the same confidence everywhere.
+      band: series.map((point) => ({
+        x: diffDays(origin, point.date),
+        lo: point.trendWeightKg - 2 * point.trendWeightSdKg,
+        hi: point.trendWeightKg + 2 * point.trendWeightSdKg,
+      })),
       ordinary: visible
         .filter((row) => !outlierDates.has(row.date))
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kg })),
@@ -106,6 +114,8 @@ export default function WeightScreen() {
       origin,
     };
   }, [series, weights, outlierDates]);
+
+  const verdict = useMemo(() => rateVerdict(weights), [weights]);
 
   const recent = useMemo(() => [...weights].reverse().slice(0, 14), [weights]);
 
@@ -195,8 +205,10 @@ export default function WeightScreen() {
         <StatTile
           label="14-day rate"
           value={trend ? formatRate(trend.rateKgPerWeek, units) : '—'}
-          tone={trend && trend.rateKgPerWeek < 0 ? 'positive' : 'default'}
-          hint={trend ? `over ${trend.windowDays} days` : 'Needs two weigh-ins'}
+          // Coloured only once the change is beyond the noise; before that the
+          // number is an early guess and should not look like a result.
+          tone={verdict === 'losing' ? 'positive' : 'default'}
+          hint={trend && verdict ? RATE_HINT[verdict](trend.windowDays) : 'Needs two weigh-ins'}
         />
       </View>
 
@@ -204,8 +216,8 @@ export default function WeightScreen() {
         title="Trend vs readings"
         subtitle={
           outlierDates.size > 0
-            ? 'Dots are raw weigh-ins, the line is the trend. Amber dots were too far off to take at face value.'
-            : 'Dots are raw weigh-ins; the line is the filtered trend'
+            ? 'Dots are your weigh-ins. The line is the trend, and the shading is where it likely lies. Amber dots were too far off to take at face value.'
+            : 'Dots are your weigh-ins. The line is the trend, and the shading is where it likely lies.'
         }
       >
         {weights.length === 1 ? (
@@ -218,6 +230,7 @@ export default function WeightScreen() {
         ) : (
         <LineChart
           series={chart ? [{ points: chart.trend, color: colors.accent, strokeWidth: 2.5 }] : []}
+          band={chart ? { points: chart.band, color: colors.accent } : undefined}
           scatter={
             chart
               ? [
@@ -257,6 +270,14 @@ export default function WeightScreen() {
     </Screen>
   );
 }
+
+/** What the rate tile says under its number, by whether the change is real yet. */
+const RATE_HINT: Record<NonNullable<ReturnType<typeof rateVerdict>>, (days: number) => string> = {
+  losing: (days) => `A real loss over ${days} days`,
+  gaining: (days) => `A real gain over ${days} days`,
+  steady: (days) => `Holding steady over ${days} days`,
+  unclear: () => 'Too early to tell from day-to-day swings',
+};
 
 /** Day offset back to a calendar date, for axis labels. */
 const shiftDate = (origin: string, offsetDays: number): string =>
