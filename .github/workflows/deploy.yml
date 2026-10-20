@@ -113,6 +113,17 @@ jobs:
           # The list the next deploy keeps old code files by.
           curl -fsS "$URL/code-files.json" | grep -q "$built" || fail "code-files.json is missing or does not list $built"
           code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+          # Every asset that was built must be served. .gcloudignore once left
+          # out anything under a folder named dist/ at any depth, which dropped
+          # the barcode decoder (assets/_node_modules/zxing-wasm/dist/...) from
+          # the upload, and nothing noticed until a scan failed in Safari.
+          missing=0
+          while IFS= read -r file; do
+            path="/${file#services/gemini-proxy/web/}"
+            status=$(code -I "$URL$path")
+            [ "$status" = 200 ] || { echo "::error::$path answered $status"; missing=$((missing + 1)); }
+          done < <(find services/gemini-proxy/web/assets -type f)
+          [ "$missing" = 0 ] || fail "$missing built asset(s) are not being served"
           [ "$(code "$URL/api/nonsense")" = 404 ] || fail "/api/nonsense is not 404"
           [ "$(code -X POST "$URL/api/gemini" -H 'Content-Type: application/json' -d '{}')" = 401 ] \
             || fail "a token-less POST /api/gemini is not 401"
