@@ -246,11 +246,14 @@ export default function AddRoutinesScreen() {
               ))}
             </View>
 
+            {/* Quiet until there is something to build: a disabled red slab read
+                as broken rather than as waiting for a choice. */}
             <Button
               tone="loud"
               label={focuses.length === 0 ? 'Pick at least one day' : `Build ${count(focuses.length)}`}
               onPress={build}
               disabled={focuses.length === 0}
+              variant={focuses.length === 0 ? 'subtle' : 'primary'}
             />
           </Card>
 
@@ -423,7 +426,7 @@ const styles = StyleSheet.create({
   label: { fontFamily: font.display, fontSize: 11, letterSpacing: 1.2, marginTop: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginVertical: space.sm },
   chip: {
-    minHeight: TOUCH_TARGET - 8,
+    minHeight: TOUCH_TARGET,
     justifyContent: 'center',
     paddingHorizontal: space.md,
     borderRadius: radius.pill,

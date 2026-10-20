@@ -1,10 +1,11 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card } from '../src/components/Card';
 import { Button, Field, TOUCH_TARGET } from '../src/components/Controls';
 import { ExercisePicker } from '../src/components/ExercisePicker';
+import { ReorderSheet } from '../src/components/ReorderSheet';
 import { Tappable } from '../src/components/Tappable';
 import { Screen } from '../src/components/Screen';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../src/db';
 import type { Routine } from '../src/db';
 import type { MovementPattern } from '../src/ai/exercises';
+import { estimateMinutes } from '../src/ai/routineBuild';
 import { warmCatalogueCache } from '../src/exerciseSearch';
 import { confirm, notify } from '../src/dialog';
 import { useApp } from '../src/state/AppStore';
@@ -39,6 +41,13 @@ type Draft = {
   targetSpeed?: number | null;
   targetIncline?: number | null;
 };
+
+// The pill around it already shows focus; the browser's own box drew a
+// second, square one inside it.
+const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {};
+
+/** More than anyone programmes for one exercise; the stepper stops here. */
+const MAX_SETS = 10;
 
 /**
  * Routines: named, ordered exercise lists with a target set count each.
@@ -70,13 +79,14 @@ export default function RoutinesScreen() {
   const [patterns, setPatterns] = useState<Record<string, MovementPattern>>({});
   const { settings } = useApp();
   const [busy, setBusy] = useState(false);
-  const [autoSaved, setAutoSaved] = useState(false);
+  /** The exercise the reorder sheet opened holding; null while it is shut. */
+  const [reorderPick, setReorderPick] = useState<number | null>(null);
+  const [reorderingList, setReorderingList] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-save existing routines on every edit
   useEffect(() => {
     if (!editing || editing === 'new' || !draftName.trim() || draft.length === 0) return;
-    setAutoSaved(false);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -86,7 +96,6 @@ export default function RoutinesScreen() {
           const { renameRoutine } = await import('../src/db');
           await renameRoutine(editing, draftName.trim());
         }
-        setAutoSaved(true);
       } catch (err) {
         console.warn('Failed to auto-save routine:', err);
       }
@@ -165,12 +174,12 @@ export default function RoutinesScreen() {
     ]);
   };
 
-  const move = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= draft.length) return;
-    const next = [...draft];
-    [next[index], next[target]] = [next[target], next[index]];
-    setDraft(next);
+  // The database moves a routine one place at a time, so a jump of several is
+  // that many single moves, which keeps the ones in between in their order.
+  const placeRoutine = async (id: string, from: number, to: number) => {
+    const direction = to > from ? 1 : -1;
+    for (let i = from; i !== to; i += direction) await moveRoutine(id, direction);
+    await refresh();
   };
 
   const save = async () => {
@@ -216,91 +225,117 @@ export default function RoutinesScreen() {
   }
 
   if (editing) {
+    const update = (index: number, patch: Partial<Draft>) =>
+      setDraft((c) => c.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+
     return (
       <Screen tone="loud" title={editing === 'new' ? 'New routine' : 'Edit routine'}>
-        <View style={styles.disclaimerBox}>
-          <Ionicons name="information-circle" size={18} color="#F59E0B" style={{ marginTop: 1 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.disclaimerTitle}>ROUTINE TEMPLATE</Text>
-            <Text style={styles.disclaimerText}>
-              Routines are templates for future workouts. Changes auto-save and apply to your next workout without altering any active workout session in progress.
-            </Text>
-          </View>
-        </View>
-
         <Card loud title="Name">
           <Field label="Routine name" value={draftName} onChangeText={setDraftName} placeholder="Push A" />
         </Card>
 
-        <Card loud title="Exercises & Cardio">
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            The order here is the order you do them in.
-          </Text>
+        <Card loud title="Exercises" subtitle={draft.length > 0 ? planSummary(draft) : undefined}>
+          {draft.length === 0 && (
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
+              Add them in the order you do them.
+            </Text>
+          )}
           {draft.map((item, index) => (
-            <View key={item.name} style={[styles.row, { borderColor: loud.rule }]}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.xs }}>
-                  <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{item.name}</Text>
-                  {item.isCardio && (
-                    <Text style={{ fontFamily: font.display, fontSize: 10, color: loud.loud }}>
-                      CARDIO
+            <View key={item.name} style={[styles.exercise, { borderColor: loud.rule }]}>
+              <View style={styles.exerciseHead}>
+                {/* The same sheet a workout reorders with: pick one up, tap where it
+                    goes. Arrows on every row took five taps to move last to first. */}
+                {draft.length > 1 && (
+                  <Pressable
+                    onPress={() => setReorderPick(index)}
+                    style={styles.iconBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Move ${item.name}`}
+                  >
+                    <Ionicons name="reorder-three" size={22} color={loud.figureMuted} />
+                  </Pressable>
+                )}
+                <Text style={[styles.exerciseName, { color: loud.figure }]} numberOfLines={2}>
+                  {item.name}
+                </Text>
+                <Pressable
+                  onPress={() => setDraft((c) => c.filter((_, i) => i !== index))}
+                  style={styles.iconBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item.name}`}
+                >
+                  <Ionicons name="close" size={20} color={loud.figureFaint} />
+                </Pressable>
+              </View>
+
+              {item.isCardio ? (
+                <View style={styles.targets}>
+                  {(['treadmill', 'outside'] as const).map((mode) => {
+                    const on = (item.cardioMode ?? 'treadmill') === mode;
+                    return (
+                      <Pressable
+                        key={mode}
+                        onPress={() => update(index, { cardioMode: mode })}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: on }}
+                        style={[
+                          styles.option,
+                          { backgroundColor: on ? loud.figure : loud.panel, borderColor: on ? loud.figure : loud.rule },
+                        ]}
+                      >
+                        <Text style={{ fontFamily: font.uiStrong, fontSize: 13, color: on ? loud.ground : loud.figure }}>
+                          {mode === 'outside' ? 'Outside' : 'Machine'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                  <Text style={[styles.targetText, { color: loud.figureMuted }]}>{item.targetTime ?? '30m'}</Text>
+                </View>
+              ) : (
+                <View style={styles.targets}>
+                  {/* A stepper rather than a button that cycled 1 to 6 and wrapped:
+                      going from 4 to 3 took five taps, and past 6 was impossible. */}
+                  <View style={[styles.stepper, { borderColor: loud.rule, backgroundColor: loud.panel }]}>
+                    <Pressable
+                      onPress={() => update(index, { targetSets: Math.max(1, item.targetSets - 1) })}
+                      style={styles.stepBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`One set fewer of ${item.name}`}
+                    >
+                      <Text style={[styles.stepGlyph, { color: loud.figure }]}>−</Text>
+                    </Pressable>
+                    <Text style={[styles.targetText, { color: loud.figure }]}>
+                      {item.targetSets} {item.targetSets === 1 ? 'set' : 'sets'}
                     </Text>
+                    <Pressable
+                      onPress={() => update(index, { targetSets: Math.min(MAX_SETS, item.targetSets + 1) })}
+                      style={styles.stepBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`One set more of ${item.name}`}
+                    >
+                      <Text style={[styles.stepGlyph, { color: loud.figure }]}>+</Text>
+                    </Pressable>
+                  </View>
+                  {/* Reps were stored and used to prefill a session, but only an
+                      imported programme could set them; here they can be typed. */}
+                  <View style={[styles.repsBox, { borderColor: loud.rule, backgroundColor: loud.panel }]}>
+                    <TextInput
+                      value={item.targetReps ?? ''}
+                      onChangeText={(text) => update(index, { targetReps: text.trim() === '' ? null : text })}
+                      onBlur={() => update(index, { targetReps: item.targetReps?.trim() || null })}
+                      placeholder="8-12"
+                      placeholderTextColor={loud.figureFaint}
+                      keyboardType="numbers-and-punctuation"
+                      accessibilityLabel={`Target reps for ${item.name}`}
+                      style={[styles.repsInput, webNoOutline, { color: loud.figure }]}
+                    />
+                    <Text style={[styles.note, { color: loud.figureFaint, marginTop: 0 }]}>reps</Text>
+                  </View>
+                  {item.bodyweightBased && (
+                    <Text style={[styles.note, { color: loud.figureFaint, marginTop: 0 }]}>bodyweight</Text>
                   )}
                 </View>
-                <Text style={[styles.note, { color: loud.figureFaint }]}>
-                  {item.isCardio
-                    ? `${item.cardioMode === 'outside' ? 'Outside' : 'Machine'} · ${item.targetTime ?? '30m'}`
-                    : `${item.targetSets} sets${item.targetReps ? ` of ${item.targetReps}` : ''}${
-                        item.bodyweightBased ? ' · bodyweight' : ''
-                      }`}
-                </Text>
-              </View>
-              <Pressable onPress={() => move(index, -1)} style={styles.iconBtn}>
-                <Text style={{ color: loud.figureMuted }}>↑</Text>
-              </Pressable>
-              <Pressable onPress={() => move(index, 1)} style={styles.iconBtn}>
-                <Text style={{ color: loud.figureMuted }}>↓</Text>
-              </Pressable>
-              {item.isCardio ? (
-                <Pressable
-                  onPress={() =>
-                    setDraft((c) =>
-                      c.map((d, i) =>
-                        i === index
-                          ? {
-                              ...d,
-                              cardioMode: d.cardioMode === 'outside' ? 'treadmill' : 'outside',
-                            }
-                          : d,
-                      ),
-                    )
-                  }
-                  style={styles.iconBtn}
-                >
-                  <Text style={{ fontFamily: font.uiStrong, color: loud.loud, fontSize: 11 }}>
-                    {item.cardioMode === 'outside' ? '🌲' : '🏃'}
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={() =>
-                    setDraft((c) =>
-                      c.map((d, i) =>
-                        i === index ? { ...d, targetSets: (d.targetSets % 6) + 1 } : d,
-                      ),
-                    )
-                  }
-                  style={styles.iconBtn}
-                >
-                  <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>sets</Text>
-                </Pressable>
               )}
-              <Pressable
-                onPress={() => setDraft((c) => c.filter((_, i) => i !== index))}
-                style={styles.iconBtn}
-              >
-                <Text style={{ color: loud.loud }}>✕</Text>
-              </Pressable>
             </View>
           ))}
 
@@ -314,146 +349,205 @@ export default function RoutinesScreen() {
               onCancel={() => setPicking(false)}
             />
           ) : (
+            // Both quiet and equal: red on this screen belongs to the one
+            // button that finishes it, and a red "+ Cardio" outshouted it.
             <View style={styles.addButtonsRow}>
-              <Tappable
-                onPress={() => {
-                  setPickerMode('exercise');
-                  setPicking(true);
-                }}
-                scaleTo={0.97}
-                style={{ flex: 1 }}
-              >
-                <View style={[styles.addSlab, { backgroundColor: loud.panel, borderWidth: StyleSheet.hairlineWidth, borderColor: loud.rule }]}>
-                  <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.figure }}>
-                    + EXERCISE
-                  </Text>
-                </View>
-              </Tappable>
-              <Tappable
-                onPress={() => {
-                  setPickerMode('cardio');
-                  setPicking(true);
-                }}
-                scaleTo={0.97}
-                style={{ flex: 1 }}
-              >
-                <View style={[styles.addSlab, { backgroundColor: loud.loud }]}>
-                  <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.onLoud }}>
-                    + CARDIO
-                  </Text>
-                </View>
-              </Tappable>
+              {(['exercise', 'cardio'] as const).map((mode) => (
+                <Tappable
+                  key={mode}
+                  onPress={() => {
+                    setPickerMode(mode);
+                    setPicking(true);
+                  }}
+                  scaleTo={0.97}
+                  style={{ flex: 1 }}
+                >
+                  <View style={[styles.addSlab, { backgroundColor: loud.panel, borderColor: loud.rule }]}>
+                    <Text style={{ fontFamily: font.display, fontSize: 12, letterSpacing: 1.2, color: loud.figure }}>
+                      {mode === 'exercise' ? '+ EXERCISE' : '+ CARDIO'}
+                    </Text>
+                  </View>
+                </Tappable>
+              ))}
             </View>
           )}
         </Card>
 
-        {autoSaved && editing !== 'new' && (
-          <Text style={styles.autoSavedBadge}>✓ Changes auto-saved to template</Text>
+        {/* An existing routine saves as it is edited, so it has no Cancel: there
+            would be nothing left to cancel, and a Cancel that kept the changes
+            would be lying. A new one exists only once it is created. */}
+        {editing === 'new' ? (
+          <>
+            <Button tone="loud" label={busy ? 'Creating…' : 'Create routine'} onPress={save} disabled={busy} />
+            <Button tone="loud" label="Cancel" variant="subtle" onPress={() => setEditing(null)} />
+          </>
+        ) : (
+          <>
+            <Button tone="loud" label={busy ? 'Saving…' : 'Done'} onPress={save} disabled={busy} />
+            <Text style={[styles.note, styles.centred, { color: loud.figureFaint }]}>
+              Changes save as you go, and apply from the next workout you start.
+            </Text>
+          </>
         )}
-        <Button
-          tone="loud"
-          label={editing === 'new' ? (busy ? 'Creating…' : 'Create routine') : (busy ? 'Saving…' : 'Done')}
-          onPress={save}
-          disabled={busy}
+
+        <ReorderSheet
+          open={reorderPick !== null}
+          initialPick={reorderPick}
+          items={draft.map((d) => ({ name: d.name, isCardio: d.isCardio, setCount: d.isCardio ? undefined : d.targetSets }))}
+          onMove={(from, to) =>
+            setDraft((c) => {
+              // Lifted out and dropped in, as a session does, so the ones in
+              // between keep their order.
+              const next = [...c];
+              const [moved] = next.splice(from, 1);
+              next.splice(to, 0, moved);
+              return next;
+            })
+          }
+          onClose={() => setReorderPick(null)}
         />
-        <Button tone="loud" label="Cancel" variant="subtle" onPress={() => setEditing(null)} />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Routines" tone="loud">
+    <Screen
+      title="Routines"
+      tone="loud"
+      action={
+        routines.length > 1 ? (
+          <Pressable onPress={() => setReorderingList(true)} style={styles.iconBtn} accessibilityLabel="Reorder routines">
+            <Ionicons name="swap-vertical" size={20} color={loud.figureMuted} />
+          </Pressable>
+        ) : undefined
+      }
+    >
       {routines.length === 0 && (
         <Card loud title="No routines yet">
           <Text style={[styles.note, { color: loud.figureFaint }]}>
-            A routine is a named list of exercises in the order you do them. You can start one
-            from scratch, or build it from a session you have already done.
+            A routine is a named list of exercises in the order you do them. Make one yourself,
+            have one built for you, or start from a session you have already done.
           </Text>
         </Card>
       )}
 
-      {routines.map((routine, index) => (
-        <Card key={routine.id} title={routine.name}>
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            {routine.exercises
-              .map((e) =>
-                e.isCardio
-                  ? `${e.name} (${e.cardioMode === 'outside' ? 'Outside' : 'Machine'}${
-                      e.targetTime ? `, ${e.targetTime}` : ''
-                    })`
-                  : `${e.name} × ${e.targetSets}${e.targetReps ? ` (${e.targetReps})` : ''}`,
-              )
-              .join(' · ') || 'No exercises'}
+      {routines.map((routine) => (
+        <Card
+          key={routine.id}
+          loud
+          title={routine.name}
+          subtitle={routine.exercises.length > 0 ? planSummary(routine.exercises) : 'No exercises'}
+        >
+          <Text style={[styles.note, { color: loud.figureMuted }]} numberOfLines={3}>
+            {routine.exercises.map((e) => e.name).join(' · ')}
           </Text>
+          {/* Starting is the point of a routine, so it is here and not only on
+              the Train tab, which is where this screen used to send you. */}
           <View style={styles.actions}>
-            <Pressable onPress={() => void moveRoutine(routine.id, -1).then(refresh)} style={styles.iconBtn}>
-              <Text style={{ color: loud.figureMuted }}>↑</Text>
+            <Tappable
+              onPress={() => router.push(`/session?routine=${routine.id}`)}
+              scaleTo={0.96}
+              accessibilityRole="button"
+              accessibilityLabel={`Start ${routine.name}`}
+            >
+              <View style={[styles.startBtn, { backgroundColor: loud.loud }]}>
+                <Ionicons name="play" size={14} color={loud.onLoud} />
+                <Text style={{ fontFamily: font.uiStrong, fontSize: 14, color: loud.onLoud }}>Start</Text>
+              </View>
+            </Tappable>
+            <View style={{ flex: 1 }} />
+            <Pressable onPress={() => edit(routine)} style={styles.textBtn} accessibilityRole="button">
+              <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>Edit</Text>
             </Pressable>
-            <Pressable onPress={() => void moveRoutine(routine.id, 1).then(refresh)} style={styles.iconBtn}>
-              <Text style={{ color: loud.figureMuted }}>↓</Text>
-            </Pressable>
-            <Pressable onPress={() => edit(routine)} style={styles.iconBtn}>
-              <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>Edit</Text>
-            </Pressable>
-            <Pressable onPress={() => void remove(routine)} style={styles.iconBtn}>
-              <Text style={{ fontFamily: font.uiStrong, color: loud.loud }}>Delete</Text>
+            <Pressable
+              onPress={() => void remove(routine)}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${routine.name}`}
+            >
+              <Ionicons name="trash-outline" size={18} color={loud.figureFaint} />
             </Pressable>
           </View>
-          {index === 0 && (
-            <Text style={[styles.note, { color: loud.figureFaint }]}>
-              Start a workout from the Train tab.
-            </Text>
-          )}
         </Card>
       ))}
 
       <Button tone="loud" label="New routine" onPress={() => startNew('', [])} />
-      <Button
-        tone="loud"
-        label="Build or import routines"
-        variant="subtle"
-        onPress={() => router.push('/add-routines')}
-      />
 
-      {past.length > 0 && (
-        <Card loud title="Build one from a past session">
+      <Card loud title="Or start from">
+        <Pressable
+          onPress={() => router.push('/add-routines')}
+          style={[styles.row, { borderColor: loud.rule }]}
+          accessibilityRole="button"
+        >
+          <View style={{ flex: 1, paddingVertical: space.xs }}>
+            <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>Build or import</Text>
+            <Text style={[styles.note, { color: loud.figureFaint }]}>
+              Pick the days and have them built, or read a programme from a PDF or a screenshot.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={loud.figureFaint} />
+        </Pressable>
+
+        {past.slice(0, 8).map((session) => (
+          <Pressable
+            key={session.id}
+            onPress={() =>
+              startNew(
+                session.name,
+                session.exercises.map((name) => {
+                  const k = known.find((item) => item.name === name);
+                  return {
+                    name,
+                    bodyweightBased: k?.bodyweightBased ?? false,
+                    targetSets: k?.isCardio ? 1 : 3,
+                    isCardio: k?.isCardio ?? false,
+                    cardioMode: k?.cardioMode ?? 'treadmill',
+                    targetTime: k?.isCardio ? '30m' : null,
+                  };
+                }),
+              )
+            }
+            style={[styles.row, { borderColor: loud.rule }]}
+            accessibilityRole="button"
+          >
+            <View style={{ flex: 1, paddingVertical: space.xs }}>
+              <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
+              <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
+                {formatDate(session.date)} · {session.exercises.join(', ')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={loud.figureFaint} />
+          </Pressable>
+        ))}
+        {past.length > 0 && (
           <Text style={[styles.note, { color: loud.figureFaint }]}>
-            Takes that session's exercises, in the order they were done.
+            A past session comes in with its exercises in the order they were done.
           </Text>
-          {past.slice(0, 8).map((session) => (
-            <Pressable
-              key={session.id}
-              onPress={() =>
-                startNew(
-                  session.name,
-                  session.exercises.map((name) => {
-                    const k = known.find((item) => item.name === name);
-                    return {
-                      name,
-                      bodyweightBased: k?.bodyweightBased ?? false,
-                      targetSets: k?.isCardio ? 1 : 3,
-                      isCardio: k?.isCardio ?? false,
-                      cardioMode: k?.cardioMode ?? 'treadmill',
-                      targetTime: k?.isCardio ? '30m' : null,
-                    };
-                  }),
-                )
-              }
-              style={[styles.row, { borderColor: loud.rule }]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
-                <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
-                  {formatDate(session.date)} · {session.exercises.join(', ')}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </Card>
-      )}
+        )}
+      </Card>
+
+      <ReorderSheet
+        open={reorderingList}
+        title="Reorder routines"
+        items={routines.map((r) => ({ name: r.name }))}
+        onMove={(from, to) => void placeRoutine(routines[from].id, from, to)}
+        onClose={() => setReorderingList(false)}
+      />
     </Screen>
   );
 }
+
+/**
+ * "4 exercises · 12 sets · about 30 min", for a routine or a draft of one.
+ * Minutes use the same rough rule as the built routines, from lifting sets
+ * only, since a cardio block's length is its own target time.
+ */
+const planSummary = (exercises: { isCardio?: boolean; targetSets: number }[]): string => {
+  const sets = exercises.filter((e) => !e.isCardio).reduce((sum, e) => sum + e.targetSets, 0);
+  const parts = [`${exercises.length} ${exercises.length === 1 ? 'exercise' : 'exercises'}`];
+  if (sets > 0) parts.push(`${sets} sets`, `about ${estimateMinutes(sets)} min`);
+  return parts.join(' · ');
+};
 
 const styles = StyleSheet.create({
   note: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: 4 },
@@ -464,46 +558,59 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingVertical: space.xs,
   },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: space.xs },
+  actions: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
   iconBtn: {
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
-  addExercise: { marginTop: space.sm },
-  addSlab: { minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center', borderRadius: radius.lg },
-  disclaimerBox: {
+  textBtn: { minHeight: TOUCH_TARGET, paddingHorizontal: space.sm, justifyContent: 'center' },
+  startBtn: {
     flexDirection: 'row',
-    gap: space.sm,
-    backgroundColor: '#1E1810',
-    borderWidth: 1,
-    borderColor: '#78350F',
-    borderRadius: radius.md,
-    padding: space.md,
-    marginBottom: space.md,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
   },
-  disclaimerTitle: {
-    fontFamily: font.display,
-    fontSize: 10,
-    color: '#F59E0B',
-    letterSpacing: 1.5,
-    marginBottom: 2,
-    fontWeight: '800',
+  centred: { textAlign: 'center' },
+  exercise: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: space.xs },
+  exerciseHead: { flexDirection: 'row', alignItems: 'center', minHeight: TOUCH_TARGET },
+  exerciseName: { flex: 1, fontFamily: font.uiStrong, fontSize: 15 },
+  targets: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.xs, paddingBottom: space.xs },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
   },
-  disclaimerText: {
-    fontFamily: font.ui,
-    fontSize: 12,
-    lineHeight: 17,
-    color: loud.figureMuted,
+  stepBtn: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
+  stepGlyph: { fontFamily: font.uiStrong, fontSize: 18 },
+  targetText: { fontFamily: font.figure, fontSize: 14, minWidth: 52, textAlign: 'center' },
+  repsBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
   },
-  autoSavedBadge: {
-    fontFamily: font.uiStrong,
-    fontSize: 12,
-    color: '#34D399',
-    textAlign: 'center',
-    marginBottom: space.sm,
+  repsInput: { fontFamily: font.figure, fontSize: 14, width: 56, minHeight: TOUCH_TARGET, textAlign: 'center' },
+  option: {
+    minHeight: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  addButtonsRow: { flexDirection: 'row', gap: space.xs, marginTop: space.sm },
+  addSlab: {
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
