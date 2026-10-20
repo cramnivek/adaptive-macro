@@ -8,6 +8,7 @@ import {
   type MonthlyExtractedMetrics,
 } from '../monthlyReview';
 import type { DailyEstimate, DailyObservation, DatedSet } from '@adaptive-macros/engine';
+import { addDays } from '@adaptive-macros/engine';
 
 describe('monthlyReview metrics extractor and schema', () => {
   const endDate = '2026-10-28';
@@ -114,7 +115,31 @@ describe('monthlyReview metrics extractor and schema', () => {
     expect(prompt).toContain('WEEKLY ADJUSTMENT ADHERENCE');
     expect(prompt).toContain('Week 1');
     expect(prompt).toContain('Week 4');
-    expect(prompt).toContain('30-DAY BODY COMPOSITION & METABOLISM');
+    // The review covers four 7-day weeks, and the prompt now says so; it used
+    // to tell the model "30-DAY" about 28 days of data.
+    expect(prompt).toContain('28-DAY BODY COMPOSITION & METABOLISM');
+  });
+
+  it('runs the same review over a 13-week quarter, in its own words', () => {
+    const metrics = extractMonthlyMetrics({
+      series: mockSeries,
+      observations: mockObservations,
+      sets: mockSets,
+      goal: { direction: 'lose', rateKgPerWeek: 0.5 },
+      targetKcal: 2000,
+      units: 'metric',
+      endDate,
+      weeks: 13,
+    });
+    expect(metrics.weeks).toBe(13);
+    expect(metrics.weeklyAdherence).toHaveLength(13);
+    expect(metrics.period.from).toBe(addDays(endDate, -90));
+
+    const prompt = buildMonthlyCoachingPrompt(metrics, { direction: 'lose', rateKgPerWeek: 0.5 }, 'ascend');
+    expect(prompt).toContain('91-DAY QUARTERLY COACHING REVIEW');
+    expect(prompt).toContain('(13 full weeks)');
+    expect(prompt).toContain('Week 13');
+    expect(prompt).not.toContain('30-DAY');
   });
 
   it('validates a schema-compliant monthly review response', () => {

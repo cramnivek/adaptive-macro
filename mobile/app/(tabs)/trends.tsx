@@ -8,7 +8,7 @@ import {
   todayISO,
 } from '@adaptive-macros/engine';
 import type { DatedSet, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -70,6 +70,17 @@ import {
 import { notify } from '../../src/dialog';
 import { thud } from '../../src/platform/haptics';
 import { getEventCopy } from '../../src/copy/personality';
+import {
+  CHECK_IN_WEEKS,
+  checkInAppliedKey,
+  checkInLockedNote,
+  checkInStatus,
+  checkInStorageKey,
+  firstLoggedDate,
+  qualifyingDays,
+  type CheckInKind,
+  type CheckInPeriod,
+} from '../../src/checkInSchedule';
 
 export type Timeframe = 'week' | 'month' | 'year';
 
@@ -101,6 +112,9 @@ export default function TrendsScreen() {
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
   const [timeframe, setTimeframe] = useState<Timeframe>('month');
+  // Arriving from Today's "your week is ready" opens that check-in directly.
+  const { checkin } = useLocalSearchParams<{ checkin?: string }>();
+  const router = useRouter();
   const [intake, setIntake] = useState<{ date: string; kcal: number; proteinG?: number }[]>([]);
   const [method, setMethod] = useState(false);
   const [sets, setSets] = useState<DatedSet[]>([]);
@@ -111,6 +125,18 @@ export default function TrendsScreen() {
 
   // Coaching review state (weekly)
   const [coachingModalOpen, setCoachingModalOpen] = useState(false);
+  // A past check-in opened from the history list. While set, the modal and
+  // the metrics behind it are about that period instead of the latest one.
+  const [pastPeriod, setPastPeriod] = useState<CheckInPeriod | null>(null);
+  const [history, setHistory] = useState<{ period: CheckInPeriod; headline: string }[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => {
+    if (checkin !== 'weekly' && checkin !== 'monthly' && checkin !== 'quarterly') return;
+    setTimeframe(checkin === 'weekly' ? 'week' : checkin === 'monthly' ? 'month' : 'year');
+    setCoachingModalOpen(true);
+    // Cleared so coming back to the tab later does not reopen it.
+    router.setParams({ checkin: undefined });
+  }, [checkin, router]);
   const [coachingReview, setCoachingReview] = useState<WeeklyReviewResult | null>(null);
   const [coachingLoading, setCoachingLoading] = useState(false);
   const [coachingError, setCoachingError] = useState<string | null>(null);
@@ -208,26 +234,9 @@ export default function TrendsScreen() {
     [series, sets],
   );
 
-  const summary7D: PeriodSummary = useMemo(
-    () => summarisePeriod(sets, bodyweightByDate, weekFrom, today),
-    [sets, bodyweightByDate, weekFrom, today],
-  );
-
   const summaryPeriod: PeriodSummary = useMemo(
     () => summarisePeriod(sets, bodyweightByDate, timeframeFrom, today),
     [sets, bodyweightByDate, timeframeFrom, today],
-  );
-
-  const diagnostics7D: VolumeDiagnostics = useMemo(
-    () =>
-      computeVolumeDiagnostics({
-        sets,
-        exerciseRegions: regions,
-        from: weekFrom,
-        to: today,
-        periodDays: 7,
-      }),
-    [sets, regions, weekFrom, today],
   );
 
   const diagnosticsPeriod: VolumeDiagnostics = useMemo(
@@ -240,18 +249,6 @@ export default function TrendsScreen() {
         periodDays: windowDays,
       }),
     [sets, regions, timeframeFrom, today, windowDays],
-  );
-
-  const diagnosticsMonth: VolumeDiagnostics = useMemo(
-    () =>
-      computeVolumeDiagnostics({
-        sets,
-        exerciseRegions: regions,
-        from: monthFrom,
-        to: today,
-        periodDays: 28,
-      }),
-    [sets, regions, monthFrom, today],
   );
 
   const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, today), [sessionTimes, sets, today]);
@@ -293,6 +290,85 @@ export default function TrendsScreen() {
     };
   }, [sets, regions, timeframeFrom, today]);
 
+  // Which finished periods have earned a check-in (see checkInSchedule). A
+  // check-in is always about a finished week, month or quarter, so it no longer
+  // moves under the person each day or each time a meal is logged.
+  const loggedDays = useMemo(() => qualifyingDays(observations, dayStatus), [observations, dayStatus]);
+  const firstLogged = useMemo(() => firstLoggedDate(observations), [observations]);
+  const weeklyStatus = useMemo(
+    () => checkInStatus('weekly', firstLogged, today, loggedDays),
+    [firstLogged, today, loggedDays],
+  );
+  // The month and year views share the longer review: four weeks, or thirteen
+  // for a quarter. A full year is too long to wait for a first one.
+  const longKind: CheckInKind =
+    pastPeriod && pastPeriod.kind !== 'weekly' ? pastPeriod.kind : timeframe === 'year' ? 'quarterly' : 'monthly';
+  const longStatus = useMemo(
+    () => checkInStatus(longKind, firstLogged, today, loggedDays),
+    [longKind, firstLogged, today, loggedDays],
+  );
+  // The period each review is about: the last finished one. Before any has
+  // finished it is the one in progress, which cannot be reviewed yet.
+  const weeklyPeriod =
+    pastPeriod?.kind === 'weekly' ? pastPeriod : (weeklyStatus?.last?.period ?? weeklyStatus?.current.period ?? null);
+  const longPeriod =
+    pastPeriod && pastPeriod.kind !== 'weekly'
+      ? pastPeriod
+      : (longStatus?.last?.period ?? longStatus?.current.period ?? null);
+  const NOTHING_YET = 'Log a weigh-in and your food to start earning check-ins.';
+  // A past check-in was earned by definition: it has a saved review.
+  const weeklyLockedNote = pastPeriod ? null : weeklyStatus ? checkInLockedNote(weeklyStatus) : NOTHING_YET;
+  const longLockedNote = pastPeriod ? null : longStatus ? checkInLockedNote(longStatus) : NOTHING_YET;
+
+  // Every saved check-in, newest first, for the history list. Re-read whenever
+  // a review is written so a new one appears without leaving the tab.
+  useEffect(() => {
+    let alive = true;
+    const KEY = /^ascend_checkin_(weekly|monthly|quarterly)_(\d{4}-\d{2}-\d{2})$/;
+    void (async () => {
+      const keys = (await AsyncStorage.getAllKeys()).filter((k) => KEY.test(k));
+      const rows = await AsyncStorage.multiGet(keys);
+      const items = rows.flatMap(([key, value]) => {
+        const match = KEY.exec(key);
+        if (!match || !value) return [];
+        const kind = match[1] as CheckInKind;
+        const from = match[2];
+        const headline = (JSON.parse(value) as { review?: { headline?: string } }).review?.headline ?? '';
+        return [{ period: { kind, from, to: addDays(from, CHECK_IN_WEEKS[kind] * 7 - 1) }, headline }];
+      });
+      items.sort((a, b) => (a.period.to === b.period.to ? 0 : a.period.to < b.period.to ? 1 : -1));
+      if (alive) setHistory(items);
+    })().catch(() => {
+      if (alive) setHistory([]);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [coachingReview, monthlyReview]);
+
+  const weeklyCheckInDiagnostics: VolumeDiagnostics = useMemo(
+    () =>
+      computeVolumeDiagnostics({
+        sets,
+        exerciseRegions: regions,
+        from: weeklyPeriod?.from ?? weekFrom,
+        to: weeklyPeriod?.to ?? today,
+        periodDays: 7,
+      }),
+    [sets, regions, weeklyPeriod?.from, weeklyPeriod?.to, weekFrom, today],
+  );
+  const longCheckInDiagnostics: VolumeDiagnostics = useMemo(
+    () =>
+      computeVolumeDiagnostics({
+        sets,
+        exerciseRegions: regions,
+        from: longPeriod?.from ?? monthFrom,
+        to: longPeriod?.to ?? today,
+        periodDays: CHECK_IN_WEEKS[longKind] * 7,
+      }),
+    [sets, regions, longPeriod?.from, longPeriod?.to, monthFrom, today, longKind],
+  );
+
   // Deterministic coaching review metrics (weekly)
   const coachingMetrics: WeeklyExtractedMetrics = useMemo(
     () =>
@@ -301,18 +377,21 @@ export default function TrendsScreen() {
         observations,
         intake,
         sets,
-        diagnostics: diagnostics7D.totalWorkingSets > 0 ? diagnostics7D : null,
+        diagnostics: weeklyCheckInDiagnostics.totalWorkingSets > 0 ? weeklyCheckInDiagnostics : null,
         goalDirection: settings.goal?.direction,
         targetKcal: program?.calories?.kcal,
         targetProteinG: program?.macros?.proteinG,
         units: settings.units,
+        endDate: weeklyPeriod?.to ?? today,
       }),
     [
       series,
       observations,
       intake,
       sets,
-      diagnostics7D,
+      weeklyCheckInDiagnostics,
+      weeklyPeriod?.to,
+      today,
       settings.goal?.direction,
       program?.calories?.kcal,
       program?.macros?.proteinG,
@@ -328,19 +407,22 @@ export default function TrendsScreen() {
         observations,
         intake,
         sets,
-        diagnostics: diagnosticsMonth.totalWorkingSets > 0 ? diagnosticsMonth : null,
+        diagnostics: longCheckInDiagnostics.totalWorkingSets > 0 ? longCheckInDiagnostics : null,
         goal: settings.goal,
         targetKcal: program?.calories?.kcal,
         targetProteinG: program?.macros?.proteinG,
         units: settings.units,
-        endDate: today,
+        endDate: longPeriod?.to ?? today,
+        weeks: CHECK_IN_WEEKS[longKind],
       }),
     [
       series,
       observations,
       intake,
       sets,
-      diagnosticsMonth,
+      longCheckInDiagnostics,
+      longPeriod?.to,
+      longKind,
       settings.goal,
       program?.calories?.kcal,
       program?.macros?.proteinG,
@@ -349,89 +431,57 @@ export default function TrendsScreen() {
     ],
   );
 
-  const coachingFingerprint = `${coachingMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${summary7D.volumeKg}_${summary7D.workingSets}`;
-  const coachingCacheKey = `ascend_weekly_review_${settings.personality}_${coachingMetrics.period.to}`;
-  const coachingAppliedKey = `ascend_applied_coaching_${coachingMetrics.period.to}`;
+  // One saved review per period, under that period's own key. It is never
+  // thrown away by later logging: it is a record of how that period went.
+  const coachingCacheKey = weeklyPeriod ? checkInStorageKey(weeklyPeriod) : null;
+  const coachingAppliedKey = weeklyPeriod ? checkInAppliedKey(weeklyPeriod) : null;
+  const monthlyCacheKey = longPeriod ? checkInStorageKey(longPeriod) : null;
+  const monthlyAppliedKey = longPeriod ? checkInAppliedKey(longPeriod) : null;
 
-  const monthlyFingerprint = `${monthlyMetrics.period.to}_${sets.length}_${observations.length}_${intake.length}_${program?.calories?.kcal ?? 0}_${monthlyMetrics.overallAdherence.score}`;
-  const monthlyCacheKey = `ascend_monthly_review_${settings.personality}_${monthlyMetrics.period.to}`;
-  const monthlyAppliedKey = `ascend_applied_monthly_${monthlyMetrics.period.to}`;
-
-  // Weekly review cache persistence
   useEffect(() => {
     let alive = true;
-    void Promise.all([
-      AsyncStorage.getItem(coachingCacheKey),
-      AsyncStorage.getItem(coachingAppliedKey),
-    ]).then(([savedReview, savedApplied]) => {
-      if (!alive) return;
-      if (savedReview) {
-        try {
-          const parsed = JSON.parse(savedReview) as
-            | { review: WeeklyReviewResult; fingerprint: string }
-            | WeeklyReviewResult;
-          if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
-            if (parsed.fingerprint === coachingFingerprint) {
-              setCoachingReview(parsed.review);
-            } else {
-              setCoachingReview(null);
-            }
-          } else {
-            setCoachingReview(null);
-          }
-        } catch {
-          setCoachingReview(null);
-        }
-      } else {
-        setCoachingReview(null);
-      }
-      if (savedApplied) {
-        setCoachingApplied(true);
-      }
-    });
+    if (!coachingCacheKey || !coachingAppliedKey) {
+      setCoachingReview(null);
+      setCoachingApplied(false);
+      return;
+    }
+    void Promise.all([AsyncStorage.getItem(coachingCacheKey), AsyncStorage.getItem(coachingAppliedKey)])
+      .then(([saved, applied]) => {
+        if (!alive) return;
+        setCoachingReview(saved ? (JSON.parse(saved) as { review: WeeklyReviewResult }).review : null);
+        setCoachingApplied(Boolean(applied));
+      })
+      .catch(() => {
+        if (alive) setCoachingReview(null);
+      });
     return () => {
       alive = false;
     };
-  }, [coachingCacheKey, coachingAppliedKey, coachingFingerprint]);
+  }, [coachingCacheKey, coachingAppliedKey]);
 
-  // Monthly review cache persistence
   useEffect(() => {
     let alive = true;
-    void Promise.all([
-      AsyncStorage.getItem(monthlyCacheKey),
-      AsyncStorage.getItem(monthlyAppliedKey),
-    ]).then(([savedReview, savedApplied]) => {
-      if (!alive) return;
-      if (savedReview) {
-        try {
-          const parsed = JSON.parse(savedReview) as
-            | { review: MonthlyReviewResult; fingerprint: string }
-            | MonthlyReviewResult;
-          if (parsed && 'fingerprint' in parsed && parsed.fingerprint) {
-            if (parsed.fingerprint === monthlyFingerprint) {
-              setMonthlyReview(parsed.review);
-            } else {
-              setMonthlyReview(null);
-            }
-          } else {
-            setMonthlyReview(null);
-          }
-        } catch {
-          setMonthlyReview(null);
-        }
-      } else {
-        setMonthlyReview(null);
-      }
-      if (savedApplied) {
-        setMonthlyApplied(true);
-      }
-    });
+    if (!monthlyCacheKey || !monthlyAppliedKey) {
+      setMonthlyReview(null);
+      setMonthlyApplied(false);
+      return;
+    }
+    void Promise.all([AsyncStorage.getItem(monthlyCacheKey), AsyncStorage.getItem(monthlyAppliedKey)])
+      .then(([saved, applied]) => {
+        if (!alive) return;
+        setMonthlyReview(saved ? (JSON.parse(saved) as { review: MonthlyReviewResult }).review : null);
+        setMonthlyApplied(Boolean(applied));
+      })
+      .catch(() => {
+        if (alive) setMonthlyReview(null);
+      });
     return () => {
       alive = false;
     };
-  }, [monthlyCacheKey, monthlyAppliedKey, monthlyFingerprint]);
+  }, [monthlyCacheKey, monthlyAppliedKey]);
 
   const handleGenerateCoaching = useCallback(async () => {
+    if (weeklyLockedNote || !coachingCacheKey) return;
     setCoachingLoading(true);
     setCoachingError(null);
     try {
@@ -444,10 +494,7 @@ export default function TrendsScreen() {
       );
       setCoachingReview(result);
       setCoachingApplied(false);
-      await AsyncStorage.setItem(
-        coachingCacheKey,
-        JSON.stringify({ review: result, fingerprint: coachingFingerprint }),
-      );
+      await AsyncStorage.setItem(coachingCacheKey, JSON.stringify({ review: result, savedAt: Date.now() }));
       thud('heavy');
       notify('Review ready', 'Your weekly coaching review is ready.');
     } catch (err) {
@@ -457,9 +504,10 @@ export default function TrendsScreen() {
     } finally {
       setCoachingLoading(false);
     }
-  }, [coachingMetrics, settings.goal?.direction, settings.personality, coachingCacheKey, coachingFingerprint]);
+  }, [coachingMetrics, settings.goal?.direction, settings.personality, coachingCacheKey, weeklyLockedNote]);
 
   const handleGenerateMonthlyCoaching = useCallback(async () => {
+    if (longLockedNote || !monthlyCacheKey) return;
     setMonthlyLoading(true);
     setMonthlyError(null);
     try {
@@ -472,12 +520,12 @@ export default function TrendsScreen() {
       );
       setMonthlyReview(result);
       setMonthlyApplied(false);
-      await AsyncStorage.setItem(
-        monthlyCacheKey,
-        JSON.stringify({ review: result, fingerprint: monthlyFingerprint }),
-      );
+      await AsyncStorage.setItem(monthlyCacheKey, JSON.stringify({ review: result, savedAt: Date.now() }));
       thud('heavy');
-      notify('Monthly Review ready', 'Your 30-day comprehensive monthly review is ready.');
+      notify(
+        longKind === 'quarterly' ? 'Quarterly review ready' : 'Monthly review ready',
+        `Your ${CHECK_IN_WEEKS[longKind]}-week review is ready.`,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to generate monthly review';
       setMonthlyError(msg);
@@ -485,10 +533,10 @@ export default function TrendsScreen() {
     } finally {
       setMonthlyLoading(false);
     }
-  }, [monthlyMetrics, settings.goal, settings.personality, monthlyCacheKey, monthlyFingerprint]);
+  }, [monthlyMetrics, settings.goal, settings.personality, monthlyCacheKey, longLockedNote, longKind]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
-    if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied) return;
+    if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied || !coachingAppliedKey) return;
     thud('heavy');
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
@@ -523,7 +571,7 @@ export default function TrendsScreen() {
   }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, coachingAppliedKey]);
 
   const handleApplyMonthlyAdjustment = useCallback(async () => {
-    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || monthlyApplied) return;
+    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || monthlyApplied || !monthlyAppliedKey) return;
     thud('heavy');
     const adj = monthlyReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
@@ -621,6 +669,52 @@ export default function TrendsScreen() {
     timeframe === 'week' ? 'past 7 days' : timeframe === 'month' ? 'past 30 days' : 'past year';
   const comparison = volumeComparison(summaryPeriod.volumeKg);
 
+  // What the check-in card says for the selected view: the weekly check-in on
+  // Week, the monthly one on Month, the quarterly one on Year. Until a period
+  // has earned its check-in the card shows how far along the current one is,
+  // rather than a button that would write a review from a few days of data.
+  const card = useMemo(() => {
+    const isWeek = timeframe === 'week';
+    const kind: CheckInKind = isWeek ? 'weekly' : longKind;
+    const status = isWeek ? weeklyStatus : longStatus;
+    const review = isWeek ? coachingReview : monthlyReview;
+    const locked = isWeek ? weeklyLockedNote : longLockedNote;
+    const gymrat = settings.personality === 'gymrat';
+    const span = kind === 'weekly' ? 'week' : kind === 'monthly' ? 'month' : 'quarter';
+    const tag =
+      kind === 'weekly'
+        ? getEventCopy('trends.weekly_recap_tag', { personality: settings.personality, seed: 'weekly_tag' })
+        : kind === 'monthly'
+          ? gymrat ? '4-WEEK RECAP 🔥' : 'MONTHLY CHECK-IN'
+          : gymrat ? '13-WEEK RECAP 🏆' : 'QUARTERLY CHECK-IN';
+    const last = status?.last?.period;
+    const pill = review
+      ? gymrat ? 'LOCKED IN 🔥' : 'READ IT'
+      : locked
+        ? status ? `${status.current.logged}/${status.current.needed} DAYS` : 'NOT YET'
+        : gymrat ? 'TAP TO CHECK IN 🏋️' : 'READY';
+    const headline = review
+      ? `"${review.headline}"`
+      : locked
+        ? status
+          ? `${status.current.logged} of ${status.current.needed} logged days this ${span}, ${status.current.daysLeft} to go`
+          : NOTHING_YET
+        : last
+          ? `${formatDayMonth(last.from)} to ${formatDayMonth(last.to)} is ready to review`
+          : '';
+    return { noun: kind, tag, pill, headline, review, locked };
+  }, [
+    timeframe,
+    longKind,
+    weeklyStatus,
+    longStatus,
+    coachingReview,
+    monthlyReview,
+    weeklyLockedNote,
+    longLockedNote,
+    settings.personality,
+  ]);
+
   return (
     <Screen
       title="Trends & Progress"
@@ -696,9 +790,7 @@ export default function TrendsScreen() {
             { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={
-            timeframe === 'month' ? 'Open Monthly Coaching Review' : 'Open Weekly Coach Review'
-          }
+          accessibilityLabel={`Open the ${card.noun} check-in`}
         >
           <View style={styles.coachingBannerLeft}>
             <View
@@ -708,64 +800,40 @@ export default function TrendsScreen() {
               ]}
             >
               <Ionicons
-                name={timeframe === 'month' ? 'calendar' : 'sparkles'}
+                name={timeframe === 'week' ? 'sparkles' : 'calendar'}
                 size={18}
                 color={colors.accent}
               />
             </View>
             <View style={styles.coachingBannerContent}>
               <View style={styles.coachingTagRow}>
-                <Text style={[styles.coachingTag, { color: colors.textMuted }]}>
-                  {timeframe === 'month'
-                    ? (settings.personality === 'gymrat' ? '30-DAY MESOCYCLE RECAP 🔥' : 'MONTHLY REVIEW (30D)')
-                    : timeframe === 'year'
-                      ? (settings.personality === 'gymrat' ? 'FULL YEAR GAINS OVERVIEW 🏆' : 'YEARLY OVERVIEW (1Y)')
-                      : getEventCopy('trends.weekly_recap_tag', {
-                          personality: settings.personality,
-                          seed: 'weekly_tag',
-                        })}
+                <Text style={[styles.coachingTag, { color: colors.textMuted }]} numberOfLines={1}>
+                  {card.tag}
                 </Text>
                 <View
                   style={[
                     styles.readyPill,
-                    (timeframe === 'month' ? monthlyReview : coachingReview)
+                    card.review
                       ? { backgroundColor: colors.positive + '20', borderColor: colors.positive }
-                      : { backgroundColor: colors.warning + '20', borderColor: colors.warning },
+                      : card.locked
+                        ? { backgroundColor: colors.surface, borderColor: colors.border }
+                        : { backgroundColor: colors.warning + '20', borderColor: colors.warning },
                   ]}
                 >
                   <Text
                     style={[
                       styles.readyPillText,
                       {
-                        color: (timeframe === 'month' ? monthlyReview : coachingReview)
-                          ? colors.positive
-                          : colors.warning,
+                        color: card.review ? colors.positive : card.locked ? colors.textMuted : colors.warning,
                       },
                     ]}
                   >
-                    {timeframe === 'month'
-                      ? monthlyReview
-                        ? (settings.personality === 'gymrat' ? '30D LOCKED IN 🔥' : '30D READY')
-                        : (settings.personality === 'gymrat' ? 'TAP TO LOCK IN 🔥' : 'TAP TO REVIEW')
-                      : coachingReview
-                        ? getEventCopy('trends.weekly_recap_action', {
-                            personality: settings.personality,
-                            seed: 'recap_action',
-                          })
-                        : (settings.personality === 'gymrat' ? 'TAP TO CHECK IN 🏋️' : 'TAP TO CHECK IN')}
+                    {card.pill}
                   </Text>
                 </View>
               </View>
-              <Text style={[styles.coachingHeadline, { color: colors.text }]} numberOfLines={1}>
-                {timeframe === 'month'
-                  ? monthlyReview
-                    ? `"${monthlyReview.headline}"`
-                    : (settings.personality === 'gymrat'
-                        ? 'See if you actually locked in on macros and progressive overload over 30 days'
-                        : 'Evaluate 4-week adherence, metabolic shift, and training over 30 days')
-                  : coachingReview
-                    ? `"${coachingReview.headline}"`
-                    : 'See how your workouts, scale weight, and calories connected this week'}
+              <Text style={[styles.coachingHeadline, { color: colors.text }]} numberOfLines={2}>
+                {card.headline}
               </Text>
             </View>
           </View>
@@ -774,6 +842,48 @@ export default function TrendsScreen() {
           </View>
         </Tappable>
       </FadeIn>
+
+      {/* Past check-ins: each is kept for the period it covers, so they can be
+          read again rather than vanishing when the next one is written. */}
+      {history.length > 0 && (
+        <View style={styles.history}>
+          <Tappable
+            onPress={() => setHistoryOpen((open) => !open)}
+            scaleTo={0.98}
+            style={styles.historyToggle}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: historyOpen }}
+          >
+            <Text style={[styles.historyToggleText, { color: colors.textMuted }]}>
+              PAST CHECK-INS ({history.length})
+            </Text>
+            <Ionicons name={historyOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+          </Tappable>
+          {historyOpen &&
+            history.map((item) => (
+              <Tappable
+                key={`${item.period.kind}_${item.period.from}`}
+                onPress={() => {
+                  thud('light');
+                  setPastPeriod(item.period);
+                  setCoachingModalOpen(true);
+                }}
+                scaleTo={0.98}
+                style={[styles.historyRow, { borderColor: colors.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Open the ${item.period.kind} check-in for ${formatDayMonth(item.period.from)} to ${formatDayMonth(item.period.to)}`}
+              >
+                <Text style={[styles.historyPeriod, { color: colors.textMuted }]}>
+                  {item.period.kind === 'weekly' ? 'WEEK' : item.period.kind === 'monthly' ? 'MONTH' : 'QUARTER'} ·{' '}
+                  {formatDayMonth(item.period.from)} – {formatDayMonth(item.period.to)}
+                </Text>
+                <Text style={[styles.historyHeadline, { color: colors.text }]} numberOfLines={1}>
+                  {item.headline}
+                </Text>
+              </Tappable>
+            ))}
+        </View>
+      )}
 
       {/* Unified Tab Switcher */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
@@ -1221,7 +1331,10 @@ export default function TrendsScreen() {
       {/* Weekly & Monthly Coaching Review Modal Popup */}
       <WeeklyReviewModal
         open={coachingModalOpen}
-        onClose={() => setCoachingModalOpen(false)}
+        onClose={() => {
+          setCoachingModalOpen(false);
+          setPastPeriod(null);
+        }}
         review={coachingReview}
         metrics={coachingMetrics}
         loading={coachingLoading}
@@ -1239,8 +1352,12 @@ export default function TrendsScreen() {
         monthlyApplied={monthlyApplied}
         onGenerateMonthly={handleGenerateMonthlyCoaching}
         onApplyMonthlyAdjustment={handleApplyMonthlyAdjustment}
-        initialMode={timeframe === 'month' ? 'monthly' : 'weekly'}
+        initialMode={
+          pastPeriod ? (pastPeriod.kind === 'weekly' ? 'weekly' : 'monthly') : timeframe === 'week' ? 'weekly' : 'monthly'
+        }
         units={settings.units}
+        weeklyLockedNote={coachingReview ? null : weeklyLockedNote}
+        monthlyLockedNote={monthlyReview ? null : longLockedNote}
       />
 
       <StepLogModal
@@ -1342,8 +1459,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  // Wraps, so a long label pushes the pill to the next line instead of being
+  // squeezed into three.
   coachingTagRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
@@ -1362,6 +1482,37 @@ const styles = StyleSheet.create({
     fontFamily: font.uiStrong,
     fontSize: 11,
     letterSpacing: 0.8,
+  },
+  history: {
+    marginBottom: space.md,
+    gap: space.xs,
+  },
+  historyToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: TOUCH_TARGET,
+  },
+  historyToggleText: {
+    fontFamily: font.uiStrong,
+    fontSize: 11,
+    letterSpacing: 1.1,
+  },
+  historyRow: {
+    minHeight: TOUCH_TARGET,
+    justifyContent: 'center',
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+  },
+  historyPeriod: {
+    fontFamily: font.uiStrong,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  historyHeadline: {
+    fontFamily: font.ui,
+    fontSize: 13,
   },
   coachingHeadline: {
     fontFamily: font.ui,
