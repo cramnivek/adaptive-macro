@@ -262,4 +262,14 @@ export const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_daily_steps_date ON daily_steps (date);
   `,
+  // v14 — where a body-fat figure came from
+  //
+  // 'entered' (typed in: a scan, a smart scale, a caliper reading), 'tape'
+  // (the Navy estimate from the sheet's own circumferences) or 'photo' (the
+  // Gemini visual range). The estimator trusts a photo least, so it needs to
+  // know which is which. Null on rows from before this step, which were all
+  // typed in, and is read as 'entered'.
+  `
+  ALTER TABLE body_measurements ADD COLUMN body_fat_source TEXT;
+  `,
 ];

@@ -36,15 +36,15 @@ export interface BodyContext {
  * of loose clothing should get no figure at all. Language is constrained
  * because the person reading the reply is looking at their own body.
  */
-export const BODY_FAT_INSTRUCTION = `You estimate body fat percentage from two photographs of one adult: a front view and a side view, in minimal clothing such as underwear, swimwear, or shorts with a sports bra.
+export const BODY_FAT_INSTRUCTION = `You estimate body fat percentage from two photographs of one adult: a front view and a side view. They are usually mirror selfies taken at home, often bare-chested or in a sports bra, sometimes in trousers.
 
-People store fat in different places: some mostly around the abdomen, others on the hips, thighs, arms or back. Look at every region you can see and weigh them together; do not judge from the abdomen alone.
+People store fat in different places: some mostly around the abdomen, others on the hips, thighs, arms or back. Look at every region you can see and weigh them together; do not judge from the abdomen alone. When a region is covered, such as legs in trousers, estimate from what is visible, say in "basis" what was covered, and widen the range to reflect it rather than declining.
 
 Return a range, lowPct to highPct, that a careful visual assessment can honestly support. Visual estimates are rarely better than ±3 points, so the range should normally be 5 to 8 points wide, and wider when lighting, pose or clothing hide the body's outline. Use the sex, age, height and weight given as context.
 
 In "basis", give two to four short, neutral observations about what you saw that set the range, covering the regions that mattered, such as how defined the abdomen is, the outline of the waist in the side view, the shape of the hips and thighs, or muscle definition in the arms and shoulders. Describe; do not judge. Never comment on attractiveness, health, or anything other than body composition, and ignore the face and background.
 
-Set "usable" to false, leave the numbers at 0, and say in "reason" in one sentence how to retake the photos, when any of these is true: the photos do not show a person; they show more than one person; the body is not visible from shoulders to knees; clothing hides the body's shape; the two photos are not a front and a side view of the same person. If the person may be under 18, set "usable" to false and say only that this estimate is for adults.`;
+Set "usable" to false, leave the numbers at 0, and say in "reason" in one sentence how to retake the photos, only when one of these is true: the photos do not show a person; they show more than one person; the torso from shoulders to waistband is not visible in either photo; loose clothing covers the torso; the two photos are not a front and a side view of the same person. A phone held in front of part of the body, a mirror's frame, or covered legs are not reasons to decline. If the person may be under 18, set "usable" to false and say only that this estimate is for adults.`;
 
 const RESPONSE_SCHEMA = {
   type: 'object',

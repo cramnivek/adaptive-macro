@@ -9,6 +9,8 @@ import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
 import { TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
+import { chooseBodyFat } from '../state/bodyFatChoice';
+import { BodyFatPhotoSheet } from './BodyFatPhotoSheet';
 import { BodyMeasurementsSheet } from './BodyMeasurementsSheet';
 
 interface BodyMeasurementsCardProps {
@@ -24,6 +26,7 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
   const { refreshAll } = useApp();
   const [records, setRecords] = useState<BodyMeasurementRecord[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<BodyMeasurementRecord | null>(null);
 
   const loadData = async () => {
@@ -40,6 +43,10 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
   }, []);
 
   const latest = records[0] ?? null;
+  // A tape or typed figure outranks a photo read (see bodyFatChoice), so the
+  // photo sheet says so rather than implying its result will take over.
+  const chosen = chooseBodyFat(records);
+  const betterFigure = chosen && chosen.source !== 'photo' ? { pct: chosen.pct, source: chosen.source } : null;
   const previous = records[1] ?? null;
 
   const formatVal = (cmVal: number | null | undefined): string | null => {
@@ -144,8 +151,17 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
           <View style={[styles.logBtnInner, { backgroundColor: loud.loud }]}>
             <Ionicons name="add" size={18} color={loud.onLoud} style={{ marginRight: 4 }} />
             <Text style={[styles.logBtnText, { color: loud.onLoud }]}>
-              {latest ? 'LOG NEW MEASUREMENT' : '+ LOG FIRST MEASUREMENT'}
+              {latest ? 'LOG NEW MEASUREMENT' : 'LOG FIRST MEASUREMENT'}
             </Text>
+          </View>
+        </Tappable>
+
+        {/* The photo route gets a button of its own: as a link inside the
+            measurements form it was scrolled past. */}
+        <Tappable onPress={() => setPhotoOpen(true)} scaleTo={0.97} style={styles.logBtn}>
+          <View style={styles.photoBtnInner}>
+            <Ionicons name="camera-outline" size={18} color={loud.figure} style={{ marginRight: 6 }} />
+            <Text style={styles.photoBtnText}>ESTIMATE BODY FAT FROM PHOTOS</Text>
           </View>
         </Tappable>
       </View>
@@ -161,6 +177,15 @@ export const BodyMeasurementsCard = ({ units }: BodyMeasurementsCardProps) => {
           void refreshAll();
         }}
         initialRecord={selectedRecord}
+      />
+      <BodyFatPhotoSheet
+        open={photoOpen}
+        onClose={() => setPhotoOpen(false)}
+        betterFigure={betterFigure}
+        onSaved={() => {
+          void loadData();
+          void refreshAll();
+        }}
       />
     </Card>
   );
@@ -311,6 +336,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.lg,
     minHeight: TOUCH_TARGET,
+  },
+  photoBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    minHeight: TOUCH_TARGET,
+    borderWidth: 1,
+    borderColor: loud.loud,
+  },
+  photoBtnText: {
+    fontFamily: font.display,
+    fontSize: 12,
+    fontWeight: '800',
+    color: loud.figure,
+    letterSpacing: 1,
   },
   logBtnText: {
     fontFamily: font.display,

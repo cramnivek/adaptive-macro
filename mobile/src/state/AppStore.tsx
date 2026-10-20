@@ -38,6 +38,7 @@ import * as db from '../db';
 import { pushBaselineToCloud } from '../social/baselineSync';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
+import { chooseBodyFat } from './bodyFatChoice';
 
 /**
  * Rescales an entry's stored totals to a new portion.
@@ -110,7 +111,12 @@ interface AppState {
    * What the estimate assumes a kilo of weight change is worth, and the body
    * fat it was worked out from, so the screen can say so rather than hide it.
    */
-  energyDensity: { kcalPerKg: number; bodyFatPct: number; measured: boolean };
+  energyDensity: {
+    kcalPerKg: number;
+    bodyFatPct: number;
+    /** Where the logged figure came from; null when it is the BMI-based guess. */
+    source: db.BodyFatSource | null;
+  };
 
   /** Full filtered history, oldest first. Empty until a first weigh-in exists. */
   series: DailyEstimate[];
@@ -140,7 +146,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [selectedDate, setSelectedDate] = useState<ISODate>(todayISO());
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weights, setWeights] = useState<db.WeightRow[]>([]);
-  const [measuredBodyFatPct, setMeasuredBodyFatPct] = useState<number | null>(null);
+  const [loggedBodyFat, setLoggedBodyFat] = useState<{ pct: number; source: db.BodyFatSource } | null>(null);
   const [observations, setObservations] = useState<DailyObservation[]>([]);
   const [dayStatus, setDayStatus] = useState<Map<ISODate, boolean>>(new Map());
 
@@ -153,8 +159,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // patched. The data is small — years of daily logs is a few thousand rows.
   const reloadHistory = useCallback(async () => {
     setWeights(await db.listWeights());
-    const measured = (await db.getLatestBodyMeasurements(20)).find((m) => m.bodyFatPct != null);
-    setMeasuredBodyFatPct(measured?.bodyFatPct ?? null);
+    setLoggedBodyFat(chooseBodyFat(await db.getLatestBodyMeasurements(20)));
     setObservations(await db.loadObservations());
     setDayStatus(await db.listDayStatus());
   }, []);
@@ -316,7 +321,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // set in the same units it is measured in. A stored value other than the
   // default is someone's deliberate choice and is kept.
   const bodyFatPct =
-    measuredBodyFatPct ??
+    loggedBodyFat?.pct ??
     deurenbergBodyFatPct(latestWeightKg ?? 80, settings.profile.heightCm, settings.profile.age, settings.profile.sex);
   const kcalPerKgChange =
     settings.kcalPerKgTissue !== KCAL_PER_KG_TISSUE
@@ -405,7 +410,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     observations,
     dayStatus,
     markDay,
-    energyDensity: { kcalPerKg: kcalPerKgChange, bodyFatPct, measured: measuredBodyFatPct !== null },
+    energyDensity: { kcalPerKg: kcalPerKgChange, bodyFatPct, source: loggedBodyFat?.source ?? null },
     weights,
     recordWeight,
     removeWeight,
