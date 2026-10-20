@@ -164,9 +164,8 @@ export default function AccountScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Health & Step Activity</Text>
             <Text style={[styles.subNote, { color: colors.textMuted }]}>
-              {healthConfig?.enabled
-                ? `Auto-sync active (${healthConfig.provider === 'apple_health' ? 'Apple Health' : 'Google Health Connect'}) · ${(healthConfig.dailyStepGoal || 10000).toLocaleString()} steps daily goal`
-                : 'Connect Apple Health or Google Health Connect to automatically sync steps & activity'}
+              {/* No health-app connection exists yet, whatever an older build saved. */}
+              {`Entered by hand for now · ${(healthConfig?.dailyStepGoal || 10000).toLocaleString()} steps daily goal`}
             </Text>
           </View>
         </View>

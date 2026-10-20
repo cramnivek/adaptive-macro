@@ -37,6 +37,7 @@ import {
   listAllSets,
   type DailyStepRecord,
 } from '../../src/db';
+import { StepBars } from '../../src/components/StepBars';
 import { StepLogModal } from '../../src/components/StepLogModal';
 import { calculateNeatKcal } from '../../src/health/neat';
 import { calculateCoachingGoalAdjustment } from '../../src/ai/coachingAdjustment';
@@ -152,6 +153,9 @@ export default function TrendsScreen() {
   // Daily Steps and Activity Sync State
   const [stepsHistory, setStepsHistory] = useState<DailyStepRecord[]>([]);
   const [stepModalOpen, setStepModalOpen] = useState(false);
+  // The day the step sheet is for: today from the button, any of the last
+  // seven from the bars.
+  const [stepDate, setStepDate] = useState<string>(todayISO());
   const [refreshing, setRefreshing] = useState(false);
 
   const unit = weightUnit(settings.units);
@@ -209,6 +213,11 @@ export default function TrendsScreen() {
   const timeframeSteps = useMemo(() => {
     return stepsHistory.filter((s) => s.date >= timeframeFrom && s.date <= today);
   }, [stepsHistory, timeframeFrom, today]);
+
+  const stepsByDate = useMemo(
+    () => new Map(stepsHistory.map((s) => [s.date, s.steps] as const)),
+    [stepsHistory],
+  );
 
   const stepsSummary = useMemo(() => {
     const totalSteps = timeframeSteps.reduce((acc, s) => acc + s.steps, 0);
@@ -1130,44 +1139,31 @@ export default function TrendsScreen() {
           {/* Daily steps & NEAT expenditure */}
           <Card title={settings.personality === 'gymrat' ? 'Daily steps & NEAT burn 🔥' : 'Daily steps & NEAT activity'}>
             <View style={styles.stepsCardContent}>
-              <View style={styles.stepsGlanceRow}>
-                <View style={styles.stepsGlanceCol}>
-                  <Text style={[styles.stepsGlanceVal, { color: colors.text }]}>
-                    {stepsSummary.avgSteps.toLocaleString()}
-                  </Text>
-                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    {settings.personality === 'gymrat' ? 'daily steps' : 'avg daily steps'}
-                  </Text>
-                </View>
-                <View style={styles.stepsGlanceCol}>
-                  <Text style={[styles.stepsGlanceVal, { color: colors.accent }]}>
-                    ~{stepsSummary.avgNeatKcal} kcal
-                  </Text>
-                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    {settings.personality === 'gymrat' ? 'free NEAT burn 🔥' : 'avg daily NEAT'}
-                  </Text>
-                </View>
-                <View style={styles.stepsGlanceCol}>
-                  <Text style={[styles.stepsGlanceVal, { color: colors.positive }]}>
-                    {stepsSummary.totalDistanceKm} km
-                  </Text>
-                  <Text style={[styles.stepsGlanceLabel, { color: colors.textMuted }]}>
-                    distance moved
-                  </Text>
-                </View>
-              </View>
+              <StepBars
+                today={today}
+                byDate={stepsByDate}
+                goal={10000}
+                onPressDay={(date) => {
+                  thud('light');
+                  setStepDate(date);
+                  setStepModalOpen(true);
+                }}
+              />
 
+              {/* What the numbers are: an average of the days with a count, and
+                  whether today has one. It used to call that average "daily
+                  steps" and say walking fed the energy estimate, which it does not. */}
               <Text style={[styles.stepsExplainer, { color: colors.textMuted }]}>
                 {stepsSummary.daysLogged > 0
-                  ? `${stepsSummary.totalSteps.toLocaleString()} total steps logged over ${timeframeLabel}. Non-exercise movement fuels your metabolic baseline.`
-                  : (settings.personality === 'gymrat'
-                      ? 'No steps logged for this period yet. Lock in your daily steps or sync Apple Health / Health Connect to keep your calorie burn high.'
-                      : 'No steps recorded for this period yet. Log daily steps or connect Apple Health / Google Health Connect to factor walking into your energy expenditure.')}
+                  ? `Average ${stepsSummary.avgSteps.toLocaleString()} steps on the ${stepsSummary.daysLogged} of ${dataCoverage.dataDays || windowDays} days with a count, about ${stepsSummary.avgNeatKcal} kcal of walking a day. Today: ${stepsByDate.has(today) ? `${stepsByDate.get(today)!.toLocaleString()} steps` : 'not logged'}.`
+                  : 'No steps logged for this period yet.'}{' '}
+                Steps are for your own record; the burn estimate comes from your weight and food.
               </Text>
 
               <Tappable
                 onPress={() => {
                   thud('light');
+                  setStepDate(today);
                   setStepModalOpen(true);
                 }}
                 style={[
@@ -1177,7 +1173,7 @@ export default function TrendsScreen() {
               >
                 <Ionicons name="footsteps" size={15} color={colors.accent} />
                 <Text style={[styles.logStepsBtnText, { color: colors.text }]}>
-                  {settings.personality === 'gymrat' ? 'Log Steps / Health Sync 🔥' : 'Log Steps / Sync Health'}
+                  {settings.personality === 'gymrat' ? "Log today's steps 🔥" : "Log today's steps"}
                 </Text>
               </Tappable>
             </View>
@@ -1400,8 +1396,8 @@ export default function TrendsScreen() {
       <StepLogModal
         visible={stepModalOpen}
         onClose={() => setStepModalOpen(false)}
-        date={today}
-        initialSteps={stepsHistory.find((s) => s.date === today)?.steps ?? 0}
+        date={stepDate}
+        initialSteps={stepsByDate.get(stepDate) ?? 0}
         userWeightKg={latest?.trendWeightKg ?? 75}
         onSaved={() => {
           void fetchTrendsData();
@@ -1761,25 +1757,6 @@ const styles = StyleSheet.create({
   },
   stepsCardContent: {
     gap: space.md,
-  },
-  stepsGlanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: space.xs,
-  },
-  stepsGlanceCol: {
-    alignItems: 'center',
-    gap: 2,
-    flex: 1,
-  },
-  stepsGlanceVal: {
-    fontFamily: font.figure,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  stepsGlanceLabel: {
-    fontFamily: font.ui,
-    fontSize: 11,
   },
   stepsExplainer: {
     fontFamily: font.ui,

@@ -141,3 +141,9 @@ export const bulkSaveDailySteps = async (inputs: SaveDailyStepsInput[]): Promise
     }
   });
 };
+
+/** Removes a day's count, so a day nobody walked is not stored as a day of zero steps. */
+export const deleteDailySteps = async (date: ISODate): Promise<void> => {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM daily_steps WHERE date = ?', date);
+};

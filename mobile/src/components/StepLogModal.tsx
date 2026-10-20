@@ -1,9 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,12 +10,12 @@ import {
   View,
 } from 'react-native';
 import type { ISODate } from '@adaptive-macros/engine';
+import { deleteDailySteps } from '../db';
 import { notify } from '../dialog';
 import { calculateDistanceKm, calculateNeatKcal } from '../health/neat';
 import {
   loadHealthSyncConfig,
   logDailyStepCount,
-  saveHealthSyncConfig,
 } from '../health/healthSync';
 import type { HealthSyncConfig } from '../health/types';
 import { thud } from '../platform/haptics';
@@ -47,7 +45,6 @@ export const StepLogModal = ({
   const [steps, setSteps] = useState<number>(initialSteps);
   const [stepInput, setStepInput] = useState<string>(initialSteps > 0 ? String(initialSteps) : '');
   const [config, setConfig] = useState<HealthSyncConfig | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -76,66 +73,28 @@ export const StepLogModal = ({
     thud('heavy');
     setIsSaving(true);
     try {
-      await logDailyStepCount({
-        date,
-        steps,
-        bodyWeightKg: userWeightKg,
-        source: config?.enabled ? (config.provider ?? 'health_sync') : 'manual',
-      });
+      // Zero clears the day: a stored zero would count as a logged day and
+      // pull the average down for a day that was simply not recorded.
+      if (steps === 0) {
+        await deleteDailySteps(date);
+      } else {
+        await logDailyStepCount({
+          date,
+          steps,
+          bodyWeightKg: userWeightKg,
+          source: 'manual',
+        });
+      }
       onSaved?.(steps);
-      notify('Steps Logged', `${steps.toLocaleString()} steps saved for ${date}`);
+      notify(
+        steps === 0 ? 'Steps cleared' : 'Steps Logged',
+        steps === 0 ? `No step count for ${date}.` : `${steps.toLocaleString()} steps saved for ${date}`,
+      );
       onClose();
     } catch (err) {
       notify('Error', (err as Error).message);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleToggleSync = async () => {
-    thud('light');
-    setIsSyncing(true);
-    try {
-      const willEnable = !config?.enabled;
-      const defaultProvider =
-        Platform.OS === 'ios'
-          ? 'apple_health'
-          : Platform.OS === 'android'
-            ? 'health_connect'
-            : 'apple_health';
-
-      const updated = await saveHealthSyncConfig({
-        enabled: willEnable,
-        provider: willEnable ? defaultProvider : 'manual',
-        lastSyncTimestamp: willEnable ? new Date().toISOString() : null,
-      });
-      setConfig(updated);
-
-      if (willEnable) {
-        // If enabling and current steps are 0, initialize with active sync count
-        const newCount = steps > 0 ? steps : 8500;
-        if (steps === 0) {
-          setSteps(newCount);
-          setStepInput(String(newCount));
-        }
-        await logDailyStepCount({
-          date,
-          steps: newCount,
-          bodyWeightKg: userWeightKg,
-          source: defaultProvider,
-        });
-        onSaved?.(newCount);
-        notify(
-          'Health Sync Connected',
-          `Connected to ${defaultProvider === 'apple_health' ? 'Apple Health' : 'Google Health Connect'}. Steps and activity will sync automatically!`,
-        );
-      } else {
-        notify('Health Sync Disabled', 'Manual logging mode active.');
-      }
-    } catch (err) {
-      notify('Sync Error', (err as Error).message);
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -256,74 +215,18 @@ export const StepLogModal = ({
               )}
             </View>
 
-            {/* Automatic Health Sync Section */}
-            <View style={[styles.syncCard, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <View style={styles.syncHeaderRow}>
-                <Ionicons
-                  name={Platform.OS === 'ios' ? 'heart' : 'fitness'}
-                  size={20}
-                  color={colors.positive}
-                />
-                <View style={styles.syncHeaderTextWrap}>
-                  <Text style={[styles.syncTitle, { color: colors.text }]}>
-                    {Platform.OS === 'ios'
-                      ? 'Apple Health Sync'
-                      : Platform.OS === 'android'
-                        ? 'Google Health Connect'
-                        : 'Health Data Automatic Sync'}
-                  </Text>
-                  <Text style={[styles.syncSubtitle, { color: colors.textMuted }]}>
-                    {config?.enabled
-                      ? 'Automatically connected · Syncing steps & active burn'
-                      : 'Connect once to automatically sync steps with your health data'}
-                  </Text>
-                </View>
-                {config?.enabled && (
-                  <View style={[styles.syncBadge, { backgroundColor: colors.positive + '25', borderColor: colors.positive }]}>
-                    <Text style={[styles.syncBadgeText, { color: colors.positive }]}>ACTIVE</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.syncActionsRow}>
-                <Tappable
-                  onPress={handleToggleSync}
-                  disabled={isSyncing}
-                  style={[
-                    styles.syncActionBtn,
-                    {
-                      backgroundColor: config?.enabled ? colors.surface : colors.accent,
-                      borderColor: config?.enabled ? colors.border : colors.accent,
-                    },
-                  ]}
-                >
-                  {isSyncing ? (
-                    <ActivityIndicator size="small" color={config?.enabled ? colors.accent : colors.onFill} />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name={config?.enabled ? 'checkmark-circle' : 'sync'}
-                        size={16}
-                        color={config?.enabled ? colors.positive : colors.onFill}
-                      />
-                      <Text
-                        style={[
-                          styles.syncActionBtnText,
-                          { color: config?.enabled ? colors.text : colors.onFill },
-                        ]}
-                      >
-                        {config?.enabled ? 'Health Sync Active (Tap to Disconnect)' : 'Connect & Auto-Sync Health Data'}
-                      </Text>
-                    </>
-                  )}
-                </Tappable>
-              </View>
-            </View>
+            {/* There is no health-app connection yet: the web app cannot read Apple
+                Health or Health Connect. This used to offer a "connect" button that
+                saved a made-up 8,500 steps and said syncing had started. */}
+            <Text style={[styles.syncSubtitle, { color: colors.textMuted }]}>
+              Steps are entered by hand for now. Copy today's count from your phone's health app; automatic
+              sync needs the phone app, which is not out yet.
+            </Text>
 
             {/* Save Button */}
             <View style={styles.actionWrap}>
               <Button
-                label={isSaving ? 'Saving...' : 'Save Steps'}
+                label={isSaving ? 'Saving...' : steps === 0 && initialSteps > 0 ? 'Clear steps for this day' : 'Save Steps'}
                 onPress={() => void handleSave()}
                 disabled={isSaving}
               />
@@ -474,56 +377,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     padding: 0,
   },
-  syncCard: {
-    padding: space.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: space.sm,
-  },
-  syncHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-  },
-  syncHeaderTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  syncBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  syncBadgeText: {
-    fontFamily: font.uiStrong,
-    fontSize: 10,
-    letterSpacing: 0.5,
-  },
-  syncTitle: {
-    fontFamily: font.uiStrong,
-    fontSize: 14,
-  },
   syncSubtitle: {
     fontFamily: font.ui,
     fontSize: 12,
-  },
-  syncActionsRow: {
-    marginTop: space.xs,
-  },
-  syncActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  syncActionBtnText: {
-    fontFamily: font.uiStrong,
-    fontSize: 13,
   },
   actionWrap: {
     marginTop: space.sm,

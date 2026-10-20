@@ -132,6 +132,30 @@ describe('shareSummary', () => {
       detail: expect.stringContaining('Outside'),
     });
   });
+
+  it('estimates the lifting energy from the session less its cardio, only with a body weight', () => {
+    const walk: LoggedSet = {
+      id: 'c2',
+      exerciseName: 'Morning Walk',
+      bodyweightBased: false,
+      setIndex: 9,
+      weightKg: null,
+      reps: 0,
+      setType: 'normal',
+      rpe: null,
+      isCardio: true,
+      cardioMode: 'outside',
+      durationSeconds: 1800,
+      distanceKm: 2.5,
+    };
+    // 72 minutes, 30 of them walking: 42 minutes of lifting at 75 kg.
+    expect(shareSummary({ ...base, sets: [...sets, walk], bodyweightKg: 75 }).liftingEnergy).toEqual({
+      lowKcal: 130,
+      highKcal: 260,
+    });
+    expect(shareSummary({ ...base, sets }).liftingEnergy).toBeNull();
+    expect(shareSummary({ ...base, sets: [walk], bodyweightKg: 75 }).liftingEnergy).toBeNull();
+  });
 });
 
 describe('the climb', () => {

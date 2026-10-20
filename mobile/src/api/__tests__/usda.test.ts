@@ -106,4 +106,30 @@ describe('searchUsda', () => {
 
     expect(urlOf(fetchMock)).toContain('page_size=5');
   });
+
+  // Vitamin D is stored in IU. FoodData Central's 1114 is micrograms, which
+  // used to be stored as IU and so read forty times too low.
+  it('stores vitamin D in IU, converting from micrograms when that is all there is', async () => {
+    vi.stubGlobal('document', {});
+    const food = (nutrients: { nutrientId: number; value: number }[]) => ({
+      ...validFood,
+      foodNutrients: [{ nutrientId: 1008, value: 120 }, ...nutrients],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          foods: [
+            food([{ nutrientId: 1114, value: 2.5 }]),
+            { ...food([{ nutrientId: 1110, value: 300 }, { nutrientId: 1114, value: 7.5 }]), fdcId: 5678 },
+          ],
+        }),
+      ),
+    );
+
+    const [microgramsOnly, both] = await searchUsda('salmon', USDA_DEMO_KEY);
+
+    expect(microgramsOnly.per100g.micros?.vitaminDIU).toBe(100);
+    expect(both.per100g.micros?.vitaminDIU).toBe(300);
+  });
 });

@@ -5,6 +5,7 @@ import { Card } from '../src/components/Card';
 import { Button, TOUCH_TARGET } from '../src/components/Controls';
 import { EditSetSheet } from '../src/components/EditSetSheet';
 import { FinishSheet } from '../src/components/FinishSheet';
+import { LiftingEnergyNote } from '../src/components/LiftingEnergyNote';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
 import { SaveRoutineSheet } from '../src/components/SaveRoutineSheet';
@@ -63,7 +64,7 @@ const sameWorkout = (a: Loaded, b: Loaded): boolean =>
 export default function WorkoutScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { settings } = useApp();
+  const { settings, series, latest } = useApp();
   const social = useSocial();
   const workoutUnits: UnitSystem = settings.workoutUnits ?? settings.units ?? 'metric';
 
@@ -140,8 +141,12 @@ export default function WorkoutScreen() {
             sets: workout.sets,
             units: workoutUnits,
             milestone: null,
+            // The trend on the day it was done, or the latest when the history
+            // does not reach back that far.
+            bodyweightKg:
+              series.find((point) => point.date === workout.date)?.trendWeightKg ?? latest?.trendWeightKg ?? null,
           }),
-    [workout, workoutUnits],
+    [workout, workoutUnits, series, latest],
   );
 
   const groups = useMemo(() => groupByExercise(sets), [sets]);
@@ -193,6 +198,7 @@ export default function WorkoutScreen() {
             <Stat label="STEPS" value={`~${summary.steps.toLocaleString()}`} />
           ) : null}
         </View>
+        {summary.liftingEnergy && <LiftingEnergyNote energy={summary.liftingEnergy} />}
       </Card>
 
       {groups.map((group) => {

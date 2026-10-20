@@ -1,4 +1,4 @@
-import type { Milestone } from '@adaptive-macros/engine';
+import { liftingEnergyKcal, type LiftingEnergy, type Milestone } from '@adaptive-macros/engine';
 import {
   type CardioMode,
   calculateCardioSteps,
@@ -45,6 +45,11 @@ export interface ShareSummary {
   steps?: number | null;
   /** Total distance in km from cardio in this session. */
   cardioDistanceKm?: number | null;
+  /**
+   * Rough burn above resting from the lifting, when a body weight was given.
+   * For reading only: the measured expenditure already includes it.
+   */
+  liftingEnergy?: LiftingEnergy | null;
 }
 
 /**
@@ -104,6 +109,8 @@ export const shareSummary = (input: {
   sets: LoggedSet[];
   units: UnitSystem;
   milestone: Milestone | null;
+  /** The trend weight on the day, for the lifting energy estimate; omitted, there is none. */
+  bodyweightKg?: number | null;
 }): ShareCard => {
   const working = input.sets.filter((s) => s.setType !== 'warmup');
   const isCardioSet = (s: LoggedSet): boolean => s.isCardio === true || detectCardio(s.exerciseName);
@@ -239,6 +246,15 @@ export const shareSummary = (input: {
     highlight: milestoneCopy ? { label: milestoneCopy.label, figure: milestoneCopy.figure } : null,
     steps: totalSteps > 0 ? totalSteps : null,
     cardioDistanceKm: totalDistanceKm > 0 ? totalDistanceKm : null,
+    // The session's time, less what was spent on cardio, which has figures of
+    // its own; only when there was lifting to estimate.
+    liftingEnergy:
+      strengthWorking.length > 0
+        ? liftingEnergyKcal(
+            minutes - cardioWorking.reduce((sum, s) => sum + (s.durationSeconds ?? 0), 0) / 60,
+            input.bodyweightKg ?? null,
+          )
+        : null,
     climb: climb(input.sets),
   };
 };

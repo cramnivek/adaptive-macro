@@ -348,6 +348,11 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                 summary.steps && summary.steps > 0
                   ? `~${summary.steps.toLocaleString()} steps`
                   : null,
+                // A range and marked as an estimate; the workout's own page says
+                // why it is not added to calories.
+                summary.liftingEnergy
+                  ? `~${summary.liftingEnergy.lowKcal}–${summary.liftingEnergy.highKcal} kcal est.`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}

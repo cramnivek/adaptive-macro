@@ -11,7 +11,7 @@ import type {
 import {
   DEFAULT_MODEL_OPTIONS,
   DEFAULT_TARGET_OPTIONS,
-  EMPTY_NUTRIENTS,
+  sumNutrients,
   KCAL_PER_KG_TISSUE,
   deurenbergBodyFatPct,
   energyDensityKcalPerKg,
@@ -297,20 +297,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     [reloadHistory],
   );
 
-  const totals = useMemo(
-    () =>
-      entries.reduce<Nutrients>(
-        (sum, entry) => ({
-          kcal: sum.kcal + entry.nutrients.kcal,
-          proteinG: sum.proteinG + entry.nutrients.proteinG,
-          carbsG: sum.carbsG + entry.nutrients.carbsG,
-          fatG: sum.fatG + entry.nutrients.fatG,
-          fiberG: (sum.fiberG ?? 0) + (entry.nutrients.fiberG ?? 0),
-        }),
-        EMPTY_NUTRIENTS,
-      ),
-    [entries],
-  );
+  // The engine's sum, which carries vitamins and minerals. A hand-written
+  // reduce here added up the macros and fibre only, so every micronutrient
+  // reached the quality screen as zero however much had been logged.
+  const totals = useMemo(() => sumNutrients(entries.map((entry) => entry.nutrients)), [entries]);
 
   const latestWeightKg = weights.length ? weights[weights.length - 1].kg : null;
 

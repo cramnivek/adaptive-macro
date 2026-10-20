@@ -12,3 +12,4 @@ export * from './checkIn.ts';
 export * from './volumeLandmarks.ts';
 export * from './micronutrients.ts';
 export * from './bodyComposition.ts';
+export * from './liftingEnergy.ts';
