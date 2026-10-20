@@ -422,15 +422,6 @@ export default function RoutinesScreen() {
         ) : undefined
       }
     >
-      {routines.length === 0 && (
-        <Card loud title="No routines yet">
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            A routine is a named list of exercises in the order you do them. Make one yourself,
-            have one built for you, or start from a session you have already done.
-          </Text>
-        </Card>
-      )}
-
       {routines.map((routine) => (
         <Card
           key={routine.id}
@@ -471,60 +462,69 @@ export default function RoutinesScreen() {
         </Card>
       ))}
 
-      <Button tone="loud" label="New routine" onPress={() => startNew('', [])} />
-
-      <Card loud title="Or start from">
-        <Pressable
-          onPress={() => router.push('/add-routines')}
-          style={[styles.row, { borderColor: loud.rule }]}
-          accessibilityRole="button"
-        >
-          <View style={{ flex: 1, paddingVertical: space.xs }}>
-            <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>Build or import</Text>
-            <Text style={[styles.note, { color: loud.figureFaint }]}>
-              Pick the days and have them built, or read a programme from a PDF or a screenshot.
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={loud.figureFaint} />
-        </Pressable>
-
-        {past.slice(0, 8).map((session) => (
+      {/* Three ways in, said plainly, with building first. "New routine" next
+          to "Build or import routines" read as two names for the same thing,
+          and nothing said the app would write the routines for you. */}
+      <Card loud title={routines.length === 0 ? 'Get your first routine' : 'Add a routine'}>
+        {WAYS.map((way) => (
           <Pressable
-            key={session.id}
-            onPress={() =>
-              startNew(
-                session.name,
-                session.exercises.map((name) => {
-                  const k = known.find((item) => item.name === name);
-                  return {
-                    name,
-                    bodyweightBased: k?.bodyweightBased ?? false,
-                    targetSets: k?.isCardio ? 1 : 3,
-                    isCardio: k?.isCardio ?? false,
-                    cardioMode: k?.cardioMode ?? 'treadmill',
-                    targetTime: k?.isCardio ? '30m' : null,
-                  };
-                }),
-              )
-            }
-            style={[styles.row, { borderColor: loud.rule }]}
+            key={way.key}
+            onPress={() => (way.key === 'scratch' ? startNew('', []) : router.push(`/add-routines?mode=${way.key}`))}
+            style={[
+              styles.way,
+              way.key === 'build'
+                ? { backgroundColor: loud.panel, borderColor: loud.loud }
+                : { borderColor: loud.rule },
+            ]}
             accessibilityRole="button"
           >
-            <View style={{ flex: 1, paddingVertical: space.xs }}>
-              <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
-              <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
-                {formatDate(session.date)} · {session.exercises.join(', ')}
-              </Text>
+            <View style={[styles.wayIcon, { backgroundColor: way.key === 'build' ? loud.loud : loud.panel }]}>
+              <Ionicons name={way.icon} size={18} color={way.key === 'build' ? loud.onLoud : loud.figure} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: font.uiStrong, fontSize: 15, color: loud.figure }}>{way.title}</Text>
+              <Text style={[styles.note, { color: loud.figureFaint }]}>{way.detail}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={loud.figureFaint} />
           </Pressable>
         ))}
-        {past.length > 0 && (
-          <Text style={[styles.note, { color: loud.figureFaint }]}>
-            A past session comes in with its exercises in the order they were done.
-          </Text>
-        )}
       </Card>
+
+      {past.length > 0 && (
+        <Card loud title="Copy a past session" subtitle="Its exercises, in the order you did them.">
+          {past.slice(0, 8).map((session) => (
+            <Pressable
+              key={session.id}
+              onPress={() =>
+                startNew(
+                  session.name,
+                  session.exercises.map((name) => {
+                    const k = known.find((item) => item.name === name);
+                    return {
+                      name,
+                      bodyweightBased: k?.bodyweightBased ?? false,
+                      targetSets: k?.isCardio ? 1 : 3,
+                      isCardio: k?.isCardio ?? false,
+                      cardioMode: k?.cardioMode ?? 'treadmill',
+                      targetTime: k?.isCardio ? '30m' : null,
+                    };
+                  }),
+                )
+              }
+              style={[styles.row, { borderColor: loud.rule }]}
+              accessibilityRole="button"
+            >
+              <View style={{ flex: 1, paddingVertical: space.xs }}>
+                <Text style={{ fontFamily: font.uiStrong, color: loud.figure }}>{session.name}</Text>
+                <Text style={[styles.note, { color: loud.figureFaint }]} numberOfLines={1}>
+                  {formatDate(session.date)} · {session.exercises.join(', ')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={loud.figureFaint} />
+            </Pressable>
+          ))}
+        </Card>
+      )}
 
       <ReorderSheet
         open={reorderingList}
@@ -536,6 +536,27 @@ export default function RoutinesScreen() {
     </Screen>
   );
 }
+
+const WAYS = [
+  {
+    key: 'build',
+    icon: 'barbell',
+    title: 'Build them for me',
+    detail: 'Pick your days, equipment and level. You get balanced routines that use the lifts you already do.',
+  },
+  {
+    key: 'import',
+    icon: 'document-text-outline',
+    title: 'Import a programme',
+    detail: 'From a PDF or a screenshot of one you were given.',
+  },
+  {
+    key: 'scratch',
+    icon: 'add',
+    title: 'Make one yourself',
+    detail: 'Name it and pick each exercise.',
+  },
+] as const;
 
 /**
  * "4 exercises · 12 sets · about 30 min", for a routine or a draft of one.
@@ -575,6 +596,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   centred: { textAlign: 'center' },
+  way: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: TOUCH_TARGET,
+    padding: space.sm,
+    marginTop: space.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+  },
+  wayIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   exercise: { borderTopWidth: StyleSheet.hairlineWidth, paddingVertical: space.xs },
   exerciseHead: { flexDirection: 'row', alignItems: 'center', minHeight: TOUCH_TARGET },
   exerciseName: { flex: 1, fontFamily: font.uiStrong, fontSize: 15 },
