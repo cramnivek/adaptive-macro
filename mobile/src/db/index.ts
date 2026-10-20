@@ -2534,6 +2534,7 @@ export {
   getDailyStepsBetween,
   getRecentDailySteps,
   saveDailySteps,
+  deleteDailySteps,
   bulkSaveDailySteps,
   type DailyStepRecord,
   type SaveDailyStepsInput,

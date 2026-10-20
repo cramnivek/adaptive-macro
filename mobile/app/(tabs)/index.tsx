@@ -362,7 +362,7 @@ export default function TodayScreen() {
               ) : (
                 <View style={[styles.stepsTag, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.stepsTagText, { color: colors.textMuted }]}>
-                    HEALTH SYNC
+                    NOT LOGGED
                   </Text>
                 </View>
               )}
@@ -372,7 +372,7 @@ export default function TodayScreen() {
                 ? `${Math.min(100, Math.round((dailySteps.steps / 10000) * 100))}% of 10k goal · ${dailySteps.distanceKm ?? 0} km walked · Tap to edit`
                 : settings.personality === 'gymrat'
                   ? 'Hit your 10k daily step goal to keep expenditure dialed in 🔥'
-                  : 'Tap to log steps or sync Apple Health / Health Connect'}
+                  : "Tap to log today's steps"}
             </Text>
           </View>
         </View>

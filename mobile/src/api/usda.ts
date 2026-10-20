@@ -168,7 +168,6 @@ const MICRO_IDS = {
   cholineMg: 1180,
   vitaminAMcg: 1106,
   vitaminEMg: 1109,
-  vitaminDIU: 1114,
   vitaminKMcg: 1185,
   saturatedFatG: 1258,
   monounsaturatedFatG: 1292,
@@ -196,6 +195,11 @@ const toFood = (food: FdcFood): Food | null => {
       micros[key] = val;
     }
   }
+  // Vitamin D is stored in IU. FoodData Central gives it as 1110 (IU) on some
+  // records and only as 1114 (micrograms) on others; reading 1114 as IU made
+  // vitamin D about forty times too low. 1 µg of vitamin D is 40 IU.
+  const vitaminDIU = nutrientValue(nutrients, 1110) || nutrientValue(nutrients, 1114) * 40;
+  if (vitaminDIU > 0) micros.vitaminDIU = vitaminDIU;
 
   return {
     id: `usda:${food.fdcId}`,

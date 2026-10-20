@@ -62,6 +62,11 @@ export const NutritionQualityModal = ({
 
   const { quality, electrolytes, microsList, proteinTimingAdvice, topGaps } = diagnostics;
 
+  const microCoverage = useMemo(() => {
+    const covered = entries.filter((e) => Object.keys(e.nutrients.micros ?? {}).length > 0).length;
+    return { covered, missing: entries.length - covered };
+  }, [entries]);
+
   const vitamins = useMemo(() => {
     return microsList.filter((m) => m.target.category === 'vitamins');
   }, [microsList]);
@@ -222,6 +227,17 @@ export const NutritionQualityModal = ({
             );
           })}
         </View>
+
+        {/* Quick adds, custom foods and web lookups carry no vitamins or
+            minerals, and they count as nothing in these totals. Saying how many
+            foods the totals cover keeps a gap in the data from reading as a gap
+            in the diet. */}
+        {microCoverage.missing > 0 && (
+          <Text style={[styles.coverageNote, { color: colors.textMuted }]}>
+            Vitamins and minerals cover {microCoverage.covered} of {entries.length} foods today. The other{' '}
+            {microCoverage.missing} came without that data, so the real totals are higher than shown.
+          </Text>
+        )}
 
         {/* Scrollable Content */}
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -515,6 +531,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  coverageNote: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    lineHeight: 17,
+    paddingHorizontal: space.md,
+    marginBottom: space.sm,
   },
   scrollContent: {
     paddingHorizontal: space.md,
