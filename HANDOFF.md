@@ -19,8 +19,9 @@ the repository, the last being `20261020120000_squad_join_limit.sql`.
 
 **In flight:** branch `claude/updates-overview-y2g5ve`, after #26 — Left/Right
 spelled out under one-sided sets, the sticker preview no longer cropped, the
-routine editor's back arrow, reordering that keeps supersets together, and
-this file. See `git log origin/main..` on it for the exact list.
+routine editor's back arrow, reordering that keeps supersets together, the
+barcode decoder served by the app, entering an unknown barcode from its label,
+building a day more than once a week, and this file. See `git log origin/main..` on it for the exact list.
 
 **Deploys are automatic now.** A push to `main` runs
 `.github/workflows/deploy.yml`: test, build, deploy to Cloud Run, verify. Its
@@ -53,7 +54,8 @@ refused. The one real squad and its two members came through intact.
 - **Scan a barcode** (#26). Checked only against a simulated camera: the
   stream is 1920×1080 and a code in the box reads. Sharpness, focus and the 2×
   zoom (`scanZoom` in `src/platform/scanGeometry.ts`) need a real phone. The
-  decoder's WebAssembly comes from jsDelivr on the first scan in Safari.
+  decoder's WebAssembly is served by the app itself, not jsDelivr. A barcode
+  Open Food Facts lacks can be entered from the label and scans to it after.
 - Sign out, sign in by email code — iOS should offer the code above the keyboard.
 - **Continue with Google from the installed app.** Unverified, and the one that
   may not work: if sign-in finishes in Safari, the installed app (separate
