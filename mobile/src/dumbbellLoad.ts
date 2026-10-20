@@ -59,14 +59,14 @@ export const dumbbellBreakdown = (
   if (load === 'pair') return `= ${shown(each * 2)} ${unit.toLowerCase()} total, both dumbbells`;
   const r = Number.parseInt(reps, 10);
   const side = Number.isFinite(r) && r > 0 ? `${shown(each)} × ${r}` : shown(each);
-  return `L ${side} · R ${side}`;
+  // Spelled out: a bare L and R read as abbreviations to decode, mid-set.
+  return `Left ${side} · Right ${side}`;
 };
 
 /** Heading for the weight column: "LB EACH" makes clear a pair is not summed. */
 export const weightColumnLabel = (unit: string, load: DumbbellLoad | null): string =>
   load === 'pair' || load === 'perSide' ? `${unit.toUpperCase()} EACH` : unit.toUpperCase();
 
-export const repsColumnLabel = (load: DumbbellLoad | null): string => (load === 'perSide' ? 'REPS/SIDE' : 'REPS');
 
 /** One line under the target, in words, for anyone who does not read column headings. */
 export const dumbbellNote = (load: DumbbellLoad): string => {

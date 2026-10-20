@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../dumbbellLoad';
+import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../dumbbellLoad';
 
 describe('dumbbellLoad', () => {
   it('leaves non-dumbbell exercises alone', () => {
@@ -51,11 +51,6 @@ describe('column labels', () => {
     expect(weightColumnLabel('lb', null)).toBe('LB');
   });
 
-  it('marks reps per side only when they are', () => {
-    expect(repsColumnLabel('perSide')).toBe('REPS/SIDE');
-    expect(repsColumnLabel('pair')).toBe('REPS');
-  });
-
   it('has a note for every kind', () => {
     for (const kind of ['pair', 'single', 'perSide'] as const) expect(dumbbellNote(kind).length).toBeGreaterThan(10);
   });
@@ -67,8 +62,8 @@ describe('dumbbellBreakdown', () => {
   });
 
   it('shows both sides of a one-sided movement, with reps when there are some', () => {
-    expect(dumbbellBreakdown('perSide', '105.0', '13', 'lb')).toBe('L 105 × 13 · R 105 × 13');
-    expect(dumbbellBreakdown('perSide', '24', '', 'kg')).toBe('L 24 · R 24');
+    expect(dumbbellBreakdown('perSide', '105.0', '13', 'lb')).toBe('Left 105 × 13 · Right 105 × 13');
+    expect(dumbbellBreakdown('perSide', '24', '', 'kg')).toBe('Left 24 · Right 24');
   });
 
   it('adds nothing for a single bell, an empty or zero weight, or a non-dumbbell lift', () => {

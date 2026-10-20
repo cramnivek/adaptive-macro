@@ -149,7 +149,7 @@ The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
   field (BW) still works. Ticking a set straight from such a field also takes
   the old number: on iOS Safari the tick can land before the field's blur.
 - **One-sided dumbbell work assumes both sides match.** One weight and rep
-  count is logged, and the row shows `L 105 × 13 · R 105 × 13`; a pair shows its
+  count is logged, and the row shows `Left 105 × 13 · Right 105 × 13`; a pair shows its
   total. Sides that differ cannot be logged yet.
 - **A squad can read as full because of a member you cannot see** across a
   block — the accepted leak, documented in the migration.

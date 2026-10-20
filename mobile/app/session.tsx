@@ -74,7 +74,7 @@ import { updateCatalogueCache, warmCatalogueCache } from '../src/exerciseSearch'
 import { exerciseInfoFor } from '../src/exerciseInfo';
 import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
-import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, repsColumnLabel, weightColumnLabel } from '../src/dumbbellLoad';
+import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../src/dumbbellLoad';
 import { playChime, primeChime } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
@@ -2375,8 +2375,11 @@ export default function SessionScreen() {
                       <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
                         {weightColumnLabel(unit, load)}
                       </Text>
+                      {/* Plain REPS even for one side at a time: REPS/SIDE did not fit
+                          the column and showed as REPS/SI…, and the Left/Right line
+                          under each set already says the reps are per side. */}
                       <Text style={[styles.col, styles.colNum]} numberOfLines={1}>
-                        {repsColumnLabel(load)}
+                        REPS
                       </Text>
                     </>
                   );
