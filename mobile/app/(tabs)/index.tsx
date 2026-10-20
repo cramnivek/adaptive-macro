@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CheckInCard } from '../../src/components/CheckInCard';
+import { CheckInReadyCard } from '../../src/components/CheckInReadyCard';
 import { FadeIn } from '../../src/components/FadeIn';
 import { Tappable } from '../../src/components/Tappable';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
@@ -380,6 +381,7 @@ export default function TodayScreen() {
 
       {/* Morning Scale Weight & Check-in (Always Active) */}
       {isToday && <CheckInCard />}
+      {isToday && <CheckInReadyCard />}
 
       {askAboutYesterday && yesterdayKcal !== undefined && (
         <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>

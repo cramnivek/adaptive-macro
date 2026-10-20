@@ -121,6 +121,8 @@ export interface WeeklyAdherenceBreakdown {
 
 export interface MonthlyExtractedMetrics {
   period: { from: ISODate; to: ISODate };
+  /** How many weeks the period spans (4 or 13). */
+  weeks: number;
   weeklyAdherence: WeeklyAdherenceBreakdown[];
   overallAdherence: {
     score: number;
@@ -164,6 +166,11 @@ export interface MonthlyMetricsInput {
   targetProteinG?: number;
   units?: UnitSystem;
   endDate?: ISODate;
+  /**
+   * Length of the review in weeks: 4 for the monthly check-in, 13 for the
+   * quarterly one. The breakdown, thresholds and prompt all follow it.
+   */
+  weeks?: number;
 }
 
 /**
@@ -172,7 +179,12 @@ export interface MonthlyMetricsInput {
  */
 export const extractMonthlyMetrics = (input: MonthlyMetricsInput): MonthlyExtractedMetrics => {
   const to = input.endDate ?? todayISO();
-  const from = addDays(to, -27); // 4 full 7-day weeks = 28 days
+  const weeks = input.weeks ?? 4;
+  const days = weeks * 7;
+  const from = addDays(to, -(days - 1));
+  // Confidence thresholds were set for 28 days; a longer review needs the same
+  // share of days logged, not the same count.
+  const scale = weeks / 4;
 
   // Goal calorie adjustment delta
   const goalDirection = input.goal?.direction ?? 'maintain';
@@ -189,7 +201,7 @@ export const extractMonthlyMetrics = (input: MonthlyMetricsInput): MonthlyExtrac
   let totalAdherenceSum = 0;
   let weeksWithDataCount = 0;
 
-  for (let w = 0; w < 4; w++) {
+  for (let w = 0; w < weeks; w++) {
     const wFrom = addDays(from, w * 7);
     const wTo = addDays(wFrom, 6);
 
@@ -345,7 +357,7 @@ export const extractMonthlyMetrics = (input: MonthlyMetricsInput): MonthlyExtrac
   // 4. 30-Day Training & Progressive Overload
   const monthSets = input.sets.filter((s) => s.date >= from && s.date <= to);
   const priorSets = input.sets.filter(
-    (s) => s.date >= addDays(from, -28) && s.date < from,
+    (s) => s.date >= addDays(from, -days) && s.date < from,
   );
 
   const sessionIds = new Set(monthSets.map((s) => (s.set as any).sessionId || s.date));
@@ -404,14 +416,15 @@ export const extractMonthlyMetrics = (input: MonthlyMetricsInput): MonthlyExtrac
 
   // 5. Confidence
   let confidence: 'high' | 'moderate' | 'low' = 'low';
-  if (all30Weights.length >= 14 && all30Calories.length >= 16) {
+  if (all30Weights.length >= 14 * scale && all30Calories.length >= 16 * scale) {
     confidence = 'high';
-  } else if (all30Weights.length >= 7 || all30Calories.length >= 8) {
+  } else if (all30Weights.length >= 7 * scale || all30Calories.length >= 8 * scale) {
     confidence = 'moderate';
   }
 
   return {
     period: { from, to },
+    weeks,
     weeklyAdherence,
     overallAdherence: {
       score: overallScore,
@@ -436,7 +449,7 @@ export const extractMonthlyMetrics = (input: MonthlyMetricsInput): MonthlyExtrac
     },
     training: {
       totalSessions: sessionIds.size,
-      avgSessionsPerWeek: Math.round((sessionIds.size / 4) * 10) / 10,
+      avgSessionsPerWeek: Math.round((sessionIds.size / weeks) * 10) / 10,
       totalWorkingSets: workingSets.length,
       totalVolumeKg,
       progressions: progressions.slice(0, 5),
@@ -450,12 +463,19 @@ export const buildMonthlyCoachingPrompt = (
   goal: Goal = { direction: 'maintain', rateKgPerWeek: 0 },
   personality: AppPersonality = 'ascend',
 ): string => {
+  // The same review over a quarter: the words follow the length so the model is
+  // not told "30 days" about thirteen weeks of data.
+  const weeks = metrics.weeks;
+  const days = weeks * 7;
+  const span = weeks >= 13 ? 'QUARTERLY' : 'MONTHLY';
+  const block = weeks >= 13 ? 'quarter' : 'month';
+
   const personaBlock =
     personality === 'gymrat'
       ? `COACH PERSONA: GYMRAT MODE 🔥
 You are a high-energy gym-bro coach speaking fluent gym culture & Gen Z fitness slang ("cooked", "we are so back", "locked in", "W", "massive W", "gains", "beast mode", "overload", "dialed in", "ghosted").
 - Headline MUST be punchy, hype, and use gymrat slang (e.g. "Mesocycle Complete: Locked In on Macros & Iron Moved 🔥" or "30 Days of Overload: We Are So Back ⚡").
-- Deliver enthusiastic, hype-filled but direct monthly feedback on their 4-week mesocycle.
+- Deliver enthusiastic, hype-filled but direct ${block === 'quarter' ? 'quarterly' : 'monthly'} feedback on their ${weeks}-week block.
 - Talk directly about their weekly calorie adherence ("You actually locked in on Week 2, but Week 3 had you slacking on logging").
 - Celebrate milestone PRs and total tonnage moved loudly.
 - Keep the plain summary raw, punchy, and motivating.`
@@ -479,11 +499,11 @@ You are a warm, encouraging personal fitness coach for everyday lifters.
   return `You are an expert personal coach for Ascend.
 ${personaBlock}
 
-You are conducting a DEEP 30-DAY MONTHLY COACHING REVIEW.
-The lifter wants a comprehensive retrospective taking more data into consideration, ESPECIALLY their adherence to weekly calorie & macro adjustments over the past 4 weeks.
+You are conducting a DEEP ${days}-DAY ${span} COACHING REVIEW.
+The lifter wants a comprehensive retrospective taking more data into consideration, ESPECIALLY their adherence to weekly calorie & macro adjustments over the past ${weeks} weeks.
 
-=== 30-DAY GROUND TRUTH METRICS ===
-Review Period: ${metrics.period.from} to ${metrics.period.to} (4 full weeks)
+=== ${days}-DAY GROUND TRUTH METRICS ===
+Review Period: ${metrics.period.from} to ${metrics.period.to} (${weeks} full weeks)
 Goal: ${goal.direction.toUpperCase()} (${goal.rateKgPerWeek} kg/week target rate)
 Data Confidence: ${metrics.confidence.toUpperCase()}
 
@@ -493,27 +513,27 @@ Summary: ${metrics.overallAdherence.adherenceSummary}
 Weekly Breakdown:
 ${weeklyAdherenceText}
 
-=== 30-DAY BODY COMPOSITION & METABOLISM ===
+=== ${days}-DAY BODY COMPOSITION & METABOLISM ===
 Start Weight: ${metrics.weight.startWeightKg ?? '—'} kg
 End Weight: ${metrics.weight.endWeightKg ?? '—'} kg
 Net Weight Change: ${metrics.weight.deltaKg !== null ? `${metrics.weight.deltaKg >= 0 ? '+' : ''}${metrics.weight.deltaKg} kg` : '—'} (${metrics.weight.percentBwChange ?? '—'}% BW)
-Weigh-in Days: ${metrics.weight.totalLoggedDays}/28 days
-Average Daily Intake: ${metrics.nutrition.avgCalories ?? '—'} kcal (Logged ${metrics.nutrition.totalLoggedDays}/28 days)
+Weigh-in Days: ${metrics.weight.totalLoggedDays}/${days} days
+Average Daily Intake: ${metrics.nutrition.avgCalories ?? '—'} kcal (Logged ${metrics.nutrition.totalLoggedDays}/${days} days)
 Average Daily Expenditure (TDEE): ${metrics.nutrition.avgExpenditure ?? '—'} kcal
 Metabolic Adaptation / TDEE Shift: ${metrics.nutrition.expenditureChangeKcal !== null ? `${metrics.nutrition.expenditureChangeKcal >= 0 ? '+' : ''}${metrics.nutrition.expenditureChangeKcal} kcal/day` : '—'}
 
-=== 30-DAY TRAINING & PROGRESSIVE OVERLOAD ===
+=== ${days}-DAY TRAINING & PROGRESSIVE OVERLOAD ===
 Total Workouts: ${metrics.training.totalSessions} sessions (~${metrics.training.avgSessionsPerWeek} sessions/week)
 Total Working Sets: ${metrics.training.totalWorkingSets} sets
 Total Tonnage Moved: ${metrics.training.totalVolumeKg.toLocaleString()} kg
 Key Strength Overload Progressions:
-${metrics.training.progressions.length > 0 ? metrics.training.progressions.map((p) => `  • ${p.exercise}: ${p.previous} → ${p.current} (${p.delta})`).join('\n') : '  • No direct overload pairs across prior month'}
+${metrics.training.progressions.length > 0 ? metrics.training.progressions.map((p) => `  • ${p.exercise}: ${p.previous} → ${p.current} (${p.delta})`).join('\n') : `  • No direct overload pairs across the prior ${block}`}
 
 === INSTRUCTIONS FOR YOUR ANALYSIS ===
-1. Adherence Verdict: Explicitly evaluate their adherence to each of the 4 weekly adjustments. Did they respect the targets? Did over/under-eating in specific weeks cause stalls or surges in weight?
-2. Synthesis: Explain the interplay between their weekly adherence, metabolic adaptation, and strength performance over the full 30 days.
-3. Month-Ahead Strategy: Provide a concrete, strategic recommendation for the next 30 days (e.g., maintain the current deficit, schedule a 1-week diet break / maintenance phase, deload training volume, or push progressive overload).
-4. Suggested Adjustment: Recommend an exact daily calorie or volume adjustment for the upcoming month block.
+1. Adherence Verdict: Explicitly evaluate their adherence to each of the ${weeks} weekly adjustments. Did they respect the targets? Did over/under-eating in specific weeks cause stalls or surges in weight?
+2. Synthesis: Explain the interplay between their weekly adherence, metabolic adaptation, and strength performance over the full ${days} days.
+3. ${block === 'quarter' ? 'Quarter' : 'Month'}-Ahead Strategy: Provide a concrete, strategic recommendation for the next ${block} (e.g., maintain the current deficit, schedule a 1-week diet break / maintenance phase, deload training volume, or push progressive overload).
+4. Suggested Adjustment: Recommend an exact daily calorie or volume adjustment for the upcoming ${block}.
 5. Plain Summary: A 2-3 sentence crystal-clear summary in your designated coach persona.`;
 };
 

@@ -46,6 +46,13 @@ interface WeeklyReviewModalProps {
   onApplyMonthlyAdjustment?: () => void;
   initialMode?: 'weekly' | 'monthly';
   units?: UnitSystem;
+  /**
+   * Set while the period has not earned a check-in yet: why, in one sentence.
+   * The generate button is replaced by it, so a review is never written from
+   * a week or month too thin to say anything about.
+   */
+  weeklyLockedNote?: string | null;
+  monthlyLockedNote?: string | null;
 }
 
 const CONFIDENCE_COLORS = {
@@ -76,6 +83,8 @@ export const WeeklyReviewModal = ({
   onApplyMonthlyAdjustment,
   initialMode = 'weekly',
   units = 'metric',
+  weeklyLockedNote = null,
+  monthlyLockedNote = null,
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -90,6 +99,11 @@ export const WeeklyReviewModal = ({
   }, [open, initialMode]);
 
   const hasMonthlySupport = Boolean(monthlyMetrics && onGenerateMonthly);
+  // The long review is a month (4 weeks) or a quarter (13): its labels say
+  // which, and how many days, rather than a fixed "30".
+  const longDays = (monthlyMetrics?.weeks ?? 4) * 7;
+  const isQuarter = (monthlyMetrics?.weeks ?? 4) >= 13;
+  const longName = isQuarter ? 'Quarterly' : 'Monthly';
 
   // Weekly review calculations
   const weeklyConf = review?.dataConfidence ?? metrics.confidence;
@@ -134,10 +148,10 @@ export const WeeklyReviewModal = ({
 
   const monthlyConfLabel =
     monthlyConf === 'high'
-      ? 'High Confidence · 4 weeks of consistent data'
+      ? `High Confidence · ${monthlyMetrics?.weeks ?? 4} weeks of consistent data`
       : monthlyConf === 'moderate'
-        ? 'Moderate Confidence · Partial 30-day logs'
-        : 'Early Data · Log more days for monthly precision';
+        ? `Moderate Confidence · Partial ${longDays}-day logs`
+        : `Early Data · Log more days for ${longName.toLowerCase()} precision`;
 
   const unit = weightUnit(units);
 
@@ -163,15 +177,15 @@ export const WeeklyReviewModal = ({
               <Text style={[styles.headerBadge, { color: colors.textMuted }]}>
                 {reviewMode === 'weekly'
                   ? getEventCopy('trends.weekly_recap_tag', { personality }) || 'WEEKLY COACH'
-                  : 'MONTHLY COACH REVIEW'}
+                  : `${longName.toUpperCase()} COACH REVIEW`}
               </Text>
             </View>
             <Text style={[styles.headerPeriod, { color: colors.textMuted }]}>
               {reviewMode === 'weekly'
                 ? `${metrics.period.from} to ${metrics.period.to} (7 Days)`
                 : monthlyMetrics
-                  ? `${monthlyMetrics.period.from} to ${monthlyMetrics.period.to} (4 Weeks)`
-                  : '30-Day Period'}
+                  ? `${monthlyMetrics.period.from} to ${monthlyMetrics.period.to} (${monthlyMetrics.weeks} Weeks)`
+                  : `${longDays}-Day Period`}
             </Text>
           </View>
 
@@ -239,7 +253,7 @@ export const WeeklyReviewModal = ({
                   { color: reviewMode === 'monthly' ? colors.text : colors.textMuted },
                 ]}
               >
-                MONTHLY REVIEW (30D)
+                {`${longName.toUpperCase()} REVIEW (${longDays}D)`}
               </Text>
             </Pressable>
           </View>
@@ -255,16 +269,18 @@ export const WeeklyReviewModal = ({
           {/* ========================================================= */}
           {reviewMode === 'weekly' && (
             <>
-              {/* Data Confidence Banner */}
-              <View
-                style={[
-                  styles.confBanner,
-                  { backgroundColor: weeklyConfColor.bg, borderColor: weeklyConfColor.border },
-                ]}
-              >
-                <View style={[styles.confDot, { backgroundColor: weeklyConfColor.text }]} />
-                <Text style={[styles.confText, { color: weeklyConfColor.text }]}>{weeklyConfLabel}</Text>
-              </View>
+              {/* Data Confidence Banner: rates a check-in, so none while there is nothing to rate */}
+              {!weeklyLockedNote && (
+                <View
+                  style={[
+                    styles.confBanner,
+                    { backgroundColor: weeklyConfColor.bg, borderColor: weeklyConfColor.border },
+                  ]}
+                >
+                  <View style={[styles.confDot, { backgroundColor: weeklyConfColor.text }]} />
+                  <Text style={[styles.confText, { color: weeklyConfColor.text }]}>{weeklyConfLabel}</Text>
+                </View>
+              )}
 
               {/* Error Message */}
               {error && (
@@ -292,7 +308,14 @@ export const WeeklyReviewModal = ({
               )}
 
               {/* No Review Yet State */}
-              {!review && !loading && (
+              {!review && !loading && weeklyLockedNote && (
+                <View style={styles.emptyState}>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Not earned yet</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>{weeklyLockedNote}</Text>
+                </View>
+              )}
+
+              {!review && !loading && !weeklyLockedNote && (
                 <View style={styles.emptyState}>
                   <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
                     <Ionicons name="analytics" size={32} color={colors.accent} />
@@ -498,16 +521,18 @@ export const WeeklyReviewModal = ({
           {/* ========================================================= */}
           {reviewMode === 'monthly' && monthlyMetrics && (
             <>
-              {/* Data Confidence Banner */}
-              <View
-                style={[
-                  styles.confBanner,
-                  { backgroundColor: monthlyConfColor.bg, borderColor: monthlyConfColor.border },
-                ]}
-              >
-                <View style={[styles.confDot, { backgroundColor: monthlyConfColor.text }]} />
-                <Text style={[styles.confText, { color: monthlyConfColor.text }]}>{monthlyConfLabel}</Text>
-              </View>
+              {/* Data Confidence Banner: rates a check-in, so none while there is nothing to rate */}
+              {!monthlyLockedNote && (
+                <View
+                  style={[
+                    styles.confBanner,
+                    { backgroundColor: monthlyConfColor.bg, borderColor: monthlyConfColor.border },
+                  ]}
+                >
+                  <View style={[styles.confDot, { backgroundColor: monthlyConfColor.text }]} />
+                  <Text style={[styles.confText, { color: monthlyConfColor.text }]}>{monthlyConfLabel}</Text>
+                </View>
+              )}
 
               {/* Error Message */}
               {monthlyError && (
@@ -523,10 +548,10 @@ export const WeeklyReviewModal = ({
                   <ActivityIndicator size="large" color={colors.accent} />
                   <Text style={styles.loadingTitle}>
                     {personality === 'gymrat'
-                      ? 'REVIEWING YOUR 4-WEEK MESOCYCLE & GAINS... 🔥'
+                      ? `REVIEWING YOUR ${monthlyMetrics?.weeks ?? 4}-WEEK BLOCK & GAINS... 🔥`
                       : personality === 'classic'
-                        ? 'Analyzing 30-day trends and weekly adherence...'
-                        : 'Reviewing your past 30 days...'}
+                        ? `Analyzing ${longDays}-day trends and weekly adherence...`
+                        : `Reviewing your past ${longDays} days...`}
                   </Text>
                   <Text style={[styles.loadingDesc, { color: colors.textMuted }]}>
                     Evaluating adherence to weekly calorie adjustments, metabolic adaptation, and progressive overload.
@@ -535,20 +560,27 @@ export const WeeklyReviewModal = ({
               )}
 
               {/* No Review Yet State */}
-              {!monthlyReview && !monthlyLoading && (
+              {!monthlyReview && !monthlyLoading && monthlyLockedNote && (
+                <View style={styles.emptyState}>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Not earned yet</Text>
+                  <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>{monthlyLockedNote}</Text>
+                </View>
+              )}
+
+              {!monthlyReview && !monthlyLoading && !monthlyLockedNote && (
                 <View style={styles.emptyState}>
                   <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
                     <Ionicons name="pie-chart-outline" size={32} color={colors.accent} />
                   </View>
                   <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                    Ready for your 30-Day Monthly Review
+                    {`Ready for your ${longDays}-Day ${longName} Review`}
                   </Text>
                   <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
                     Get deep feedback on how strictly you adhered to weekly calorie adjustments and how that shaped your scale weight and strength.
                   </Text>
                   <View style={styles.btnWrap}>
                     <Button
-                      label={personality === 'gymrat' ? 'LOCK IN 30-DAY CHECK-IN 🔥' : 'CHECK IN FOR MONTHLY REVIEW'}
+                      label={personality === 'gymrat' ? `LOCK IN ${longDays}-DAY CHECK-IN 🔥` : `CHECK IN FOR ${longName.toUpperCase()} REVIEW`}
                       onPress={onGenerateMonthly ?? (() => {})}
                       tone="loud"
                     />
@@ -696,7 +728,7 @@ export const WeeklyReviewModal = ({
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="body-outline" size={16} color={colors.accent} />
                         <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
-                          {personality === 'gymrat' ? '30-DAY SCALE & PHYSIQUE SHIFT ⚡' : '30-DAY BODY COMPOSITION'}
+                          {personality === 'gymrat' ? `${longDays}-DAY SCALE & PHYSIQUE SHIFT ⚡` : `${longDays}-DAY BODY COMPOSITION`}
                         </Text>
                       </View>
                       <View style={styles.vitalStatRow}>
@@ -748,7 +780,7 @@ export const WeeklyReviewModal = ({
                       <View style={styles.cardHeaderRow}>
                         <Ionicons name="barbell-outline" size={16} color={colors.accent} />
                         <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
-                          {personality === 'gymrat' ? '30-DAY TONNAGE & IRON MOVED 🏋️' : '30-DAY TRAINING VOLUME'}
+                          {personality === 'gymrat' ? `${longDays}-DAY TONNAGE & IRON MOVED 🏋️` : `${longDays}-DAY TRAINING VOLUME`}
                         </Text>
                       </View>
                       <View style={styles.vitalStatRow}>
@@ -779,7 +811,7 @@ export const WeeklyReviewModal = ({
                   {monthlyReview.keyWins.length > 0 && (
                     <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
                       <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                        {personality === 'gymrat' ? 'MASSIVE MONTHLY Ws 🏆' : 'MONTHLY MILESTONE WINS 🏆'}
+                        {personality === 'gymrat' ? `MASSIVE ${longName.toUpperCase()} Ws 🏆` : `${longName.toUpperCase()} MILESTONE WINS 🏆`}
                       </Text>
                       {monthlyReview.keyWins.map((win, idx) => (
                         <View key={idx} style={styles.winRow}>
@@ -793,7 +825,7 @@ export const WeeklyReviewModal = ({
                   {/* Monthly Big Picture */}
                   <View style={[styles.sectionBox, { backgroundColor: colors.surfaceRaised }]}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                      {personality === 'gymrat' ? 'COACH BREAKDOWN: THE BIG PICTURE 🧠' : 'MONTHLY SYNTHESIS & ANALYSIS'}
+                      {personality === 'gymrat' ? 'COACH BREAKDOWN: THE BIG PICTURE 🧠' : `${longName.toUpperCase()} SYNTHESIS & ANALYSIS`}
                     </Text>
                     <Text style={[styles.plainSummary, { color: colors.text }]}>
                       {monthlyReview.plainSummary ?? monthlyReview.synthesis}
@@ -805,7 +837,7 @@ export const WeeklyReviewModal = ({
                     <View style={styles.cardHeaderRow}>
                       <Ionicons name="compass-outline" size={18} color={colors.accent} />
                       <Text style={[styles.strategyTitle, { color: colors.accent }]}>
-                        {personality === 'gymrat' ? 'NEXT 30 DAYS BATTLE PLAN 🚀' : 'STRATEGY FOR NEXT 30 DAYS'}
+                        {personality === 'gymrat' ? `NEXT ${isQuarter ? 'QUARTER' : 'MONTH'} BATTLE PLAN 🚀` : `STRATEGY FOR THE NEXT ${isQuarter ? 'QUARTER' : 'MONTH'}`}
                       </Text>
                     </View>
                     <Text style={[styles.strategyText, { color: colors.text }]}>
@@ -867,8 +899,8 @@ export const WeeklyReviewModal = ({
                             ]}
                           >
                             {monthlyReview.suggestedAdjustment.hasAdjustment
-                              ? (personality === 'gymrat' ? 'RECOMMENDED COACH PROTOCOL 🔥' : 'RECOMMENDED MONTHLY ADJUSTMENT')
-                              : (personality === 'gymrat' ? 'TARGETS LOCKED IN · KEEP CRUSHING 🎯' : 'MONTHLY TARGETS ON TRACK')}
+                              ? (personality === 'gymrat' ? 'RECOMMENDED COACH PROTOCOL 🔥' : `RECOMMENDED ${longName.toUpperCase()} ADJUSTMENT`)
+                              : (personality === 'gymrat' ? 'TARGETS LOCKED IN · KEEP CRUSHING 🎯' : `${longName.toUpperCase()} TARGETS ON TRACK`)}
                           </Text>
                         </View>
                         <Text style={[styles.adjustTitle, { color: colors.text }]}>
@@ -911,7 +943,7 @@ export const WeeklyReviewModal = ({
                             <View style={styles.appliedPill}>
                               <Ionicons name="checkmark-circle" size={16} color="#10B981" />
                               <Text style={styles.appliedText}>
-                                {personality === 'gymrat' ? 'ADJUSTMENT LOCKED IN 🔒🔥' : 'MONTHLY ADJUSTMENT APPLIED'}
+                                {personality === 'gymrat' ? 'ADJUSTMENT LOCKED IN 🔒🔥' : `${longName.toUpperCase()} ADJUSTMENT APPLIED`}
                               </Text>
                             </View>
                           ) : (
