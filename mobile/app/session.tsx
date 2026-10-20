@@ -191,6 +191,8 @@ const handleWorkoutNumberInput = (text: string): string => {
 };
 
 /** "192" rather than "192.0", but "32.5" kept: the decimal only when it says something. */
+// Also what the weight boxes are filled with, so a set reads the same in the
+// box as in the Previous column beside it; they used to say "117.0" next to "117".
 const compactWeight = (value: number): string => {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -681,7 +683,7 @@ export default function SessionScreen() {
           weight:
             previous?.weightKg == null
               ? ''
-              : String(displayWeight(previous.weightKg, workoutUnits).toFixed(1)),
+              : compactWeight(displayWeight(previous.weightKg, workoutUnits)),
           reps: repsPrefill(previous?.reps, target.reps),
           setType: 'normal',
           rpe: null,
@@ -715,7 +717,7 @@ export default function SessionScreen() {
               key: s.id,
               id: s.id,
               weight:
-                s.weightKg === null ? '' : String(displayWeight(s.weightKg, workoutUnits).toFixed(1)),
+                s.weightKg === null ? '' : compactWeight(displayWeight(s.weightKg, workoutUnits)),
               reps: String(s.reps),
               setType: s.setType,
               rpe: s.rpe,
@@ -824,7 +826,7 @@ export default function SessionScreen() {
                   mine.map((s) => ({
                     key: s.id,
                     id: s.id,
-                    weight: s.weightKg === null ? '' : String(displayWeight(s.weightKg, workoutUnits).toFixed(1)),
+                    weight: s.weightKg === null ? '' : compactWeight(displayWeight(s.weightKg, workoutUnits)),
                     reps: String(s.reps),
                     setType: s.setType,
                     rpe: s.rpe,
@@ -1008,7 +1010,7 @@ export default function SessionScreen() {
                 last?.weight ??
                 (previous?.weightKg == null
                   ? ''
-                  : String(displayWeight(previous.weightKg, workoutUnits).toFixed(1))),
+                  : compactWeight(displayWeight(previous.weightKg, workoutUnits))),
               reps: last?.reps ?? (previous ? String(previous.reps) : ''),
               setType: 'normal',
               rpe: null,
@@ -1753,7 +1755,7 @@ export default function SessionScreen() {
           ...row,
           weight:
             prev?.weightKg != null
-              ? String(displayWeight(prev.weightKg, workoutUnits).toFixed(1))
+              ? compactWeight(displayWeight(prev.weightKg, workoutUnits))
               : row.weight,
           reps: prev?.reps != null ? String(prev.reps) : row.reps || targetBlock.target?.reps || '8',
           isCardio,
@@ -1794,7 +1796,7 @@ export default function SessionScreen() {
           id: null,
           weight:
             prev?.weightKg != null
-              ? String(displayWeight(prev.weightKg, workoutUnits).toFixed(1))
+              ? compactWeight(displayWeight(prev.weightKg, workoutUnits))
               : '',
           reps: repsPrefill(prev?.reps, targetBlock.target?.reps ?? null),
           setType: 'normal',

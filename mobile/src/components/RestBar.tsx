@@ -6,6 +6,7 @@ import { getEventCopy } from '../copy/personality';
 import { font, radius, space } from '../theme';
 import { useAnimatedTo } from '../theme/motion';
 import { session as loud } from '../theme/sessionTheme';
+import { TOUCH_TARGET } from './Controls';
 import { Tappable } from './Tappable';
 
 interface RestBarProps {
@@ -46,8 +47,62 @@ export const RestBar = ({
   const fraction = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
   const width = useAnimatedTo(fraction);
 
+  const bell = (
+    <Tappable
+      onPress={onToggleSound}
+      scaleTo={0.85}
+      style={styles.bell}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: soundOn }}
+      accessibilityLabel={soundOn ? 'Rest chime on' : 'Rest chime off'}
+    >
+      <Ionicons
+        name={soundOn ? 'notifications' : 'notifications-off-outline'}
+        size={16}
+        color={done ? loud.onLoud : soundOn ? loud.figure : loud.figureFaint}
+      />
+    </Tappable>
+  );
+
+  // Once the rest is up there is one thing to say and one thing to do. The
+  // clock reading 0:00 said nothing, and the dismiss button's label fought the
+  // message for the same row, so the message wrapped in small type. Now the
+  // message gets the row, the whole bar dismisses it, and +15 stays for
+  // someone who wants longer.
+  if (done) {
+    return (
+      <Tappable
+        onPress={onSkip}
+        scaleTo={0.98}
+        style={[styles.wrap, styles.wrapDone]}
+        accessibilityRole="button"
+        accessibilityLabel="Rest over. Dismiss"
+      >
+        <View style={styles.content}>
+          {bell}
+          <View style={styles.readout}>
+            <Text numberOfLines={2} style={styles.doneLabel}>
+              {getEventCopy('workout.rest_done_label', { personality, seed: total })}
+            </Text>
+            <Text numberOfLines={1} style={styles.doneHint}>
+              Tap to continue
+            </Text>
+          </View>
+          <Tappable
+            onPress={() => onAdjust(1)}
+            scaleTo={0.85}
+            style={[styles.step, styles.stepDone]}
+            accessibilityLabel="Fifteen seconds more rest"
+          >
+            <Text style={[styles.stepLabel, { color: loud.onLoud }]}>+15</Text>
+          </Tappable>
+        </View>
+      </Tappable>
+    );
+  }
+
   return (
-    <View style={[styles.wrap, done ? styles.wrapDone : styles.wrapResting]}>
+    <View style={[styles.wrap, styles.wrapResting]}>
       {!done && (
         <Animated.View
           style={[
@@ -59,20 +114,7 @@ export const RestBar = ({
       )}
 
       <View style={styles.content} pointerEvents="box-none">
-        <Tappable
-          onPress={onToggleSound}
-          scaleTo={0.85}
-          style={styles.bell}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: soundOn }}
-          accessibilityLabel={soundOn ? 'Rest chime on' : 'Rest chime off'}
-        >
-          <Ionicons
-            name={soundOn ? 'notifications' : 'notifications-off-outline'}
-            size={16}
-            color={done ? loud.onLoud : soundOn ? loud.figure : loud.figureFaint}
-          />
-        </Tappable>
+        {bell}
         {/*
           Label over clock in one column that takes the spare width. Side by
           side, a long label ("REST OVER · TIME TO COOK") was squeezed to a
@@ -133,15 +175,15 @@ export const RestBar = ({
 
 const styles = StyleSheet.create({
   bell: {
-    minWidth: 36,
-    minHeight: 36,
+    minWidth: TOUCH_TARGET,
+    minHeight: TOUCH_TARGET,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: -4,
   },
   wrap: {
-    minHeight: 52,
+    minHeight: TOUCH_TARGET + 12,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: space.md,
@@ -168,8 +210,8 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', gap: 6 },
   step: {
-    minWidth: 42,
-    minHeight: 34,
+    minWidth: TOUCH_TARGET,
+    minHeight: TOUCH_TARGET,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.pill,
@@ -177,4 +219,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   stepLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 0.8 },
+  stepDone: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  doneLabel: { fontFamily: font.display, fontSize: 14, lineHeight: 18, letterSpacing: 1, color: loud.onLoud },
+  doneHint: { fontFamily: font.ui, fontSize: 11, color: loud.onLoud, opacity: 0.8, marginTop: 1 },
 });
