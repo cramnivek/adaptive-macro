@@ -1,7 +1,9 @@
-import React, { useContext } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useContext, useRef } from 'react';
+import { Animated, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, space, useTheme } from '../theme';
+import { duration, ease, useReduceMotion } from '../theme/motion';
 import { FloatingBarInset } from './FloatingWorkoutBar';
 import { session as loud } from '../theme/sessionTheme';
 
@@ -35,6 +37,31 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
   // Room for the floating workout bar, when this is a tab and the bar is up.
   const barInset = useContext(FloatingBarInset);
 
+  // Each time a screen comes into view — a tab tapped, sign-in finished, a
+  // sheet closed over it — its content fades and lifts the last few points
+  // into place. Before this a tab switch was a hard cut, which on web reads as
+  // the page reloading. Short (the entrance duration) because it runs on every
+  // tab tap, and a fade alone with reduce motion on.
+  const arrival = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
+  useFocusEffect(
+    useCallback(() => {
+      arrival.setValue(0);
+      const animation = Animated.timing(arrival, {
+        toValue: 1,
+        duration: duration.enter,
+        easing: ease,
+        useNativeDriver: true,
+      });
+      animation.start();
+      return () => animation.stop();
+    }, [arrival]),
+  );
+  const arrivalStyle = {
+    opacity: arrival,
+    transform: [{ translateY: arrival.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 8, 0] }) }],
+  };
+
   return (
     <ScrollView
       style={{ backgroundColor: tone === 'loud' ? loud.ground : colors.background }}
@@ -52,26 +79,28 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
       {/* An action alone still draws the header: a modal whose stack header already
           shows its title would otherwise have to pass one here only to get the
           slot, and the heading would appear twice. */}
-      {(title || action) && (
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            {title ? (
-              <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
-            ) : (
-              <View />
+      <Animated.View style={arrivalStyle}>
+        {(title || action) && (
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              {title ? (
+                <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+              ) : (
+                <View />
+              )}
+              {action}
+            </View>
+            {subtitle && (
+              <Text
+                style={[styles.subtitle, { color: tone === 'loud' ? loud.figureMuted : colors.textMuted }]}
+              >
+                {subtitle}
+              </Text>
             )}
-            {action}
           </View>
-          {subtitle && (
-            <Text
-              style={[styles.subtitle, { color: tone === 'loud' ? loud.figureMuted : colors.textMuted }]}
-            >
-              {subtitle}
-            </Text>
-          )}
-        </View>
-      )}
-      {children}
+        )}
+        {children}
+      </Animated.View>
     </ScrollView>
   );
 };

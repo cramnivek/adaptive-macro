@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 import { watchForNewBuild } from '../src/platform/staleBuild';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppArrival } from '../src/components/AppArrival';
 import { Toaster } from '../src/components/Toaster';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
@@ -59,6 +60,7 @@ export default function RootLayout() {
   }
 
   return (
+    <AppArrival background={colors.background}>
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -325,5 +327,6 @@ export default function RootLayout() {
         </SocialProvider>
       </AppProvider>
     </SafeAreaProvider>
+    </AppArrival>
   );
 }
