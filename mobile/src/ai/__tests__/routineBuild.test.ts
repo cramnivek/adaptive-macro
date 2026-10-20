@@ -3,11 +3,13 @@ import {
   applyPrescription,
   buildRoutinePrompt,
   estimateMinutes,
+  focusesFromCounts,
   isBodyweightOnly,
   missingEquipment,
   PRESCRIPTION,
   ROUTINE_BUILD_SYSTEM,
   ROUTINE_FOCUSES,
+  routineNames,
   slotsFor,
   TRAINING_LEVELS,
 } from '../routineBuild';
@@ -52,6 +54,18 @@ describe('buildRoutinePrompt', () => {
 
     expect(prompt.endsWith('- Exercise 60')).toBe(true);
     expect(prompt).not.toContain('Exercise 61');
+  });
+
+  it('letters a repeated day and asks the second to vary its exercises', () => {
+    const prompt = buildRoutinePrompt(['push', 'pull', 'push'], []);
+
+    expect(prompt).toContain('Write 3 routines.');
+    expect(prompt).toContain('Routine named exactly "Push A"');
+    expect(prompt).toContain('Routine named exactly "Pull"');
+    expect(prompt).toContain('Routine named exactly "Push B"');
+    expect(prompt).toContain('different exercises from "Push A"');
+    // Only the repeat is asked to differ.
+    expect(prompt.match(/different exercises from/g)).toHaveLength(1);
   });
 
   it('says nothing about history to someone with none', () => {
@@ -226,5 +240,26 @@ describe('estimateMinutes', () => {
     expect(estimateMinutes(10)).toBe(25);
     expect(estimateMinutes(16)).toBe(40);
     expect(estimateMinutes(22)).toBe(55);
+  });
+});
+
+describe('focusesFromCounts', () => {
+  it('lays a week out round by round, in the order of the chips', () => {
+    expect(focusesFromCounts({ legs: 2, push: 2, pull: 2 })).toEqual(['push', 'pull', 'legs', 'push', 'pull', 'legs']);
+    expect(focusesFromCounts({ full: 3 })).toEqual(['full', 'full', 'full']);
+    expect(focusesFromCounts({ upper: 2, lower: 1 })).toEqual(['upper', 'lower', 'upper']);
+  });
+
+  it('is empty when nothing is picked', () => {
+    expect(focusesFromCounts({})).toEqual([]);
+    expect(focusesFromCounts({ push: 0 })).toEqual([]);
+  });
+});
+
+describe('routineNames', () => {
+  it('uses the plain label for a day that appears once, and letters repeats', () => {
+    expect(routineNames(['push', 'pull', 'legs'])).toEqual(['Push', 'Pull', 'Legs']);
+    expect(routineNames(['upper', 'lower', 'upper'])).toEqual(['Upper A', 'Lower', 'Upper B']);
+    expect(routineNames(['full', 'full', 'full'])).toEqual(['Full body A', 'Full body B', 'Full body C']);
   });
 });

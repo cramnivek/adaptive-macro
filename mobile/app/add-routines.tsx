@@ -13,12 +13,15 @@ import {
   EQUIPMENT_ITEMS,
   EQUIPMENT_LABEL,
   FOCUS_LABEL,
+  focusesFromCounts,
   isBodyweightOnly,
   LEVEL_COACHING,
   LEVEL_LABEL,
+  MAX_FOCUS_REPEATS,
   missingEquipment,
   ROUTINE_FOCUSES,
   type RoutineFocus,
+  routineNames,
   TRAINING_LEVELS,
 } from '../src/ai/routineBuild';
 import { type ResolvedExercise, type RoutineDraft, resolveAgainstLog } from '../src/ai/routineImport';
@@ -61,7 +64,9 @@ export default function AddRoutinesScreen() {
   const apiKey = settings.foodLookup.geminiApiKey;
 
   const [known, setKnown] = useState<{ name: string; bodyweightBased: boolean }[]>([]);
-  const [focuses, setFocuses] = useState<RoutineFocus[]>([]);
+  // How many of each day, so Push, Pull, Legs twice a week is six routines.
+  const [counts, setCounts] = useState<Partial<Record<RoutineFocus, number>>>({});
+  const focuses = focusesFromCounts(counts);
   // What the drafts on screen were built with: for the equipment warnings, and
   // so a bodyweight routine saves its new exercises as bodyweight ones.
   const [builtWith, setBuiltWith] = useState<BuildOptions | null>(null);
@@ -89,11 +94,14 @@ export default function AddRoutinesScreen() {
     );
   };
 
-  const toggleFocus = (focus: RoutineFocus) =>
-    // Kept in the order of the chips, so "Push, Pull, Legs" comes back in that order.
-    setFocuses((current) =>
-      ROUTINE_FOCUSES.filter((f) => (f === focus ? !current.includes(f) : current.includes(f))),
-    );
+  // Each tap adds one more of that day, up to the limit, then clears it. The
+  // week is laid out from the counts in the order of the chips, so "Push, Pull,
+  // Legs" comes back in that order.
+  const tapFocus = (focus: RoutineFocus) =>
+    setCounts((current) => {
+      const next = (current[focus] ?? 0) + 1;
+      return { ...current, [focus]: next > MAX_FOCUS_REPEATS ? 0 : next };
+    });
 
   const toggleEquipment = (item: (typeof EQUIPMENT_ITEMS)[number]) =>
     void updateSettings({
@@ -102,7 +110,7 @@ export default function AddRoutinesScreen() {
 
   const build = async () => {
     const options: BuildOptions = { equipment, level };
-    setWorking({ title: 'Building your routines', detail: focuses.map((f) => FOCUS_LABEL[f]).join(', ') });
+    setWorking({ title: 'Building your routines', detail: routineNames(focuses).join(', ') });
     try {
       show(await buildRoutinesWithGemini(focuses, known.map((k) => k.name), apiKey, options));
       setSource('built');
@@ -218,10 +226,23 @@ export default function AddRoutinesScreen() {
                 exercises you already do wherever they fit. You see them all before anything is saved.
               </Text>
               <View style={styles.chips}>
-                {ROUTINE_FOCUSES.map((focus) => (
-                  <Chip key={focus} label={FOCUS_LABEL[focus]} on={focuses.includes(focus)} onPress={() => toggleFocus(focus)} />
-                ))}
+                {ROUTINE_FOCUSES.map((focus) => {
+                  const n = counts[focus] ?? 0;
+                  return (
+                    <Chip
+                      key={focus}
+                      label={n > 1 ? `${FOCUS_LABEL[focus]} ×${n}` : FOCUS_LABEL[focus]}
+                      on={n > 0}
+                      onPress={() => tapFocus(focus)}
+                    />
+                  );
+                })}
               </View>
+              <Text style={[styles.note, { color: loud.figureFaint }]}>
+                {focuses.length > 0
+                  ? routineNames(focuses).join(' · ')
+                  : `Tap a day again to have it more than once a week, up to ${MAX_FOCUS_REPEATS} times.`}
+              </Text>
 
               <Text style={[styles.label, { color: loud.figureMuted }]}>WHAT YOU HAVE</Text>
               <View style={styles.chips}>

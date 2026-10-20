@@ -244,21 +244,60 @@ export interface BuildOptions {
 
 export const DEFAULT_BUILD_OPTIONS: BuildOptions = { equipment: [...EQUIPMENT_ITEMS], level: 'intermediate' };
 
+/** How many times a week one kind of day can be picked: full body three times is a common plan. */
+export const MAX_FOCUS_REPEATS = 3;
+
+/**
+ * The week, from how many of each day were picked: round by round, so two of
+ * each of Push, Pull and Legs come out Push, Pull, Legs, Push, Pull, Legs —
+ * the order they are trained in — not Push, Push, Pull, Pull.
+ */
+export const focusesFromCounts = (counts: Partial<Record<RoutineFocus, number>>): RoutineFocus[] => {
+  const rounds = Math.max(0, ...ROUTINE_FOCUSES.map((f) => counts[f] ?? 0));
+  const week: RoutineFocus[] = [];
+  for (let round = 1; round <= rounds; round++) {
+    for (const focus of ROUTINE_FOCUSES) if ((counts[focus] ?? 0) >= round) week.push(focus);
+  }
+  return week;
+};
+
+/**
+ * A name for each routine: the day's label alone when it appears once, and
+ * lettered when it repeats ("Push A", "Push B"), since two routines called
+ * "Push" could not be told apart in the list or on the Train tab.
+ */
+export const routineNames = (focuses: RoutineFocus[]): string[] => {
+  const seen: Partial<Record<RoutineFocus, number>> = {};
+  return focuses.map((focus) => {
+    const total = focuses.filter((f) => f === focus).length;
+    const nth = (seen[focus] = (seen[focus] ?? 0) + 1);
+    return total > 1 ? `${FOCUS_LABEL[focus]} ${String.fromCharCode(64 + nth)}` : FOCUS_LABEL[focus];
+  });
+};
+
 /** The request for one routine per focus, steered towards exercises the person already logs. */
 export const buildRoutinePrompt = (
   focuses: RoutineFocus[],
   known: string[],
   options: BuildOptions = DEFAULT_BUILD_OPTIONS,
 ): string => {
+  const names = routineNames(focuses);
   const days = focuses
-    .map((focus) => {
+    .map((focus, index) => {
       const slots = slotsFor(focus, options.level)
         .map((slot, index) => {
           const { sets, reps } = PRESCRIPTION[options.level][slot.role];
           return `  ${index + 1}. ${slot.text} — ${sets} sets of "${reps}"`;
         })
         .join('\n');
-      return `Routine named exactly "${FOCUS_LABEL[focus]}":\n${slots}`;
+      // A second Push should not be the first one again: same slots, so the
+      // week stays balanced, but other exercises where an equal choice exists.
+      const first = focuses.indexOf(focus);
+      const vary =
+        first < index
+          ? `\n  Fill these slots with different exercises from "${names[first]}" wherever an equally good choice fits the equipment.`
+          : '';
+      return `Routine named exactly "${names[index]}":\n${slots}${vary}`;
     })
     .join('\n\n');
 
