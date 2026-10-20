@@ -121,6 +121,8 @@ export interface AppSettings {
   restSound: boolean;
   /** The sound played when the rest timer finishes. Defaults to 'chime'. */
   restChimeChoice: ChimeChoice;
+  /** Short sounds for moments, such as a new PR. Separate from the rest chime. */
+  effectSounds: boolean;
   /**
    * Whether the finish sheet leads with POST. Set by what someone did last
    * time — posted, or left without posting — so a regular poster gets one tap
@@ -178,6 +180,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trainingLevel: 'intermediate',
   restSound: true,
   restChimeChoice: 'chime',
+  effectSounds: true,
   postWorkouts: false,
   personality: 'ascend',
   userMission: 'hybrid',

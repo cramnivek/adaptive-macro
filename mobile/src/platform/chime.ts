@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { chimeWav } from './chimeSound';
+import { chimeWav, prStingSamples, wavFromSamples } from './chimeSound';
 import type { ChimeChoice } from './chimeSound';
 
 /**
@@ -207,4 +207,63 @@ export const playChime = (choice: ChimeChoice = 'chime'): void => {
     }
   }
   playWebAudioFallback(choice);
+};
+
+/**
+ * Short sounds for moments rather than alarms: so far, the new-PR sting.
+ *
+ * The same element-not-Web-Audio rule as the chime, for the same reason (the
+ * iOS silent switch mutes Web Audio), and the same priming: the sting plays
+ * a moment after the Finish tap, once the session is saved, so it is primed
+ * on that tap.
+ */
+export type SoundEffect = 'pr';
+
+const effects = new Map<SoundEffect, HTMLAudioElement>();
+
+const effectAudio = (effect: SoundEffect): HTMLAudioElement | null => {
+  if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
+  let element = effects.get(effect);
+  if (!element) {
+    try {
+      const samples = prStingSamples();
+      const url = URL.createObjectURL(new Blob([wavFromSamples(samples).buffer as ArrayBuffer], { type: 'audio/wav' }));
+      element = new Audio(url);
+      element.preload = 'auto';
+      effects.set(effect, element);
+    } catch {
+      return null;
+    }
+  }
+  return element;
+};
+
+/** Call from a tap, so the effect may play shortly after it. */
+export const primeEffect = (effect: SoundEffect): void => {
+  const a = effectAudio(effect);
+  if (a === null) return;
+  a.muted = true;
+  void a
+    .play()
+    .then(() => {
+      a.pause();
+      a.currentTime = 0;
+      a.muted = false;
+    })
+    .catch(() => {
+      a.muted = false;
+    });
+};
+
+/** Plays the effect if the browser allows it; silently nothing if not. */
+export const playEffect = (effect: SoundEffect): void => {
+  const a = effectAudio(effect);
+  if (a === null) return;
+  try {
+    a.muted = false;
+    a.currentTime = 0;
+    void a.play().catch(() => undefined);
+  } catch {
+    // A sound that cannot play is not worth an error.
+  }
 };

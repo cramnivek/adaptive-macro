@@ -43,7 +43,18 @@ export interface MilestoneCopy {
   label: string;
   /** The claim being made, underneath. */
   detail: string;
+  /**
+   * What actually happened beside the round number, when the milestone says:
+   * "Today 102.5 kg · previous best 97.5 kg (+5 kg)". Null when it does not.
+   */
+  context: string | null;
 }
+
+/** One decimal at most, and none on a whole number. */
+const compact = (value: number): string => {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+};
 
 const round = (value: number): string => String(Math.round(value));
 
@@ -65,12 +76,21 @@ export const describeMilestone = (
   const unit = units === 'metric' ? 'kg' : 'lb';
 
   if (milestone.kind === 'load') {
+    const { previous, reached } = milestone;
+    const shown = (kg: number) => `${compact(displayWeight(kg, units))} ${unit}`;
+    const context =
+      reached === undefined
+        ? null
+        : previous === undefined || previous <= 0
+          ? `Today ${shown(reached)} · first time on this lift`
+          : `Today ${shown(reached)} · previous best ${shown(previous)} (+${shown(reached - previous)})`;
     return {
       label: (milestone.exercise ?? 'That lift').toUpperCase(),
       figure: `${round(displayWeight(milestone.value, units))} ${unit}`,
       detail:
         getEventCopy('milestone.load_detail', { personality, seed: milestone.value }) ||
         'Heavier than you have ever had on it.',
+      context,
     };
   }
 
@@ -85,6 +105,10 @@ export const describeMilestone = (
         comparison === null
           ? base || 'Everything you have ever put on a bar, added up.'
           : `${base || 'Everything you have ever put on a bar'} — ${comparison}.`,
+      context:
+        milestone.previous !== undefined && milestone.reached !== undefined
+          ? `+${Math.round(displayWeight(milestone.reached - milestone.previous, units)).toLocaleString()} ${unit} today`
+          : null,
     };
   }
 
@@ -94,5 +118,6 @@ export const describeMilestone = (
     detail:
       getEventCopy('milestone.sessions_detail', { personality, seed: milestone.value }) ||
       'Workouts finished. Most people never get here.',
+    context: null,
   };
 };

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing } from 'react-native';
 
 /**
  * Shared motion vocabulary.
@@ -72,6 +72,29 @@ export const useEntrance = (delay = 0) => {
     opacity: progress,
     transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
   };
+};
+
+/**
+ * Whether the person has asked their phone for less motion. Anything bigger
+ * than a fade checks this and settles for a fade when it is on: a burst of
+ * shards or a card swinging in is exactly what that setting is for.
+ */
+export const useReduceMotion = (): boolean => {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((value) => {
+        if (alive) setReduce(value);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
+    return () => {
+      alive = false;
+      subscription.remove();
+    };
+  }, []);
+  return reduce;
 };
 
 /**
