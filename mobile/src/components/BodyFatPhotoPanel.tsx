@@ -110,9 +110,10 @@ export const BodyFatPhotoPanel = ({ tapeEstimate, onUse }: BodyFatPhotoPanelProp
       ) : (
         <>
           <Text style={styles.note}>
-            Take one photo from the front and one from the side, in fitted clothing, standing relaxed in even
-            light, shoulders to hips in frame. Ascend does not keep them: they are sent once to Google’s Gemini
-            to be read, then dropped from the app.
+            Take one photo from the front and one from the side, in underwear or swimwear, standing relaxed in
+            even light, shoulders to knees in frame. Bodies store fat in different places, so the more of yours
+            the photos show, the better the read. Ascend does not keep them: they are sent once to Google’s
+            Gemini to be read, then dropped from the app.
           </Text>
           {result && !result.usable && <Text style={styles.warning}>{result.reason}</Text>}
           {(['front', 'side'] as const).map((shot) => (

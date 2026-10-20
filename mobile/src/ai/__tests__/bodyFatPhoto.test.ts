@@ -89,6 +89,16 @@ describe('estimateBodyFatFromPhotos', () => {
     await expect(estimateBodyFatFromPhotos(front, side, context, '')).rejects.toThrow(/allowance/);
   });
 
+  it('says when Gemini’s own filter refused the photos, rather than that the reply was unreadable', async () => {
+    for (const payload of [
+      { promptFeedback: { blockReason: 'SAFETY' } },
+      { candidates: [{ finishReason: 'IMAGE_SAFETY' }] },
+    ]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(payload), { status: 200 })));
+      await expect(estimateBodyFatFromPhotos(front, side, context, '')).rejects.toThrow(/declined to read those photos/);
+    }
+  });
+
   it('turns a dropped connection into a sentence', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     await expect(estimateBodyFatFromPhotos(front, side, context, '')).rejects.toThrow(/Check your connection/);
