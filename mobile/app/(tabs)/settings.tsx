@@ -117,7 +117,7 @@ const Section = ({
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, refreshAll, protein, proteinOverrideGPerKg, latest } = useApp();
+  const { settings, updateSettings, refreshAll, retryLoad, protein, proteinOverrideGPerKg, latest } = useApp();
   /** A goal weight and date not yet applied; applying it sets the direction and rate above. */
   const [plan, setPlan] = useState<GoalPlan | null>(null);
   const social = useSocial();
@@ -211,7 +211,15 @@ export default function SettingsScreen() {
       if (!sure) return;
 
       await restoreBackup(backup);
-      notify('Restored', 'Close and reopen the app to load the restored data.');
+      // The whole load again, settings included: the screens that read the
+      // store kept showing what was there before, so weigh-ins looked lost
+      // while workouts, read straight from the database, had come back.
+      retryLoad();
+      notify(
+        'Restored',
+        `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.sessions} workouts and ${counts.sets} sets.`,
+      );
     } catch (error) {
       notify('Restore failed', (error as Error).message);
     }
