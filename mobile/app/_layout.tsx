@@ -19,6 +19,10 @@ import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
+import { holdSplash } from '../src/platform/splash';
+
+// At module load, before the first render, or the launch screen is already gone.
+holdSplash();
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
