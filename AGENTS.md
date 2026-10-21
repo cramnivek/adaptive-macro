@@ -4,8 +4,9 @@ Written for an agent arriving with no history: what this is, where things live,
 what will bite you, and what counts as done here. If you read one section, read
 **Before you touch anything**.
 
-Last verified 2026-10-20 against `main` at `e219229`. Commands were run, not
-remembered: 1,483 tests pass (`npm test`) and `npm run typecheck` is clean.
+Last verified 2026-10-21 against `main` at `b987bc2` plus PR #43. Commands were
+run, not remembered: 1,637 tests pass (`npm test`) and `npm run typecheck` is
+clean. The Android build is being set up; see `HANDOFF.md`.
 The rest of this file was last read through on 2026-10-14; where it and
 `HANDOFF.md` disagree, the handoff is newer.
 
@@ -36,6 +37,7 @@ The applied set as of today:
 20261018230000_profile_avatars_and_bio.sql avatars, bio, training focus
 20261019120000_squad_access.sql           squads private to members, join_squad
 20261020120000_squad_join_limit.sql       twenty join_squad tries an hour
+20261020160000_post_lift_records.sql      a post's lift may carry pr: true
 ```
 
 `20261018120000_training_squads.sql` is the rule broken once already: it was
@@ -87,16 +89,16 @@ Three things make it unusual, and each constrains how you change it:
 ## Layout
 
 ```
-packages/engine        pure TDEE / trend / targets maths, no I/O        166 tests
-mobile                 the Expo app                                     851 tests
+packages/engine        pure TDEE / trend / targets maths, no I/O        251 tests
+mobile                 the Expo app                                    1231 tests
   app/                 expo-router screens (file-based routes)
-  src/db/              SQLite schema + queries; migrations by user_version (v1..v8)
+  src/db/              SQLite schema + queries; migrations by user_version (v1..v14)
   src/social/          everything Supabase: api, feed, errors, session, types
   src/ai/              meal estimation prompts and parsing
-  src/platform/        web-only pieces (the share card canvas lives here)
+  src/platform/        web-only pieces (the share card canvas, sounds); see HANDOFF.md for native
   src/components/      shared UI
   src/theme/           palette, spacing, type; `sessionTheme` is the loud one
-services/gemini-proxy  Cloud Run: holds API keys, serves the web build 133 tests
+services/gemini-proxy  Cloud Run: holds API keys, serves the web build 155 tests
 supabase/migrations    the live database's history
 evals, tools           eval harness and scripts
 ```

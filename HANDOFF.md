@@ -1,202 +1,188 @@
 # Handoff
 
-State of play on **2026-10-20**. For how the repository works — layout,
-commands, the security model, the rules — read [AGENTS.md](AGENTS.md) first;
-this file is only what is in flight and what to do next. Earlier snapshots:
-[docs/handoff-2026-10-01.md](docs/handoff-2026-10-01.md); the 2026-10-19 one is
-this file's git history.
+State of play on **2026-10-21**, written for the session that picks this up on
+the owner's Windows PC to build the **Android app**. For how the repository
+works — layout, commands, the security model, the rules — read
+[AGENTS.md](AGENTS.md) first; this file is only what is in flight and what to
+do next. Earlier snapshots are this file's git history and
+[docs/handoff-2026-10-01.md](docs/handoff-2026-10-01.md).
 
 ---
 
 ## Where things stand
 
-**Merged and live since the 2026-10-19 snapshot:** PR #22 (squads private to
-their members, automatic deploys), #24 (old code files kept across deploys),
-#25 (optional account, one-step onboarding, leaner Settings, both sides of a
-dumbbell set, a limit on squad-code guesses) and #26 (the routine screens, and
-a barcode camera that focuses on the web). The database has every migration in
-the repository, the last being `20261020120000_squad_join_limit.sql`.
+**The web app is live and current.** PRs #27–#42 merged and deployed on
+2026-10-20/21. In outline: routines and barcode fixes; body measurements and
+body fat from tape or photos; an honest weight trend and an energy density from
+body composition; Trends check-ins earned per period and numbers that follow
+the selected period; real steps and micronutrients; PR medals on record sets
+(results, share card, feed posts) and a PR popup with sound; set/finish sounds
+and screen transitions; protein recommended from goal, activity, sex and body
+fat, and DRI micronutrient targets by age and sex; goals set as a weight and a
+date; a 7- and 30-day weight projection; a profile-photo cropper; an
+installed web app that reloads itself onto a new build when it comes back into
+view after five minutes away.
 
-**In flight:** branch `claude/updates-overview-y2g5ve`, after #26 — Left/Right
-spelled out under one-sided sets, the sticker preview no longer cropped, the
-routine editor's back arrow, reordering that keeps supersets together, the
-barcode decoder served by the app, entering an unknown barcode from its label,
-building a day more than once a week, and this file. See `git log origin/main..` on it for the exact list.
+**The database** has every migration in the repository, the last being
+`20261020160000_post_lift_records.sql` (a lift in a post may carry `pr: true`),
+confirmed applied on 2026-10-21.
 
-**Deploys are automatic now.** A push to `main` runs
-`.github/workflows/deploy.yml`: test, build, deploy to Cloud Run, verify. Its
-first real run, on the merge of PR #22, passed every step. The Google side signs
-in by Workload Identity Federation — no key stored anywhere — and trusts only
-pushes to `main` of this repository, identified by GitHub's numeric IDs
-(repository `1374033579`, owner `54169123`), not the name. The deploy account
-holds `run.sourceDeveloper`, `serviceUsageConsumer`, and `serviceAccountUser` on
-the one runtime account. Manual deploys from PowerShell still work.
-
-**The squad hole is closed.** Before PR #22, any signed-in user could read
-every squad with its invite code, every member list and every cheer, and join
-any squad without the code — production had run an earlier draft of the squads
-migration. Read from `pg_policies` after the merge, every squad table now allows
-reading only inside the squad and never across a block, and joining only goes
-through `join_squad`. From outside: `in_squad`, `can_see` and
-`check_squad_capacity` over `/rpc` are 404, and a signed-out `join_squad` is
-refused. The one real squad and its two members came through intact.
+**In flight:** PR #43, branch `claude/updates-overview-y2g5ve` — the first
+Android fixes (below) and this file. Merge it before starting locally.
 
 ---
 
-## Do these
+## The Android app: what to do first
 
-**On a phone, from the home-screen app** — the one check nothing here can make:
+The Expo project exists: `@zeldrich/adaptive-macros`, project id
+`1feb7a8d-afb9-479d-8e29-821bb5be74c6`, already in `mobile/app.json`. Android
+package `com.cramnivek.ascend`. `mobile/eas.json` has `development`
+(dev client, internal), `preview` and `production` profiles, each tied to an
+EAS environment of the same name.
 
-- Join a squad with its code; a wrong code says no squad has it.
-- Log a workout: Finish and the rest timer float at the bottom and step aside
-  while typing; tapping a weight and leaving it keeps the number; move an
-  exercise several places through the reorder sheet, and a superset as one.
-- **Scan a barcode** (#26). Checked only against a simulated camera: the
-  stream is 1920×1080 and a code in the box reads. Sharpness, focus and the 2×
-  zoom (`scanZoom` in `src/platform/scanGeometry.ts`) need a real phone. The
-  decoder's WebAssembly is served by the app itself, not jsDelivr. A barcode
-  Open Food Facts lacks can be entered from the label and scans to it after.
-- Sign out, sign in by email code — iOS should offer the code above the keyboard.
-- **Continue with Google from the installed app.** Unverified, and the one that
-  may not work: if sign-in finishes in Safari, the installed app (separate
-  storage) stays signed out. If so, hide the Google button when running
-  standalone on iOS and leave the email code.
+**Do not use Expo Go** (`exp://exp.host/@zeldrich/adaptive-macros`). The app
+has native modules Expo Go lacks (`@react-native-google-signin/google-signin`
+among them); it will fail and teach nothing. Use a development build.
 
-The squad policies were proved against real Postgres as real roles by
-`social-rls.test.ts`, on both versions of the schema. They could not be proved
-against production as a signed-in stranger: the read-only database connection
-may not switch roles. Joining with a second account from the phone is that proof.
+1. **Machine.** Install Android Studio (SDK, an emulator, Java 17). Optional:
+   USB debugging on the owner's Android phone, which is better than the
+   emulator for camera, barcode and sound. Run Claude Code from **PowerShell**.
+2. **Repo.** `git pull` on `main`, `npm install`, `cd mobile`.
+3. **Environment.** On expo.dev, set in the `development` environment (and
+   later `preview`/`production`): `EXPO_PUBLIC_SUPABASE_URL`,
+   `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_PROXY_TOKEN`,
+   `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, and optionally `EXPO_PUBLIC_API_BASE`.
+   Without them the app falls back to compiled-in public values (Supabase,
+   proxy token, the Cloud Run URL), which work, except Google sign-in, which
+   needs the client id. For Google sign-in also register the build's
+   **SHA-1 signing fingerprint** in Google Cloud (`eas credentials` shows it).
+   The service-role key never goes anywhere near the app.
+4. **Build.** Either `npx expo run:android` (local, needs the SDK) or
+   `npx eas login` then `npx eas build --profile development --platform android`
+   (cloud, 10–20 min, install the APK from its link). Then
+   `npx expo start --dev-client`.
+5. **Dependencies — do this deliberately, with a build to check it.**
+   `npx expo-doctor` on 2026-10-21 reported:
+   - 12 Expo packages a patch behind SDK 57 (`expo` 57.0.23 → ~57.0.30,
+     `expo-router`, `expo-sqlite`, `expo-camera` and others);
+   - a second copy of React (19.3.0) on disk at the root beside the app's
+     19.2.3, pulled in by `@expo/metro-runtime`. The Android bundle contains
+     only one React (Metro resolves `mobile/node_modules` first), so this is
+     a warning, not a crash;
+   - `resolver.disableHierarchicalLookup: true` in `metro.config.js`, which is
+     deliberate for the workspace and stays.
 
----
+   **Trap:** `npx expo install --fix` in place left two copies of `expo`,
+   `expo-modules-core`, `expo-asset` and `expo-constants` (root old, `mobile/`
+   new), which a native build cannot tolerate, and `npm dedupe` failed on a
+   peer conflict. It was reverted. Do it as its own change: bump the versions,
+   regenerate the lockfile cleanly, confirm `expo-doctor` shows no native
+   duplicates, and prove it with a real Android build before merging. Mind
+   the junction trap below before deleting any `node_modules`.
 
-## Found on 2026-10-20
-
-- **One timing test could have decided a deploy.** `exerciseSearch`'s speed
-  test timed a single call against 25 ms; it passed alone and failed under the
-  full suite. Since a failed test skips the deploy while Supabase applies the
-  migration anyway, it now keeps the fastest of ten runs. **Any test that reads
-  a clock is a deploy risk here**; prefer the fastest of several runs.
-- **A stored card template the app does not know crashes the finish sheet.**
-  `TEMPLATES[settings.cardTemplate].place` throws for an unknown id, and
-  `withDefaults` in `state/settings.ts` passes the stored value through
-  unchecked. Only the person's own storage can set it, so it is a crash, not an
-  exploit. The fix is to fall back to `DEFAULT_TEMPLATE` there.
-- **A recursive delete that follows links will wipe the main checkout.** npm
-  workspaces put junctions in `node_modules/@adaptive-macros/*` that point at
-  the real `mobile/`, `packages/engine` and `services/gemini-proxy`. Deleting a
-  worktree or a copy of the repo with `robocopy /MIR` from an empty folder
-  followed them and deleted the main working copy's packages on 2026-10-20.
-  Tracked files came back with `git restore`; the git-ignored
-  `mobile/.env.local` did not and was rebuilt from known values. On Windows,
-  delete `node_modules` with `cmd /c rmdir /s /q` (it does not traverse
-  junctions) before removing anything else, or pass robocopy `/XJ`.
-- **Automatic deploys were losing the previous build's code files.** The
-  keeper found old files only through the live index.html, and files kept by
-  one deploy are not linked from it, so the docs-only deploy of PR #23 logged
-  "Kept 0 of 8" and dropped the pre-PR-#22 build's files (its entry now 404s).
-  Fixed after this snapshot: every deploy now publishes `/code-files.json`,
-  each file with the date it first went live, and the next deploy keeps every
-  listed file younger than 30 days. The deploy also no longer passes
-  `--allow-unauthenticated`, which only produced "Setting IAM policy failed";
-  public access survives deploys on its own.
-- **Invite codes came from `Math.random`**, and nothing limited how often
-  `join_squad` could be called. Fixed after this snapshot: codes come from
-  `expo-crypto`, and `20261020120000_squad_join_limit.sql` allows twenty tries
-  per person per hour, wrong guesses counted. To count them, an unknown code
-  now returns null instead of raising — a raise would roll the logged attempt
-  back.
+`npx expo export --platform android` bundles cleanly (7.7 MB Hermes bytecode).
+That is the only Android check made so far; nothing has run on a device.
 
 ---
 
-## Found on 2026-10-19, and still open
+## The Android punch list, most user-visible first
 
-### Production had drifted from the repository
+Every web/native split is a runtime `Platform.OS` / `typeof document` check;
+there are no `.web.tsx`/`.native.tsx` files.
 
-Production ran an **earlier draft** of `20261018120000_training_squads.sql`; the
-file was edited after it was applied, breaking the "an applied migration is
-frozen" rule. The live database therefore had **no six-member limit, no
-one-squad-per-person index, and cheers readable and writable by anyone**. The
-squad-access migration repairs all three and was written to land on either
-version. Production's real version is saved as
-`mobile/src/social/__tests__/fixtures/training_squads_as_applied.sql`, and
-`freshDatabase(asApplied)` in `postgres.ts` swaps it in, so the tests prove the
-fix against both.
+1. **Share card and stickers are browser canvas.** `shareCardFile` returns null
+   off web (`src/platform/shareImage.ts`), so sharing falls back to text;
+   `pickCardPhoto` returns "cancelled", so Add a photo does nothing silently;
+   the depth cut-out (`src/platform/depth.ts`) is MediaPipe WebAssembly.
+   PR #43 makes the sticker sheet say "only in the web app for now" instead of
+   sitting empty. The real fix is redrawing the card natively —
+   `@shopify/react-native-skia`, or React Native views captured with
+   `react-native-view-shot` — plus `expo-image-picker` for the photo and
+   `expo-media-library` to save. The biggest piece of work.
+2. **Feed card images — fixed in PR #43.** They used bare `/api/...` paths and
+   blob URLs; they now go through `proxyBase()` and use a data URL natively.
+3. **No sounds.** Rest chime, PR sting, set tick and finish chord return null
+   off web (`src/platform/chime.ts`); they are synthesised WAVs played through
+   `HTMLAudioElement`. Native: `expo-audio` with the same samples written to
+   files, and `expo-notifications` to schedule the rest-end alert so it fires
+   with the phone locked (the web cannot).
+4. **Google sign-in** needs the client id and SHA-1 above. Sessions persist in
+   AsyncStorage natively (`src/social/client.ts`); Apple sign-in is iOS only.
+5. **Health Connect steps** are offered on Android (`src/health/healthSync.ts`)
+   but not implemented. The clearest reason to install the app over the web.
+6. Works natively already, verify on a device: barcode (`expo-camera`), meal
+   and body-fat photos, avatar cropper, backups and Hevy import
+   (`expo-file-system`, `expo-document-picker`, `expo-sharing`), haptics,
+   SQLite (same migrations as web), the Gemini proxy (absolute URL natively).
+   The web barcode decoder's WebAssembly is still bundled; check the first
+   build does not choke on it.
+7. Web-only and correctly skipped natively: the stale-build reload, storage
+   persistence, cache clearing. Over-the-air updates would need `expo-updates`
+   (not installed).
 
-**Before writing any migration, compare against what production actually ran**,
-not the file:
-
-```sql
-select version, md5(array_to_string(statements, E'\n'))
-  from supabase_migrations.schema_migrations order by version;
-```
-
-The 2026-10-14 and 2026-10-18 profile migrations were checked and match.
-
-### Decisions that are the owner's, not yet made
-
-- **Decided 2026-10-20: the account is optional again.** The sign-in screen
-  offers "Use Ascend without an account", which sets `accountSkipped`, and
-  `AuthGate` then stops sending a signed-out person to sign-in. The social
-  screens already ask for an account on their own. AGENTS.md's "everything
-  works signed out" is true again.
-- **Sign-in uploads the baseline** — profile, starting weight, goal, units — to
-  Supabase `user_metadata` (`social/baselineSync.ts`). The sign-in screen now
-  says so. The privacy policy should be checked against it.
-- **Decided 2026-10-20: the focus step left onboarding.** First run is one
-  screen of numbers. The focus is still in Settings, still label-only, and the
-  Today banner that promoted it is gone.
-- **Home "Balanced" and "Food first" lay Today out identically.** The copy now
-  admits it; the behaviour is unchanged.
-
-### Known rough edges
-
-- **Dumbbell weights are now labelled as one dumbbell's** (`src/dumbbellLoad.ts`),
-  but older history may mix conventions — one Bulgarian split squat PR reads
-  70 lb against sets logged at 32. Volume counts one dumbbell, not the pair.
-- **Fixed: reordering split supersets.** `src/blockOrder.ts` moves a superset
-  as one, gathers members that had drifted apart, and never drops an exercise
-  inside another superset. The routine editor does not keep superset links at
-  all — that was so before and is unchanged.
-- **A deliberately typed lone `0` over a prefilled weight is put back** on blur,
-  the cost of stopping a look-and-leave tap from zeroing a set. Clearing the
-  field (BW) still works. Ticking a set straight from such a field also takes
-  the old number: on iOS Safari the tick can land before the field's blur.
-- **One-sided dumbbell work assumes both sides match.** One weight and rep
-  count is logged, and the row shows `Left 105 × 13 · Right 105 × 13`; a pair shows its
-  total. Sides that differ cannot be logged yet.
-- **A squad can read as full because of a member you cannot see** across a
-  block — the accepted leak, documented in the migration.
-
-### Small, low-risk follow-ups
-
-- Done on 2026-10-20: the unused feature-interest components are deleted
-  (`features/featureInterests.ts` stays; settings still store the field), the
-  sticker modal's `backgroundPosition` error is gone, an unknown stored card
-  template falls back to the default, the workflow's actions run on Node 24,
-  and the remaining generated-sounding default copy was reworded.
-- Done: AGENTS.md describes squads and lists `20261020120000_squad_join_limit.sql`.
+Suggested order: dependencies and a first development build → sounds and the
+locked-screen rest notification → Health Connect → the native share card →
+Play Console internal testing. iPhone builds go through EAS from Windows, then
+TestFlight; a local iOS build needs a Mac.
 
 ---
 
-## Traps met this session
+## Not yet verified anywhere
 
-- **Metro does not pick up file changes in the cloud container.** A change is
-  invisible in the browser until the dev server is killed and restarted with
-  `--clear`.
-- **There is no Prettier config.** Running Prettier rewrites a whole file to
-  double quotes and 80 columns; it was reverted once. Match the surrounding
-  style by hand.
-- **Previewing a screen locally needs two temporary patches**, never committed:
-  `false && url && key` in `src/social/client.ts` (the app has live Supabase
-  fallbacks compiled in, so sign-in is otherwise required) and
-  `false && !settings.onboarded` in `src/components/AuthGate.tsx` (to skip
-  onboarding). Playwright-core with `/opt/pw-browsers/chromium-1194` at 390×844
-  worked for screenshots.
-- **The cloud environment's `gcloud` has no credentials.** Its preset access
-  token is a placeholder that Google rejects. Deploys go through GitHub Actions
-  or PowerShell on the owner's machine.
-- **The build needs no `.env.local`.** The source's compiled-in public values
-  (Supabase URL and publishable key, proxy token) are the ones the live bundle
-  carries, checked on 2026-10-19.
-- **`expo export` takes about 40 seconds** and `typecheck` passes without the
-  generated `router.d.ts`, so CI runs both.
+- **The iPhone share-card fix** (#42): a picked photo is now shrunk to the
+  card's size before drawing, on the diagnosis that a full-resolution photo
+  exceeded Safari's memory and the installed app was reloaded. No iPhone was
+  available; ask the user who reported it ("mabutang nakog photo pero mo exit
+  dayon") to try again.
+- **The reload onto a new build** (#41) needs a real deploy to see; only the
+  page parser is unit-tested.
+- **The load-failure screens** (#40/#41) could not be forced in the preview.
+
+---
+
+## Decisions that are the owner's, still open
+
+- **The Overview screen (`app/overview.tsx`) is orphaned** — nothing links to
+  it. Keep and link it, or delete it.
+- **Hevy imports show weights like 99.3 kg / 84.8 kg** ("`.1` weights"). Waiting
+  on the owner's Hevy CSV header line and a few Lat Pulldown rows to see
+  whether to snap imported values to whole or half pounds.
+- **The owner's priority list** (AGENTS.md, "Where the current work is"): a
+  Hevy-style share-card composer, subject segmentation, the feed showing the
+  real card image. Native Android reorders this: the native share card comes
+  first there.
+- Unchanged from before: sign-in uploads the baseline to `user_metadata`
+  (check the privacy policy against it); Home "Balanced" and "Food first" lay
+  Today out identically.
+
+## Known rough edges, carried forward
+
+- Settings' "Goal weight (optional)" shows 0 when none is set.
+- Trends' expenditure tile shows the raw confidence word ("insufficient").
+- A red "Received `false` for a non-boolean attribute `collapsable`" banner in
+  the dev server comes from a library, not this code, and is dev-only.
+- Older dumbbell history may mix one-dumbbell and pair conventions.
+- A squad can read as full because of a member hidden across a block — the
+  accepted, documented leak.
+
+---
+
+## Traps
+
+- **A recursive delete that follows links wipes the main checkout.** npm
+  workspaces put junctions in `node_modules/@adaptive-macros/*` pointing at the
+  real `mobile/`, `packages/engine` and `services/gemini-proxy`. On Windows
+  delete `node_modules` with `cmd /c rmdir /s /q`, or robocopy with `/XJ`.
+  This deleted the main working copy's packages once.
+- **`CI=1 npx expo start` turns Metro's file watching off** ("reloads are
+  disabled"), which is why edits looked stale in earlier sessions. Start the dev
+  server without it to see changes.
+- **Any test that reads a clock is a deploy risk**: a failed test skips the
+  deploy while Supabase still applies a migration. Keep the fastest of several
+  runs.
+- **No Prettier config.** Running it rewrites whole files; match style by hand.
+- **Previewing signed-out screens** needs two never-committed patches:
+  `false && url && key` in `src/social/client.ts` and `false &&
+  !settings.onboarded` in `src/components/AuthGate.tsx`.
+- **The cloud container's `gcloud` has no credentials.** Deploys go through
+  GitHub Actions, or PowerShell on the owner's machine.
