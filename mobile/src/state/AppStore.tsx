@@ -35,8 +35,13 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as db from '../db';
+import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
+import { LATEST_ACTIVE_DRAFT_KEY } from '../sessionDraft';
 import { pushBaselineToCloud } from '../social/baselineSync';
+import { useSocial } from '../social/session';
+import { SQUAD_STORAGE_KEY } from '../social/squads';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
 import { chooseBodyFat } from './bodyFatChoice';
@@ -145,8 +150,20 @@ export const useApp = (): AppState => {
   return value;
 };
 
+/** Stands for the one database of a build with no accounts at all. */
+const NO_ACCOUNTS = 'device';
+
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  const [ready, setReady] = useState(false);
+  const { configured, session } = useSocial();
+  // Whose log should be on screen: an account, whoever is using the app
+  // without one, or undefined while the session is still being read.
+  const owner = !configured ? NO_ACCOUNTS : session === undefined ? undefined : (session?.user.id ?? SIGNED_OUT);
+  const [loadedFor, setLoadedFor] = useState<string | undefined>(undefined);
+  // Derived in render rather than set by an effect: for the one render between
+  // a sign-in and the effect noticing it, the state still holds the previous
+  // owner's log, and anything reading it then — AuthGate's baseline upload
+  // above all — must already be told it is not ready.
+  const ready = owner !== undefined && loadedFor === owner;
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(withDefaults(null));
@@ -180,16 +197,26 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   useEffect(() => {
+    if (owner === undefined) return;
     let cancelled = false;
     (async () => {
       try {
         setLoadError(null);
+        if (owner === NO_ACCOUNTS) {
+          await db.selectDatabase(LEGACY_DATABASE);
+        } else {
+          const { database, ownerChanged } = await claimDevice(owner);
+          // These two are kept once per device rather than per owner: the
+          // squad as last seen, and a pointer to the workout in progress.
+          if (ownerChanged) await AsyncStorage.multiRemove([SQUAD_STORAGE_KEY, LATEST_ACTIVE_DRAFT_KEY]);
+          await db.selectDatabase(database);
+        }
         const stored = await db.readSetting<Partial<AppSettings>>(SETTINGS_KEY);
         if (cancelled) return;
         setSettings(withDefaults(stored));
         await reloadHistory();
         await reloadDiary(selectedDate);
-        if (!cancelled) setReady(true);
+        if (!cancelled) setLoadedFor(owner);
       } catch (error) {
         // The open already waited out a held lock before getting here, so this
         // is a real failure — most often a second tab that will not let go.
@@ -199,10 +226,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       cancelled = true;
     };
-    // Runs once, and again on `retryLoad`: later reloads are driven by the
-    // mutation helpers below.
+    // Runs for each owner in turn, and again on `retryLoad`: later reloads are
+    // driven by the mutation helpers below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt]);
+  }, [owner, attempt]);
 
   const retryLoad = useCallback(() => setAttempt((n) => n + 1), []);
 

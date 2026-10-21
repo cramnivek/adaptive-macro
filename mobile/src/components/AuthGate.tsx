@@ -16,8 +16,10 @@ import { useApp } from '../state/AppStore';
  *
  * Once signed in, the cached session is enough — offline, or with an expired
  * token — because logging a set in a basement gym must never be blocked.
- * Food and training logs live on this device and are not tied to the account,
- * so nothing here clears or resets local storage.
+ * Food and training logs live on this device, in a database file of the
+ * signed-in account's own, or of nobody's when there is no account (see
+ * `db/accountDatabase.ts`). So nothing here clears or resets local storage:
+ * signing in or out opens a different file instead.
  */
 const AUTH_PUBLIC_ROUTES = new Set(['sign-in', 'privacy']);
 
