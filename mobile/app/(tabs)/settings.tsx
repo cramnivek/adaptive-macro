@@ -174,7 +174,7 @@ export default function SettingsScreen() {
       if (how === 'downloaded' || how === 'written') {
         notify(
           'Backup saved',
-          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
             `${counts.sessions} workouts and ${counts.sets} sets.`,
         );
       }
@@ -202,7 +202,7 @@ export default function SettingsScreen() {
         title: 'Replace everything?',
         message:
           `${picked.name} was exported on ${counts.exportedAt.slice(0, 10)} and holds ` +
-          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
           `${counts.sessions} workouts and ${counts.sets} sets.\n\n` +
           'Everything currently on this device will be deleted and replaced.',
         confirmLabel: 'Replace',
@@ -217,7 +217,7 @@ export default function SettingsScreen() {
       retryLoad();
       notify(
         'Restored',
-        `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+        `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
           `${counts.sessions} workouts and ${counts.sets} sets.`,
       );
     } catch (error) {
