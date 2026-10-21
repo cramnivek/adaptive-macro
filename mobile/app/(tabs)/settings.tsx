@@ -18,6 +18,7 @@ import { Screen } from '../../src/components/Screen';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { proteinExplanation } from '../../src/proteinCopy';
+import { GoalPlanner, type GoalPlan } from '../../src/components/GoalPlanner';
 import { useSocial } from '../../src/social/session';
 import { playChime, playEffect, primeChime, primeEffect } from '../../src/platform/chime';
 import type { AppSettings, WeightUnitSetting, SpeedUnitSetting, AppPersonality, UnitSystem } from '../../src/state/settings';
@@ -116,7 +117,9 @@ const Section = ({
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, refreshAll, protein, proteinOverrideGPerKg } = useApp();
+  const { settings, updateSettings, refreshAll, protein, proteinOverrideGPerKg, latest } = useApp();
+  /** A goal weight and date not yet applied; applying it sets the direction and rate above. */
+  const [plan, setPlan] = useState<GoalPlan | null>(null);
   const social = useSocial();
   const metric = settings.units === 'metric';
 
@@ -304,6 +307,29 @@ export default function SettingsScreen() {
               void updateSettings({ goalWeightKg: metric ? weight : lbToKg(weight) })
             }
             hint="Used only to project a date on the Trends tab."
+          />
+        </Card>
+
+        <Card title="Plan by a date" subtitle="Pick a goal weight and when, and the rate above is set for you.">
+          <GoalPlanner
+            key={settings.units}
+            currentKg={latest?.trendWeightKg ?? null}
+            units={settings.units}
+            initialGoalKg={settings.goalWeightKg}
+            onPlan={setPlan}
+          />
+          <Button
+            label="Use this plan"
+            variant="subtle"
+            disabled={plan === null}
+            onPress={() => {
+              if (plan === null) return;
+              void updateSettings({
+                goal: { direction: plan.pace.direction, rateKgPerWeek: plan.pace.rateKgPerWeek },
+                goalWeightKg: plan.goalWeightKg,
+              });
+              notify('Goal updated', 'Your targets now follow the new plan.');
+            }}
           />
         </Card>
 

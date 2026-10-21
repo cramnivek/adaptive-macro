@@ -13,25 +13,29 @@ interface NutritionQualityCardProps {
   consumed: Nutrients;
   entries: LogEntry[];
   profile: UserProfile;
+  /** What the figures cover, when it is not obvious: "Your average logged day, over 5 days." */
+  caption?: string;
 }
 
 export const NutritionQualityCard = ({
   consumed,
   entries,
   profile,
+  caption,
 }: NutritionQualityCardProps) => {
   const { colors } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
 
   const quality = useMemo(() => {
     return computeNutritionQualityScore(consumed, profile.sex, profile.age);
-  }, [consumed, profile.sex]);
+  }, [consumed, profile.sex, profile.age]);
 
   const electrolytes = useMemo(() => {
     return evaluateElectrolytes(consumed.micros);
   }, [consumed.micros]);
 
-  const targetFiber = profile.sex === 'female' ? 25 : 38;
+  // As the quality score sets it: the DRI's 25 and 38 g, 21 and 30 g after 50.
+  const targetFiber = profile.sex === 'female' ? (profile.age > 50 ? 21 : 25) : profile.age > 50 ? 30 : 38;
   const consumedFiber = Math.round(consumed.fiberG ?? 0);
 
   const gradeColor =
@@ -78,6 +82,8 @@ export const NutritionQualityCard = ({
               <Text style={[styles.scoreScale, { color: colors.textMuted }]}>/100</Text>
             </View>
           </View>
+
+          {caption ? <Text style={[styles.caption, { color: colors.textMuted }]}>{caption}</Text> : null}
 
           {/* Quick Vitals Strip */}
           <View style={styles.vitalsRow}>
@@ -133,6 +139,7 @@ const styles = StyleSheet.create({
   container: {
     gap: space.sm,
   },
+  caption: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, marginTop: space.xs },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

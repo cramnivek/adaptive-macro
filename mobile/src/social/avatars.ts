@@ -57,34 +57,37 @@ export const getInitials = (name?: string): string => {
 };
 
 /**
- * Prompts the user to pick an image from their library or take a photo with the camera,
- * then crops to a 1:1 square and compresses to a lightweight 256x256 base64 Data URL.
+ * Asks for a photo from the library or the camera, uncropped.
+ *
+ * The picker's own crop step (`allowsEditing`) does nothing on the web, where
+ * most people use the app, and the photo went straight to a 256 x 256 resize
+ * that set both sides, so a portrait came out squashed and nobody could choose
+ * which part of it showed. The square is chosen in the app instead
+ * (AvatarCropper), the same on every platform.
  */
-export const pickAvatarPhoto = async (useCamera = false): Promise<string | null> => {
-  const options: ImagePicker.ImagePickerOptions = {
-    mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.8,
-  };
-
+export const pickAvatarSource = async (
+  useCamera = false,
+): Promise<{ uri: string; width: number; height: number } | null> => {
+  const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], allowsEditing: false, quality: 1 };
   const result = useCamera
     ? await ImagePicker.launchCameraAsync(options)
     : await ImagePicker.launchImageLibraryAsync(options);
+  const asset = result.canceled ? null : result.assets[0];
+  if (!asset?.uri || !asset.width || !asset.height) return null;
+  return { uri: asset.uri, width: asset.width, height: asset.height };
+};
 
-  if (result.canceled || !result.assets[0]?.uri) return null;
-
-  // Resize and compress to 256x256 square JPEG
+/** Cuts the chosen square out and makes it a small 256 x 256 JPEG data URL. */
+export const cropAvatar = async (
+  uri: string,
+  crop: { originX: number; originY: number; width: number; height: number },
+): Promise<string> => {
   const manipResult = await ImageManipulator.manipulateAsync(
-    result.assets[0].uri,
-    [{ resize: { width: 256, height: 256 } }],
+    uri,
+    [{ crop }, { resize: { width: 256, height: 256 } }],
     { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG, base64: true },
   );
-
-  if (manipResult.base64) {
-    return `data:image/jpeg;base64,${manipResult.base64}`;
-  }
-  return manipResult.uri;
+  return manipResult.base64 ? `data:image/jpeg;base64,${manipResult.base64}` : manipResult.uri;
 };
 
 export const TRAINING_FOCUS_OPTIONS = [

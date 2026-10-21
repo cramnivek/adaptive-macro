@@ -1,5 +1,5 @@
 import type { ActivityLevel, GoalDirection, Sex } from '@adaptive-macros/engine';
-import { todayISO } from '@adaptive-macros/engine';
+import { paceForGoal, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -16,6 +16,7 @@ import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
 import { Button, Field, Segmented } from './Controls';
 import { FadeIn } from './FadeIn';
+import { GoalPlanner, type GoalPlan } from './GoalPlanner';
 
 export interface OnboardingWizardProps {
   onComplete?: () => void;
@@ -39,6 +40,8 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
   const [weightStr, setWeightStr] = useState('');
   const [activity, setActivity] = useState<ActivityLevel>(settings.activity);
   const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
+  /** A goal weight and date, when given; without one the old default rates stand. */
+  const [plan, setPlan] = useState<GoalPlan | null>(null);
   const [attempted, setAttempted] = useState(false);
 
   const toggleHeightUnit = () => {
@@ -107,6 +110,10 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
     const heightCm = Math.round(heightUnit === 'in' ? heightNum * 2.54 : heightNum);
     const effectiveUnits: UnitSystem = weightUnit === 'lb' ? 'imperial' : 'metric';
 
+    // Worked out again from the weight as finally entered, in case it changed
+    // after the goal was typed.
+    const pace = plan !== null ? paceForGoal(roundedWeightKg, plan.goalWeightKg, plan.weeks) : null;
+
     const patch = {
       onboarded: true,
       // The focus picker left first run: it only changes labels, and the goal
@@ -123,11 +130,17 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
         age: ageNum,
         heightCm,
       },
-      goal: {
-        direction: goalDir,
-        rateKgPerWeek: goalDir === 'maintain' ? 0 : goalDir === 'gain' ? 0.25 : 0.5,
-      },
-      goalWeightKg: goalDir === 'maintain' ? roundedWeightKg : null,
+      // A goal weight and date set the rate; the numbers decide the direction,
+      // so a goal weight above today's weight is a gain whichever chip was on.
+      goal:
+        goalDir !== 'maintain' && pace !== null
+          ? { direction: pace.direction, rateKgPerWeek: pace.rateKgPerWeek }
+          : {
+              direction: goalDir,
+              rateKgPerWeek: goalDir === 'maintain' ? 0 : goalDir === 'gain' ? 0.25 : 0.5,
+            },
+      goalWeightKg:
+        goalDir === 'maintain' ? roundedWeightKg : plan !== null ? Math.round(plan.goalWeightKg * 100) / 100 : null,
     };
 
     await recordWeight(todayISO(), roundedWeightKg);
@@ -248,6 +261,22 @@ export const OnboardingWizard = ({ onComplete }: OnboardingWizardProps) => {
                   { value: 'gain', label: 'Muscle Gain' },
                 ]}
               />
+
+              {goalDir !== 'maintain' && (
+                // Keyed by unit, so switching kg and lb starts the goal afresh
+                // rather than reading 165 lb as 165 kg.
+                <GoalPlanner
+                  key={weightUnit}
+                  currentKg={(() => {
+                    const n = Number.parseFloat(weightStr.replace(',', '.'));
+                    if (!Number.isFinite(n) || n <= 0) return null;
+                    return weightUnit === 'lb' ? n / 2.20462 : n;
+                  })()}
+                  units={weightUnit === 'lb' ? 'imperial' : 'metric'}
+                  initialGoalKg={null}
+                  onPlan={setPlan}
+                />
+              )}
 
               {/* Finish CTA */}
               <View style={styles.finishButtonWrapper}>

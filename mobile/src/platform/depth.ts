@@ -61,6 +61,20 @@ export const coverRect = (
 };
 
 /**
+ * The size a photograph needs to be to cover the card and no larger: never
+ * enlarged, and shrunk until its shorter side just fills the frame. The card
+ * never shows more pixels than this, so anything beyond it is memory spent for
+ * nothing; see `pickCardPhoto` for what that cost on an iPhone.
+ */
+export const sizeForCard = (
+  photo: { naturalWidth: number; naturalHeight: number },
+  frame: { width: number; height: number },
+): { width: number; height: number } => {
+  const scale = Math.min(1, Math.max(frame.width / photo.naturalWidth, frame.height / photo.naturalHeight));
+  return { width: Math.round(photo.naturalWidth * scale), height: Math.round(photo.naturalHeight * scale) };
+};
+
+/**
  * The person, on nothing, at the size and position the card draws the photo.
  *
  * Null when there is nothing it can recognise as a person, or when the runtime

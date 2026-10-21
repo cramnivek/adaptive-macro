@@ -209,8 +209,12 @@ export const FoodMicronutrientsView = ({
             {filteredKeys.map((key) => {
               const target = rdaMap[key];
               const val = micros?.[key] ?? 0;
-              const hasRda = target && target.rda > 0;
-              const pct = hasRda ? (val / target.rda) * 100 : 0;
+              // A limit is shown as a share of the limit, the way a label's
+              // "% daily value" for sodium is; no official figure, no bar.
+              const isLimit = target?.judge === 'limit';
+              const reference = isLimit ? (target?.upperLimit ?? 0) : (target?.rda ?? 0);
+              const hasRda = target !== undefined && target.judge !== 'none' && reference > 0;
+              const pct = hasRda ? (val / reference) * 100 : 0;
               const formattedVal = val < 1 && val > 0 ? val.toFixed(1) : Math.round(val);
 
               return (
@@ -244,7 +248,13 @@ export const FoodMicronutrientsView = ({
                             styles.barFill,
                             {
                               width: `${Math.min(100, Math.round(pct))}%`,
-                              backgroundColor: pct >= 100 ? colors.positive : colors.accent,
+                              backgroundColor: isLimit
+                                ? pct > 100
+                                  ? colors.danger
+                                  : colors.accent
+                                : pct >= 100
+                                  ? colors.positive
+                                  : colors.accent,
                             },
                           ]}
                         />
@@ -252,15 +262,15 @@ export const FoodMicronutrientsView = ({
                       <Text
                         style={[
                           styles.rdaText,
-                          { color: pct >= 100 ? colors.positive : colors.textFaint },
+                          { color: !isLimit && pct >= 100 ? colors.positive : colors.textFaint },
                         ]}
                       >
-                        {Math.round(pct)}% RDA
+                        {Math.round(pct)}% {isLimit ? 'of limit' : 'RDA'}
                       </Text>
                     </View>
                   ) : (
                     <Text style={[styles.categorySubtitle, { color: colors.textFaint }]}>
-                      {target?.category === 'lipids' ? 'Lipid / Sugar' : 'Reference intake'}
+                      {target?.judge === 'none' ? 'No official target' : target?.category === 'lipids' ? 'Lipid / Sugar' : 'Reference intake'}
                     </Text>
                   )}
                 </View>

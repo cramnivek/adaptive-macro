@@ -473,6 +473,17 @@ export const listLogEntries = async (date: ISODate): Promise<LogEntry[]> => {
   return rows.map(rowToEntry);
 };
 
+/** Every entry from `from` to `to`, both included, oldest first. */
+export const listLogEntriesBetween = async (from: ISODate, to: ISODate): Promise<LogEntry[]> => {
+  const db = await getDb();
+  const rows = await db.getAllAsync<LogRow>(
+    'SELECT * FROM log_entries WHERE date BETWEEN ? AND ? ORDER BY date ASC, created_at ASC',
+    from,
+    to,
+  );
+  return rows.map(rowToEntry);
+};
+
 /**
  * Every day's totals plus every weigh-in, merged into the one shape the
  * estimator consumes.

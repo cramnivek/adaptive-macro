@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import type { Nutrients, UserProfile } from '@adaptive-macros/engine';
 import { computeNutritionQualityScore } from '@adaptive-macros/engine';
 import { type ShareCard, titleLines } from '../shareCard';
-import { coverRect } from './depth';
+import { coverRect, sizeForCard } from './depth';
 import {
   ALL_BLOCKS,
   type CardBlocks,
@@ -553,15 +553,56 @@ export const pickCardPhoto = (): Promise<PickedPhoto> => {
         done({ ok: false, why: 'cancelled' });
         return;
       }
-      const image = new Image();
-      // The card is drawn from this image more than once — once for the
-      // preview, again for the file, and again whenever the layout changes —
-      // and the browser is within its rights to need the source again each
-      // time. Letting go of the address as soon as it had loaded was asking
-      // for a picture that works once and then does not.
-      image.src = URL.createObjectURL(file);
-      image.onload = () => done({ ok: true, image });
-      image.onerror = () => done({ ok: false, why: 'unreadable' });
+      const original = new Image();
+      const originalUrl = URL.createObjectURL(file);
+      original.src = originalUrl;
+      original.onerror = () => {
+        URL.revokeObjectURL(originalUrl);
+        done({ ok: false, why: 'unreadable' });
+      };
+      original.onload = () => {
+        // Shrunk once, here, to the size that covers the card. A 48-megapixel
+        // iPhone photograph is about 190 MB decoded, and the card draws its
+        // photo again for the preview, the backdrop, the file and every layout
+        // change; on an iPhone that ran past the memory Safari gives a page, and
+        // an installed app that does is simply reloaded, so choosing a photo
+        // closed the card. A camera-roll picture becomes about 2560 x 1920.
+        const size = sizeForCard(original, { width: W, height: H });
+        if (size.width === original.naturalWidth && size.height === original.naturalHeight) {
+          // Already small enough; the card draws from it more than once, so its
+          // address is kept rather than let go after the first load.
+          done({ ok: true, image: original });
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = size.width;
+        canvas.height = size.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx === null) {
+          done({ ok: true, image: original });
+          return;
+        }
+        ctx.drawImage(original, 0, 0, size.width, size.height);
+        canvas.toBlob(
+          (blob) => {
+            // Safari holds canvas memory until a canvas is resized to nothing.
+            canvas.width = 0;
+            canvas.height = 0;
+            if (blob === null) {
+              // Could not re-encode: the full-size picture still works, so use it.
+              done({ ok: true, image: original });
+              return;
+            }
+            URL.revokeObjectURL(originalUrl);
+            const image = new Image();
+            image.src = URL.createObjectURL(blob);
+            image.onload = () => done({ ok: true, image });
+            image.onerror = () => done({ ok: false, why: 'unreadable' });
+          },
+          'image/jpeg',
+          0.92,
+        );
+      };
     });
     input.click();
   });

@@ -126,14 +126,22 @@ export const NutritionQualityModal = ({
         <View style={styles.microHeader}>
           <View style={styles.microNameRow}>
             <Text style={[styles.microName, { color: colors.text }]}>{item.target.name}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {item.status.toUpperCase()}
-              </Text>
-            </View>
+            {item.status !== 'untracked' && (
+              <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
+                <Text style={[styles.statusText, { color: statusColor }]}>
+                  {item.target.judge === 'limit' ? (item.status === 'high' ? 'OVER' : 'UNDER LIMIT') : item.status.toUpperCase()}
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={[styles.microValue, { color: colors.text }]}>
-            {Math.round(item.consumed)} / {item.target.rda} {item.target.unit} ({item.pctOfRda}%)
+            {/* A limit is read against the limit; a nutrient with no official
+                figure is only an amount, not a share of an invented one. */}
+            {item.status === 'untracked'
+              ? `${Math.round(item.consumed)} ${item.target.unit}`
+              : item.target.judge === 'limit'
+                ? `${Math.round(item.consumed)} of ${item.target.upperLimit} ${item.target.unit} limit (${item.pctOfRda}%)`
+                : `${Math.round(item.consumed)} / ${item.target.rda} ${item.target.unit} (${item.pctOfRda}%)`}
           </Text>
         </View>
 

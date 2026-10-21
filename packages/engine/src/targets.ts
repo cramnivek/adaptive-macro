@@ -197,3 +197,43 @@ export const buildProgram = (
     referenceWeightKg: roundTo(referenceWeightKg, 2),
   };
 };
+
+/**
+ * The fastest weekly change worth planning for, as a share of body weight.
+ *
+ * Losing: 1% a week. Faster costs disproportionately more lean mass; Helms et
+ * al. (2014) suggest 0.5–1% for keeping muscle while dieting. Gaining: 0.5% a
+ * week, past which the extra is mostly fat for anyone but a beginner.
+ */
+export const MAX_WEEKLY_CHANGE_SHARE = { lose: 0.01, gain: 0.005 } as const;
+
+export interface GoalPace {
+  direction: 'lose' | 'gain' | 'maintain';
+  /** Always positive; the direction says which way. */
+  rateKgPerWeek: number;
+  /** True when the asked-for date needed a faster pace than MAX_WEEKLY_CHANGE_SHARE. */
+  capped: boolean;
+  /** Weeks the goal takes at `rateKgPerWeek`, rounded up. */
+  weeks: number;
+}
+
+/**
+ * The weekly rate that reaches `goalKg` from `currentKg` in `weeks`, held to a
+ * pace that is sensible to plan for. When the date asks for more, the rate is
+ * the fastest sensible one and `weeks` says how long that really takes, so the
+ * app can offer a true date instead of a target that cannot be met.
+ */
+export const paceForGoal = (currentKg: number, goalKg: number, weeks: number): GoalPace => {
+  const change = goalKg - currentKg;
+  if (Math.abs(change) < 0.25 || weeks <= 0) return { direction: 'maintain', rateKgPerWeek: 0, capped: false, weeks: 0 };
+  const direction = change < 0 ? 'lose' : 'gain';
+  const wanted = Math.abs(change) / weeks;
+  const max = currentKg * MAX_WEEKLY_CHANGE_SHARE[direction];
+  const rate = Math.min(wanted, max);
+  return {
+    direction,
+    rateKgPerWeek: roundTo(rate, 2),
+    capped: wanted > max,
+    weeks: Math.ceil(Math.abs(change) / rate),
+  };
+};
