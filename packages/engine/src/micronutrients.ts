@@ -8,6 +8,15 @@ export interface MicronutrientTarget {
   category: 'vitamins' | 'minerals' | 'lipids';
   rda: number;
   upperLimit?: number;
+  /**
+   * How intake is judged. 'target' (the default) is reaching the RDA or AI.
+   * 'limit' is staying under `upperLimit`, for what guidelines cap rather than
+   * ask for: sodium, saturated and trans fat, added sugar. Judged as a target
+   * they read the more-is-better way, so 3,000 mg of sodium came out
+   * "optimal". 'none' has no official figure at all, and is shown as an
+   * amount only rather than against a number the app made up.
+   */
+  judge?: 'target' | 'limit' | 'none';
   description: string;
 }
 
@@ -198,6 +207,7 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       // It used to target 2,000, which marked a lower-sodium day as short of it.
       rda: 1500,
       upperLimit: 2300,
+      judge: 'limit',
       description: 'Extracellular fluid volume, muscle action potential transmission, and blood volume.',
     },
     potassiumMg: {
@@ -299,7 +309,8 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       unit: 'g',
       category: 'lipids',
       rda: 20, // Guideline threshold (<10% of 2000 kcal)
-      upperLimit: 25,
+      upperLimit: 22,
+      judge: 'limit',
       description: 'Dietary saturated fatty acids; keep within balanced limits for cardiovascular health.',
     },
     monounsaturatedFatG: {
@@ -307,7 +318,9 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       shortName: 'MUFA',
       unit: 'g',
       category: 'lipids',
-      rda: 30,
+      // No RDA exists for these; the old 30 g was invented.
+      rda: 0,
+      judge: 'none',
       description: 'Heart-healthy fats (olive oil, avocado, nuts) supporting lipid profile.',
     },
     polyunsaturatedFatG: {
@@ -315,7 +328,8 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       shortName: 'PUFA',
       unit: 'g',
       category: 'lipids',
-      rda: 15,
+      rda: 0,
+      judge: 'none',
       description: 'Essential omega-3 and omega-6 fatty acids supporting cellular membrane fluidity.',
     },
     transFatG: {
@@ -325,6 +339,7 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       category: 'lipids',
       rda: 0,
       upperLimit: 1,
+      judge: 'limit',
       description: 'Industrial trans fatty acids; keep as close to zero as possible.',
     },
     cholesterolMg: {
@@ -332,8 +347,10 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       shortName: 'Cholesterol',
       unit: 'mg',
       category: 'lipids',
-      rda: 300,
-      upperLimit: 400,
+      // The 300 mg cap was dropped from the Dietary Guidelines in 2015, and no
+      // other figure replaced it.
+      rda: 0,
+      judge: 'none',
       description: 'Cellular membrane precursor and steroid hormone building block.',
     },
     sugarG: {
@@ -341,7 +358,9 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       shortName: 'Sugars',
       unit: 'g',
       category: 'lipids',
-      rda: 50,
+      // No guideline sets one for total sugars; the limits are on added sugar.
+      rda: 0,
+      judge: 'none',
       description: 'Total simple carbohydrates from whole fruits, dairy, and added sources.',
     },
     addedSugarG: {
@@ -351,6 +370,7 @@ export const getClinicalRda = (sex: Sex = 'male', age = 30): Record<keyof Micron
       category: 'lipids',
       rda: isFemale ? 25 : 36,
       upperLimit: 50,
+      judge: 'limit',
       description: 'Refined or concentrated sweeteners added during manufacturing or cooking.',
     },
   };
@@ -401,7 +421,8 @@ export interface MicronutrientAnalysis {
   target: MicronutrientTarget;
   consumed: number;
   pctOfRda: number;
-  status: 'optimal' | 'adequate' | 'low' | 'deficient' | 'high';
+  /** 'untracked' is a nutrient with no official figure, shown as an amount only. */
+  status: 'optimal' | 'adequate' | 'low' | 'deficient' | 'high' | 'untracked';
 }
 
 /**
@@ -417,12 +438,20 @@ export const analyzeMicronutrients = (
   return MICRONUTRIENT_KEYS.map((key) => {
     const target = rdaMap[key];
     const consumed = consumedMicros[key] ?? 0;
-    const pctOfRda = target.rda > 0 ? Math.round((consumed / target.rda) * 100) : 100;
+    const judge = target.judge ?? 'target';
 
+    if (judge === 'none') return { key, target, consumed, pctOfRda: 0, status: 'untracked' as const };
+    if (judge === 'limit') {
+      // For a limit the percentage is of the limit, so 100% means "at it".
+      const limit = target.upperLimit ?? 0;
+      const pctOfRda = limit > 0 ? Math.round((consumed / limit) * 100) : 0;
+      return { key, target, consumed, pctOfRda, status: consumed > limit ? ('high' as const) : ('optimal' as const) };
+    }
+
+    const pctOfRda = target.rda > 0 ? Math.round((consumed / target.rda) * 100) : 100;
     let status: MicronutrientAnalysis['status'] = 'adequate';
-    if (key === 'transFatG' || key === 'addedSugarG') {
-      if (target.upperLimit && consumed > target.upperLimit) status = 'high';
-      else status = 'optimal';
+    if (target.upperLimit && consumed > target.upperLimit) {
+      status = 'high';
     } else {
       if (pctOfRda >= 100) status = 'optimal';
       else if (pctOfRda >= 75) status = 'adequate';
@@ -494,8 +523,13 @@ export const computeNutritionQualityScore = (
 
   // 1. Micronutrient score (out of 40)
   // Evaluates coverage across reported vitamins and minerals with a diversity factor
+  // Only what has a target to reach: sodium is a mineral, but a limit, and
+  // counting its percentage of the limit as coverage would reward eating more.
   const reportedVitsAndMins = analyses.filter(
-    (a) => (a.target.category === 'vitamins' || a.target.category === 'minerals') && a.consumed > 0,
+    (a) =>
+      (a.target.category === 'vitamins' || a.target.category === 'minerals') &&
+      (a.target.judge ?? 'target') === 'target' &&
+      a.consumed > 0,
   );
   const diversityFactor = Math.min(1, (reportedVitsAndMins.length || 0) / 8);
   const avgReportedCoverage =
