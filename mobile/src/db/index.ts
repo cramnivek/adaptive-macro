@@ -52,6 +52,29 @@ import {
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
+ * The file of whoever is using the app, or null until that is known.
+ *
+ * Nothing opens a database before this is set, so no call can read one
+ * person's log on behalf of another — see `accountDatabase.ts`. A call made
+ * before then waits rather than failing, since several effects reach for the
+ * database while the session is still being read from storage.
+ */
+let selectedDatabase: string | null = null;
+let waitingForSelection: (() => void)[] = [];
+
+/** Points every later call at another owner's file, closing the one open. */
+export const selectDatabase = async (name: string): Promise<void> => {
+  if (name === selectedDatabase) return;
+  const previous = databasePromise;
+  databasePromise = null;
+  selectedDatabase = name;
+  await previous?.then((db) => db.closeAsync()).catch(() => undefined);
+  const waiting = waitingForSelection;
+  waitingForSelection = [];
+  for (const resume of waiting) resume();
+};
+
+/**
  * Opens the database once and brings it up to the latest schema version.
  *
  * Migrations run inside a transaction keyed on PRAGMA user_version, so a
@@ -59,13 +82,17 @@ let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
  * pointing at a schema it cannot read.
  */
 export const getDb = (): Promise<SQLite.SQLiteDatabase> => {
+  if (selectedDatabase === null) {
+    return new Promise<void>((resume) => waitingForSelection.push(resume)).then(getDb);
+  }
   if (!databasePromise) {
     // Cleared on failure so a later call can retry rather than being stuck
     // with a rejected promise for the life of the session.
-    databasePromise = openAndMigrate().catch((error) => {
-      databasePromise = null;
+    const opening = openAndMigrate(selectedDatabase).catch((error) => {
+      if (databasePromise === opening) databasePromise = null;
       throw error;
     });
+    databasePromise = opening;
   }
   return databasePromise;
 };
@@ -95,11 +122,11 @@ const migrate = async (db: SQLite.SQLiteDatabase): Promise<void> => {
  * so a retry never stacks a second handle on the first. Migrations are safe to
  * repeat: each runs in its own transaction, so a failed one rolled back.
  */
-const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
+const openAndMigrate = async (name: string): Promise<SQLite.SQLiteDatabase> => {
   for (let attempt = 0; ; attempt += 1) {
     let db: SQLite.SQLiteDatabase | null = null;
     try {
-      db = await SQLite.openDatabaseAsync('adaptive-macros.db');
+      db = await SQLite.openDatabaseAsync(name);
       await migrate(db);
       return db;
     } catch (error) {
