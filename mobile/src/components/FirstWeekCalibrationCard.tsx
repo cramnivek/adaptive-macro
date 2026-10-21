@@ -20,11 +20,14 @@ export const FirstWeekCalibrationCard = () => {
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(CALIBRATION_DISMISSED_KEY).then((val) => {
-      if (val === 'true') {
-        setIsDismissed(true);
-      }
-    });
+    AsyncStorage.getItem(CALIBRATION_DISMISSED_KEY)
+      .then((val) => {
+        if (val === 'true') {
+          setIsDismissed(true);
+        }
+      })
+      // Unreadable, the card shows again; that costs a tap, not data.
+      .catch(() => undefined);
   }, []);
 
   const handleDismiss = async () => {
@@ -72,13 +75,13 @@ export const FirstWeekCalibrationCard = () => {
   const badgeLabel = isSevenDaysLogged
     ? needsWeight
       ? '7 DAYS LOGGED · WEIGH-INS NEEDED'
-      : '7-DAY BASELINE REACHED · FINALIZING'
+      : 'FIRST WEEK DONE'
     : 'FIRST-WEEK CALIBRATION';
 
   const titleText = isSevenDaysLogged
     ? needsWeight
       ? 'Add morning weigh-ins to finalize'
-      : '7-day baseline established'
+      : 'Your target now follows you'
     : 'Learning your metabolic burn rate';
 
   return (
@@ -124,7 +127,7 @@ export const FirstWeekCalibrationCard = () => {
           needsWeight ? (
             <>
               <Text style={[styles.desc, { color: colors.textMuted }]}>
-                You have completed 7 days of nutrition logging! To compute your true metabolic expenditure, the adaptive engine needs a few morning weigh-ins so it can compare your calorie intake against your body weight trend.
+                Seven days of food are logged. To work out what you actually burn, the app also needs a few morning weigh-ins, so it can compare what you ate with how your weight moved.
               </Text>
               <View style={styles.actionRow}>
                 <View style={styles.actionCol}>
@@ -146,7 +149,14 @@ export const FirstWeekCalibrationCard = () => {
           ) : (
             <>
               <Text style={[styles.desc, { color: colors.textMuted }]}>
-                Your first week of baseline data is recorded! The Kalman filter is actively narrowing down your true metabolic expenditure{latest?.expenditureSdKcal ? ` (current uncertainty: ±${Math.round(latest.expenditureSdKcal)} kcal)` : ''}. Over your next few days of tracking, your targets will automatically lock in.
+                {/* Plain words for the filter's state. The ± is one standard
+                    deviation, so "give or take" rather than a hard limit, and the
+                    target keeps adapting after this, so nothing "locks in". */}
+                {`A week of logging is in. Your daily burn is now measured from your own food and weight${
+                  latest?.expenditureSdKcal
+                    ? `, give or take about ${Math.round(latest.expenditureSdKcal / 10) * 10} kcal for now`
+                    : ''
+                }. That range narrows with every day you log, and your target moves with it.`}
               </Text>
               <View style={styles.actionRow}>
                 <View style={styles.actionCol}>

@@ -12,9 +12,10 @@ import {
   DEFAULT_MODEL_OPTIONS,
   DEFAULT_TARGET_OPTIONS,
   sumNutrients,
-  KCAL_PER_KG_TISSUE,
   deurenbergBodyFatPct,
   energyDensityKcalPerKg,
+  recommendedProtein,
+  type ProteinRecommendation,
   buildProgram,
   estimateExpenditure,
   expenditureConfidence,
@@ -117,6 +118,12 @@ interface AppState {
     /** Where the logged figure came from; null when it is the BMI-based guess. */
     source: db.BodyFatSource | null;
   };
+  /**
+   * The protein the evidence suggests for this person, and the hand-set figure
+   * (g per kg of body weight) that replaces it, if any, so Settings can show both.
+   */
+  protein: ProteinRecommendation;
+  proteinOverrideGPerKg: number | null;
 
   /** Full filtered history, oldest first. Empty until a first weigh-in exists. */
   series: DailyEstimate[];
@@ -308,15 +315,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // than the flat 7700 (see engine/bodyComposition.ts): the measured body fat
   // when there is one, otherwise an estimate from height, weight, age and sex.
   // Used for the expenditure estimate and the targets alike, so a deficit is
-  // set in the same units it is measured in. A stored value other than the
-  // default is someone's deliberate choice and is kept.
+  // set in the same units it is measured in. A value stored by the old
+  // Advanced settings is no longer honoured: those controls were removed, so an
+  // override would apply where nobody could see or undo it.
   const bodyFatPct =
     loggedBodyFat?.pct ??
     deurenbergBodyFatPct(latestWeightKg ?? 80, settings.profile.heightCm, settings.profile.age, settings.profile.sex);
-  const kcalPerKgChange =
-    settings.kcalPerKgTissue !== KCAL_PER_KG_TISSUE
-      ? settings.kcalPerKgTissue
-      : energyDensityKcalPerKg(((latestWeightKg ?? 80) * bodyFatPct) / 100);
+  const kcalPerKgChange = energyDensityKcalPerKg(((latestWeightKg ?? 80) * bodyFatPct) / 100);
 
   // The whole filter is re-run from scratch whenever the inputs change. Over a
   // multi-year history this is still well under a millisecond, and it removes
@@ -326,8 +331,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       estimateExpenditure(observations, {
         ...DEFAULT_MODEL_OPTIONS,
         kcalPerKgTissue: kcalPerKgChange,
-        scaleNoiseKg: settings.scaleNoiseKg,
-        expenditureVolatilityKcal: settings.expenditureVolatilityKcal,
         initialExpenditureKcal: seedExpenditure(
           settings.profile,
           latestWeightKg ?? 80,
@@ -346,14 +349,36 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   // than presenting a measured number the data does not support yet.
   const usingSeedEstimate = latest === null || confidence === 'insufficient';
 
+  // Protein from goal, activity, sex and body fat rather than one figure for
+  // everyone; see engine/protein.ts for the evidence behind each number. A
+  // figure set by hand wins. So does an old fixed figure someone had changed
+  // from its 1.8 default, which is the only way to tell it was chosen.
+  const proteinOverride =
+    settings.proteinOverrideGPerKg ??
+    (settings.proteinGPerKg !== DEFAULT_TARGET_OPTIONS.proteinGPerKg ? settings.proteinGPerKg : null);
+  const protein = useMemo(
+    () =>
+      recommendedProtein({
+        weightKg: latest?.trendWeightKg ?? latestWeightKg ?? 80,
+        bodyFatPct,
+        sex: settings.profile.sex,
+        activity: settings.activity,
+        direction: settings.goal.direction,
+      }),
+    [latest, latestWeightKg, bodyFatPct, settings.profile.sex, settings.activity, settings.goal.direction],
+  );
+
   const targetOptions = useMemo(
     () => ({
       ...DEFAULT_TARGET_OPTIONS,
       kcalPerKgTissue: kcalPerKgChange,
-      proteinGPerKg: settings.proteinGPerKg,
+      // The targets scale protein by trend weight, so the recommendation is
+      // handed over in those units; for high body fat it is less than its
+      // own g/kg, because it was set from the leaner reference weight.
+      proteinGPerKg: proteinOverride ?? protein.gPerKgBodyWeight,
       minFatGPerKg: settings.minFatGPerKg,
     }),
-    [kcalPerKgChange, settings.proteinGPerKg, settings.minFatGPerKg],
+    [kcalPerKgChange, proteinOverride, protein.gPerKgBodyWeight, settings.minFatGPerKg],
   );
 
   // Not while the estimate is still the formula's: "the target moved because
@@ -401,6 +426,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     dayStatus,
     markDay,
     energyDensity: { kcalPerKg: kcalPerKgChange, bodyFatPct, source: loggedBodyFat?.source ?? null },
+    protein,
+    proteinOverrideGPerKg: proteinOverride,
     weights,
     recordWeight,
     removeWeight,

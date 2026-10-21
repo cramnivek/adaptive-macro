@@ -52,8 +52,14 @@ export interface AppSettings {
   speedUnitSetting: SpeedUnitSetting;
   /** The current active speed unit when switchable ('kph' | 'mph'). Defaults to 'kph'. */
   activeSpeedUnit: SpeedUnit;
-  /** Macro policy, surfaced in settings because these are genuine preferences. */
+  /**
+   * The old fixed protein figure, 1.8 g/kg for everyone. Read only to keep a
+   * value someone deliberately changed; protein is otherwise recommended from
+   * goal, activity, sex and body fat (engine/protein.ts).
+   */
   proteinGPerKg: number;
+  /** A protein figure chosen by hand, in g per kg of body weight; null follows the recommendation. */
+  proteinOverrideGPerKg: number | null;
   minFatGPerKg: number;
   /** Model tuning. Sensible defaults; exposed for anyone who wants to tune. */
   kcalPerKgTissue: number;
@@ -156,6 +162,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   speedUnitSetting: 'switchable',
   activeSpeedUnit: 'kph',
   proteinGPerKg: DEFAULT_TARGET_OPTIONS.proteinGPerKg,
+  proteinOverrideGPerKg: null,
   minFatGPerKg: DEFAULT_TARGET_OPTIONS.minFatGPerKg,
   kcalPerKgTissue: DEFAULT_MODEL_OPTIONS.kcalPerKgTissue,
   scaleNoiseKg: DEFAULT_MODEL_OPTIONS.scaleNoiseKg,

@@ -1,4 +1,4 @@
-import { bodyweightForDates, progressionFor } from '@adaptive-macros/engine';
+import { bodyweightForDates, progressionFor, recordsInSession } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Card } from '../../src/components/Card';
 import { Button, TOUCH_TARGET } from '../../src/components/Controls';
 import { LoadProblem } from '../../src/components/LoadProblem';
+import { PRMedal } from '../../src/components/PRMedal';
 import { Screen } from '../../src/components/Screen';
 import { problemText } from '../../src/loadProblem';
 import { Tappable } from '../../src/components/Tappable';
@@ -101,7 +102,20 @@ export default function TrainScreen() {
           bodyweightByDate,
         );
         const last = points[points.length - 1];
-        return { name: exercise.name, last };
+        // A record by the medal's rule (estimated 1RM, against the days before),
+        // not by heaviest weight, so this card and the workout's own medal never
+        // disagree about whether that session set one.
+        const sessionIds = last
+          ? new Set(
+              sets
+                .filter((s) => s.set.exerciseName === exercise.name && s.date === last.date)
+                .map((s) => s.set.sessionId),
+            )
+          : new Set<string>();
+        const isRecord = [...sessionIds].some((id) =>
+          recordsInSession(sets, bodyweightByDate, id).some((r) => r.exerciseName === exercise.name),
+        );
+        return { name: exercise.name, last, isRecord };
       }),
     [top, sets, bodyweightByDate],
   );
@@ -164,7 +178,7 @@ export default function TrainScreen() {
       {headline.length > 0 && (
         <Card loud variant="featured" title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
           <View style={styles.listStack}>
-            {headline.map(({ name, last }) => (
+            {headline.map(({ name, last, isRecord }) => (
               <Pressable
                 key={name}
                 onPress={() => router.push('/progression')}
@@ -176,15 +190,11 @@ export default function TrainScreen() {
                   </Text>
                   <Text style={[styles.note, { color: loud.figureFaint }]}>
                     {last
-                      ? `${displayWeight(last.heaviestWorkingSetKg, settings.units).toFixed(1)} ${unit} · ${formatDate(last.date)}`
+                      ? `${displayWeight(last.heaviestWorkingSetKg, workoutUnits).toFixed(1)} ${unit} · ${formatDate(last.date)}`
                       : 'nothing scoreable yet'}
                   </Text>
                 </View>
-                {last?.isRecord && (
-                  <View style={styles.prBadge}>
-                    <Text style={styles.prBadgeText}>NEW PR</Text>
-                  </View>
-                )}
+                {isRecord && <PRMedal />}
               </Pressable>
             ))}
           </View>
@@ -359,20 +369,6 @@ const styles = StyleSheet.create({
     backgroundColor: loud.ground,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: loud.rule,
-  },
-  prBadge: {
-    paddingHorizontal: space.sm,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: 'rgba(232, 53, 42, 0.15)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(232, 53, 42, 0.4)',
-  },
-  prBadgeText: {
-    fontFamily: font.uiStrong,
-    color: loud.loud,
-    fontSize: 10,
-    letterSpacing: 0.8,
   },
   routineList: { gap: space.xs, marginBottom: space.md },
   routineRow: {

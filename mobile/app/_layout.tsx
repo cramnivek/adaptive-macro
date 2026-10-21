@@ -8,8 +8,10 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { useEffect } from 'react';
+import { watchForNewBuild } from '../src/platform/staleBuild';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppArrival } from '../src/components/AppArrival';
 import { Toaster } from '../src/components/Toaster';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
@@ -41,6 +43,9 @@ export default function RootLayout() {
     );
   }, []);
 
+  // An installed app can sit on an old build for days; see staleBuild.ts.
+  useEffect(() => (Platform.OS === 'web' ? watchForNewBuild() : undefined), []);
+
   // The fonts are local on native but a network fetch on the iOS PWA's first
   // cold load. Painting the background colour rather than nothing means a slow
   // connection shows an empty app in the right colour — on a dark-default app
@@ -55,6 +60,7 @@ export default function RootLayout() {
   }
 
   return (
+    <AppArrival background={colors.background}>
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -321,5 +327,6 @@ export default function RootLayout() {
         </SocialProvider>
       </AppProvider>
     </SafeAreaProvider>
+    </AppArrival>
   );
 }

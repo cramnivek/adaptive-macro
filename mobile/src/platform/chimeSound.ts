@@ -234,6 +234,52 @@ export const prStingSamples = (): Int16Array => {
   return samples;
 };
 
+/**
+ * The tick for a set going down: about 70 ms, a soft woodblock knock (a high
+ * partial over a lower body, both gone almost at once) rather than a beep, so
+ * thirty of them in a session never become a ringtone. Quieter than the other
+ * sounds on purpose; it is the one heard most.
+ */
+export const tickSamples = (): Int16Array => {
+  const totalSamples = Math.round(0.07 * SAMPLE_RATE);
+  const samples = new Int16Array(totalSamples);
+  for (let i = 0; i < totalSamples; i += 1) {
+    const t = i / SAMPLE_RATE;
+    const attack = Math.min(1, i / (0.002 * SAMPLE_RATE));
+    const val =
+      (Math.sin(2 * Math.PI * 1760 * t) * Math.exp(-90 * t) * 0.5 +
+        Math.sin(2 * Math.PI * 880 * t) * Math.exp(-60 * t) * 0.5) *
+      attack *
+      0.42;
+    const endFade = i > totalSamples - 120 ? (totalSamples - 1 - i) / 120 : 1;
+    samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
+  }
+  return samples;
+};
+
+/**
+ * The workout-finished chord: C major spread over two octaves, its notes
+ * rolled in 40 ms apart and left to ring for about 1.3 s. Warm rather than
+ * bright, so it reads as "done" where the PR sting reads as "new".
+ */
+export const finishSamples = (): Int16Array => {
+  const totalSamples = Math.round(1.3 * SAMPLE_RATE);
+  const samples = new Int16Array(totalSamples);
+  const notes = [261.63, 329.63, 392.0, 523.25].map((hz, n) => ({ hz, start: Math.round(n * 0.04 * SAMPLE_RATE) }));
+  for (let i = 0; i < totalSamples; i += 1) {
+    let val = 0;
+    for (const note of notes) {
+      if (i < note.start) continue;
+      const nt = (i - note.start) / SAMPLE_RATE;
+      const attack = Math.min(1, (i - note.start) / (0.01 * SAMPLE_RATE));
+      val += (Math.sin(2 * Math.PI * note.hz * nt) + 0.18 * Math.sin(2 * Math.PI * note.hz * 2 * nt)) * attack * Math.exp(-2.4 * nt) * 0.22;
+    }
+    const endFade = i > totalSamples - 200 ? (totalSamples - 1 - i) / 200 : 1;
+    samples[i] = Math.round(Math.max(-1, Math.min(1, val * endFade)) * 32767);
+  }
+  return samples;
+};
+
 /** Samples wrapped in a WAV header: a file any audio element can play. */
 export const wavFromSamples = (samples: Int16Array): Uint8Array => {
   const dataBytes = samples.length * 2;

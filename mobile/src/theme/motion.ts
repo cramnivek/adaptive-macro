@@ -55,6 +55,7 @@ export const impact = Easing.bezier(0.34, 1.56, 0.64, 1);
  */
 export const useEntrance = (delay = 0) => {
   const progress = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
     const animation = Animated.timing(progress, {
@@ -68,9 +69,10 @@ export const useEntrance = (delay = 0) => {
     return () => animation.stop();
   }, [progress, delay]);
 
+  // With reduce motion on, the fade stays and the lift goes.
   return {
     opacity: progress,
-    transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+    transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 10, 0] }) }],
   };
 };
 

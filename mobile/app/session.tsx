@@ -77,7 +77,7 @@ import { confirm, notify } from '../src/dialog';
 import { displayWeight, parseWeight, roundToPlateIncrement, weightUnit } from '../src/format';
 import { dumbbellBreakdown, dumbbellLoad, dumbbellNote, weightColumnLabel } from '../src/dumbbellLoad';
 import { moveKeepingSupersets } from '../src/blockOrder';
-import { playChime, primeChime, primeEffect } from '../src/platform/chime';
+import { playChime, playEffect, primeChime, primeEffect } from '../src/platform/chime';
 import type { ChimeChoice } from '../src/platform/chimeSound';
 import { thud } from '../src/platform/haptics';
 import { usesBarbell } from '../src/plates';
@@ -200,6 +200,19 @@ const compactWeight = (value: number): string => {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
+
+/**
+ * The set boxes are 58 points wide and set in a 14 pt monospace, which holds
+ * five characters. "226.25" or "1102.5" is six, and the box cut it off, so a
+ * longer figure is set smaller rather than shown wrong. Measured by length,
+ * which is exact for a monospace face.
+ */
+const figureFit = (text: string) =>
+  text.length <= 5
+    ? null
+    : text.length === 6
+      ? { fontSize: 12, paddingHorizontal: 3 }
+      : { fontSize: 10.5, paddingHorizontal: 2 };
 
 const elapsed = (startedAt: string, now: number): string => {
   const started = new Date(startedAt).getTime();
@@ -490,8 +503,16 @@ export default function SessionScreen() {
           const kg = parseWeight(row.weight, fromUnits);
           if (kg === null) return row;
           const raw = displayWeight(kg, nextUnits);
-          const plateRounded = roundToPlateIncrement(raw, nextUnits);
-          const formatted = plateRounded % 1 === 0 ? plateRounded.toFixed(0) : String(plateRounded);
+          // A set still to do is rounded to something that can be loaded on a
+          // bar. A set already ticked is a record of what was lifted, so it is
+          // only converted: 500 lb used to come back as 226.25 kg, which is
+          // neither what was lifted (226.8) nor short enough to fit its box.
+          const formatted = row.done
+            ? compactWeight(raw)
+            : (() => {
+                const plateRounded = roundToPlateIncrement(raw, nextUnits);
+                return plateRounded % 1 === 0 ? plateRounded.toFixed(0) : String(plateRounded);
+              })();
           return {
             ...row,
             weight: formatted,
@@ -1472,6 +1493,14 @@ export default function SessionScreen() {
       return;
     }
 
+    // The tick plays on the tap itself, which is when a browser allows sound;
+    // the PR sting is primed now for the same reason, as whether this set is a
+    // record is only known once it is written.
+    if (settings.effectSounds) {
+      playEffect('tick');
+      primeEffect('pr');
+    }
+
     await addSetToSession(session.id, {
       exerciseName: block.name,
       bodyweightBased: block.bodyweightBased,
@@ -1500,6 +1529,7 @@ export default function SessionScreen() {
 
     if (isNewPR) {
       thud('heavy');
+      if (settings.effectSounds) playEffect('pr');
       const e1rm = estimate1RM(effectiveKg, reps);
       const targetE1rm = currentBestPR?.e1rm ?? 0;
       const delta = targetE1rm > 0 ? Math.max(0, e1rm - targetE1rm) : 0;
@@ -1858,7 +1888,10 @@ export default function SessionScreen() {
     if (!session) return;
     // Primed on this tap so the PR sting may play once the session is saved,
     // a moment later and with no tap of its own.
-    if (settings.effectSounds) primeEffect('pr');
+    if (settings.effectSounds) {
+      primeEffect('pr');
+      primeEffect('finish');
+    }
     const logged = blocks.reduce((n, b) => n + b.rows.filter((r) => r.done).length, 0);
 
     if (logged === 0) {
@@ -1932,7 +1965,9 @@ export default function SessionScreen() {
       const allSets = await listAllSets();
       const bodyweightByDate = bodyweightForDates(series, allSets.map((entry) => entry.date), { extend: true });
       const reached = milestonesOn(allSets, bodyweightByDate, session.date, laddersFor(workoutUnits));
+      // A milestone brings its own sting; an ordinary finish gets the chord.
       if (reached[0] !== undefined) setMilestone(reached[0]);
+      else if (settings.effectSounds) playEffect('finish');
       // The milestone's celebration comes first; the share sheet waits behind it.
       const workout: FinishedWorkout = {
         sessionId: session.id,
@@ -2463,7 +2498,11 @@ export default function SessionScreen() {
                         previous.weightKg === null
                           ? 'BW'
                           : compactWeight(displayWeight(previous.weightKg, workoutUnits))
-                      } × ${previous.reps}${previous.rpe === null ? '' : ` @${formatRpe(previous.rpe)}`}`
+                      } × ${previous.reps}${
+                        // On its own line: beside "84.8 × 8" it ran past the column
+                        // and was cut to "84.8 × 8 …".
+                        previous.rpe === null ? '' : `\n@${formatRpe(previous.rpe)}`
+                      }`
                   : '—';
                 const on = row.done ? loud.onLoud : loud.figure;
 
@@ -2653,6 +2692,7 @@ export default function SessionScreen() {
                               styles.colNum,
                               row.done ? styles.inputOnLoud : styles.inputOnGround,
                               { color: on },
+                              figureFit(row.weight),
                             ]}
                           />
                           <TextInput

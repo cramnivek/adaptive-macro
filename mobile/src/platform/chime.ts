@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { chimeWav, prStingSamples, wavFromSamples } from './chimeSound';
+import { chimeWav, finishSamples, prStingSamples, tickSamples, wavFromSamples } from './chimeSound';
 import type { ChimeChoice } from './chimeSound';
 
 /**
@@ -217,16 +217,29 @@ export const playChime = (choice: ChimeChoice = 'chime'): void => {
  * a moment after the Finish tap, once the session is saved, so it is primed
  * on that tap.
  */
-export type SoundEffect = 'pr';
+/** The sounds behind the "Sounds for big moments" switch, beside the rest chimes. */
+export type SoundEffect = 'pr' | 'tick' | 'finish';
+
+const EFFECT_SAMPLES: Record<SoundEffect, () => Int16Array> = {
+  pr: prStingSamples,
+  tick: tickSamples,
+  finish: finishSamples,
+};
 
 const effects = new Map<SoundEffect, HTMLAudioElement>();
+/**
+ * Effects asked to play since they were last primed. Priming plays muted and
+ * pauses once that play has started, and a set written quickly can ask for the
+ * sting before then; without this the late pause cut the sting off.
+ */
+const wanted = new Set<SoundEffect>();
 
 const effectAudio = (effect: SoundEffect): HTMLAudioElement | null => {
   if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
   let element = effects.get(effect);
   if (!element) {
     try {
-      const samples = prStingSamples();
+      const samples = EFFECT_SAMPLES[effect]();
       const url = URL.createObjectURL(new Blob([wavFromSamples(samples).buffer as ArrayBuffer], { type: 'audio/wav' }));
       element = new Audio(url);
       element.preload = 'auto';
@@ -242,10 +255,12 @@ const effectAudio = (effect: SoundEffect): HTMLAudioElement | null => {
 export const primeEffect = (effect: SoundEffect): void => {
   const a = effectAudio(effect);
   if (a === null) return;
+  wanted.delete(effect);
   a.muted = true;
   void a
     .play()
     .then(() => {
+      if (wanted.has(effect)) return;
       a.pause();
       a.currentTime = 0;
       a.muted = false;
@@ -260,6 +275,7 @@ export const playEffect = (effect: SoundEffect): void => {
   const a = effectAudio(effect);
   if (a === null) return;
   try {
+    wanted.add(effect);
     a.muted = false;
     a.currentTime = 0;
     void a.play().catch(() => undefined);

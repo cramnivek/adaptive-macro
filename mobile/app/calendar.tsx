@@ -6,11 +6,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../src/components/Card';
 import { TOUCH_TARGET } from '../src/components/Controls';
+import { LoadProblem } from '../src/components/LoadProblem';
 import { Screen } from '../src/components/Screen';
 import { Tappable } from '../src/components/Tappable';
 import { monthGrid, monthTitle, shiftMonth } from '../src/calendarMonth';
 import { sessionsBetween } from '../src/db';
 import { formatDate } from '../src/format';
+import { problemText } from '../src/loadProblem';
 import { font, radius, space } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 
@@ -34,6 +36,12 @@ export default function CalendarScreen() {
 
   const [view, setView] = useState({ year: nowYear, month: nowMonth });
   const [trained, setTrained] = useState<Trained>([]);
+  /**
+   * Why the month's workouts could not be read. Without it a failed read showed
+   * an empty month, which looks exactly like a month with no training in it.
+   */
+  const [problem, setProblem] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   /** A day with several sessions that was tapped, whose sessions are listed under the grid. */
   const [picked, setPicked] = useState<ISODate | null>(null);
 
@@ -45,14 +53,19 @@ export default function CalendarScreen() {
     useCallback(() => {
       let current = true;
       const days = grid.flat().filter((day) => day.inMonth);
-      void (async () => {
-        const found = await sessionsBetween(days[0]!.date, days[days.length - 1]!.date);
-        if (current) setTrained(found);
-      })();
+      sessionsBetween(days[0]!.date, days[days.length - 1]!.date)
+        .then((found) => {
+          if (!current) return;
+          setTrained(found);
+          setProblem(null);
+        })
+        .catch((error) => {
+          if (current) setProblem(problemText(error));
+        });
       return () => {
         current = false;
       };
-    }, [grid]),
+    }, [grid, attempt]),
   );
 
   const byDate = useMemo(() => {
@@ -85,6 +98,9 @@ export default function CalendarScreen() {
 
   return (
     <Screen tone="loud">
+      {problem !== null && (
+        <LoadProblem tone="loud" message={problem} onRetry={() => setAttempt((n) => n + 1)} />
+      )}
       <View style={styles.header}>
         <Pressable
           onPress={() => go(-1)}

@@ -118,9 +118,9 @@ export const runLocalNutritionDiagnostics = (params: {
   goal: Goal;
 }) => {
   const { consumed, entries, profile } = params;
-  const quality = computeNutritionQualityScore(consumed, profile.sex);
+  const quality = computeNutritionQualityScore(consumed, profile.sex, profile.age);
   const electrolytes = evaluateElectrolytes(consumed.micros);
-  const microsList = analyzeMicronutrients(consumed.micros, profile.sex);
+  const microsList = analyzeMicronutrients(consumed.micros, profile.sex, profile.age);
 
   // Protein timing analysis
   const mealsMap = new Map<string, number>();
