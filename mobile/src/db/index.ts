@@ -14,6 +14,7 @@ import type {
 import { addDays, estimate1RM } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
+import { rowsToRestore } from './backupRows';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 import {
@@ -598,7 +599,7 @@ export const exportBackup = async (): Promise<Backup> => {
     version: 2,
     exportedAt: new Date().toISOString(),
     settings: await db.getAllAsync('SELECT key, value FROM settings'),
-    weights: await db.getAllAsync('SELECT date, kg FROM weights'),
+    weights: await db.getAllAsync('SELECT * FROM weights'),
     foods: await db.getAllAsync('SELECT * FROM foods'),
     entries: await db.getAllAsync('SELECT * FROM log_entries'),
     exerciseCatalogue: await db.getAllAsync('SELECT * FROM exercise_catalogue'),
@@ -698,17 +699,9 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       await db.runAsync(`DELETE FROM ${table}`);
     }
 
-    await insertRows(db, 'settings', backup.settings as Record<string, unknown>[]);
-    await insertRows(db, 'weights', backup.weights as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'foods', backup.foods as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'log_entries', backup.entries as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'exercise_catalogue', backup.exerciseCatalogue);
-    await insertRows(db, 'exercises', backup.exercises);
-    await insertRows(db, 'routines', backup.routines);
-    await insertRows(db, 'routine_exercises', backup.routineExercises);
-    await insertRows(db, 'sessions', backup.sessions);
-    await insertRows(db, 'sets', backup.sets);
-    await insertRows(db, 'day_status', backup.dayStatus);
+    for (const [table, rows] of rowsToRestore(backup)) {
+      await insertRows(db, table, rows);
+    }
   });
 };
 
