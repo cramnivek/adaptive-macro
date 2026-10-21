@@ -102,6 +102,20 @@ export interface WeeklyMetricsInput {
   targetProteinG?: number;
   units?: UnitSystem;
   endDate?: ISODate;
+  /** Daily step counts. Context for the coach, never added to expenditure. */
+  steps?: { date: ISODate; steps: number }[];
+  bodyMeasurements?: { date: ISODate; waistCm?: number | null; bodyFatPct?: number | null }[];
+  /** The check-in before this one, so the coach follows up on its own advice. */
+  previous?: PreviousCheckIn | null;
+}
+
+export interface PreviousCheckIn {
+  from: ISODate;
+  to: ISODate;
+  headline: string;
+  /** The adjustment it suggested, in words, or null when it suggested holding steady. */
+  advice: string | null;
+  applied: boolean;
 }
 
 export interface WeeklyExtractedMetrics {
@@ -133,7 +147,36 @@ export interface WeeklyExtractedMetrics {
     overVolumeGroups: string[];
   };
   confidence: 'high' | 'moderate' | 'low';
+  activity: { avgSteps: number | null; stepDays: number; priorAvgSteps: number | null };
+  /** The latest measurement up to the end of the week, or null with none. */
+  body: { date: ISODate; waistCm: number | null; waistChangeCm: number | null; bodyFatPct: number | null } | null;
+  previous: PreviousCheckIn | null;
 }
+
+const averageSteps = (rows: { steps: number }[]): number | null =>
+  rows.length > 0 ? Math.round(rows.reduce((sum, r) => sum + r.steps, 0) / rows.length) : null;
+
+/**
+ * The newest measurement on or before `to`, with its waist set against the
+ * waist before it, and the newest body fat, which is logged less often.
+ */
+const latestBody = (
+  rows: NonNullable<WeeklyMetricsInput['bodyMeasurements']>,
+  to: ISODate,
+): WeeklyExtractedMetrics['body'] => {
+  const upTo = rows.filter((r) => r.date <= to).sort((a, b) => a.date.localeCompare(b.date));
+  if (upTo.length === 0) return null;
+  const waists = upTo.filter((r) => typeof r.waistCm === 'number');
+  const fats = upTo.filter((r) => typeof r.bodyFatPct === 'number');
+  const waist = waists.at(-1)?.waistCm ?? null;
+  const before = waists.at(-2)?.waistCm ?? null;
+  return {
+    date: upTo[upTo.length - 1].date,
+    waistCm: waist,
+    waistChangeCm: waist !== null && before !== null ? Math.round((waist - before) * 10) / 10 : null,
+    bodyFatPct: fats.at(-1)?.bodyFatPct ?? null,
+  };
+};
 
 /**
  * Deterministically aggregates the past 7 days of training, weight, and nutrition ground truth.
@@ -274,6 +317,12 @@ export const extractWeeklyMetrics = (input: WeeklyMetricsInput): WeeklyExtracted
     }
   }
 
+  // 5. Steps this week and the week before, as context.
+  const weekSteps = (input.steps ?? []).filter((s) => s.date >= from && s.date <= to && s.steps > 0);
+  const priorSteps = (input.steps ?? []).filter(
+    (s) => s.date >= addDays(from, -7) && s.date < from && s.steps > 0,
+  );
+
   // 4. Data Confidence
   let confidence: 'high' | 'moderate' | 'low' = 'low';
   if (weightEntries.length >= 4 && calorieEntries.length >= 4) {
@@ -311,7 +360,52 @@ export const extractWeeklyMetrics = (input: WeeklyMetricsInput): WeeklyExtracted
       overVolumeGroups,
     },
     confidence,
+    activity: {
+      avgSteps: averageSteps(weekSteps),
+      stepDays: weekSteps.length,
+      priorAvgSteps: averageSteps(priorSteps),
+    },
+    body: latestBody(input.bodyMeasurements ?? [], to),
+    previous: input.previous ?? null,
   };
+};
+
+const signed = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+
+/**
+ * Steps, body measurements and the last check-in, for the prompt. Steps are
+ * labelled as context because the expenditure estimate already comes from
+ * weight and food; a coach adding calories for them would count walking twice.
+ */
+const contextSections = (metrics: WeeklyExtractedMetrics): string => {
+  const { activity, body, previous } = metrics;
+  const steps =
+    activity.avgSteps === null
+      ? '- No steps counted this week'
+      : `- Average steps: ${activity.avgSteps.toLocaleString('en-US')}/day on ${activity.stepDays} days with a count` +
+        (activity.priorAvgSteps !== null ? ` (week before: ${activity.priorAvgSteps.toLocaleString('en-US')}/day)` : '');
+  const bodyLines: string[] = [];
+  if (body?.waistCm != null) {
+    bodyLines.push(
+      `- Waist: ${body.waistCm} cm on ${body.date}` +
+        (body.waistChangeCm !== null ? ` (${signed(body.waistChangeCm)} cm since the one before)` : ''),
+    );
+  }
+  if (body?.bodyFatPct != null) bodyLines.push(`- Body fat: ${body.bodyFatPct}% (latest estimate)`);
+  const last = previous
+    ? `LAST CHECK-IN (${previous.from} to ${previous.to}):
+- Headline then: "${previous.headline}"
+- ${previous.advice ? `You advised: ${previous.advice}. The lifter ${previous.applied ? 'applied it' : 'did not apply it'}.` : 'You advised holding steady.'}
+- Follow up on it: say whether this week's data suggests it worked, before advising anything new.`
+    : 'LAST CHECK-IN:\n- This is the first check-in; there is no earlier advice to follow up.';
+
+  return `ACTIVITY (context only; expenditure already comes from weight and food, so do not add calories for steps):
+${steps}
+
+BODY:
+${bodyLines.join('\n') || '- No body measurements logged'}
+
+${last}`;
 };
 
 export const buildCoachingPrompt = (
@@ -373,6 +467,8 @@ ${metrics.training.progressions.map((p) => `  * ${p.exercise}: ${p.previous} -> 
   * Muscles in the Growth Sweet Spot: ${metrics.training.optimalVolumeGroups.join(', ') || 'None'}
   * Muscles that could use more sets: ${metrics.training.underVolumeGroups.join(', ') || 'None'}
   * Muscles that might be doing too much: ${metrics.training.overVolumeGroups.join(', ') || 'None'}
+
+${contextSections(metrics)}
 
 INSTRUCTIONS:
 1. Synthesize the interaction between nutrition energy balance, scale weight rate of change, and gym performance in your coach persona.

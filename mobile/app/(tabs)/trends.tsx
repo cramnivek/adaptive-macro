@@ -36,6 +36,8 @@ import {
   listLogEntriesBetween,
   finishedSessionTimes,
   getDailyStepsBetween,
+  getLatestBodyMeasurements,
+  type BodyMeasurementRecord,
   listAllSets,
   type DailyStepRecord,
 } from '../../src/db';
@@ -74,6 +76,7 @@ import {
 import { notify } from '../../src/dialog';
 import { thud } from '../../src/platform/haptics';
 import { getEventCopy } from '../../src/copy/personality';
+import { adviceOf, previousCheckIn, type SavedCheckIn } from '../../src/previousCheckIn';
 import {
   CHECK_IN_WEEKS,
   checkInAppliedKey,
@@ -134,7 +137,9 @@ export default function TrendsScreen() {
   // A past check-in opened from the history list. While set, the modal and
   // the metrics behind it are about that period instead of the latest one.
   const [pastPeriod, setPastPeriod] = useState<CheckInPeriod | null>(null);
-  const [history, setHistory] = useState<{ period: CheckInPeriod; headline: string }[]>([]);
+  const [history, setHistory] = useState<SavedCheckIn[]>([]);
+  /** For the coach: the waist and body fat around a check-in, as context. */
+  const [bodyRows, setBodyRows] = useState<BodyMeasurementRecord[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
     if (checkin !== 'weekly' && checkin !== 'monthly' && checkin !== 'quarterly') return;
@@ -169,15 +174,17 @@ export default function TrendsScreen() {
 
   const fetchTrendsData = useCallback(async () => {
     try {
-      const [intakeRows, allSets, byName, times, stepRows, yearEntries] = await Promise.all([
+      const [intakeRows, allSets, byName, times, stepRows, yearEntries, measurements] = await Promise.all([
         dailyIntakeBetween(maxHistoryFrom, today),
         listAllSets(),
         catalogueRegionsByExerciseName(),
         finishedSessionTimes(maxHistoryFrom),
         getDailyStepsBetween(maxHistoryFrom, today),
         listLogEntriesBetween(maxHistoryFrom, today),
+        getLatestBodyMeasurements(50),
       ]);
       setLoggedEntries(yearEntries);
+      setBodyRows(measurements);
       setIntake(intakeRows);
       setSets(allSets);
       setRegions(byName);
@@ -337,6 +344,12 @@ export default function TrendsScreen() {
   // finished it is the one in progress, which cannot be reviewed yet.
   const weeklyPeriod =
     pastPeriod?.kind === 'weekly' ? pastPeriod : (weeklyStatus?.last?.period ?? weeklyStatus?.current.period ?? null);
+  // The check-in before the week in question: shown when this one is not
+  // earned, and given to the coach so it follows up on what it said last.
+  const previousWeekly = useMemo(
+    () => (weeklyPeriod ? previousCheckIn(history, 'weekly', weeklyPeriod.from) : null),
+    [history, weeklyPeriod],
+  );
   const longPeriod =
     pastPeriod && pastPeriod.kind !== 'weekly'
       ? pastPeriod
@@ -354,13 +367,27 @@ export default function TrendsScreen() {
     void (async () => {
       const keys = (await AsyncStorage.getAllKeys()).filter((k) => KEY.test(k));
       const rows = await AsyncStorage.multiGet(keys);
-      const items = rows.flatMap(([key, value]) => {
+      const appliedRows = new Map(
+        await AsyncStorage.multiGet(keys.map((k) => k.replace('ascend_checkin_', 'ascend_checkin_applied_'))),
+      );
+      const items = rows.flatMap(([key, value]): SavedCheckIn[] => {
         const match = KEY.exec(key);
         if (!match || !value) return [];
         const kind = match[1] as CheckInKind;
         const from = match[2];
-        const headline = (JSON.parse(value) as { review?: { headline?: string } }).review?.headline ?? '';
-        return [{ period: { kind, from, to: addDays(from, CHECK_IN_WEEKS[kind] * 7 - 1) }, headline }];
+        const period = { kind, from, to: addDays(from, CHECK_IN_WEEKS[kind] * 7 - 1) };
+        const review =
+          (JSON.parse(value) as {
+            review?: { headline?: string; suggestedAdjustment?: { hasAdjustment: boolean; title: string } };
+          }).review ?? {};
+        return [
+          {
+            period,
+            headline: review.headline ?? '',
+            advice: adviceOf(review),
+            applied: appliedRows.get(checkInAppliedKey(period)) != null,
+          },
+        ];
       });
       items.sort((a, b) => (a.period.to === b.period.to ? 0 : a.period.to < b.period.to ? 1 : -1));
       if (alive) setHistory(items);
@@ -409,6 +436,17 @@ export default function TrendsScreen() {
         targetProteinG: program?.macros?.proteinG,
         units: settings.units,
         endDate: weeklyPeriod?.to ?? today,
+        steps: stepsHistory,
+        bodyMeasurements: bodyRows,
+        previous: previousWeekly
+          ? {
+              from: previousWeekly.period.from,
+              to: previousWeekly.period.to,
+              headline: previousWeekly.headline,
+              advice: previousWeekly.advice,
+              applied: previousWeekly.applied,
+            }
+          : null,
       }),
     [
       series,
@@ -417,6 +455,9 @@ export default function TrendsScreen() {
       sets,
       weeklyCheckInDiagnostics,
       weeklyPeriod?.to,
+      stepsHistory,
+      bodyRows,
+      previousWeekly,
       today,
       settings.goal?.direction,
       program?.calories?.kcal,
@@ -1414,6 +1455,8 @@ export default function TrendsScreen() {
         units={settings.units}
         weeklyLockedNote={coachingReview ? null : weeklyLockedNote}
         monthlyLockedNote={monthlyReview ? null : longLockedNote}
+        previousWeekly={previousWeekly}
+        onOpenPrevious={(period) => setPastPeriod(period)}
       />
 
       <StepLogModal

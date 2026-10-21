@@ -220,6 +220,9 @@ describe('weeklyReview metrics extractor and schema', () => {
         overVolumeGroups: [],
       },
       confidence: 'high',
+      activity: { avgSteps: null, stepDays: 0, priorAvgSteps: null },
+      body: null,
+      previous: null,
     };
 
     const mockPayload = {
@@ -291,6 +294,9 @@ describe('weeklyReview metrics extractor and schema', () => {
       nutrition: { loggedDays: 7, avgCalories: 2200, targetCalories: 2200, avgExpenditure: 2600, avgEnergyDeltaKcal: -400, avgProteinG: 160, targetProteinG: 160 },
       training: { sessionsCount: 4, totalWorkingSets: 16, totalVolumeKg: 10000, progressions: [], underVolumeGroups: [], optimalVolumeGroups: [], overVolumeGroups: [] },
       confidence: 'high',
+      activity: { avgSteps: null, stepDays: 0, priorAvgSteps: null },
+      body: null,
+      previous: null,
     };
 
     const gymratPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'gymrat');
@@ -304,5 +310,52 @@ describe('weeklyReview metrics extractor and schema', () => {
     const ascendPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'ascend');
     expect(ascendPrompt).toContain('ASCEND MODE');
     expect(ascendPrompt).toContain('warm, encouraging');
+  });
+});
+
+describe('weekly review context beyond weight, food and training', () => {
+  const base = { series: [], sets: [], endDate: '2026-10-18', units: 'metric' as const };
+
+  it('gives the week its steps, set against the week before', () => {
+    const metrics = extractWeeklyMetrics({
+      ...base,
+      steps: [
+        { date: '2026-10-05', steps: 4000 },
+        { date: '2026-10-08', steps: 6000 },
+        { date: '2026-10-12', steps: 8000 },
+        { date: '2026-10-18', steps: 10000 },
+      ],
+    });
+    expect(metrics.activity).toEqual({ avgSteps: 9000, stepDays: 2, priorAvgSteps: 5000 });
+    expect(buildCoachingPrompt(metrics)).toContain('Average steps: 9,000/day on 2 days with a count (week before: 5,000/day)');
+  });
+
+  it('gives the latest body measurement up to the end of the week, and the waist change', () => {
+    const metrics = extractWeeklyMetrics({
+      ...base,
+      bodyMeasurements: [
+        { date: '2026-10-01', waistCm: 86, bodyFatPct: 19 },
+        { date: '2026-10-16', waistCm: 85, bodyFatPct: null },
+        { date: '2026-10-20', waistCm: 84 },
+      ],
+    });
+    expect(metrics.body).toEqual({ date: '2026-10-16', waistCm: 85, waistChangeCm: -1, bodyFatPct: 19 });
+    expect(buildCoachingPrompt(metrics)).toContain('Waist: 85 cm on 2026-10-16 (-1 cm since the one before)');
+  });
+
+  it('tells the coach what it advised last time and whether it was taken', () => {
+    const metrics = extractWeeklyMetrics({
+      ...base,
+      previous: { from: '2026-10-05', to: '2026-10-11', headline: 'Steady week', advice: 'Drop 150 kcal/day', applied: true },
+    });
+    const prompt = buildCoachingPrompt(metrics);
+    expect(prompt).toContain('LAST CHECK-IN (2026-10-05 to 2026-10-11)');
+    expect(prompt).toContain('You advised: Drop 150 kcal/day. The lifter applied it.');
+  });
+
+  it('says plainly when there is nothing to go on', () => {
+    const prompt = buildCoachingPrompt(extractWeeklyMetrics(base));
+    expect(prompt).toContain('No steps counted');
+    expect(prompt).toContain('This is the first check-in');
   });
 });
