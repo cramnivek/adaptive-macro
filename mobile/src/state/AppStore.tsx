@@ -38,6 +38,7 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as db from '../db';
 import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
+import { offerToMoveLog } from '../db/moveLog';
 import { LATEST_ACTIVE_DRAFT_KEY } from '../sessionDraft';
 import { pushBaselineToCloud } from '../social/baselineSync';
 import { useSocial } from '../social/session';
@@ -210,6 +211,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           // squad as last seen, and a pointer to the workout in progress.
           if (ownerChanged) await AsyncStorage.multiRemove([SQUAD_STORAGE_KEY, LATEST_ACTIVE_DRAFT_KEY]);
           await db.selectDatabase(database);
+          // Before the log is read: an account opening to an empty log is
+          // offered the one kept here without an account (moveLog.ts).
+          // A move that fails must not keep the account's own log from
+          // opening; it is ordered so the log is never in neither place.
+          if (owner !== SIGNED_OUT) {
+            await offerToMoveLog(owner, database).catch(() => db.selectDatabase(database));
+          }
         }
         const stored = await db.readSetting<Partial<AppSettings>>(SETTINGS_KEY);
         if (cancelled) return;

@@ -10,7 +10,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../accountDatabase';
+import { LEGACY_DATABASE, SIGNED_OUT, claimDevice, hasLog, signedOutDatabase } from '../accountDatabase';
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -48,5 +48,28 @@ describe('claimDevice', () => {
     expect((await claimDevice(ALICE)).ownerChanged).toBe(false);
     expect((await claimDevice(SIGNED_OUT)).ownerChanged).toBe(true);
     expect((await claimDevice(SIGNED_OUT)).ownerChanged).toBe(false);
+  });
+});
+
+describe('signedOutDatabase', () => {
+  beforeEach(() => mockStore.clear());
+
+  it('is the original file when going without an account claimed it first', async () => {
+    await claimDevice(SIGNED_OUT);
+    await claimDevice(ALICE);
+    expect(await signedOutDatabase()).toBe(LEGACY_DATABASE);
+  });
+
+  it('is a file of its own when an account claimed the original', async () => {
+    await claimDevice(ALICE);
+    expect(await signedOutDatabase()).toBe(`adaptive-macros-${SIGNED_OUT}.db`);
+  });
+});
+
+describe('hasLog', () => {
+  it('counts weigh-ins, food, workouts and body measurements, not settings alone', () => {
+    expect(hasLog({ weights: 0, entries: 0, sessions: 0, measurements: 0 })).toBe(false);
+    expect(hasLog({ weights: 0, entries: 0, sessions: 0, measurements: 1 })).toBe(true);
+    expect(hasLog({ weights: 10, entries: 0, sessions: 0, measurements: 0 })).toBe(true);
   });
 });
