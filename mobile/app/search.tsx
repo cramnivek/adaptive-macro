@@ -520,16 +520,20 @@ export default function SearchScreen() {
                 <Text style={[styles.rowName, { color: colors.text }]} numberOfLines={2}>
                   {item.name}
                 </Text>
+                {/* The serving first, because that is the number being compared:
+                    "1 large egg · 72 kcal" answers the question, "143 kcal / 100 g"
+                    makes you do arithmetic. Per 100 g stays below for comparing
+                    two foods like for like. */}
+                {primaryPortion && (
+                  <Text style={[styles.portionBadge, { color: isVerified ? colors.accent : colors.textMuted }]}>
+                    {primaryPortion.label} · {Math.round((item.per100g.kcal * primaryPortion.grams) / 100)} kcal
+                  </Text>
+                )}
                 <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
                   {item.brand ? `${item.brand} · ` : ''}
                   {Math.round(item.per100g.kcal)} kcal / 100 g · P {Math.round(item.per100g.proteinG)} · C{' '}
                   {Math.round(item.per100g.carbsG)} · F {Math.round(item.per100g.fatG)}
                 </Text>
-                {primaryPortion && (
-                  <Text style={[styles.portionBadge, { color: isVerified ? colors.accent : colors.textMuted }]}>
-                    Serving: {primaryPortion.label}
-                  </Text>
-                )}
                 {item.source === 'ai' && (
                   <Text style={[styles.rowWarning, { color: colors.textMuted }]}>
                     Estimated macro profile · verify portion
@@ -609,8 +613,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   portionBadge: {
-    fontFamily: font.ui,
-    fontSize: 11,
+    fontFamily: font.uiStrong,
+    fontSize: 13,
     marginTop: 2,
   },
   error: { fontFamily: font.ui, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: space.xs },
