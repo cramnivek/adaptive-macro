@@ -10,8 +10,9 @@ import {
   View,
 } from 'react-native';
 import { thud } from '../platform/haptics';
-import { pickAvatarPhoto, PRESET_AVATARS } from '../social/avatars';
+import { pickAvatarSource, PRESET_AVATARS } from '../social/avatars';
 import { font, radius, space, useTheme } from '../theme';
+import { AvatarCropper } from './AvatarCropper';
 import { Tappable } from './Tappable';
 import { UserAvatar } from './UserAvatar';
 
@@ -34,22 +35,25 @@ export const AvatarPickerModal = ({
 }: AvatarPickerModalProps) => {
   const { colors } = useTheme();
   const [picking, setPicking] = useState(false);
+  /** A photo picked and waiting to be positioned; the sheet shows the cropper while it is set. */
+  const [source, setSource] = useState<{ uri: string; width: number; height: number } | null>(null);
 
   const handlePickPhoto = async (useCamera: boolean) => {
     thud('light');
     setPicking(true);
     try {
-      const uri = await pickAvatarPhoto(useCamera);
-      if (uri) {
-        thud('heavy');
-        onSelectAvatar(uri);
-        onClose();
-      }
+      const picked = await pickAvatarSource(useCamera);
+      if (picked) setSource(picked);
     } catch {
       thud('light');
     } finally {
       setPicking(false);
     }
+  };
+
+  const close = () => {
+    setSource(null);
+    onClose();
   };
 
   const handleSelectPreset = (presetId: string) => {
@@ -65,8 +69,8 @@ export const AvatarPickerModal = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
+      <Pressable style={styles.backdrop} onPress={close}>
         <Pressable
           style={[
             styles.sheet,
@@ -88,7 +92,7 @@ export const AvatarPickerModal = ({
             <Tappable
               onPress={() => {
                 thud('light');
-                onClose();
+                close();
               }}
               accessibilityRole="button"
               accessibilityLabel="Close"
@@ -98,6 +102,19 @@ export const AvatarPickerModal = ({
             </Tappable>
           </View>
 
+          {source ? (
+            <View style={styles.scrollContent}>
+              <AvatarCropper
+                photo={source}
+                onCancel={() => setSource(null)}
+                onDone={(avatarUrl) => {
+                  thud('heavy');
+                  onSelectAvatar(avatarUrl);
+                  close();
+                }}
+              />
+            </View>
+          ) : (
           <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {/* Current Avatar Preview */}
             <View style={styles.previewRow}>
@@ -224,6 +241,7 @@ export const AvatarPickerModal = ({
               })}
             </View>
           </ScrollView>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
