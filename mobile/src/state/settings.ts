@@ -109,6 +109,11 @@ export interface AppSettings {
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
   /**
+   * The onboarding version last completed (see onboardingSteps.ts). Someone
+   * onboarded before a version added steps is shown just those, once.
+   */
+  onboardingVersion: number;
+  /**
    * True once someone chose to use the app without an account. The sign-in
    * screen then stops being a gate and becomes something the social screens
    * offer; signing out clears nothing here, so it stays a choice made once.
@@ -182,6 +187,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   foodLookup: { geminiApiKey: '' },
   onboarded: false,
+  onboardingVersion: 0,
   accountSkipped: false,
   checkInSeenWeek: null,
   barbell: 'standard',

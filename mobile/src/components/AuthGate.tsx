@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { pushBaselineToCloud, readBaselineFromSession } from '../social/baselineSync';
 import { useSocial } from '../social/session';
+import { needsOnboarding } from '../onboardingSteps';
 import { useApp } from '../state/AppStore';
 import { useTheme } from '../theme';
 import { AppArrival } from './AppArrival';
@@ -99,9 +100,10 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
       }
     }
 
-    // Auth & social profile satisfied (or auth not configured in this build): enforce baseline onboarding
+    // Auth & social profile satisfied (or auth not configured in this build): enforce
+    // onboarding, and send anyone set up before its newer steps through those, once.
     if (
-      !settings.onboarded &&
+      needsOnboarding({ onboarded: settings.onboarded, completedVersion: settings.onboardingVersion }) &&
       rootSegment !== 'onboard' &&
       rootSegment !== 'profile-setup' &&
       rootSegment !== 'sign-in' &&

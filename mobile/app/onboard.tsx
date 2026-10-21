@@ -1,12 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Screen } from '../src/components/Screen';
-import { OnboardingWizard } from '../src/components/OnboardingWizard';
+import { OnboardingFlow } from '../src/components/OnboardingFlow';
 
 export default function OnboardScreen() {
   const router = useRouter();
-  return (
-    <Screen>
-      <OnboardingWizard onComplete={() => router.replace('/')} />
-    </Screen>
-  );
+  // Full screen, without the scrolling Screen frame: each step is a page of
+  // its own, with its own progress bar and buttons.
+  return <OnboardingFlow onComplete={() => router.replace('/')} />;
 }
