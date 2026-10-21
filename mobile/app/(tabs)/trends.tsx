@@ -81,7 +81,7 @@ import {
   checkInStatus,
   checkInStorageKey,
   firstLoggedDate,
-  qualifyingDays,
+  loggedDays,
   type CheckInKind,
   type CheckInPeriod,
 } from '../../src/checkInSchedule';
@@ -318,19 +318,20 @@ export default function TrendsScreen() {
   // Which finished periods have earned a check-in (see checkInSchedule). A
   // check-in is always about a finished week, month or quarter, so it no longer
   // moves under the person each day or each time a meal is logged.
-  const loggedDays = useMemo(() => qualifyingDays(observations, dayStatus), [observations, dayStatus]);
+  const logged = useMemo(() => loggedDays(observations, dayStatus), [observations, dayStatus]);
+  const weekEndsOn = settings.checkInWeekEndsOn;
   const firstLogged = useMemo(() => firstLoggedDate(observations), [observations]);
   const weeklyStatus = useMemo(
-    () => checkInStatus('weekly', firstLogged, today, loggedDays),
-    [firstLogged, today, loggedDays],
+    () => checkInStatus('weekly', firstLogged, today, logged, weekEndsOn),
+    [firstLogged, today, logged, weekEndsOn],
   );
   // The month and year views share the longer review: four weeks, or thirteen
   // for a quarter. A full year is too long to wait for a first one.
   const longKind: CheckInKind =
     pastPeriod && pastPeriod.kind !== 'weekly' ? pastPeriod.kind : timeframe === 'year' ? 'quarterly' : 'monthly';
   const longStatus = useMemo(
-    () => checkInStatus(longKind, firstLogged, today, loggedDays),
-    [longKind, firstLogged, today, loggedDays],
+    () => checkInStatus(longKind, firstLogged, today, logged, weekEndsOn),
+    [longKind, firstLogged, today, logged, weekEndsOn],
   );
   // The period each review is about: the last finished one. Before any has
   // finished it is the one in progress, which cannot be reviewed yet.
@@ -727,14 +728,14 @@ export default function TrendsScreen() {
     const pill = review
       ? gymrat ? 'LOCKED IN 🔥' : 'READ IT'
       : locked
-        ? status ? `${status.current.logged}/${status.current.needed} DAYS` : 'NOT YET'
+        ? status ? `${Math.min(status.current.food, status.current.foodNeeded)}/${status.current.foodNeeded} DAYS` : 'NOT YET'
         : gymrat ? 'TAP TO CHECK IN 🏋️' : 'READY';
     const headline = review
       ? `"${review.headline}"`
       : locked
         ? status
           ? // "6 to go" read as six more days to log; it is the days left in the period.
-            `${status.current.logged} of ${status.current.needed} days logged · ${status.current.daysLeft} day${status.current.daysLeft === 1 ? '' : 's'} left this ${span}`
+            `Food on ${status.current.food} of ${status.current.foodNeeded} days · ${status.current.weighIns} of ${status.current.weighInsNeeded} weigh-ins · ${status.current.daysLeftAfterToday} day${status.current.daysLeftAfterToday === 1 ? '' : 's'} left this ${span}`
           : NOTHING_YET
         : last
           ? `${formatDayMonth(last.from)} to ${formatDayMonth(last.to)} is ready to review`

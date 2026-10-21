@@ -422,8 +422,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             latest,
             goal: settings.goal,
             options: targetOptions,
+            weekEndsOn: settings.checkInWeekEndsOn,
           }),
-    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions],
+    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
   );
 
   const program = useMemo(() => {

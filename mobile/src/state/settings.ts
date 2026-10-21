@@ -130,6 +130,12 @@ export interface AppSettings {
   /** Short sounds for moments, such as a new PR. Separate from the rest chime. */
   effectSounds: boolean;
   /**
+   * The weekday a week ends on, for check-ins and the weekly target note: 0 for
+   * Sunday through 6 for Saturday. Someone who weighs in and reviews on a
+   * Friday wants Saturday-to-Friday weeks, not to wait until Monday.
+   */
+  checkInWeekEndsOn: number;
+  /**
    * Whether the finish sheet leads with POST. Set by what someone did last
    * time — posted, or left without posting — so a regular poster gets one tap
    * and someone who never posts is not nagged.
@@ -188,6 +194,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restSound: true,
   restChimeChoice: 'chime',
   effectSounds: true,
+  checkInWeekEndsOn: 0,
   postWorkouts: false,
   personality: 'ascend',
   userMission: 'hybrid',

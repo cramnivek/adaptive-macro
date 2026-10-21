@@ -35,6 +35,13 @@ describe('checkInWeekFor', () => {
   it('moves on when the next week starts', () => {
     expect(checkInWeekFor('2026-10-19')).toEqual({ start: '2026-10-12', end: '2026-10-18' });
   });
+
+  it('can end the week on another day, for someone who checks in on a Friday', () => {
+    // 5 is Friday. 2026-10-16 is a Friday, 2026-10-21 a Wednesday.
+    expect(checkInWeekFor('2026-10-21', 5)).toEqual({ start: '2026-10-10', end: '2026-10-16' });
+    expect(checkInWeekFor('2026-10-16', 5)).toEqual({ start: '2026-10-03', end: '2026-10-09' });
+    expect(checkInWeekFor('2026-10-17', 5)).toEqual({ start: '2026-10-10', end: '2026-10-16' });
+  });
 });
 
 describe('weeklyCheckIn', () => {

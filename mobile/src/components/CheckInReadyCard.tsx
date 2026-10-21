@@ -7,7 +7,7 @@ import {
   checkInStorageKey,
   earnedCheckIns,
   firstLoggedDate,
-  qualifyingDays,
+  loggedDays,
   type CheckInPeriod,
 } from '../checkInSchedule';
 import { formatDayMonth } from '../format';
@@ -29,12 +29,18 @@ const dismissedKey = (period: CheckInPeriod) => `${checkInStorageKey(period)}_di
 export const CheckInReadyCard = () => {
   const { colors } = useTheme();
   const router = useRouter();
-  const { observations, dayStatus } = useApp();
+  const { observations, dayStatus, settings } = useApp();
   const [ready, setReady] = useState<CheckInPeriod | null>(null);
 
   const earned = useMemo(
-    () => earnedCheckIns(firstLoggedDate(observations), todayISO(), qualifyingDays(observations, dayStatus)),
-    [observations, dayStatus],
+    () =>
+      earnedCheckIns(
+        firstLoggedDate(observations),
+        todayISO(),
+        loggedDays(observations, dayStatus),
+        settings.checkInWeekEndsOn,
+      ),
+    [observations, dayStatus, settings.checkInWeekEndsOn],
   );
 
   // The first earned period with no saved review and no "not now" against it.

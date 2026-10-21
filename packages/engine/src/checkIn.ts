@@ -30,12 +30,18 @@ export interface WeeklyCheckIn {
   targetNowKcal: number;
 }
 
-/** Last week, Monday to Sunday, as seen from any day of this one. */
-export const checkInWeekFor = (today: ISODate): { start: ISODate; end: ISODate } => {
-  // getUTCDay: 0 is Sunday. Days since this week's Monday.
-  const sinceMonday = (parseISODate(today).getUTCDay() + 6) % 7;
-  const thisMonday = addDays(today, -sinceMonday);
-  return { start: addDays(thisMonday, -7), end: addDays(thisMonday, -1) };
+/**
+ * Last week, as seen from any day of this one. Monday to Sunday unless the
+ * person ends their week on another day: `weekEndsOn` is that weekday, 0 for
+ * Sunday through 6 for Saturday, so a Friday check-in reviews Saturday to
+ * Friday.
+ */
+export const checkInWeekFor = (today: ISODate, weekEndsOn = 0): { start: ISODate; end: ISODate } => {
+  // getUTCDay: 0 is Sunday. Days since this week's first day.
+  const firstDay = (weekEndsOn + 1) % 7;
+  const sinceStart = (parseISODate(today).getUTCDay() - firstDay + 7) % 7;
+  const thisStart = addDays(today, -sinceStart);
+  return { start: addDays(thisStart, -7), end: addDays(thisStart, -1) };
 };
 
 /** The last entry on or before `date`, from a list in date order. */
@@ -61,6 +67,8 @@ export interface CheckInInput {
   latest: DailyEstimate | null;
   goal: Goal;
   options: TargetOptions;
+  /** The weekday the person's week ends on, as in checkInWeekFor. Sunday when absent. */
+  weekEndsOn?: number;
 }
 
 /**
@@ -71,7 +79,7 @@ export interface CheckInInput {
  * as a target change the data caused. The difference is the data's alone.
  */
 export const weeklyCheckIn = (input: CheckInInput): WeeklyCheckIn | null => {
-  const { start, end } = checkInWeekFor(input.today);
+  const { start, end } = checkInWeekFor(input.today, input.weekEndsOn);
   if (input.latest === null || input.filtered.length === 0) return null;
   if (diffDays(input.filtered[0].date, end) < 0) return null;
 
