@@ -1,4 +1,5 @@
 import type { ISODate } from '@adaptive-macros/engine';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import {
   aggregateGroupByPeriod,
@@ -11,8 +12,10 @@ import {
 } from 'react-native-health-connect';
 import { bulkSaveDailySteps, listWeights, saveWeight } from '../db';
 import { getDailyStepsBetween } from '../db/stepQueries';
-import { planHealthConnectImport, stepsByDay, weightsByDay } from './healthConnectRules';
+import { planHealthConnectImport, stepsByDay, weightsByDay, type HealthConnectSyncResult } from './healthConnectRules';
 import { calculateDistanceKm, calculateNeatKcal } from './neat';
+
+export type { HealthConnectSyncResult } from './healthConnectRules';
 
 /**
  * Steps and scale weigh-ins from Android's Health Connect, read only.
@@ -65,14 +68,77 @@ export const connectHealthConnect = async (): Promise<boolean> => {
   return granted.some((p) => p.recordType === 'Steps' || p.recordType === 'Weight');
 };
 
-export interface HealthConnectSyncResult {
-  stepDays: number;
-  weighIns: number;
-  /** Weigh-ins found but left alone, because the day already had one. */
-  weighInsKept: number;
+/** Names for the apps people are likely to sync from; anything else shows its package. */
+const APP_NAMES: Record<string, string> = {
+  'com.garmin.android.apps.connectmobile': 'Garmin Connect',
+  'com.google.android.apps.fitness': 'Fit',
+  'com.sec.android.app.shealth': 'Samsung Health',
+  'com.heytap.health': 'HeyTap Health',
+  'com.oplus.health': 'OPPO Health',
+  'com.fitbit.FitbitMobile': 'Fitbit',
+};
+
+/** The last sync, kept so the Account screen can say when and what without syncing again. */
+export interface LastHealthConnectSync {
+  at: string;
+  result: HealthConnectSyncResult;
 }
 
-export const syncHealthConnect = async (now = new Date()): Promise<HealthConnectSyncResult> => {
+const LAST_SYNC_KEY = 'ascend_health_connect_last_sync';
+
+export const lastHealthConnectSync = async (): Promise<LastHealthConnectSync | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_SYNC_KEY);
+    return raw ? (JSON.parse(raw) as LastHealthConnectSync) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Screens that show synced data and stay mounted, like Today, listen here:
+ * a tab is not re-read when another screen syncs, so it went on showing the
+ * count from before until the date changed.
+ */
+const syncListeners = new Set<(sync: LastHealthConnectSync) => void>();
+
+export const onHealthConnectSynced = (listener: (sync: LastHealthConnectSync) => void): (() => void) => {
+  syncListeners.add(listener);
+  return () => {
+    syncListeners.delete(listener);
+  };
+};
+
+/**
+ * How often the app syncs by itself while open. Garmin hands data to Health
+ * Connect on its own schedule, so syncing more often than this mostly finds
+ * nothing new.
+ */
+const AUTO_SYNC_EVERY_MS = 15 * 60 * 1000;
+
+/** Syncs when connected and the last sync is older than the interval; null when it did not. */
+export const syncHealthConnectIfDue = async (): Promise<HealthConnectSyncResult | null> => {
+  const last = await lastHealthConnectSync();
+  if (last && Date.now() - new Date(last.at).getTime() < AUTO_SYNC_EVERY_MS) return null;
+  if ((await healthConnectState()) !== 'connected') return null;
+  return syncHealthConnect();
+};
+
+let inFlight: Promise<HealthConnectSyncResult> | null = null;
+
+/**
+ * One sync at a time: the app coming to the front and a tap on Sync can
+ * arrive together, and two imports racing would each see the other's days as
+ * not yet logged.
+ */
+export const syncHealthConnect = (now = new Date()): Promise<HealthConnectSyncResult> => {
+  inFlight ??= runSync(now).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+};
+
+const runSync = async (now: Date): Promise<HealthConnectSyncResult> => {
   await initialize();
   const from = new Date(now.getFullYear() - HISTORY_YEARS, now.getMonth(), now.getDate());
   const range = { operator: 'between', startTime: from.toISOString(), endTime: now.toISOString() } as const;
@@ -83,12 +149,16 @@ export const syncHealthConnect = async (now = new Date()): Promise<HealthConnect
     timeRangeSlicer: { period: 'DAYS', length: 1 },
   });
   const steps = stepsByDay(stepGroups.map((g) => ({ startTime: g.startTime, steps: g.result.COUNT_TOTAL ?? 0 })));
+  const origins = new Set<string>(stepGroups.flatMap((g) => g.result.dataOrigins ?? []));
 
   const readings: { time: string; kg: number }[] = [];
   let pageToken: string | undefined;
   do {
     const page = await readRecords('Weight', { timeRangeFilter: range, pageSize: 1000, pageToken });
-    for (const record of page.records) readings.push({ time: record.time, kg: record.weight.inKilograms });
+    for (const record of page.records) {
+      readings.push({ time: record.time, kg: record.weight.inKilograms });
+      if (record.metadata?.dataOrigin) origins.add(record.metadata.dataOrigin);
+    }
     pageToken = page.pageToken || undefined;
   } while (pageToken);
   const weights = weightsByDay(readings, localDay);
@@ -98,7 +168,7 @@ export const syncHealthConnect = async (now = new Date()): Promise<HealthConnect
   const [loggedWeights, loggedSteps] = await Promise.all([listWeights(), getDailyStepsBetween(fromDay, toDay)]);
   const plan = planHealthConnectImport({
     loggedWeightDates: new Set(loggedWeights.map((w) => w.date)),
-    loggedStepSources: new Map(loggedSteps.map((s) => [s.date, s.source])),
+    loggedSteps: new Map(loggedSteps.map((s) => [s.date, { source: s.source, steps: s.steps }])),
     weights,
     steps,
   });
@@ -117,5 +187,21 @@ export const syncHealthConnect = async (now = new Date()): Promise<HealthConnect
     })),
   );
 
-  return { stepDays: plan.steps.length, weighIns: plan.weights.length, weighInsKept: weights.length - plan.weights.length };
+  const days = [...steps.map((d) => d.date), ...weights.map((d) => d.date)].sort();
+  const result: HealthConnectSyncResult = {
+    stepDays: plan.steps.length,
+    weighIns: plan.weights.length,
+    weighInsKept: weights.length - plan.weights.length,
+    found: {
+      stepDays: steps.length,
+      weighIns: weights.length,
+      sources: [...origins].map((pkg) => APP_NAMES[pkg] ?? pkg),
+      firstDay: days[0] ?? null,
+    },
+  };
+
+  const sync: LastHealthConnectSync = { at: new Date().toISOString(), result };
+  await AsyncStorage.setItem(LAST_SYNC_KEY, JSON.stringify(sync)).catch(() => undefined);
+  for (const listener of syncListeners) listener(sync);
+  return result;
 };

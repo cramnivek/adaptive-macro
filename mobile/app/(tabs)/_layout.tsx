@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FloatingBarInset, FloatingWorkoutBar } from '../../src/components/FloatingWorkoutBar';
 import { font, useTheme } from '../../src/theme';
+import { useHealthConnectAutoSync } from '../../src/health/useHealthConnectAutoSync';
 
 export default function TabsLayout() {
   const { colors } = useTheme();
   const [barInset, setBarInset] = useState(0);
+  useHealthConnectAutoSync();
 
   return (
     <FloatingBarInset.Provider value={barInset}>

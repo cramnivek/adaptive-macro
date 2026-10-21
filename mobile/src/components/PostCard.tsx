@@ -176,7 +176,12 @@ export const PostCard = ({
   const [phoneCardUrl, setPhoneCardUrl] = useState<string | null | false>(null);
   const displayCardUrl = customCardUrl || card?.url || phoneCardUrl || null;
   const drawOnPhone = Platform.OS !== 'web' && viewMode === 'card' && !displayCardUrl && phoneCardUrl === null;
-  const phoneSummary = useMemo(() => (drawOnPhone ? postViewToShareCard(view) : null), [drawOnPhone, view]);
+  // The drawer stays mounted after it has drawn, for as long as its card is
+  // the one shown. Unmounting it the moment the PNG arrived took the webview
+  // away before it heard back that the PNG was received ("Java object is gone").
+  const keepDrawer =
+    Platform.OS !== 'web' && viewMode === 'card' && !customCardUrl && !card && phoneCardUrl !== false;
+  const phoneSummary = useMemo(() => (keepDrawer ? postViewToShareCard(view) : null), [keepDrawer, view]);
 
   useEffect(() => {
     if (viewMode === 'card' && !displayCardUrl && !drawing) {
