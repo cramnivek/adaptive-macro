@@ -4,6 +4,8 @@ import { useEffect, useRef } from 'react';
 import { pushBaselineToCloud, readBaselineFromSession } from '../social/baselineSync';
 import { useSocial } from '../social/session';
 import { useApp } from '../state/AppStore';
+import { useTheme } from '../theme';
+import { AppArrival } from './AppArrival';
 
 /**
  * Keeps the app behind a one-time sign-in, social profile setup, and baseline onboarding.
@@ -28,6 +30,7 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const rootSegment: string = segments[0] ?? '';
   const syncedUserIdRef = useRef<string | null>(null);
+  const { colors } = useTheme();
 
   const latestWeightKg = weights.length > 0 ? weights[weights.length - 1].kg : null;
 
@@ -120,5 +123,8 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   if (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment)) {
     return null;
   }
-  return <>{children}</>;
+  // The opening fade lives here, not in the root layout: there it ran while
+  // this gate was still waiting for the log, and on a phone that wait outlasts
+  // the fade, so the app appeared with no arrival at all.
+  return <AppArrival background={colors.background}>{children}</AppArrival>;
 };

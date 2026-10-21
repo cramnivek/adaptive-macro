@@ -62,50 +62,60 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
     transform: [{ translateY: arrival.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 8, 0] }) }],
   };
 
+  const ground = tone === 'loud' ? loud.ground : colors.background;
+
   return (
-    <ScrollView
-      style={{ backgroundColor: tone === 'loud' ? loud.ground : colors.background }}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl + barInset },
-      ]}
-      keyboardShouldPersistTaps="handled"
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} tintColor={colors.textMuted} />
-        ) : undefined
-      }
-    >
-      {/* An action alone still draws the header: a modal whose stack header already
-          shows its title would otherwise have to pass one here only to get the
-          slot, and the heading would appear twice. */}
-      <Animated.View style={arrivalStyle}>
-        {(title || action) && (
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              {title ? (
-                <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
-              ) : (
-                <View />
+    <View style={styles.frame}>
+      <ScrollView
+        style={{ backgroundColor: ground }}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl + barInset },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} tintColor={colors.textMuted} />
+          ) : undefined
+        }
+      >
+        {/* An action alone still draws the header: a modal whose stack header already
+            shows its title would otherwise have to pass one here only to get the
+            slot, and the heading would appear twice. */}
+        <Animated.View style={arrivalStyle}>
+          {(title || action) && (
+            <View style={styles.header}>
+              <View style={styles.titleRow}>
+                {title ? (
+                  <Text style={[styles.title, { color: tone === 'loud' ? loud.figure : colors.text }]}>{title}</Text>
+                ) : (
+                  <View />
+                )}
+                {action}
+              </View>
+              {subtitle && (
+                <Text
+                  style={[styles.subtitle, { color: tone === 'loud' ? loud.figureMuted : colors.textMuted }]}
+                >
+                  {subtitle}
+                </Text>
               )}
-              {action}
             </View>
-            {subtitle && (
-              <Text
-                style={[styles.subtitle, { color: tone === 'loud' ? loud.figureMuted : colors.textMuted }]}
-              >
-                {subtitle}
-              </Text>
-            )}
-          </View>
-        )}
-        {children}
-      </Animated.View>
-    </ScrollView>
+          )}
+          {children}
+        </Animated.View>
+      </ScrollView>
+      {/* Android draws the app under a transparent status bar, so content
+          scrolled up ran beneath the clock and icons. A strip of the page's own
+          ground there keeps it readable; where the inset is zero it is nothing. */}
+      <View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: ground }]} />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  frame: { flex: 1 },
+  statusStrip: { position: 'absolute', top: 0, left: 0, right: 0 },
   content: { paddingHorizontal: space.lg },
   header: { marginBottom: space.lg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

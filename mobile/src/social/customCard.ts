@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { currentAccessToken } from './api';
+import { proxyBase } from '../api/gemini';
 
 const STORAGE_PREFIX = 'adaptive_card_img_';
 const STATUS_PREFIX = 'adaptive_card_status_';
@@ -42,9 +43,19 @@ export const fetchCardImage = async (sessionId?: string | null, authorId?: strin
   const token = await currentAccessToken();
   if (!token) return null;
   try {
-    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+    // The proxy's own address on a phone, where a relative path has no page to
+    // be relative to; empty on the web build, which the proxy serves.
+    const res = await fetch(`${proxyBase()}${path}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    if (typeof document !== 'undefined') return URL.createObjectURL(blob);
+    // React Native's Image cannot show an object URL; a data URL it can.
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
   } catch {
     return null;
   }

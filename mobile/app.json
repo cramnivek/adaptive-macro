@@ -56,7 +56,15 @@
       ],
       "expo-video",
       "@react-native-google-signin/google-signin",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
