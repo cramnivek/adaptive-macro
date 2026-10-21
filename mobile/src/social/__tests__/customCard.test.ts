@@ -4,6 +4,11 @@ vi.mock('../api', () => ({
   currentAccessToken: vi.fn().mockResolvedValue('jwt-mock'),
 }));
 
+// The server's address: empty as in a browser, where the app is served by its
+// own API; one test below sets it as the native app has it.
+const base = vi.hoisted(() => ({ value: '' }));
+vi.mock('../../api/gemini', () => ({ proxyBase: () => base.value }));
+
 import { currentAccessToken } from '../api';
 import {
   dataUrlToArrayBuffer,
@@ -51,13 +56,24 @@ describe('customCard persistence & sync', () => {
     expect(cardImagePath(null, 'user-456')).toBeNull();
   });
 
+  it('asks the server by its own address in the native app, where a bare path goes nowhere', () => {
+    base.value = 'https://proxy.example';
+    expect(cardImagePath('workout-1', 'user-456')).toBe(
+      'https://proxy.example/api/card?author=user-456&session=workout-1',
+    );
+    base.value = '';
+  });
+
   it('fetches a card with the viewer’s sign-in and hands back an object URL', async () => {
     const fetchMock = vi.fn(async () => new Response(new Blob(['img'], { type: 'image/jpeg' })));
     vi.stubGlobal('fetch', fetchMock);
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card');
+    // An object URL is what a browser gets; the native app has none.
+    vi.stubGlobal('document', {});
 
     expect(await fetchCardImage('workout-1', 'user-456')).toBe('blob:card');
     created.mockRestore();
+    vi.unstubAllGlobals();
     expect(fetchMock).toHaveBeenCalledWith('/api/card?author=user-456&session=workout-1', {
       headers: { Authorization: 'Bearer jwt-mock' },
     });

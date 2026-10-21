@@ -29,6 +29,7 @@ import {
   getCustomCardStatus,
   getLocalCustomCard,
   fetchCardImage,
+  releaseImage,
   persistCustomCard,
   retryCustomCardUpload,
 } from '../social/customCard';
@@ -131,7 +132,7 @@ export const PostCard = ({
         const remote = await fetchCardImage(view.sessionId, view.authorId);
         if (!remote) return;
         if (!alive) {
-          URL.revokeObjectURL(remote);
+          releaseImage(remote);
           return;
         }
         fetched = remote;
@@ -146,7 +147,7 @@ export const PostCard = ({
     return () => {
       alive = false;
       // The object URL holds the image in memory until it is released.
-      if (fetched) URL.revokeObjectURL(fetched);
+      if (fetched) releaseImage(fetched);
     };
   }, [view.sessionId, view.authorId, canEditPhoto]);
 

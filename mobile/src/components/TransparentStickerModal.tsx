@@ -82,6 +82,13 @@ export const TransparentStickerModal = ({
       })
       .catch((err) => {
         console.warn('Failed to draw sticker:', err);
+        // The drawing is a browser canvas; in the native app it throws, and the
+        // sheet used to sit empty with no word of why.
+        if (alive) {
+          setToast(
+            Platform.OS === 'web' ? 'That sticker could not be drawn.' : 'Stickers are only in the web app for now.',
+          );
+        }
       })
       .finally(() => {
         if (alive) setDrawing(false);

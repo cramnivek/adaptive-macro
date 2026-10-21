@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { proxyBase } from '../api/gemini';
 import { currentAccessToken } from './api';
 
 const STORAGE_PREFIX = 'adaptive_card_img_';
@@ -27,7 +28,30 @@ export const sanitizeSessionId = (sessionId: string): string =>
  */
 export const cardImagePath = (sessionId?: string | null, authorId?: string | null): string | null => {
   if (!sessionId || !authorId) return null;
-  return `/api/card?author=${encodeURIComponent(authorId)}&session=${encodeURIComponent(sanitizeSessionId(sessionId))}`;
+  // Through proxyBase: empty in a browser, where the app and its server share an
+  // origin, and the server's own address in the native app, where a bare
+  // "/api/..." has nowhere to go and every card image silently failed.
+  return `${proxyBase()}/api/card?author=${encodeURIComponent(authorId)}&session=${encodeURIComponent(sanitizeSessionId(sessionId))}`;
+};
+
+/**
+ * An image the screen can show from a fetched blob: an object URL in a browser,
+ * and a data URL in the native app, which has no object URLs. Only the former
+ * needs revoking, which `releaseImage` does.
+ */
+const showableImage = async (blob: Blob): Promise<string> => {
+  if (typeof URL.createObjectURL === 'function' && typeof document !== 'undefined') return URL.createObjectURL(blob);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+};
+
+/** Lets go of an image from `fetchCardImage`; nothing to do for a data URL. */
+export const releaseImage = (url: string): void => {
+  if (url.startsWith('blob:')) URL.revokeObjectURL(url);
 };
 
 /**
@@ -44,7 +68,7 @@ export const fetchCardImage = async (sessionId?: string | null, authorId?: strin
   try {
     const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
+    return await showableImage(await res.blob());
   } catch {
     return null;
   }
@@ -59,7 +83,7 @@ export const removeCardImage = async (sessionId: string): Promise<boolean> => {
   const token = await currentAccessToken();
   if (!token) return false;
   try {
-    const res = await fetch(`/api/card?session=${encodeURIComponent(sanitizeSessionId(sessionId))}`, {
+    const res = await fetch(`${proxyBase()}/api/card?session=${encodeURIComponent(sanitizeSessionId(sessionId))}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -74,7 +98,7 @@ export const removeAllCardImages = async (): Promise<boolean> => {
   const token = await currentAccessToken();
   if (!token) return false;
   try {
-    const res = await fetch('/api/cards', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`${proxyBase()}/api/cards`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     return res.ok;
   } catch {
     return false;
@@ -366,7 +390,7 @@ export const persistCustomCard = async (
         'Authorization': `Bearer ${token}`,
       };
 
-      const res = await fetch(`/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
+      const res = await fetch(`${proxyBase()}/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
         method: 'POST',
         headers,
         body: arrayBuffer,
@@ -470,7 +494,7 @@ export const retryCustomCardUpload = async (sessionId: string): Promise<string |
       'Authorization': `Bearer ${token}`,
     };
 
-    const res = await fetch(`/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
+    const res = await fetch(`${proxyBase()}/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
       method: 'POST',
       headers,
       body: arrayBuffer,
