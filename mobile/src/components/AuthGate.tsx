@@ -1,9 +1,11 @@
 import { todayISO } from '@adaptive-macros/engine';
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { pushBaselineToCloud, readBaselineFromSession } from '../social/baselineSync';
 import { useSocial } from '../social/session';
 import { useApp } from '../state/AppStore';
+import { useTheme } from '../theme';
 
 /**
  * Keeps the app behind a one-time sign-in, social profile setup, and baseline onboarding.
@@ -30,6 +32,8 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const rootSegment: string = segments[0] ?? '';
   const syncedUserIdRef = useRef<string | null>(null);
+  const shown = useRef(false);
+  const { colors } = useTheme();
 
   const latestWeightKg = weights.length > 0 ? weights[weights.length - 1].kg : null;
 
@@ -117,10 +121,20 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
     router,
   ]);
 
-  if (!ready) return null;
-  if (configured && session === undefined) return null;
-  if (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment)) {
-    return null;
-  }
-  return <>{children}</>;
+  const hold =
+    !ready ||
+    (configured && session === undefined) ||
+    (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment));
+  if (hold && !shown.current) return null;
+  shown.current = true;
+  // Once the navigator is up it stays up, covered, while the next person's log
+  // loads. Unmounting it, as this used to, makes the router rebuild it from
+  // the bare root URL; with a log per account that happens on every sign-in,
+  // and the Android build then showed "Unmatched Route" for ascend:///.
+  return (
+    <>
+      {children}
+      {hold && <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />}
+    </>
+  );
 };
