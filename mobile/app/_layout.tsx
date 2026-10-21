@@ -65,11 +65,12 @@ export default function RootLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
     <SafeAreaProvider>
-      <AppProvider>
+      {/* Outside AppProvider, because the store opens the log of whoever is signed in. */}
+      <SocialProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Toaster />
         <ConfirmDialog />
-        <SocialProvider>
+        <AppProvider>
           {/* Inside AppProvider, because it reads the load error from the store. */}
           <StorageGate>
             <AuthGate>
@@ -327,8 +328,8 @@ export default function RootLayout() {
               </Stack>
             </AuthGate>
           </StorageGate>
-        </SocialProvider>
-      </AppProvider>
+        </AppProvider>
+      </SocialProvider>
     </SafeAreaProvider>
     </View>
   );
