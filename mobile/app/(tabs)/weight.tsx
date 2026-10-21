@@ -1,4 +1,4 @@
-import { diffDays, rateVerdict, todayISO } from '@adaptive-macros/engine';
+import { diffDays, projectWeight, rateVerdict, todayISO } from '@adaptive-macros/engine';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BodyMeasurementsCard } from '../../src/components/BodyMeasurementsCard';
@@ -117,6 +117,15 @@ export default function WeightScreen() {
   }, [series, weights, outlierDates]);
 
   const verdict = useMemo(() => rateVerdict(weights), [weights]);
+  // A week and a month ahead at the rate the weigh-ins show, as ranges; see
+  // projectWeight for why no further than that.
+  const ahead = useMemo(() => {
+    if (!latest) return null;
+    const from = { kg: latest.trendWeightKg, sdKg: latest.trendWeightSdKg };
+    const week = projectWeight(weights, from, 7);
+    const month = projectWeight(weights, from, 30);
+    return week && month ? { week, month } : null;
+  }, [weights, latest]);
 
   const recent = useMemo(() => [...weights].reverse().slice(0, 14), [weights]);
 
@@ -213,6 +222,30 @@ export default function WeightScreen() {
         />
       </View>
 
+      {ahead && (
+        <Card
+          title="Where this rate leads"
+          subtitle="If the last two weeks carry on. The range is wide while the rate is still settling."
+        >
+          {(
+            [
+              ['In 7 days', ahead.week],
+              ['In 30 days', ahead.month],
+            ] as const
+          ).map(([label, p]) => (
+            <View key={label} style={[styles.aheadRow, { borderColor: colors.border }]}>
+              <Text style={[styles.aheadLabel, { color: colors.textMuted }]}>{label}</Text>
+              <View style={styles.aheadFigures}>
+                <Text style={[styles.aheadValue, { color: colors.text }]}>{formatWeight(p.kg, units)}</Text>
+                <Text style={[styles.aheadRange, { color: colors.textMuted }]}>
+                  likely {displayWeight(p.lowKg, units).toFixed(1)}–{formatWeight(p.highKg, units)}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+      )}
+
       <Card
         title="Trend vs readings"
         subtitle={
@@ -293,6 +326,17 @@ const shiftDate = (origin: string, offsetDays: number): string =>
     .slice(0, 10);
 
 const styles = StyleSheet.create({
+  aheadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  aheadLabel: { fontFamily: font.ui, fontSize: 14 },
+  aheadFigures: { alignItems: 'flex-end' },
+  aheadValue: { fontFamily: font.figure, fontSize: 18, fontVariant: ['tabular-nums'] },
+  aheadRange: { fontFamily: font.ui, fontSize: 12 },
   tiles: { flexDirection: 'row', gap: space.md, marginBottom: space.md },
   row: {
     flexDirection: 'row',

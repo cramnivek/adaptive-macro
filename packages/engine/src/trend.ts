@@ -92,6 +92,26 @@ export const rateVerdict = (
   readings: { date: ISODate; kg: number }[],
   lookbackDays = 14,
 ): RateVerdict | null => {
+  const fit = fitReadings(readings, lookbackDays);
+  if (fit === null) return null;
+  // In kg across the span the readings cover, which is what the steady limit
+  // is stated in.
+  const change = fit.slopeKgPerDay * fit.spanDays;
+  const changeSe = fit.slopeSeKgPerDay * fit.spanDays;
+  if (Math.abs(change) >= 2 * changeSe) return change < 0 ? 'losing' : 'gaining';
+  if (Math.abs(change) + 2 * changeSe <= STEADY_LIMIT_KG) return 'steady';
+  return 'unclear';
+};
+
+/**
+ * A straight line through the last `lookbackDays` of weigh-ins: its slope, the
+ * standard error of that slope, and the span of days it covers. Null with
+ * fewer than `MIN_READINGS_FOR_VERDICT` readings, or all on one day.
+ */
+export const fitReadings = (
+  readings: { date: ISODate; kg: number }[],
+  lookbackDays = 14,
+): { slopeKgPerDay: number; slopeSeKgPerDay: number; spanDays: number } | null => {
   if (readings.length === 0) return null;
   const last = readings[readings.length - 1].date;
   const window = readings.filter((r) => {
@@ -114,16 +134,31 @@ export const rateVerdict = (
   const slope = sxy / sxx;
   let residuals = 0;
   for (let i = 0; i < n; i++) residuals += (window[i].kg - (meanY + slope * (xs[i] - meanX))) ** 2;
-  const slopeSe = Math.sqrt(residuals / (n - 2) / sxx);
+  return { slopeKgPerDay: slope, slopeSeKgPerDay: Math.sqrt(residuals / (n - 2) / sxx), spanDays: xs[n - 1] - xs[0] };
+};
 
-  // In kg across the span the readings cover, which is what the steady limit
-  // is stated in.
-  const span = xs[n - 1] - xs[0];
-  const change = slope * span;
-  const changeSe = slopeSe * span;
-  if (Math.abs(change) >= 2 * changeSe) return change < 0 ? 'losing' : 'gaining';
-  if (Math.abs(change) + 2 * changeSe <= STEADY_LIMIT_KG) return 'steady';
-  return 'unclear';
+/**
+ * Where the weight is headed in `days`, as a range rather than a point.
+ *
+ * From today's trend weight, at the slope the weigh-ins show, with two
+ * standard errors of that slope either side, carried forward over `days`, plus
+ * the trend's own uncertainty. So it is wide while the rate is still "too
+ * early to tell" and narrows as weigh-ins come in, rather than putting a
+ * confident figure on a few days of water. It assumes nothing changes, which
+ * is why the app offers it a week and a month ahead and not further: the
+ * further out, the more eating, training and adaptation will have moved.
+ */
+export const projectWeight = (
+  readings: { date: ISODate; kg: number }[],
+  trend: { kg: number; sdKg: number },
+  days: number,
+  lookbackDays = 14,
+): { kg: number; lowKg: number; highKg: number } | null => {
+  const fit = fitReadings(readings, lookbackDays);
+  if (fit === null) return null;
+  const kg = trend.kg + fit.slopeKgPerDay * days;
+  const spread = Math.sqrt((2 * fit.slopeSeKgPerDay * days) ** 2 + (2 * trend.sdKg) ** 2);
+  return { kg, lowKg: kg - spread, highKg: kg + spread };
 };
 
 /**

@@ -1,5 +1,6 @@
 import {
   addDays,
+  averageLoggedDay,
   bodyweightForDates,
   computeVolumeDiagnostics,
   diffDays,
@@ -7,7 +8,7 @@ import {
   summarisePeriod,
   todayISO,
 } from '@adaptive-macros/engine';
-import type { DatedSet, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
+import type { DatedSet, LogEntry, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -32,6 +33,7 @@ import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
 import {
   catalogueRegionsByExerciseName,
   dailyIntakeBetween,
+  listLogEntriesBetween,
   finishedSessionTimes,
   getDailyStepsBetween,
   listAllSets,
@@ -107,17 +109,19 @@ export default function TrendsScreen() {
     dayStatus,
     updateSettings,
     observations,
-    totals,
-    entries,
     energyDensity,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
-  const [timeframe, setTimeframe] = useState<Timeframe>('month');
+  // A week first: it is the period people check most often, and the one a new
+  // user has data for soonest.
+  const [timeframe, setTimeframe] = useState<Timeframe>('week');
   // Arriving from Today's "your week is ready" opens that check-in directly.
   const { checkin } = useLocalSearchParams<{ checkin?: string }>();
   const router = useRouter();
   const [intake, setIntake] = useState<{ date: string; kcal: number; proteinG?: number }[]>([]);
+  /** Everything logged over the year, so the quality card can follow the chosen period. */
+  const [loggedEntries, setLoggedEntries] = useState<LogEntry[]>([]);
   const [method, setMethod] = useState(false);
   const [sets, setSets] = useState<DatedSet[]>([]);
   const [regions, setRegions] = useState<
@@ -165,13 +169,15 @@ export default function TrendsScreen() {
 
   const fetchTrendsData = useCallback(async () => {
     try {
-      const [intakeRows, allSets, byName, times, stepRows] = await Promise.all([
+      const [intakeRows, allSets, byName, times, stepRows, yearEntries] = await Promise.all([
         dailyIntakeBetween(maxHistoryFrom, today),
         listAllSets(),
         catalogueRegionsByExerciseName(),
         finishedSessionTimes(maxHistoryFrom),
         getDailyStepsBetween(maxHistoryFrom, today),
+        listLogEntriesBetween(maxHistoryFrom, today),
       ]);
+      setLoggedEntries(yearEntries);
       setIntake(intakeRows);
       setSets(allSets);
       setRegions(byName);
@@ -208,6 +214,15 @@ export default function TrendsScreen() {
   const windowDays = TIMEFRAME_DAYS[timeframe];
   const timeframeFrom = addDays(today, -(windowDays - 1));
   const weekFrom = addDays(today, -6);
+
+  // The quality card read Today's diary, so on a day with nothing logged yet
+  // every vitamin said 0 whatever the week held. It is the period's average
+  // logged day now, like every other number on this screen.
+  const periodEntries = useMemo(
+    () => loggedEntries.filter((entry) => entry.date >= timeframeFrom && entry.date <= today),
+    [loggedEntries, timeframeFrom, today],
+  );
+  const periodAverage = useMemo(() => averageLoggedDay(periodEntries), [periodEntries]);
   const monthFrom = addDays(today, -27); // 4 full 7-day weeks = 28 days
 
   const timeframeSteps = useMemo(() => {
@@ -1213,8 +1228,13 @@ export default function TrendsScreen() {
           </Card>
 
           <NutritionQualityCard
-            consumed={totals}
-            entries={entries}
+            consumed={periodAverage.nutrients}
+            entries={periodEntries}
+            caption={
+              periodAverage.days === 0
+                ? 'Nothing logged in this period yet.'
+                : `Your average logged day, over ${periodAverage.days} day${periodAverage.days === 1 ? '' : 's'}.`
+            }
             profile={settings.profile}
           />
         </>

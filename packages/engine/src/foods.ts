@@ -114,6 +114,21 @@ export const addNutrients = (a: Nutrients, b: Nutrients): Nutrients => ({
 export const sumNutrients = (items: Nutrients[]): Nutrients =>
   items.reduce(addNutrients, EMPTY_NUTRIENTS);
 
+/**
+ * The average logged day across a set of entries: everything eaten, divided by
+ * the number of days that have anything logged. Days with nothing are left out
+ * rather than counted as zero, because a day nobody logged is unknown, not a
+ * fast; the same rule the expenditure estimate follows.
+ */
+export const averageLoggedDay = (
+  entries: { date: string; nutrients: Nutrients }[],
+): { nutrients: Nutrients; days: number } => {
+  const days = new Set(entries.map((entry) => entry.date)).size;
+  if (days === 0) return { nutrients: EMPTY_NUTRIENTS, days: 0 };
+  // scaleNutrients works per 100 g, so 100 / days divides by days.
+  return { nutrients: scaleNutrients(sumNutrients(entries.map((entry) => entry.nutrients)), 100 / days), days };
+};
+
 export const roundNutrients = (n: Nutrients): Nutrients => ({
   kcal: roundTo(n.kcal),
   proteinG: roundTo(n.proteinG, 1),
