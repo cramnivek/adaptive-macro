@@ -9,7 +9,6 @@ import { font, radius, space, useTheme } from '../theme';
 import { Card } from './Card';
 import { Button } from './Controls';
 import { FadeIn } from './FadeIn';
-import { OnboardingWizard } from './OnboardingWizard';
 
 const CALIBRATION_DISMISSED_KEY = 'ascend_first_week_calibration_dismissed';
 
@@ -54,9 +53,11 @@ export const FirstWeekCalibrationCard = () => {
     return null;
   }
 
-  // State 1: Brand new user has not completed initial onboarding
+  // Not set up yet: the onboarding screen asks for everything, and AuthGate
+  // sends people there. The card used to embed its own copy of the form,
+  // with answers preselected.
   if (!settings.onboarded) {
-    return <OnboardingWizard />;
+    return null;
   }
 
   // State 2: Onboarded, but still calibrating in the first week

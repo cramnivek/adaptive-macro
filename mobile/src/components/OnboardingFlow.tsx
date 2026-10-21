@@ -13,7 +13,7 @@ import { useApp } from '../state/AppStore';
 import { withDefaults, type AppPersonality, type DashboardSpotlight, type UnitSystem } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
 import { ease, useReduceMotion } from '../theme/motion';
-import { Button, Field, Segmented, TOUCH_TARGET } from './Controls';
+import { Button, Field, TOUCH_TARGET } from './Controls';
 import { GoalPlanner, type GoalPlan } from './GoalPlanner';
 import { Tappable } from './Tappable';
 
@@ -148,14 +148,21 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
   const { settings, updateSettings, recordWeight, program } = useApp();
 
   // The draft, kept until the last question so Back never half-saves anything.
-  const [goalDir, setGoalDir] = useState<GoalDirection>(settings.goal.direction);
-  const [sex, setSex] = useState<Sex>(settings.profile.sex);
-  const [ageStr, setAgeStr] = useState(settings.onboarded ? String(settings.profile.age) : '');
-  const [heightStr, setHeightStr] = useState('');
+  // Unchosen until chosen on first run. The stored defaults are fallbacks for
+  // the type, and preselecting them made one person's answers everyone's:
+  // tapping through accepted male, 30, 178 cm, moderately active, losing fat.
+  // Someone already set up starts from their own answers instead.
+  const own = settings.onboarded;
+  const [goalDir, setGoalDir] = useState<GoalDirection | null>(own ? settings.goal.direction : null);
+  const [sex, setSex] = useState<Sex | null>(own ? settings.profile.sex : null);
+  const [ageStr, setAgeStr] = useState(own ? String(settings.profile.age) : '');
+  const [heightStr, setHeightStr] = useState(
+    own ? String(settings.units === 'imperial' ? Math.round(settings.profile.heightCm / 2.54) : settings.profile.heightCm) : '',
+  );
   const [heightUnit, setHeightUnit] = useState<'cm' | 'in'>(settings.units === 'imperial' ? 'in' : 'cm');
   const [weightStr, setWeightStr] = useState('');
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lb'>(settings.units === 'imperial' ? 'lb' : 'kg');
-  const [activity, setActivity] = useState<ActivityLevel>(settings.activity);
+  const [activity, setActivity] = useState<ActivityLevel | null>(own ? settings.activity : null);
   const [plan, setPlan] = useState<GoalPlan | null>(null);
   const [spotlight, setSpotlight] = useState<DashboardSpotlight>(settings.dashboardSpotlight ?? 'balanced');
   const [voice, setVoice] = useState<AppPersonality>(settings.personality);
@@ -167,7 +174,7 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
   // under them because a setting saved part-way through.
   const firstRun = useRef({ onboarded: settings.onboarded, completedVersion: settings.onboardingVersion }).current;
   const steps = useMemo(
-    () => onboardingSteps({ ...firstRun, goal: goalDir, android: Platform.OS === 'android' }),
+    () => onboardingSteps({ ...firstRun, goal: goalDir ?? 'lose', android: Platform.OS === 'android' }),
     [firstRun, goalDir],
   );
   const [index, setIndex] = useState(0);
@@ -176,8 +183,11 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
   const parsedAge = Math.round(Number.parseFloat(ageStr));
   const parsedHeight = Number.parseFloat(heightStr.replace(',', '.'));
   const parsedWeight = Number.parseFloat(weightStr.replace(',', '.'));
+  // Someone already set up may leave today's weight empty: a weigh-in is
+  // logged only when one is given, never filled in from an old one.
+  const weightValid = parsedWeight > 0 || (firstRun.onboarded && weightStr.trim() === '');
   const bodyValid =
-    Number.isFinite(parsedAge) && parsedAge >= 13 && parsedAge <= 100 && parsedHeight > 0 && parsedWeight > 0;
+    sex !== null && Number.isFinite(parsedAge) && parsedAge >= 13 && parsedAge <= 100 && parsedHeight > 0 && weightValid;
   const currentKg = parsedWeight > 0 ? (weightUnit === 'lb' ? parsedWeight / 2.20462 : parsedWeight) : null;
 
   // Entrance for each step, from the side it was reached from.
@@ -208,12 +218,18 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
       checkInWeekEndsOn: weekEndsOn,
       onboardingVersion: ONBOARDING_VERSION,
     };
-    if (firstRun.onboarded) {
-      await updateSettings(choices);
-      return;
-    }
     const weightKg = Math.round((currentKg ?? 0) * 100) / 100;
     const heightCm = Math.round(heightUnit === 'in' ? parsedHeight * 2.54 : parsedHeight);
+    // Continue is off until each is chosen, so these are always set by now.
+    const chosenSex = sex ?? settings.profile.sex;
+    const chosenGoal = goalDir ?? settings.goal.direction;
+    const chosenActivity = activity ?? settings.activity;
+    if (firstRun.onboarded) {
+      // Confirmed or corrected; today's weight only when one was given.
+      if (weightKg > 0) await recordWeight(todayISO(), weightKg);
+      await updateSettings({ ...choices, profile: { ...settings.profile, sex: chosenSex, age: parsedAge, heightCm } });
+      return;
+    }
     const units: UnitSystem = weightUnit === 'lb' ? 'imperial' : 'metric';
     // A goal weight and date set the rate; the numbers decide the direction, so
     // a goal above today's weight is a gain whichever card was picked.
@@ -225,14 +241,14 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
       featureOnboardingDismissed: true,
       units,
       workoutUnits: units,
-      activity,
-      profile: { ...settings.profile, sex, age: parsedAge, heightCm },
+      activity: chosenActivity,
+      profile: { ...settings.profile, sex: chosenSex, age: parsedAge, heightCm },
       goal:
-        goalDir !== 'maintain' && pace !== null
+        chosenGoal !== 'maintain' && pace !== null
           ? { direction: pace.direction, rateKgPerWeek: pace.rateKgPerWeek }
-          : { direction: goalDir, rateKgPerWeek: goalDir === 'maintain' ? 0 : goalDir === 'gain' ? 0.25 : 0.5 },
+          : { direction: chosenGoal, rateKgPerWeek: chosenGoal === 'maintain' ? 0 : chosenGoal === 'gain' ? 0.25 : 0.5 },
       goalWeightKg:
-        goalDir === 'maintain' ? weightKg : plan !== null ? Math.round(plan.goalWeightKg * 100) / 100 : null,
+        chosenGoal === 'maintain' ? weightKg : plan !== null ? Math.round(plan.goalWeightKg * 100) / 100 : null,
     };
     await recordWeight(todayISO(), weightKg);
     await updateSettings(patch);
@@ -275,8 +291,13 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
     }
   };
 
-  const canContinue = step !== 'body' || bodyValid;
-  const { title, line } = TITLES[step];
+  const canContinue =
+    step === 'body' ? bodyValid : step === 'goal' ? goalDir !== null : step === 'activity' ? activity !== null : true;
+  // Someone already set up is asked to confirm their numbers, not enter them.
+  const { title, line } =
+    step === 'body' && firstRun.onboarded
+      ? { title: 'Are these still right?', line: 'Age and height set your starting estimate. Add today’s weight if you have weighed in, or leave it empty.' }
+      : TITLES[step];
   const slide = reduceMotion ? 0 : 24 * direction.current;
 
   const body = (() => {
@@ -288,18 +309,34 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
       case 'body':
         return (
           <View style={styles.form}>
-            <Segmented<Sex>
-              label="BIOLOGICAL SEX"
-              value={sex}
-              onChange={(s) => {
-                thud('light');
-                setSex(s);
-              }}
-              options={[
-                { value: 'male', label: 'Male' },
-                { value: 'female', label: 'Female' },
-              ]}
-            />
+            {/* Two pills rather than a segmented control, which always has one
+                side on: here neither is, until it is chosen. */}
+            <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>BIOLOGICAL SEX</Text>
+            <View style={styles.days}>
+              {(['female', 'male'] as const).map((option) => {
+                const on = sex === option;
+                return (
+                  <Tappable
+                    key={option}
+                    onPress={() => {
+                      thud('light');
+                      setSex(option);
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    style={[
+                      styles.day,
+                      styles.sexPill,
+                      { backgroundColor: on ? colors.accent : colors.surface, borderColor: on ? colors.accent : colors.border },
+                    ]}
+                  >
+                    <Text style={[styles.dayText, { color: on ? colors.onFill : colors.text }]}>
+                      {option === 'female' ? 'Female' : 'Male'}
+                    </Text>
+                  </Tappable>
+                );
+              })}
+            </View>
             <Field label="AGE" value={ageStr} onChangeText={setAgeStr} keyboardType="numeric" placeholder="28" />
             <Field
               label={`HEIGHT (${heightUnit.toUpperCase()})`}
@@ -314,7 +351,7 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
               placeholder={heightUnit === 'in' ? '68' : '175'}
             />
             <Field
-              label={`WEIGHT TODAY (${weightUnit.toUpperCase()})`}
+              label={`WEIGHT TODAY (${weightUnit.toUpperCase()})${firstRun.onboarded ? ', OPTIONAL' : ''}`}
               labelRight={<Ionicons name="swap-horizontal" size={13} color={colors.accent} />}
               onPressLabel={() => {
                 setWeightUnit((u) => (u === 'kg' ? 'lb' : 'kg'));
@@ -525,6 +562,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   dayText: { fontFamily: font.uiStrong, fontSize: 15 },
+  sexPill: { flex: 1 },
+  fieldLabel: { fontFamily: font.display, fontSize: 11, letterSpacing: 1, marginBottom: -space.xs },
   note: { fontFamily: font.ui, fontSize: 14, lineHeight: 20 },
   healthCard: { gap: space.md, padding: space.lg, borderRadius: radius.xl, borderWidth: 1 },
   ready: { gap: space.sm, alignItems: 'flex-start' },

@@ -163,9 +163,14 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  profile: { sex: 'male', age: 30, heightCm: 178 },
-  activity: 'moderate',
-  goal: { direction: 'lose', rateKgPerWeek: 0.5 },
+  // Fallbacks for the type only, never shown or preselected: onboarding asks
+  // for every one of these before anything is worked out from them. They used
+  // to be one person's own answers (male, 178 cm, moderately active, losing
+  // fat), and first run preselected them, so tapping through made them
+  // everyone's. Stored settings always override these.
+  profile: { sex: 'female', age: 30, heightCm: 170 },
+  activity: 'light',
+  goal: { direction: 'maintain', rateKgPerWeek: 0 },
   goalWeightKg: null,
   units: 'metric',
   workoutUnits: 'metric',

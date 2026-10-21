@@ -9,8 +9,9 @@ import type { GoalDirection } from '@adaptive-macros/engine';
  * own, asked once, in a flow with no Skip; only Health Connect can be put
  * off, because a permission must always be optional.
  *
- * Someone set up before these screens existed sees only the new ones, once:
- * their numbers are already in, and asking for them again would be a chore.
+ * Someone set up before these screens existed sees only the new ones, once,
+ * plus their numbers to confirm, prefilled: age and height drift, and the first
+ * estimate is built on them.
  */
 
 export type OnboardingStep =
@@ -45,6 +46,16 @@ export const onboardingSteps = ({
     ? []
     : ['goal', 'body', 'activity', ...(goal === 'maintain' ? [] : (['plan'] as const))];
   const added: OnboardingStep[] =
-    completedVersion < ONBOARDING_VERSION ? ['focus', 'voice', 'checkin', ...(android ? (['health'] as const) : [])] : [];
+    completedVersion < ONBOARDING_VERSION
+      ? [
+          // Age, height and weight are what the first estimate is built on, so
+          // someone set up is asked to confirm them, prefilled, rather than skipped.
+          ...(onboarded ? (['body'] as const) : []),
+          'focus',
+          'voice',
+          'checkin',
+          ...(android ? (['health'] as const) : []),
+        ]
+      : [];
   return [...baseline, ...added, 'ready'];
 };
