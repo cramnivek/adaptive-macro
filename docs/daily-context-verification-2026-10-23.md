@@ -108,8 +108,8 @@ it does not establish the cause of the user's device storage failure.
 
 The 17 existing body-fat/parser/measurement-schema tests pass, as do workspace
 types and the Android export. The previous full 1,751-test run predates this
-UI-only follow-up. Device retry is requested to obtain the actual error before
-claiming that the underlying save failure has been resolved.
+UI-only follow-up. The user subsequently confirmed that Save now succeeds on
+the Android phone. The original device-side write failure was not captured.
 
 GitHub subsequently caught a native ViewStyle type mismatch for the overlay's
 web-only `touchAction`. Local installed types accepted it. The CSS extension is
