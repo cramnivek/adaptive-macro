@@ -36,6 +36,32 @@ Validation: `npm test` passed all 1,686 tests (252 engine, 1,279 mobile,
 also passed, producing a 7.9 MB Hermes bundle and the DOM component bundles.
 These checks establish code and bundle validity, not device acceptance.
 
+## Deployment and phone retest
+
+The owner subsequently reported that an Android photo estimate completed after
+about 90 seconds. A nearby Android request in Cloud Run completed with HTTP
+200 in 9.885 seconds. Server timings do not account for the entire capture,
+authentication, upload, retries, and client response-handling interval, so
+these observations do not identify the remaining delay by themselves.
+
+On 2026-10-22 the app changes from commit `34767fd` were deployed manually
+through gcloud from PowerShell. Revision `gemini-proxy-00167-448` serves 100%
+of traffic. The served web entry matches the built entry,
+`entry-6194163e17ae5e891890bbfaf67de412.js`. Health answered exactly `ok`,
+unknown API paths answered 404, tokenless Gemini requests answered 401, and
+all 61 checked assets/new entry modules answered 200. Earlier live code chunks
+were retained.
+
+A bounded non-food image request through the deployed proxy returned HTTP 200
+in 3.635 seconds and correctly returned no food. This verifies the deployed
+image request path; it does not establish food-photo accuracy or Android
+end-to-end latency.
+
+The OPPO development app was confirmed connected to this project's Metro
+server, and a full reload was sent after deployment. Gcloud serves the API
+and web app; Metro supplies JavaScript to that native development build. A
+fresh phone scan is still needed to verify the observed delay has improved.
+
 ## Model and accuracy findings
 
 The app uses Gemini 3.5 Flash for photo and text estimates. It converts photos
