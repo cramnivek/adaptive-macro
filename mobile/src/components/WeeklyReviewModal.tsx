@@ -21,7 +21,9 @@ import type { Goal } from '@adaptive-macros/engine';
 import { calculateCoachingGoalAdjustment } from '../ai/coachingAdjustment';
 import type { AppPersonality, UnitSystem } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
-import { displayWeight, formatWeight, weightUnit } from '../format';
+import { displayWeight, formatDayMonth, formatWeight, weightUnit } from '../format';
+import type { CheckInPeriod } from '../checkInSchedule';
+import type { SavedCheckIn } from '../previousCheckIn';
 
 interface WeeklyReviewModalProps {
   open: boolean;
@@ -53,6 +55,12 @@ interface WeeklyReviewModalProps {
    */
   weeklyLockedNote?: string | null;
   monthlyLockedNote?: string | null;
+  /**
+   * The weekly check-in before this one. Shown under a locked week, so a thin
+   * week does not hide what the last earned one said, and opened in full on tap.
+   */
+  previousWeekly?: SavedCheckIn | null;
+  onOpenPrevious?: (period: CheckInPeriod) => void;
 }
 
 const CONFIDENCE_COLORS = {
@@ -85,6 +93,8 @@ export const WeeklyReviewModal = ({
   units = 'metric',
   weeklyLockedNote = null,
   monthlyLockedNote = null,
+  previousWeekly = null,
+  onOpenPrevious,
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -312,6 +322,25 @@ export const WeeklyReviewModal = ({
                 <View style={styles.emptyState}>
                   <Text style={[styles.emptyTitle, { color: colors.text }]}>Not earned yet</Text>
                   <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>{weeklyLockedNote}</Text>
+                  {previousWeekly && (
+                    <Tappable
+                      onPress={() => onOpenPrevious?.(previousWeekly.period)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open your last check-in, ${previousWeekly.headline}`}
+                      style={[styles.previousCard, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+                    >
+                      <Text style={[styles.previousLabel, { color: colors.textFaint }]}>
+                        YOUR LAST CHECK-IN · {formatDayMonth(previousWeekly.period.from)} to {formatDayMonth(previousWeekly.period.to)}
+                      </Text>
+                      <Text style={[styles.previousHeadline, { color: colors.text }]}>{previousWeekly.headline}</Text>
+                      <Text style={[styles.previousAdvice, { color: colors.textMuted }]}>
+                        {previousWeekly.advice
+                          ? `${previousWeekly.advice} · ${previousWeekly.applied ? 'applied' : 'not applied'}`
+                          : 'Advice: hold steady'}
+                      </Text>
+                      <Text style={[styles.previousOpen, { color: colors.accent }]}>Read it again ›</Text>
+                    </Tappable>
+                  )}
                 </View>
               )}
 
@@ -1172,6 +1201,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space.sm,
   },
+  previousCard: {
+    alignSelf: 'stretch',
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: space.md,
+    gap: 4,
+  },
+  previousLabel: { fontFamily: font.display, fontSize: 10, letterSpacing: 1 },
+  previousHeadline: { fontFamily: font.uiStrong, fontSize: 15 },
+  previousAdvice: { fontFamily: font.ui, fontSize: 13, lineHeight: 18 },
+  previousOpen: { fontFamily: font.uiStrong, fontSize: 13, marginTop: 4 },
   emptyTitle: {
     fontFamily: font.display,
     fontSize: 18,

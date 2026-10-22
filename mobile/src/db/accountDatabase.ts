@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Backup } from './index';
 
 /**
  * Which database file on this device belongs to whom.
@@ -44,3 +45,40 @@ export const claimDevice = async (
     ownerChanged: last !== null && last !== owner,
   };
 };
+
+/**
+ * The file holding the log kept without an account: the original, when going
+ * without one claimed it first, otherwise one of its own. Read without
+ * claiming anything.
+ */
+export const signedOutDatabase = async (): Promise<string> => {
+  const legacyOwner = await AsyncStorage.getItem(LEGACY_OWNER_KEY);
+  return legacyOwner === null || legacyOwner === SIGNED_OUT ? LEGACY_DATABASE : `adaptive-macros-${SIGNED_OUT}.db`;
+};
+
+/** Whether a log holds anything worth moving: settings alone are not a log. */
+export const hasLog = (counts: { weights: number; entries: number; sessions: number; measurements: number }): boolean =>
+  counts.weights + counts.entries + counts.sessions + counts.measurements > 0;
+
+/**
+ * Whether a log has nothing anyone put there, so a move may be restored over
+ * it. Every table a person can add to counts, settings included: the first
+ * version looked only at weigh-ins, food, workouts and measurements, and an
+ * account holding custom foods or routines would have lost them to the move.
+ * The exercise catalogue is left out because the app fills it itself.
+ */
+export const isEmptyLog = (backup: Backup): boolean =>
+  [
+    backup.settings,
+    backup.weights,
+    backup.foods,
+    backup.entries,
+    backup.exercises,
+    backup.routines,
+    backup.routineExercises,
+    backup.sessions,
+    backup.sets,
+    backup.dayStatus,
+    backup.bodyMeasurements,
+    backup.dailySteps,
+  ].every((rows) => (rows?.length ?? 0) === 0);

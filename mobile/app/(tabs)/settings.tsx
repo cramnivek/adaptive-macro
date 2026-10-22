@@ -433,6 +433,21 @@ export default function SettingsScreen() {
         </Section>
       )}
 
+      <Section title="Check-ins">
+        <Card subtitle="The day your week ends. Your coach reviews the week the day after.">
+          <Segmented<string>
+            label="Week ends on"
+            value={String(settings.checkInWeekEndsOn)}
+            onChange={(day) => void updateSettings({ checkInWeekEndsOn: Number(day) })}
+            options={['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, day) => ({ value: String(day), label }))}
+          />
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            A week earns a check-in with food logged on 5 days and 3 weigh-ins. Changing the day starts the next week
+            from it; check-ins you already have stay as they were.
+          </Text>
+        </Card>
+      </Section>
+
       <Section title="Units & Training" initiallyOpen>
         <Card title="Units">
           <Segmented<UnitSystem>

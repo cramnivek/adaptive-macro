@@ -38,6 +38,8 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as db from '../db';
 import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
+import { finishPendingMove, offerToMoveLog } from '../db/moveLog';
+import { notify } from '../dialog';
 import { LATEST_ACTIVE_DRAFT_KEY } from '../sessionDraft';
 import { pushBaselineToCloud } from '../social/baselineSync';
 import { useSocial } from '../social/session';
@@ -210,6 +212,23 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           // squad as last seen, and a pointer to the workout in progress.
           if (ownerChanged) await AsyncStorage.multiRemove([SQUAD_STORAGE_KEY, LATEST_ACTIVE_DRAFT_KEY]);
           await db.selectDatabase(database);
+          // Before the log is read: an account opening to an empty log is
+          // offered the one kept here without an account (moveLog.ts).
+          // A move that fails must not keep the account's own log from
+          // opening; it is ordered so the log is never in neither place. A
+          // clear left owed by an earlier move is finished first, for anyone,
+          // so a moved log is never left on show signed out. Either failure is
+          // said, not swallowed.
+          await finishPendingMove(database).catch(() => {
+            void db.selectDatabase(database);
+            notify('Could not finish moving your log', 'It is in your account; the old copy is cleared next time.');
+          });
+          if (owner !== SIGNED_OUT) {
+            await offerToMoveLog(owner, database).catch(() => {
+              void db.selectDatabase(database);
+              notify('Could not move your log', 'Nothing was lost. You can try again with a backup and restore.');
+            });
+          }
         }
         const stored = await db.readSetting<Partial<AppSettings>>(SETTINGS_KEY);
         if (cancelled) return;
@@ -422,8 +441,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             latest,
             goal: settings.goal,
             options: targetOptions,
+            weekEndsOn: settings.checkInWeekEndsOn,
           }),
-    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions],
+    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
   );
 
   const program = useMemo(() => {
