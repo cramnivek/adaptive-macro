@@ -96,3 +96,19 @@ does not diagnose causation, measure fat change, or modify engine targets.
   Resume and removal of its decorative pulse addressed it. Re-review found no
   remaining important issues. Actual Android gesture feel remains a device
   check. No new native dependency or build is needed for this overlay change.
+
+## Photo body-fat Save feedback
+
+The user reports Save leaves the result sheet open. A synthetic write failure
+in the actual BodyFatPhotoSheet reproduced an unchanged result, with its notice
+outside the modal. Save now shows pending state, prevents duplicate submissions,
+and presents write failures inside the result sheet while preserving the estimate
+for retry. Browser verification confirmed visible failure, disabled Saving state,
+and a successful retry closing the sheet. The ignored fixture at
+`.superpowers/bodyfat-save/` uses synthetic images/results and a mocked write;
+it does not establish the cause of the user's device storage failure.
+
+The 17 existing body-fat/parser/measurement-schema tests pass, as do workspace
+types and the Android export. The previous full 1,751-test run predates this
+UI-only follow-up. Device retry is requested to obtain the actual error before
+claiming that the underlying save failure has been resolved.
