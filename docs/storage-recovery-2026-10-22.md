@@ -28,3 +28,13 @@ fails explicitly if an SDK update changes the expected opening statement.
 This reproduces and repairs a matching failure in the browser. Recovery on
 the owner's phone remains to be confirmed. Do not clear site or app storage
 as a recovery step: the local log lives there.
+
+Cloud Run revision `gemini-proxy-00168-9fz` serves this build at 100% traffic.
+The live entry and SQLite worker match the tested export; the worker's SHA-256
+is `5e7d2dc098adb40edb37ad2453d1d8ef2f61d6777a054f35675ce36d07fcc8e6`.
+Health body, API boundaries, and 61 asset/module checks passed.
+
+After this deployment, the owner clarified that the failing app is the native
+Android development client connected through Metro. The web pool repair does
+not address native SQLite. No Metro peers or inspector targets were connected
+when checked; a reconnect and fresh failure are needed to diagnose that path.
