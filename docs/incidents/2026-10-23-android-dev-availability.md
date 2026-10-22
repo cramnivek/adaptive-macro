@@ -64,20 +64,29 @@ keystore. Install as an update rather than uninstalling and losing local data.
 Build requested: `05fc1f8f-f858-45ac-b56c-750df4a8ad0d`, profile preview:
 https://expo.dev/accounts/zeldrich/projects/adaptive-macros/builds/05fc1f8f-f858-45ac-b56c-750df4a8ad0d
 
-The build is IN_PROGRESS at the last check. Its source archive includes the
+The build FINISHED successfully at 07:57:24. Its source archive includes the
 explicit non-development preview profile; the source commit metadata is
 `bfda341` because that profile edit was uncommitted at submission. The identical
 profile is now committed as `fc70fe4`. Both this build and the earlier development
 build report the same existing default keystore. No new signing identity was made.
 
-The remote build log confirms `createBundleReleaseJsAndAssets`, both DOM
-renderers and their `www.bundle` HTML/JavaScript were exported. That verifies
-the build is taking the release embedding path; APK inspection and runtime
-acceptance remain necessary. EAS Simulator availability was checked read-only
-and is disabled on this account, so no cloud-device validation was performed.
+The downloaded APK was inspected directly: package `com.cramnivek.ascend`,
+version 0.1.0/code 1, no application debuggable flag, embedded
+`assets/index.android.bundle`, both DOM renderer HTML files, three DOM JavaScript
+files and 44 font files. The remote build log confirms
+`createBundleReleaseJsAndAssets`. This verifies release embedding, not runtime
+acceptance. The artifact is about 149 MB and contains multiple Android
+architectures; its download size does not measure startup or memory usage.
 
-Submission is not delivery. Record its final status and inspect the artifact
-before calling the installed app independent of Metro. No production merge,
+APK: https://expo.dev/artifacts/eas/4s4H5iGDnivpdTx2Hd9sYW0wNr-4FtQMrgWc_6YBmqg.apk
+
+EAS Simulator availability was checked read-only and is disabled on this account,
+so no cloud-device validation was performed. GitHub CI at `b739cf7` passed
+workspace typechecks and the full test suite after the preview profile change.
+
+The APK is ready, but installation and device acceptance are still pending.
+Do not call the installed app independent of Metro until those checks pass.
+No production merge,
 Supabase migration, Cloud Run configuration change, or Windows sleep-policy
 change is part of this remedy.
 
@@ -94,10 +103,14 @@ APK until a separate update mechanism is deliberately configured.
 ## Acceptance and performance checks
 
 1. Install the preview over the existing app; confirm the existing log remains.
-2. Stop Metro, cold-launch the preview and navigate Today, Weight and Train.
+2. Make Metro unreachable from the phone, cold-launch the preview and navigate
+   Today, Weight and Train. Airplane mode can establish this without disrupting
+   a development server another session is using.
 3. With the PC unavailable and phone offline, record a local meal and weigh-in,
    background/reopen, and confirm persistence. Check that online actions fail
-   visibly without blocking access to the local log.
+   visibly without blocking access to the local log. Repeat with a previously
+   signed-in account and cached data, including an expired session; bundling
+   code alone does not prove that account restoration is independent of network.
 4. Render a nutrition sticker and a finished-workout card with Metro stopped.
    Check Android sharing into a destination app. Health Connect should remain
    independently available with its granted permissions and source records.
