@@ -49,6 +49,16 @@ Missing sodium remains unknown rather than zero. Sparse evidence produces no
 personal attribution. Sleep import initially stands on its own: it does not
 establish a causal explanation for a weight change or a readiness score.
 
+Follow-up from Android use: keep the weekly summary and sodium availability
+visible even without a personal signal, on Weight and Today. Show recorded-day
+coverage for two separate seven-day means; compare them only with at least three
+readings in each window. Explain daily variation and unknown/incomplete sodium.
+Request sleep specifically, verify that exact grant, and provide Health Connect
+settings and updated-client guidance instead of silently syncing existing grants.
+Android workout/nutrition stickers render transparent PNGs through Expo DOM and
+share local cache files; retain web clipboard behavior without promising Android
+image clipboard support.
+
 ## Verification and delivery
 
 Use pure-module and real SQLite tests for imports, overlap rules, nutrient

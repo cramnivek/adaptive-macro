@@ -10,7 +10,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 vi.mock('../../db', () => ({ getDb: async () => account.current, bulkSaveDailySteps: vi.fn(), listWeights: async () => [], saveWeight: vi.fn() }));
 vi.mock('../../db/stepQueries', () => ({ getDailyStepsBetween: async () => [] }));
 vi.mock('../../db/sleepQueries', () => ({ saveSleepSessions: vi.fn() }));
-import { syncHealthConnect, healthConnectState } from '../healthConnect';
+import { syncHealthConnect, healthConnectState, requestSleepAccess } from '../healthConnect';
 import { saveSleepSessions } from '../../db/sleepQueries';
 
 beforeEach(() => {
@@ -21,6 +21,15 @@ beforeEach(() => {
   account.current = { owner: 'alice' };
 });
 describe('optional Health Connect reads', () => {
+  it('does not report sleep permission success when only steps are granted', async () => {
+    native.requestPermission.mockResolvedValue([{ accessType: 'read', recordType: 'Steps' }]);
+    expect(await requestSleepAccess()).toBe(false);
+    expect(native.requestPermission).toHaveBeenCalledWith([{ accessType: 'read', recordType: 'SleepSession' }]);
+  });
+  it('reports success only for an actual sleep read grant', async () => {
+    native.requestPermission.mockResolvedValue([{ accessType: 'read', recordType: 'SleepSession' }]);
+    expect(await requestSleepAccess()).toBe(true);
+  });
   it('keeps steps useful when weight and sleep are refused', async () => {
     native.getGrantedPermissions.mockResolvedValue([{ accessType: 'read', recordType: 'Steps' }]);
     await syncHealthConnect();

@@ -55,3 +55,24 @@ The micronutrient prompt now asks to omit unknown values rather than report
 zero. This does not prove model accuracy or repair unknown historical zeros.
 Weight context describes logged observations and possible water retention; it
 does not diagnose causation, measure fat change, or modify engine targets.
+
+## Android follow-up
+
+- Full tests pass: 252 engine + 1,340 mobile + 155 proxy = **1,747**.
+  All workspace typechecks and web/Android exports pass.
+- New tests cover separate weekly windows, rising daily weight alongside a
+  falling weekly mean, sparse/invalid weights, sodium availability, exact sleep
+  permission grants, and PNG file creation before native sharing.
+- Weight now always shows its weekly summary and sodium availability on Weight
+  and Today. Browser inspection at 393 px confirms the card, recorded-day count,
+  daily-variation explanation and incomplete-log guidance are visible.
+- The actual Expo DOM sticker renderer passed browser checks for all 16 workout
+  theme/layout pairs and four nutrition themes: valid PNG decode, dimensions,
+  clear/ink/translucent pixels and loaded fonts. Stable bridge requests avoid
+  redraws. Reproduction fixture: ignored `.superpowers/sticker-android/`.
+- Independent follow-up review found no important correctness issues.
+- Native sharing into destination apps remains unverified on the phone. The
+  new sleep request checks SleepSession specifically, reports refusal, exposes
+  Health Connect settings and refreshes permissions after returning to the app.
+  The READ_SLEEP development build is still IN_QUEUE, with no APK available.
+  Metro can serve these JavaScript changes but cannot add manifest permissions.

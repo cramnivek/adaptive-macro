@@ -76,6 +76,13 @@ export const sleepAccessGranted = async (): Promise<boolean> => {
   return (await getGrantedPermissions()).some((p) => p.accessType === 'read' && p.recordType === 'SleepSession');
 };
 
+/** An existing steps grant is not permission to read sleep. */
+export const requestSleepAccess = async (): Promise<boolean> => {
+  await initialize();
+  const granted = await requestPermission([{ accessType: 'read', recordType: 'SleepSession' }]);
+  return granted.some((permission) => permission.accessType === 'read' && permission.recordType === 'SleepSession');
+};
+
 /** Names for the apps people are likely to sync from; anything else shows its package. */
 const APP_NAMES: Record<string, string> = {
   'com.garmin.android.apps.connectmobile': 'Garmin Connect',

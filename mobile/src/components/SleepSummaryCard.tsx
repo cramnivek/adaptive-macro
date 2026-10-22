@@ -62,7 +62,7 @@ export const SleepSummaryCard = () => {
             {selected && <Text style={[styles.note, text]}>{sleepWindow(selected)} · this phone’s time zone</Text>}
             {selected && <Text style={[styles.note, text]}>Source: {selected.sources.map(healthConnectSourceName).join(', ')}</Text>}
             {!access && <Text style={[styles.note, text]}>{Platform.OS === 'android'
-              ? 'Sleep access is optional. Allow it in Account → Health Connect; steps and weight work without it.'
+              ? 'Sleep access is not allowed. Request it in Account → Health Connect. If Sleep is missing from Ascend permissions, install the updated Android build.'
               : 'Sleep import requires Android Health Connect. Saved sleep is still available here.'}</Text>}
             {access && !selected && <Text style={[styles.note, text]}>Check that Garmin Connect shares sleep with Health Connect, then sync from Account.</Text>}
             {selected && <Text style={[styles.note, text]}>Recorded sleep counts supplied sleep stages; gaps are unknown. A session can include awake time.</Text>}

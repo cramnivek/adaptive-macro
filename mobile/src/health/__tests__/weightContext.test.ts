@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LogEntry } from '@adaptive-macros/engine';
-import { dailySodiumObservations, weightContext, type DailySodiumObservation } from '../weightContext';
+import { dailySodiumObservations, weightContext, weeklyWeightSummary, sodiumCoverage, type DailySodiumObservation } from '../weightContext';
 
 const day = (date: string, sodiumMg = 2000): DailySodiumObservation => ({
   date, sodiumMg, complete: true, foodCount: 2, knownSodiumCount: 2,
@@ -8,6 +8,37 @@ const day = (date: string, sodiumMg = 2000): DailySodiumObservation => ({
 const baseline = [day('2026-10-15', 1800), day('2026-10-18', 2000), day('2026-10-20', 2200)];
 const sodium = () => [...baseline, day('2026-10-21', 3000)];
 const weights = [{ date: '2026-10-22', kg: 80.4 }, { date: '2026-10-21', kg: 80 }];
+
+describe('weekly weight perspective', () => {
+  it('shows a falling weekly average even when the latest daily reading rises', () => {
+    expect(weeklyWeightSummary('2026-10-22', [
+      { date: '2026-10-09', kg: 81 }, { date: '2026-10-12', kg: 82 }, { date: '2026-10-15', kg: 80 },
+      { date: '2026-10-16', kg: 79 }, { date: '2026-10-19', kg: 78 }, { date: '2026-10-22', kg: 80 },
+    ])).toEqual({ current: { kg: 79, readings: 3 }, previous: { kg: 81, readings: 3 }, changeKg: -2 });
+  });
+  it('uses separate seven-day windows and does not invent readings on missing days', () => {
+    expect(weeklyWeightSummary('2026-10-22', [
+      { date: '2026-10-08', kg: 200 }, { date: '2026-10-09', kg: 60 }, { date: '2026-10-15', kg: 70 },
+      { date: '2026-10-16', kg: 100 }, { date: '2026-10-22', kg: 80 }, { date: '2026-10-23', kg: 200 },
+    ])).toEqual({ current: { kg: 90, readings: 2 }, previous: { kg: 65, readings: 2 }, changeKg: null });
+  });
+  it('does not turn absent or invalid weights into a zero average', () => {
+    expect(weeklyWeightSummary('2026-10-22', [{ date: '2026-10-22', kg: NaN }, { date: '2026-10-21', kg: 0 }]))
+      .toEqual({ current: null, previous: null, changeKg: null });
+  });
+});
+
+describe('visible sodium evidence status', () => {
+  it('distinguishes an incomplete day from complete logs with unknown sodium', () => {
+    expect(sodiumCoverage('2026-10-22', [day('2026-10-21')]).status).toBe('baseline');
+    expect(sodiumCoverage('2026-10-22', [{ ...day('2026-10-21'), complete: false }]).status).toBe('incomplete');
+    expect(sodiumCoverage('2026-10-22', [{ ...day('2026-10-21'), knownSodiumCount: 1 }]).status).toBe('unknown-sodium');
+  });
+  it('counts only complete baseline days with known sodium', () => {
+    expect(sodiumCoverage('2026-10-22', sodium())).toEqual({ status: 'ready', baselineDays: 3 });
+    expect(sodiumCoverage('2026-10-22', [...sodium(), day('2026-10-01')])).toEqual({ status: 'ready', baselineDays: 3 });
+  });
+});
 
 describe('weightContext', () => {
   it('returns dated observed amounts when both inclusive display thresholds are met', () => {

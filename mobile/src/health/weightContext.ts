@@ -49,6 +49,31 @@ const hasKnownSodium = (day: DailySodiumObservation): day is DailySodiumObservat
   day.complete === true && day.foodCount > 0 && day.knownSodiumCount === day.foodCount &&
   typeof day.sodiumMg === 'number' && Number.isFinite(day.sodiumMg) && day.sodiumMg >= 0;
 
+export const sodiumCoverage = (date: ISODate, sodium: DailySodiumObservation[]): {
+  status: 'incomplete' | 'unknown-sodium' | 'baseline' | 'ready'; baselineDays: number;
+} => {
+  const previousDate = addDays(date, -1);
+  const baselineDays = sodium.filter((day) => day.date >= addDays(date, -7) && day.date < previousDate && hasKnownSodium(day)).length;
+  const previous = sodium.find((day) => day.date === previousDate);
+  if (!previous?.complete || previous.foodCount === 0) return { status: 'incomplete', baselineDays };
+  if (!hasKnownSodium(previous)) return { status: 'unknown-sodium', baselineDays };
+  return { status: baselineDays < 3 ? 'baseline' : 'ready', baselineDays };
+};
+
+/** The mean of recorded days, without filling missing days or blending the two weeks. */
+export const weeklyWeightSummary = (date: ISODate, weights: { date: ISODate; kg: number }[]) => {
+  const average = (from: ISODate, to: ISODate) => {
+    const readings = weights.filter((row) => row.date >= from && row.date <= to && Number.isFinite(row.kg) && row.kg > 0);
+    return readings.length ? { kg: readings.reduce((sum, row) => sum + row.kg, 0) / readings.length, readings: readings.length } : null;
+  };
+  const current = average(addDays(date, -6), date);
+  const previous = average(addDays(date, -13), addDays(date, -7));
+  return {
+    current, previous,
+    changeKg: current && previous && current.readings >= 3 && previous.readings >= 3 ? current.kg - previous.kg : null,
+  };
+};
+
 export const weightContext = (
   date: ISODate,
   weights: { date: ISODate; kg: number }[],
