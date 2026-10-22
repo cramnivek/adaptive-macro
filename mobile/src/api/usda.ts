@@ -24,6 +24,8 @@ export const USDA_DEMO_KEY = 'DEMO_KEY';
 /** FoodData Central nutrient ids for the fields this app tracks. */
 const NUTRIENT_IDS = {
   kcal: 1008,
+  kcalAtwaterGeneral: 2047,
+  kcalAtwaterSpecific: 2048,
   protein: 1003,
   fat: 1004,
   carbs: 1005,
@@ -183,7 +185,14 @@ const toFood = (food: FdcFood): Food | null => {
   const description = food.description?.trim();
   if (!description) return null;
 
-  const kcal = nutrientValue(nutrients, NUTRIENT_IDS.kcal);
+  // Foundation Foods often state energy only as Atwater values, not as 1008:
+  // 2047 uses the general 4/4/9 factors, as labels do, and 2048 food-specific
+  // ones. Reading 1008 alone dropped over half of them, raw chicken breast and
+  // every oats, salmon and potato record among them.
+  const kcal =
+    nutrientValue(nutrients, NUTRIENT_IDS.kcal) ||
+    nutrientValue(nutrients, NUTRIENT_IDS.kcalAtwaterGeneral) ||
+    nutrientValue(nutrients, NUTRIENT_IDS.kcalAtwaterSpecific);
   // A USDA entry with no energy value is an incomplete record, not a zero
   // calorie food, so it is dropped rather than logged as free.
   if (kcal <= 0) return null;
