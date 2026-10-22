@@ -11,7 +11,7 @@ import { MIGRATIONS } from '../schema';
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
   DatabaseSync: new (path: string) => {
     exec(sql: string): void;
-    prepare(sql: string): { get(...params: unknown[]): unknown; run(...params: unknown[]): unknown };
+    prepare(sql: string): { get(...params: unknown[]): unknown; all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
   };
 };
 
@@ -55,5 +55,36 @@ describe('rowsToRestore', () => {
     expect(db.prepare('SELECT created_at FROM weights').get()).toEqual({
       created_at: '2026-10-01T07:00:00.000Z',
     });
+  });
+});
+
+describe('what a backup covers', () => {
+  it('restores every table the app keeps, so a new one cannot be left out unnoticed', () => {
+    // Body measurements and daily steps were added after the backup was
+    // written, and never joined it: body fat logged on the web did not survive
+    // a move to the phone.
+    const db = new DatabaseSync(':memory:');
+    for (const step of MIGRATIONS) db.exec(step);
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as {
+        name: string;
+      }[]
+    )
+      .map((t) => t.name)
+      .sort();
+    const restored = rowsToRestore(backup([]))
+      .map(([table]) => table)
+      .sort();
+    expect(restored).toEqual(tables);
+  });
+
+  it('restores body measurements and steps', () => {
+    const db = restore({
+      ...backup([]),
+      bodyMeasurements: [{ id: 'bm_1', date: '2026-10-20', body_fat_pct: 18.5, created_at: '2026-10-20T07:00:00Z' }],
+      dailySteps: [{ date: '2026-10-20', steps: 8400, source: 'health_connect', created_at: '2026-10-20T23:00:00Z' }],
+    } as unknown as Backup);
+    expect(db.prepare('SELECT body_fat_pct FROM body_measurements').get()).toEqual({ body_fat_pct: 18.5 });
+    expect(db.prepare('SELECT steps, source FROM daily_steps').get()).toEqual({ steps: 8400, source: 'health_connect' });
   });
 });

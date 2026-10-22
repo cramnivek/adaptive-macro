@@ -613,6 +613,8 @@ export interface Backup {
   sessions?: Record<string, unknown>[];
   sets?: Record<string, unknown>[];
   dayStatus?: Record<string, unknown>[];
+  bodyMeasurements?: Record<string, unknown>[];
+  dailySteps?: Record<string, unknown>[];
 }
 
 /**
@@ -636,6 +638,8 @@ export const exportBackup = async (): Promise<Backup> => {
     sessions: await db.getAllAsync('SELECT * FROM sessions'),
     sets: await db.getAllAsync('SELECT * FROM sets'),
     dayStatus: await db.getAllAsync('SELECT * FROM day_status'),
+    bodyMeasurements: await db.getAllAsync('SELECT * FROM body_measurements'),
+    dailySteps: await db.getAllAsync('SELECT * FROM daily_steps'),
   };
 };
 
@@ -649,6 +653,7 @@ export const describeBackup = (backup: Backup) => ({
   sessions: backup.sessions?.length ?? 0,
   sets: backup.sets?.length ?? 0,
   routines: backup.routines?.length ?? 0,
+  measurements: backup.bodyMeasurements?.length ?? 0,
 });
 
 const isBackup = (value: unknown): value is Backup => {
@@ -722,6 +727,8 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       'weights',
       'settings',
       'day_status',
+      'body_measurements',
+      'daily_steps',
     ]) {
       await db.runAsync(`DELETE FROM ${table}`);
     }

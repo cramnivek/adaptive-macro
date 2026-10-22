@@ -27,4 +27,8 @@ export const rowsToRestore = (backup: Backup): [table: string, rows: Record<stri
   ['sessions', backup.sessions],
   ['sets', backup.sets],
   ['day_status', backup.dayStatus],
+  // Added after the backup was first written, and missed until a body fat
+  // reading logged on the web did not arrive on the phone.
+  ['body_measurements', backup.bodyMeasurements],
+  ['daily_steps', backup.dailySteps],
 ];
