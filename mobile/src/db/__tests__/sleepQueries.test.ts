@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportBackup, getDb, restoreBackup, selectDatabase } from '../index';
 import { clearAllData } from '../seed';
-import { normalizeSleep } from '../../health/sleep';
+import { normalizeSleep, summarizeSleep } from '../../health/sleep';
 import { saveSleepSessions, listSleepSessions } from '../sleepQueries';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
@@ -61,5 +61,24 @@ describe('account-local sleep persistence', () => {
     await selectDatabase(`next-account-${selection++}.db`);
     await expect(saveSleepSessions(night, bound)).rejects.toThrow();
     expect(await listSleepSessions('2026-10-21', '2026-10-21')).toEqual([]);
+  });
+
+  const refreshed = { start: Date.parse('2026-09-22T00:00:00Z'), end: Date.parse('2026-10-22T00:00:00Z') };
+
+  it('removes deleted source sessions from a successfully refreshed empty range but keeps older history', async () => {
+    const older = { ...night[0], id: 'old-night', date: '2026-09-01' as const,
+      start: Date.parse('2026-08-31T22:00:00Z'), end: Date.parse('2026-09-01T06:00:00Z') };
+    await saveSleepSessions([older, ...night]);
+    await saveSleepSessions([], await getDb(), refreshed);
+    expect(await listSleepSessions('2026-09-01', '2026-10-22')).toEqual([older]);
+  });
+
+  it('replaces a corrected source session under a new id without retaining its old longer interval', async () => {
+    await saveSleepSessions(night);
+    const shorter = { ...night[0], id: 'corrected-night', start: night[0].start + 3600000 };
+    await saveSleepSessions([shorter], await getDb(), refreshed);
+    const stored = await listSleepSessions('2026-10-21', '2026-10-21');
+    expect(stored).toEqual([shorter]);
+    expect(summarizeSleep(stored)[0].sessionMinutes).toBe(420);
   });
 });

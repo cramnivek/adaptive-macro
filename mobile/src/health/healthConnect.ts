@@ -192,7 +192,7 @@ const runSync = async (now: Date): Promise<HealthConnectSyncResult> => {
     pageToken = page.pageToken || undefined;
   } while (pageToken);
   const sleep = normalizeSleep(sleepReadings);
-  if (sleepDatabase) await saveSleepSessions(sleep, sleepDatabase);
+  if (sleepDatabase) await saveSleepSessions(sleep, sleepDatabase, { start: Date.parse(sleepRange.startTime), end: now.getTime() });
   const sleepNights = summarizeSleep(sleep).length;
 
   const fromDay = localDay(from.toISOString()) as ISODate;

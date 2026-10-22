@@ -33,7 +33,7 @@ describe('optional Health Connect reads', () => {
     await syncHealthConnect();
     expect(native.aggregateGroupByPeriod).not.toHaveBeenCalled();
     expect(native.readRecords).toHaveBeenCalledWith('SleepSession', expect.anything());
-    expect(saveSleepSessions).toHaveBeenCalledWith([], account.current);
+    expect(saveSleepSessions).toHaveBeenCalledWith([], account.current, expect.objectContaining({ start: expect.any(Number), end: expect.any(Number) }));
   });
   it('binds sleep to the database selected before the native read starts', async () => {
     native.getGrantedPermissions.mockResolvedValue([{ accessType: 'read', recordType: 'SleepSession' }]);
@@ -43,7 +43,7 @@ describe('optional Health Connect reads', () => {
       return { records: [] };
     });
     await syncHealthConnect();
-    expect(saveSleepSessions).toHaveBeenCalledWith([], original);
+    expect(saveSleepSessions).toHaveBeenCalledWith([], original, expect.objectContaining({ start: expect.any(Number), end: expect.any(Number) }));
   });
   it('bounds sleep reads to the recent month instead of re-reading five years of stages', async () => {
     native.getGrantedPermissions.mockResolvedValue([{ accessType: 'read', recordType: 'SleepSession' }]);
@@ -52,5 +52,11 @@ describe('optional Health Connect reads', () => {
       timeRangeFilter: { operator: 'between', startTime: '2026-09-22T00:00:00.000Z', endTime: '2026-10-22T00:00:00.000Z' },
       pageSize: 1000, pageToken: undefined,
     });
+  });
+  it('keeps the cached snapshot when the native read fails', async () => {
+    native.getGrantedPermissions.mockResolvedValue([{ accessType: 'read', recordType: 'SleepSession' }]);
+    native.readRecords.mockRejectedValue(new Error('Native read failed'));
+    await expect(syncHealthConnect()).rejects.toThrow('Native read failed');
+    expect(saveSleepSessions).not.toHaveBeenCalled();
   });
 });
