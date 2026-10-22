@@ -10,6 +10,11 @@ import { FoodMicronutrientsView } from './FoodMicronutrientsView';
 
 const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+/** How many of a serving: half a bagel, two eggs, three biscuits. */
+const COUNTS = [0.5, 1, 2, 3] as const;
+
+const countLabel = (count: number) => (count === 0.5 ? '½' : `×${count}`);
+
 interface LogFoodSheetProps {
   food: Food | null;
   defaultMeal: Meal;
@@ -30,10 +35,38 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
   const [grams, setGrams] = useState('');
   const [meal, setMeal] = useState<Meal>(defaultMeal);
   const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
+  // The serving the amount was built from, and how many of it. Two eggs used to
+  // mean working out the grams for two eggs; now it is the serving, then ×2.
+  // Typing grams by hand lets go of the serving, so the two cannot disagree.
+  const [servingGrams, setServingGrams] = useState<number | null>(null);
+  const [servingLabel, setServingLabel] = useState<string | null>(null);
+  const [count, setCount] = useState(1);
+
+  const amountFor = (grams: number, times: number) => String(Math.round(grams * times * 10) / 10);
+
+  const chooseServing = (label: string, grams: number) => {
+    setServingLabel(label);
+    setServingGrams(grams);
+    setGrams(amountFor(grams, count));
+  };
+
+  const chooseCount = (times: number) => {
+    setCount(times);
+    if (servingGrams !== null) setGrams(amountFor(servingGrams, times));
+  };
+
+  const typeGrams = (value: string) => {
+    setGrams(value);
+    setServingLabel(null);
+    setServingGrams(null);
+  };
 
   if (food && initialisedFor !== food.id) {
-    const preferred = food.portions[food.portions.length - 1] ?? { grams: 100 };
-    setGrams(String(preferred.grams));
+    const preferred = food.portions[food.portions.length - 1];
+    setGrams(String(preferred?.grams ?? 100));
+    setServingLabel(preferred?.label ?? null);
+    setServingGrams(preferred?.grams ?? null);
+    setCount(1);
     setMeal(defaultMeal);
     setInitialisedFor(food.id);
   }
@@ -75,18 +108,52 @@ export const LogFoodSheet = ({ food, defaultMeal, onCancel, onConfirm }: LogFood
             )}
 
             <View style={styles.chips}>
-              {food.portions.map((portion) => (
-                <Pressable
-                  key={portion.label}
-                  onPress={() => setGrams(String(portion.grams))}
-                  style={[styles.chip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
-                >
-                  <Text style={{ fontFamily: font.uiStrong, color: colors.text, fontSize: 13 }}>{portion.label}</Text>
-                </Pressable>
-              ))}
+              {food.portions.map((portion) => {
+                const on = portion.label === servingLabel;
+                return (
+                  <Pressable
+                    key={portion.label}
+                    onPress={() => chooseServing(portion.label, portion.grams)}
+                    accessibilityState={{ selected: on }}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: on ? colors.accent : colors.surfaceRaised, borderColor: colors.border },
+                    ]}
+                  >
+                    <Text style={{ fontFamily: font.uiStrong, color: on ? colors.onFill : colors.text, fontSize: 13 }}>
+                      {portion.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <Stepper label="Amount" value={grams} onChangeText={setGrams} suffix="g" />
+            {servingLabel !== null && (
+              <View style={styles.chips}>
+                {COUNTS.map((times) => {
+                  const on = times === count;
+                  return (
+                    <Pressable
+                      key={times}
+                      onPress={() => chooseCount(times)}
+                      accessibilityLabel={`${times} × ${servingLabel}`}
+                      accessibilityState={{ selected: on }}
+                      style={[
+                        styles.chip,
+                        styles.countChip,
+                        { backgroundColor: on ? colors.accent : colors.surfaceRaised, borderColor: colors.border },
+                      ]}
+                    >
+                      <Text style={{ fontFamily: font.uiStrong, color: on ? colors.onFill : colors.text, fontSize: 13 }}>
+                        {countLabel(times)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <Stepper label="Amount" value={grams} onChangeText={typeGrams} suffix="g" />
 
             <View style={styles.chips}>
               {MEALS.map((option) => (
@@ -176,5 +243,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  countChip: { minWidth: TOUCH_TARGET + space.sm, alignItems: 'center' },
   preview: { fontFamily: font.figure, fontSize: 13, marginBottom: space.md, fontVariant: ['tabular-nums'] },
 });

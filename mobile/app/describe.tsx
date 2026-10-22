@@ -58,6 +58,13 @@ interface DraftItem {
  * food is stays Claude's, only the amount changes. The original portion is kept
  * on screen so an adjusted row never looks like the estimate itself changed.
  */
+/** Quick corrections to an estimated portion, relative to what was estimated. */
+const SIZE_STEPS = [
+  { label: 'Smaller', factor: 0.75 },
+  { label: 'As estimated', factor: 1 },
+  { label: 'Larger', factor: 1.25 },
+] as const;
+
 const scaleItem = (item: EstimatedItem, grams: number): Nutrients => {
   if (item.grams <= 0) {
     return { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 };
@@ -613,6 +620,36 @@ export default function DescribeScreen() {
                         keyboardType="decimal-pad"
                         suffix="g"
                       />
+                      {/* Portion is where an estimate is most often wrong, and a
+                          weight is hard to type with one thumb at the table. A
+                          quarter either side of the estimate, always from the
+                          estimate, so pressing twice does not compound. */}
+                      <View style={styles.sizeRow}>
+                        {SIZE_STEPS.map((step) => {
+                          const target = roundTo(draft.item.grams * step.factor, 1);
+                          const on = roundTo(draft.grams, 1) === target;
+                          return (
+                            <Pressable
+                              key={step.label}
+                              onPress={() =>
+                                setDrafts((current) =>
+                                  current.map((d, i) => (i === index ? { ...d, grams: target } : d)),
+                                )
+                              }
+                              accessibilityLabel={`${step.label}: ${Math.round(target)} grams of ${draft.item.name}`}
+                              accessibilityState={{ selected: on }}
+                              style={[
+                                styles.sizeChip,
+                                { backgroundColor: on ? colors.accent : colors.surfaceRaised, borderColor: colors.border },
+                              ]}
+                            >
+                              <Text style={[styles.sizeChipText, { color: on ? colors.onFill : colors.text }]}>
+                                {step.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                       <Text style={[styles.macros, { color: colors.textMuted }]}>
                         {Math.round(scaled.kcal)} kcal · P {scaled.proteinG.toFixed(1)} · C{' '}
                         {scaled.carbsG.toFixed(1)} · F {scaled.fatG.toFixed(1)}
@@ -719,6 +756,16 @@ const styles = StyleSheet.create({
   },
   removeItemBtnText: { fontFamily: font.uiStrong, fontSize: 11 },
   itemActionGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sizeRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  sizeChip: {
+    flex: 1,
+    minHeight: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  sizeChipText: { fontFamily: font.uiStrong, fontSize: 13 },
   matchItemBtn: {
     paddingVertical: 3,
     paddingHorizontal: 8,
