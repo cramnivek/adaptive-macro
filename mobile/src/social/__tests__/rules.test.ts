@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isAlreadyPosted, messageFor } from '../errors';
-import { normaliseProfile, profileProblem } from '../profileRules';
+import { missingOnServer, normaliseProfile, profileProblem } from '../profileRules';
 
 const fields = (username: string, displayName = 'Marc', instagram = '') =>
   normaliseProfile({ username, displayName, instagram });
@@ -207,5 +207,23 @@ describe('isAlreadyPosted', () => {
 describe('messageFor on a filtered word', () => {
   it('says the text has a word the app does not allow', () => {
     expect(messageFor({ code: 'P0001', message: 'blocked_word' })).toBe('That has a word Ascend doesn’t allow. Change it and try again.');
+  });
+});
+
+describe('missingOnServer', () => {
+  const server = { avatar_url: null, bio: 'Lifts', training_focus: null, pr_highlight: null };
+
+  it('names what only this device kept, so it can be sent', () => {
+    expect(missingOnServer(server, { avatar_url: 'data:image/jpeg;base64,AAAA', bio: 'Old', training_focus: null })).toEqual({
+      avatar_url: 'data:image/jpeg;base64,AAAA',
+    });
+  });
+
+  it('never replaces what the server already has', () => {
+    expect(missingOnServer(server, { bio: 'Old' })).toBeNull();
+  });
+
+  it('has nothing to send without a cached copy', () => {
+    expect(missingOnServer(server, null)).toBeNull();
   });
 });

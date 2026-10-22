@@ -1,7 +1,7 @@
 import type { ISODate, LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Card } from '../../src/components/Card';
@@ -19,6 +19,7 @@ import { NutritionQualityCard } from '../../src/components/NutritionQualityCard'
 import { Screen } from '../../src/components/Screen';
 import { shouldAskAbout } from '../../src/dayStatus';
 import { getDailySteps, lastMealsBefore, type DailyStepRecord, type RecentMeal } from '../../src/db';
+import { onHealthConnectSynced } from '../../src/health/healthConnect';
 import { sameAsLabel } from '../../src/mealRepeat';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
@@ -73,6 +74,16 @@ export default function TodayScreen() {
   useEffect(() => {
     void loadSteps();
   }, [loadSteps]);
+
+  // A tab stays mounted, so steps that arrived while it was out of view
+  // waited for the date to change. Read again on returning to it, and the
+  // moment a Health Connect sync lands.
+  useFocusEffect(
+    useCallback(() => {
+      void loadSteps();
+    }, [loadSteps]),
+  );
+  useEffect(() => onHealthConnectSynced(() => void loadSteps()), [loadSteps]);
 
   const renderMealActions = (meal: Meal, style?: ViewStyle) => (
     <View style={[styles.mealActions, style]}>
@@ -159,173 +170,51 @@ export default function TodayScreen() {
     ready && isToday && shouldAskAbout(yesterdayKcal, dayStatus.get(yesterday), program.calories.kcal);
   const leftOut = dayStatus.get(selectedDate) === false;
 
-  return (
-    <Screen
-      title="Today"
-      subtitle={formatDateLong(selectedDate)}
-      action={
-        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
-          <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
-        </Tappable>
-      }
+  // Where Today puts training and the activity cards follows the focus picked
+  // in onboarding or Settings. Balanced and Food first used to lay Today out
+  // identically, so the choice changed nothing anyone could see.
+  const spotlight = settings.dashboardSpotlight ?? 'balanced';
+  const trainingShortcut = (
+    <Pressable
+      onPress={() => router.push('/train')}
+      style={({ pressed }) => [
+        styles.trainingShortcut,
+        {
+          backgroundColor: colors.surfaceRaised,
+          borderColor: colors.border,
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Open workout routines"
     >
-      <HomeScreenNotice />
-      <ActiveWorkoutBanner />
-      <FirstWeekCalibrationCard />
-      <View style={styles.dateNav}>
-        <Pressable
-          onPress={() => setSelectedDate(addDays(selectedDate, -1))}
-          accessibilityLabel="Go to the previous day"
-          style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedDate(todayISO())}
-          style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        >
-          <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontFamily: font.uiStrong }}>
-            {isToday ? 'Today' : 'Jump to today'}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedDate(addDays(selectedDate, 1))}
-          // Logging into the future would feed the estimator days that have not
-          // happened yet, so forward navigation stops at today.
-          disabled={isToday}
-          accessibilityLabel="Go to the next day"
-          style={[
-            styles.navButton,
-            { backgroundColor: colors.surface, borderColor: colors.border, opacity: isToday ? 0.35 : 1 },
-          ]}
-        >
-          <Ionicons name="chevron-forward" size={18} color={colors.text} />
-        </Pressable>
-      </View>
-
-      {/* When Workouts Spotlight is active, lead with Workout Routine */}
-      {settings.dashboardSpotlight === 'workouts' && (
-        <Pressable
-          onPress={() => router.push('/train')}
-          style={({ pressed }) => [
-            styles.trainingShortcut,
-            {
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.border,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Open workout routines"
-        >
-          <View style={styles.trainingShortcutLeft}>
-            <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
-              <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
-            </View>
-            <View style={{ gap: 2, flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
-                  Workout & Routines
-                </Text>
-              </View>
-              <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
-                Start a workout or pick up a routine.
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-      )}
-
-      {/* Daily Macro Targets Card */}
-      <Card>
-        <MacroSummary consumed={totals} target={program.macros} />
-        <View style={styles.macroCardFooter}>
-          <Text style={[styles.targetLine, { color: colors.textMuted }]}>
-            Target {program.calories.kcal} kcal
-            {program.calories.adjustmentKcal !== 0 &&
-              ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
-          </Text>
-          <Pressable
-            onPress={() => setShowStickerModal(true)}
-            style={({ pressed }) => [
-              styles.stickerPill,
-              {
-                backgroundColor: colors.surfaceRaised,
-                borderColor: colors.border,
-                opacity: pressed ? 0.75 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Export nutrition sticker for stories"
-          >
-            <Ionicons name="share-outline" size={13} color={colors.textMuted} />
-            <Text style={[styles.stickerPillText, { color: colors.text }]}>
-              Share today as a sticker
-            </Text>
-          </Pressable>
+      <View style={styles.trainingShortcutLeft}>
+        <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
+          <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
         </View>
-        {/*
-          A day missing a meal reads to the estimator as a deficit the scale
-          never showed, and the target drops to explain it. This takes the day
-          out of the estimate without touching the diary.
-        */}
-        {entries.length > 0 && (
-          <Pressable
-            onPress={() => void markDay(selectedDate, leftOut ? null : false)}
-            accessibilityRole="button"
-            style={styles.completeness}
-          >
-            <Text style={[styles.completenessText, { color: leftOut ? colors.warning : colors.textFaint }]}>
-              {leftOut
-                ? 'Not fully logged · left out of your expenditure estimate. Tap to count it again.'
-                : 'Not everything logged? Tap to leave this day out of the estimate.'}
+        <View style={{ gap: 2, flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
+              Workout & Routines
             </Text>
-          </Pressable>
-        )}
-      </Card>
-
-      {/* When Balanced or Nutrition Spotlight, workout shortcut sits neatly below macros */}
-      {settings.dashboardSpotlight !== 'workouts' && (
-        <Pressable
-          onPress={() => router.push('/train')}
-          style={({ pressed }) => [
-            styles.trainingShortcut,
-            {
-              backgroundColor: colors.surfaceRaised,
-              borderColor: colors.border,
-              opacity: pressed ? 0.85 : 1,
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Open workout routines"
-        >
-          <View style={styles.trainingShortcutLeft}>
-            <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
-              <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
-            </View>
-            <View style={{ gap: 2, flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
-                  Workout & Routines
-                </Text>
-              </View>
-              <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
-                Start a workout or pick up a routine.
-              </Text>
-            </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-        </Pressable>
-      )}
-
+          <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
+            Start a workout or pick up a routine.
+          </Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+  const activityCards = (
+    <>
       {/* Micronutrients from what was logged today, against the reference intakes. */}
       <NutritionQualityCard
         consumed={totals}
         entries={entries}
         profile={settings.profile}
       />
-
+  
       {/* Daily Steps & NEAT Activity Card */}
       <Pressable
         onPress={() => setStepModalOpen(true)}
@@ -378,6 +267,108 @@ export default function TodayScreen() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
       </Pressable>
+    </>
+  );
+
+  return (
+    <Screen
+      title="Today"
+      subtitle={formatDateLong(selectedDate)}
+      action={
+        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
+          <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
+        </Tappable>
+      }
+    >
+      <HomeScreenNotice />
+      <ActiveWorkoutBanner />
+      <FirstWeekCalibrationCard />
+      <View style={styles.dateNav}>
+        <Pressable
+          onPress={() => setSelectedDate(addDays(selectedDate, -1))}
+          accessibilityLabel="Go to the previous day"
+          style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Pressable>
+        <Pressable
+          onPress={() => setSelectedDate(todayISO())}
+          style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontFamily: font.uiStrong }}>
+            {isToday ? 'Today' : 'Jump to today'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setSelectedDate(addDays(selectedDate, 1))}
+          // Logging into the future would feed the estimator days that have not
+          // happened yet, so forward navigation stops at today.
+          disabled={isToday}
+          accessibilityLabel="Go to the next day"
+          style={[
+            styles.navButton,
+            { backgroundColor: colors.surface, borderColor: colors.border, opacity: isToday ? 0.35 : 1 },
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={18} color={colors.text} />
+        </Pressable>
+      </View>
+
+      {/* Workouts first: lead with training. */}
+      {spotlight === 'workouts' && trainingShortcut}
+
+      {/* Daily Macro Targets Card */}
+      <Card>
+        <MacroSummary consumed={totals} target={program.macros} />
+        <View style={styles.macroCardFooter}>
+          <Text style={[styles.targetLine, { color: colors.textMuted }]}>
+            Target {program.calories.kcal} kcal
+            {program.calories.adjustmentKcal !== 0 &&
+              ` · ${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} vs expenditure`}
+          </Text>
+          <Pressable
+            onPress={() => setShowStickerModal(true)}
+            style={({ pressed }) => [
+              styles.stickerPill,
+              {
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.border,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Export nutrition sticker for stories"
+          >
+            <Ionicons name="share-outline" size={13} color={colors.textMuted} />
+            <Text style={[styles.stickerPillText, { color: colors.text }]}>
+              Share today as a sticker
+            </Text>
+          </Pressable>
+        </View>
+        {/*
+          A day missing a meal reads to the estimator as a deficit the scale
+          never showed, and the target drops to explain it. This takes the day
+          out of the estimate without touching the diary.
+        */}
+        {entries.length > 0 && (
+          <Pressable
+            onPress={() => void markDay(selectedDate, leftOut ? null : false)}
+            accessibilityRole="button"
+            style={styles.completeness}
+          >
+            <Text style={[styles.completenessText, { color: leftOut ? colors.warning : colors.textFaint }]}>
+              {leftOut
+                ? 'Not fully logged · left out of your expenditure estimate. Tap to count it again.'
+                : 'Not everything logged? Tap to leave this day out of the estimate.'}
+            </Text>
+          </Pressable>
+        )}
+      </Card>
+
+      {/* Balanced: training sits below the targets. */}
+      {spotlight === 'balanced' && trainingShortcut}
+
+      {spotlight !== 'nutrition' && activityCards}
 
       {/* Morning Scale Weight & Check-in (Always Active) */}
       {isToday && <CheckInCard />}
@@ -499,6 +490,10 @@ export default function TodayScreen() {
           </Card>
         );
       })}
+
+      {/* Food first: the diary comes straight after the targets, and the rest follows it. */}
+      {spotlight === 'nutrition' && activityCards}
+      {spotlight === 'nutrition' && trainingShortcut}
       <EditEntrySheet
         entry={editing}
         onCancel={() => setEditing(null)}

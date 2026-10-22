@@ -109,6 +109,11 @@ export interface AppSettings {
   /** False until the profile has been filled in at least once. */
   onboarded: boolean;
   /**
+   * The onboarding version last completed (see onboardingSteps.ts). Someone
+   * onboarded before a version added steps is shown just those, once.
+   */
+  onboardingVersion: number;
+  /**
    * True once someone chose to use the app without an account. The sign-in
    * screen then stops being a gate and becomes something the social screens
    * offer; signing out clears nothing here, so it stays a choice made once.
@@ -129,6 +134,12 @@ export interface AppSettings {
   restChimeChoice: ChimeChoice;
   /** Short sounds for moments, such as a new PR. Separate from the rest chime. */
   effectSounds: boolean;
+  /**
+   * The weekday a week ends on, for check-ins and the weekly target note: 0 for
+   * Sunday through 6 for Saturday. Someone who weighs in and reviews on a
+   * Friday wants Saturday-to-Friday weeks, not to wait until Monday.
+   */
+  checkInWeekEndsOn: number;
   /**
    * Whether the finish sheet leads with POST. Set by what someone did last
    * time — posted, or left without posting — so a regular poster gets one tap
@@ -152,9 +163,14 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  profile: { sex: 'male', age: 30, heightCm: 178 },
-  activity: 'moderate',
-  goal: { direction: 'lose', rateKgPerWeek: 0.5 },
+  // Fallbacks for the type only, never shown or preselected: onboarding asks
+  // for every one of these before anything is worked out from them. They used
+  // to be one person's own answers (male, 178 cm, moderately active, losing
+  // fat), and first run preselected them, so tapping through made them
+  // everyone's. Stored settings always override these.
+  profile: { sex: 'female', age: 30, heightCm: 170 },
+  activity: 'light',
+  goal: { direction: 'maintain', rateKgPerWeek: 0 },
   goalWeightKg: null,
   units: 'metric',
   workoutUnits: 'metric',
@@ -176,6 +192,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   foodLookup: { geminiApiKey: '' },
   onboarded: false,
+  onboardingVersion: 0,
   accountSkipped: false,
   checkInSeenWeek: null,
   barbell: 'standard',
@@ -188,6 +205,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   restSound: true,
   restChimeChoice: 'chime',
   effectSounds: true,
+  checkInWeekEndsOn: 0,
   postWorkouts: false,
   personality: 'ascend',
   userMission: 'hybrid',

@@ -261,7 +261,10 @@ export default function OverviewScreen() {
     }
   }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings]);
 
-  const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, to), [sessionTimes, sets, to]);
+  const weeks = useMemo(
+    () => weeklyTotals(sessionTimes, sets, to, 12, settings.checkInWeekEndsOn),
+    [sessionTimes, sets, to, settings.checkInWeekEndsOn],
+  );
   // Older weeks can have training in them when this window is empty, and that
   // is when seeing the trend matters most.
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { isStorageLockError } from '../db/storageLock';
+import { releaseSplash } from '../platform/splash';
 import { useApp } from '../state/AppStore';
 import { font, space, useTheme } from '../theme';
 import { Button } from './Controls';
@@ -20,6 +21,12 @@ import { Button } from './Controls';
 export const StorageGate = ({ children }: { children: React.ReactNode }) => {
   const { loadError, retryLoad } = useApp();
   const { colors } = useTheme();
+
+  // The first screen never comes when the log cannot be opened, so this one
+  // releases the launch screen instead of leaving the app behind it.
+  useEffect(() => {
+    if (loadError !== null) releaseSplash();
+  }, [loadError]);
 
   if (loadError === null) return <>{children}</>;
 

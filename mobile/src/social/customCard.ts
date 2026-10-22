@@ -66,6 +66,7 @@ export const fetchCardImage = async (sessionId?: string | null, authorId?: strin
   const token = await currentAccessToken();
   if (!token) return null;
   try {
+    // cardImagePath already carries the proxy's address on a phone.
     const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
     return await showableImage(await res.blob());

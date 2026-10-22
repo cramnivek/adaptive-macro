@@ -57,3 +57,28 @@ export const profileProblem = (fields: ProfileFields): string | null => {
   }
   return null;
 };
+
+type ExtraFields = {
+  avatar_url?: string | null;
+  bio?: string | null;
+  training_focus?: string | null;
+  pr_highlight?: string | null;
+};
+
+/**
+ * The profile fields this device kept that the server never received.
+ *
+ * Saving used to cache these before the server accepted them, so a save that
+ * failed went unnoticed on the device that made it — its own copy filled the
+ * gap — while every other device showed a profile with no avatar. Sending them
+ * once closes that gap. A field the server already has is never replaced: the
+ * server is the newer word on anything it holds.
+ */
+export const missingOnServer = (server: ExtraFields, cached: ExtraFields | null): ExtraFields | null => {
+  if (cached === null) return null;
+  const patch: ExtraFields = {};
+  for (const key of ['avatar_url', 'bio', 'training_focus', 'pr_highlight'] as const) {
+    if (!server[key] && cached[key]) patch[key] = cached[key];
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+};

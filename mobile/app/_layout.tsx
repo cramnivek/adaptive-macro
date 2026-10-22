@@ -11,7 +11,6 @@ import { useEffect } from 'react';
 import { watchForNewBuild } from '../src/platform/staleBuild';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AppArrival } from '../src/components/AppArrival';
 import { Toaster } from '../src/components/Toaster';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
@@ -20,6 +19,10 @@ import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
+import { holdSplash } from '../src/platform/splash';
+
+// At module load, before the first render, or the launch screen is already gone.
+holdSplash();
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -60,13 +63,14 @@ export default function RootLayout() {
   }
 
   return (
-    <AppArrival background={colors.background}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
     <SafeAreaProvider>
-      <AppProvider>
+      {/* Outside AppProvider, because the store opens the log of whoever is signed in. */}
+      <SocialProvider>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Toaster />
         <ConfirmDialog />
-        <SocialProvider>
+        <AppProvider>
           {/* Inside AppProvider, because it reads the load error from the store. */}
           <StorageGate>
             <AuthGate>
@@ -324,9 +328,9 @@ export default function RootLayout() {
               </Stack>
             </AuthGate>
           </StorageGate>
-        </SocialProvider>
-      </AppProvider>
+        </AppProvider>
+      </SocialProvider>
     </SafeAreaProvider>
-    </AppArrival>
+    </View>
   );
 }

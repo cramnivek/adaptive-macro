@@ -1,9 +1,13 @@
 import { todayISO } from '@adaptive-macros/engine';
 import { useRouter, useSegments } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { pushBaselineToCloud, readBaselineFromSession } from '../social/baselineSync';
 import { useSocial } from '../social/session';
+import { needsOnboarding } from '../onboardingSteps';
 import { useApp } from '../state/AppStore';
+import { useTheme } from '../theme';
+import { AppArrival } from './AppArrival';
 
 /**
  * Keeps the app behind a one-time sign-in, social profile setup, and baseline onboarding.
@@ -16,8 +20,10 @@ import { useApp } from '../state/AppStore';
  *
  * Once signed in, the cached session is enough — offline, or with an expired
  * token — because logging a set in a basement gym must never be blocked.
- * Food and training logs live on this device and are not tied to the account,
- * so nothing here clears or resets local storage.
+ * Food and training logs live on this device, in a database file of the
+ * signed-in account's own, or of nobody's when there is no account (see
+ * `db/accountDatabase.ts`). So nothing here clears or resets local storage:
+ * signing in or out opens a different file instead.
  */
 const AUTH_PUBLIC_ROUTES = new Set(['sign-in', 'privacy']);
 
@@ -28,6 +34,8 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
   const rootSegment: string = segments[0] ?? '';
   const syncedUserIdRef = useRef<string | null>(null);
+  const shown = useRef(false);
+  const { colors } = useTheme();
 
   const latestWeightKg = weights.length > 0 ? weights[weights.length - 1].kg : null;
 
@@ -92,9 +100,10 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
       }
     }
 
-    // Auth & social profile satisfied (or auth not configured in this build): enforce baseline onboarding
+    // Auth & social profile satisfied (or auth not configured in this build): enforce
+    // onboarding, and send anyone set up before its newer steps through those, once.
     if (
-      !settings.onboarded &&
+      needsOnboarding({ onboarded: settings.onboarded, completedVersion: settings.onboardingVersion }) &&
       rootSegment !== 'onboard' &&
       rootSegment !== 'profile-setup' &&
       rootSegment !== 'sign-in' &&
@@ -115,10 +124,22 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
     router,
   ]);
 
-  if (!ready) return null;
-  if (configured && session === undefined) return null;
-  if (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment)) {
-    return null;
-  }
-  return <>{children}</>;
+  const hold =
+    !ready ||
+    (configured && session === undefined) ||
+    (configured && session === null && !settings.accountSkipped && !AUTH_PUBLIC_ROUTES.has(rootSegment));
+  if (hold && !shown.current) return null;
+  shown.current = true;
+  // Once the navigator is up it stays up, covered, while the next person's log
+  // loads. Unmounting it, as this used to, makes the router rebuild it from
+  // the bare root URL; with a log per account that happens on every sign-in,
+  // and the Android build then showed "Unmatched Route" for ascend:///.
+  // The opening fade wraps both, so it plays once, the first time the app is
+  // shown, and is not replayed under the cover on a later change of owner.
+  return (
+    <AppArrival background={colors.background}>
+      {children}
+      {hold && <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />}
+    </AppArrival>
+  );
 };

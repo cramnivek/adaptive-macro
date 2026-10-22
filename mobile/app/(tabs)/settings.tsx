@@ -117,7 +117,7 @@ const Section = ({
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, refreshAll, protein, proteinOverrideGPerKg, latest } = useApp();
+  const { settings, updateSettings, refreshAll, retryLoad, protein, proteinOverrideGPerKg, latest } = useApp();
   /** A goal weight and date not yet applied; applying it sets the direction and rate above. */
   const [plan, setPlan] = useState<GoalPlan | null>(null);
   const social = useSocial();
@@ -174,7 +174,7 @@ export default function SettingsScreen() {
       if (how === 'downloaded' || how === 'written') {
         notify(
           'Backup saved',
-          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
             `${counts.sessions} workouts and ${counts.sets} sets.`,
         );
       }
@@ -202,7 +202,7 @@ export default function SettingsScreen() {
         title: 'Replace everything?',
         message:
           `${picked.name} was exported on ${counts.exportedAt.slice(0, 10)} and holds ` +
-          `${counts.weights} weigh-ins, ${counts.entries} diary entries, ` +
+          `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
           `${counts.sessions} workouts and ${counts.sets} sets.\n\n` +
           'Everything currently on this device will be deleted and replaced.',
         confirmLabel: 'Replace',
@@ -211,7 +211,15 @@ export default function SettingsScreen() {
       if (!sure) return;
 
       await restoreBackup(backup);
-      notify('Restored', 'Close and reopen the app to load the restored data.');
+      // The whole load again, settings included: the screens that read the
+      // store kept showing what was there before, so weigh-ins looked lost
+      // while workouts, read straight from the database, had come back.
+      retryLoad();
+      notify(
+        'Restored',
+        `${counts.weights} weigh-ins, ${counts.measurements} body measurements, ${counts.entries} diary entries, ` +
+          `${counts.sessions} workouts and ${counts.sets} sets.`,
+      );
     } catch (error) {
       notify('Restore failed', (error as Error).message);
     }
@@ -424,6 +432,21 @@ export default function SettingsScreen() {
           </Card>
         </Section>
       )}
+
+      <Section title="Check-ins">
+        <Card subtitle="The day your week ends. Your coach reviews the week the day after.">
+          <Segmented<string>
+            label="Week ends on"
+            value={String(settings.checkInWeekEndsOn)}
+            onChange={(day) => void updateSettings({ checkInWeekEndsOn: Number(day) })}
+            options={['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label, day) => ({ value: String(day), label }))}
+          />
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            A week earns a check-in with food logged on 5 days and 3 weigh-ins. Changing the day starts the next week
+            from it; check-ins you already have stay as they were.
+          </Text>
+        </Card>
+      </Section>
 
       <Section title="Units & Training" initiallyOpen>
         <Card title="Units">

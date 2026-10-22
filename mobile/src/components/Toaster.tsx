@@ -100,7 +100,10 @@ export const Toaster = () => {
 const styles = StyleSheet.create({
   // Above the tab bar and clear of the home indicator, so it never covers the
   // control someone is about to press next.
-  wrap: { position: 'absolute', left: space.lg, right: space.lg },
+  // Raised explicitly because the Toaster is mounted before the navigator in
+  // the root layout, and on Android a later sibling draws over an earlier one:
+  // without this every notice, failures included, was hidden behind the screen.
+  wrap: { position: 'absolute', left: space.lg, right: space.lg, zIndex: 1000, elevation: 1000 },
   card: {
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,

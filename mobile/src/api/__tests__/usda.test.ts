@@ -132,4 +132,34 @@ describe('searchUsda', () => {
     expect(microgramsOnly.per100g.micros?.vitaminDIU).toBe(100);
     expect(both.per100g.micros?.vitaminDIU).toBe(300);
   });
+
+  // Foundation Foods, USDA's best-measured data, often state energy only as
+  // Atwater values (2047 general, 2048 specific) and not as 1008. Reading 1008
+  // alone dropped more than half of them, raw chicken breast and every oats,
+  // salmon and potato record among them.
+  it('keeps a food whose energy is stated only as an Atwater value', async () => {
+    vi.stubGlobal('document', {});
+    const food = (fdcId: number, nutrients: { nutrientId: number; value: number }[]) => ({
+      fdcId,
+      description: 'Chicken, breast, boneless, skinless, raw',
+      foodNutrients: [{ nutrientId: 1003, value: 22.5 }, ...nutrients],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({
+          foods: [
+            food(1, [{ nutrientId: 2047, value: 120 }, { nutrientId: 2048, value: 114 }]),
+            food(2, [{ nutrientId: 2048, value: 114 }]),
+            food(3, [{ nutrientId: 1008, value: 106 }, { nutrientId: 2047, value: 120 }]),
+            food(4, []),
+          ],
+        }),
+      ),
+    );
+
+    const foods = await searchUsda('chicken breast', USDA_DEMO_KEY);
+
+    expect(foods.map((f) => f.per100g.kcal)).toEqual([120, 114, 106]);
+  });
 });

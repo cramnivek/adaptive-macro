@@ -67,6 +67,8 @@ describe('customCard persistence & sync', () => {
   it('fetches a card with the viewer’s sign-in and hands back an object URL', async () => {
     const fetchMock = vi.fn(async () => new Response(new Blob(['img'], { type: 'image/jpeg' })));
     vi.stubGlobal('fetch', fetchMock);
+    // The web build: the proxy serves the page, so the path stays relative.
+    vi.stubGlobal('document', {});
     const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:card');
     // An object URL is what a browser gets; the native app has none.
     vi.stubGlobal('document', {});
@@ -77,6 +79,31 @@ describe('customCard persistence & sync', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/card?author=user-456&session=workout-1', {
       headers: { Authorization: 'Bearer jwt-mock' },
     });
+  });
+
+  it('on a phone, asks the proxy by its full address, once, and hands back a data URL', async () => {
+    vi.stubGlobal('document', undefined);
+    base.value = 'https://proxy.example';
+    const fetchMock = vi.fn(async () => new Response(new Blob(['img'], { type: 'image/jpeg' })));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal(
+      'FileReader',
+      class {
+        result: string | null = null;
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        readAsDataURL() {
+          this.result = 'data:image/jpeg;base64,aW1n';
+          this.onload?.();
+        }
+      },
+    );
+
+    expect(await fetchCardImage('workout-1', 'user-456')).toBe('data:image/jpeg;base64,aW1n');
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    // Once: the address went on twice when two fixes for this met in a merge.
+    expect(url).toBe('https://proxy.example/api/card?author=user-456&session=workout-1');
+    base.value = '';
   });
 
   it('shows nothing for a card the server will not serve, or when signed out', async () => {

@@ -19,7 +19,8 @@ export interface WeekTotal {
 }
 
 /**
- * The Monday on or before a date.
+ * The first day of the week holding a date: the day after the person's
+ * check-in day, Monday unless they chose another.
  *
  * `checkInWeekFor` already decides where a week starts for the weekly check-in,
  * and returns last week; the week after its start is this one. Reusing it keeps
@@ -27,7 +28,8 @@ export interface WeekTotal {
  * its arithmetic on the ISO string, so a reader east of Greenwich gets no
  * off-by-one from a local midnight.
  */
-const mondayOf = (date: ISODate): ISODate => addDays(checkInWeekFor(date).start, 7);
+const weekStartOf = (date: ISODate, weekEndsOn: number): ISODate =>
+  addDays(checkInWeekFor(date, weekEndsOn).start, 7);
 
 /**
  * The last `weeks` weeks, oldest first, ending with the week that contains `today`,
@@ -39,8 +41,9 @@ export const weeklyTotals = (
   sets: DatedSet[],
   today: ISODate,
   weeks = 12,
+  weekEndsOn = 0,
 ): WeekTotal[] => {
-  const thisMonday = mondayOf(today);
+  const thisMonday = weekStartOf(today, weekEndsOn);
   const totals = Array.from({ length: weeks }, (_, index): WeekTotal => ({
     weekStart: addDays(thisMonday, -7 * (weeks - 1 - index)),
     minutes: 0,
@@ -50,7 +53,7 @@ export const weeklyTotals = (
   const byWeek = new Map(totals.map((total) => [total.weekStart, total]));
 
   for (const item of sessions) {
-    const week = byWeek.get(mondayOf(item.date));
+    const week = byWeek.get(weekStartOf(item.date, weekEndsOn));
     if (week === undefined) continue;
     // The same rule as a post's duration: whole minutes, never less than one.
     const minutes = Math.round(
@@ -60,7 +63,7 @@ export const weeklyTotals = (
   }
 
   for (const { date, set } of sets) {
-    const week = byWeek.get(mondayOf(date));
+    const week = byWeek.get(weekStartOf(date, weekEndsOn));
     if (week === undefined || !isWorkingSet(set)) continue;
     week.sets += 1;
     // A set with no recorded reps is still a set, but it has no volume to add.

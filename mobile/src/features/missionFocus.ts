@@ -91,7 +91,7 @@ export const SPOTLIGHT_OPTIONS: SpotlightDefinition[] = [
   {
     id: 'nutrition',
     label: 'Food first',
-    description: 'Your targets first, with the training shortcut under them.',
+    description: 'Your targets, then straight into your meals; steps and training come after them.',
   },
 ];
 

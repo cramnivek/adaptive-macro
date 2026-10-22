@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { ease, useReduceMotion } from '../theme/motion';
+import { releaseSplash } from '../platform/splash';
 
 /**
  * The app opening: everything fades up from the background colour and
@@ -16,6 +17,8 @@ export const AppArrival = ({ background, children }: { background: string; child
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // The launch screen was held for this moment; the fade takes over from it.
+    releaseSplash();
     const animation = Animated.timing(progress, { toValue: 1, duration: 420, easing: ease, useNativeDriver: true });
     animation.start();
     return () => animation.stop();

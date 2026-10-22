@@ -38,6 +38,7 @@ import { useApp } from '../state/AppStore';
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Button, TOUCH_TARGET } from './Controls';
+import CardDrawerDom from './CardDrawerDom';
 import { CopyWorkoutSheet } from './CopyWorkoutSheet';
 import { PRMedal } from './PRMedal';
 import { Tappable } from './Tappable';
@@ -170,7 +171,18 @@ export const PostCard = ({
     }
   }, [card, view]);
 
-  const displayCardUrl = customCardUrl || card?.url || null;
+  // A phone has no canvas: the card is drawn by the web code in a webview
+  // (CardDrawerDom) and comes back as a PNG. Null until then; false if the
+  // drawing failed, so the post falls back to the button rather than retrying.
+  const [phoneCardUrl, setPhoneCardUrl] = useState<string | null | false>(null);
+  const displayCardUrl = customCardUrl || card?.url || phoneCardUrl || null;
+  const drawOnPhone = Platform.OS !== 'web' && viewMode === 'card' && !displayCardUrl && phoneCardUrl === null;
+  // The drawer stays mounted after it has drawn, for as long as its card is
+  // the one shown. Unmounting it the moment the PNG arrived took the webview
+  // away before it heard back that the PNG was received ("Java object is gone").
+  const keepDrawer =
+    Platform.OS !== 'web' && viewMode === 'card' && !customCardUrl && !card && phoneCardUrl !== false;
+  const phoneSummary = useMemo(() => (keepDrawer ? postViewToShareCard(view) : null), [keepDrawer, view]);
 
   useEffect(() => {
     if (viewMode === 'card' && !displayCardUrl && !drawing) {
@@ -487,6 +499,13 @@ export const PostCard = ({
       ) : (
         /* Visual Story Card Mode */
         <View style={styles.cardPreviewContainer}>
+          {phoneSummary && (
+            <CardDrawerDom
+              summary={phoneSummary}
+              onDrawn={async (url) => setPhoneCardUrl(url ?? false)}
+              dom={{ style: { width: 1, height: 1, opacity: 0 }, scrollEnabled: false }}
+            />
+          )}
           {displayCardUrl ? (
             <Tappable
               onPress={handleOpenModal}
@@ -513,7 +532,7 @@ export const PostCard = ({
                 </View>
               </View>
             </Tappable>
-          ) : drawing ? (
+          ) : drawing || drawOnPhone ? (
             <View style={[styles.cardLoadingFrame, { backgroundColor: loud.panel, borderColor: loud.rule }]}>
               <ActivityIndicator color={colors.accent} size="small" />
               <Text style={[styles.cardLoadingText, { color: colors.textMuted }]}>
@@ -522,7 +541,10 @@ export const PostCard = ({
             </View>
           ) : (
             <View style={[styles.cardLoadingFrame, { backgroundColor: loud.panel, borderColor: loud.rule }]}>
-              <Button label="Render Story Card" onPress={() => void generateCard()} />
+              <Button
+                label="Render Story Card"
+                onPress={() => (Platform.OS === 'web' ? void generateCard() : setPhoneCardUrl(null))}
+              />
             </View>
           )}
         </View>

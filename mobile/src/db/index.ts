@@ -14,6 +14,7 @@ import type {
 import { addDays, estimate1RM } from '@adaptive-macros/engine';
 import * as SQLite from 'expo-sqlite';
 import { MIGRATIONS } from './schema';
+import { rowsToRestore } from './backupRows';
 import { normalisePattern, type EnrichedExercise, type MovementPattern } from '../ai/exercises';
 import { normaliseRegion, type MuscleRegion } from '../components/muscleMap';
 import {
@@ -51,6 +52,29 @@ import {
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
+ * The file of whoever is using the app, or null until that is known.
+ *
+ * Nothing opens a database before this is set, so no call can read one
+ * person's log on behalf of another — see `accountDatabase.ts`. A call made
+ * before then waits rather than failing, since several effects reach for the
+ * database while the session is still being read from storage.
+ */
+let selectedDatabase: string | null = null;
+let waitingForSelection: (() => void)[] = [];
+
+/** Points every later call at another owner's file, closing the one open. */
+export const selectDatabase = async (name: string): Promise<void> => {
+  if (name === selectedDatabase) return;
+  const previous = databasePromise;
+  databasePromise = null;
+  selectedDatabase = name;
+  await previous?.then((db) => db.closeAsync()).catch(() => undefined);
+  const waiting = waitingForSelection;
+  waitingForSelection = [];
+  for (const resume of waiting) resume();
+};
+
+/**
  * Opens the database once and brings it up to the latest schema version.
  *
  * Migrations run inside a transaction keyed on PRAGMA user_version, so a
@@ -58,13 +82,17 @@ let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
  * pointing at a schema it cannot read.
  */
 export const getDb = (): Promise<SQLite.SQLiteDatabase> => {
+  if (selectedDatabase === null) {
+    return new Promise<void>((resume) => waitingForSelection.push(resume)).then(getDb);
+  }
   if (!databasePromise) {
     // Cleared on failure so a later call can retry rather than being stuck
     // with a rejected promise for the life of the session.
-    databasePromise = openAndMigrate().catch((error) => {
-      databasePromise = null;
+    const opening = openAndMigrate(selectedDatabase).catch((error) => {
+      if (databasePromise === opening) databasePromise = null;
       throw error;
     });
+    databasePromise = opening;
   }
   return databasePromise;
 };
@@ -94,11 +122,11 @@ const migrate = async (db: SQLite.SQLiteDatabase): Promise<void> => {
  * so a retry never stacks a second handle on the first. Migrations are safe to
  * repeat: each runs in its own transaction, so a failed one rolled back.
  */
-const openAndMigrate = async (): Promise<SQLite.SQLiteDatabase> => {
+const openAndMigrate = async (name: string): Promise<SQLite.SQLiteDatabase> => {
   for (let attempt = 0; ; attempt += 1) {
     let db: SQLite.SQLiteDatabase | null = null;
     try {
-      db = await SQLite.openDatabaseAsync('adaptive-macros.db');
+      db = await SQLite.openDatabaseAsync(name);
       await migrate(db);
       return db;
     } catch (error) {
@@ -585,6 +613,8 @@ export interface Backup {
   sessions?: Record<string, unknown>[];
   sets?: Record<string, unknown>[];
   dayStatus?: Record<string, unknown>[];
+  bodyMeasurements?: Record<string, unknown>[];
+  dailySteps?: Record<string, unknown>[];
 }
 
 /**
@@ -598,7 +628,7 @@ export const exportBackup = async (): Promise<Backup> => {
     version: 2,
     exportedAt: new Date().toISOString(),
     settings: await db.getAllAsync('SELECT key, value FROM settings'),
-    weights: await db.getAllAsync('SELECT date, kg FROM weights'),
+    weights: await db.getAllAsync('SELECT * FROM weights'),
     foods: await db.getAllAsync('SELECT * FROM foods'),
     entries: await db.getAllAsync('SELECT * FROM log_entries'),
     exerciseCatalogue: await db.getAllAsync('SELECT * FROM exercise_catalogue'),
@@ -608,6 +638,8 @@ export const exportBackup = async (): Promise<Backup> => {
     sessions: await db.getAllAsync('SELECT * FROM sessions'),
     sets: await db.getAllAsync('SELECT * FROM sets'),
     dayStatus: await db.getAllAsync('SELECT * FROM day_status'),
+    bodyMeasurements: await db.getAllAsync('SELECT * FROM body_measurements'),
+    dailySteps: await db.getAllAsync('SELECT * FROM daily_steps'),
   };
 };
 
@@ -621,6 +653,7 @@ export const describeBackup = (backup: Backup) => ({
   sessions: backup.sessions?.length ?? 0,
   sets: backup.sets?.length ?? 0,
   routines: backup.routines?.length ?? 0,
+  measurements: backup.bodyMeasurements?.length ?? 0,
 });
 
 const isBackup = (value: unknown): value is Backup => {
@@ -694,21 +727,15 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       'weights',
       'settings',
       'day_status',
+      'body_measurements',
+      'daily_steps',
     ]) {
       await db.runAsync(`DELETE FROM ${table}`);
     }
 
-    await insertRows(db, 'settings', backup.settings as Record<string, unknown>[]);
-    await insertRows(db, 'weights', backup.weights as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'foods', backup.foods as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'log_entries', backup.entries as unknown as Record<string, unknown>[]);
-    await insertRows(db, 'exercise_catalogue', backup.exerciseCatalogue);
-    await insertRows(db, 'exercises', backup.exercises);
-    await insertRows(db, 'routines', backup.routines);
-    await insertRows(db, 'routine_exercises', backup.routineExercises);
-    await insertRows(db, 'sessions', backup.sessions);
-    await insertRows(db, 'sets', backup.sets);
-    await insertRows(db, 'day_status', backup.dayStatus);
+    for (const [table, rows] of rowsToRestore(backup)) {
+      await insertRows(db, table, rows);
+    }
   });
 };
 

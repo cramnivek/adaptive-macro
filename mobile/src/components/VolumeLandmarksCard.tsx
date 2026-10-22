@@ -582,9 +582,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
     marginBottom: 4,
   },
   balanceTitle: {
+    // Wraps instead of pushing the badge off the card: on a phone-width
+    // Android screen the longer title and the badge do not fit on one line.
+    flexShrink: 1,
     fontFamily: font.display,
     fontSize: 10,
     letterSpacing: 1.1,

@@ -54,6 +54,9 @@ export default function PrivacyPolicyScreen() {
             Your entire historical log—including meals, macros, daily weight readings, body circumferences, custom routines, exercise history, and personal preferences—is stored locally in an embedded SQLite database on your device (or in your browser's private local storage on web).
           </Text>
           <Text style={[styles.paragraph, { color: colors.textMuted }]}>
+            On Android, if you connect Health Connect, Ascend reads your steps and scale weigh-ins from it (including data shared there by apps such as Garmin Connect) and saves them into this same on-device log. It only reads: nothing is written to Health Connect, and nothing read from it is sent to us or anyone else. You can revoke access at any time in Android's Health Connect settings.
+          </Text>
+          <Text style={[styles.paragraph, { color: colors.textMuted }]}>
             We have no access to this database. You can export a full JSON backup of your data at any time from Settings → Your Data. Clearing app data or browser cache without a backup will erase this information.
           </Text>
         </View>
