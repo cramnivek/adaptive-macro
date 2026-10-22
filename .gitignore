@@ -22,3 +22,7 @@ glyphs.html
 
 # The subagent workspace: briefs, reports, review packages and the ledger.
 .superpowers/
+
+# Local Codex connections and attached files are not application build inputs.
+.codex/
+.codex-remote-attachments/

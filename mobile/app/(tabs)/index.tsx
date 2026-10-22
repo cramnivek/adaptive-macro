@@ -28,6 +28,8 @@ import { font, radius, space, useTheme } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 import { StepLogModal } from '../../src/components/StepLogModal';
+import { WeightContextCard } from '../../src/components/WeightContextCard';
+import { SleepSummaryCard } from '../../src/components/SleepSummaryCard';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -88,38 +90,14 @@ export default function TodayScreen() {
   const renderMealActions = (meal: Meal, style?: ViewStyle) => (
     <View style={[styles.mealActions, style]}>
       <Tappable
-        onPress={() =>
-          router.push({ pathname: '/describe', params: { meal, capture: 'camera' } })
-        }
-        scaleTo={0.9}
-        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-        accessibilityLabel={`Photograph something to add to ${MEAL_LABELS[meal]}`}
+        onPress={() => router.push({ pathname: '/log-meal', params: { meal } })}
+        scaleTo={0.97}
+        style={[styles.logMealButton, { backgroundColor: colors.accent }]}
+        accessibilityLabel={`Log a meal for ${MEAL_LABELS[meal]}`}
+        accessibilityRole="button"
       >
-        <Ionicons name="camera-outline" size={18} color={colors.text} />
-      </Tappable>
-      <Tappable
-        onPress={() => router.push({ pathname: '/describe', params: { meal } })}
-        scaleTo={0.9}
-        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-        accessibilityLabel={`Describe something to add to ${MEAL_LABELS[meal]}`}
-      >
-        <Ionicons name="sparkles-outline" size={18} color={colors.text} />
-      </Tappable>
-      <Tappable
-        onPress={() => router.push({ pathname: '/scan', params: { meal } })}
-        scaleTo={0.9}
-        style={[styles.iconButton, { backgroundColor: colors.surfaceRaised }]}
-        accessibilityLabel={`Scan a barcode to add to ${MEAL_LABELS[meal]}`}
-      >
-        <Ionicons name="barcode-outline" size={18} color={colors.text} />
-      </Tappable>
-      <Tappable
-        onPress={() => router.push({ pathname: '/search', params: { meal } })}
-        scaleTo={0.9}
-        style={[styles.iconButton, { backgroundColor: colors.accent }]}
-        accessibilityLabel={`Search for a food to add to ${MEAL_LABELS[meal]}`}
-      >
-        <Ionicons name="add" size={18} color={colors.onFill} />
+        <Ionicons name="sparkles-outline" size={16} color={colors.onFill} />
+        <Text style={[styles.logMealLabel, { color: colors.onFill }]}>Log a meal</Text>
       </Tappable>
     </View>
   );
@@ -494,6 +472,8 @@ export default function TodayScreen() {
       {/* Food first: the diary comes straight after the targets, and the rest follows it. */}
       {spotlight === 'nutrition' && activityCards}
       {spotlight === 'nutrition' && trainingShortcut}
+      <WeightContextCard />
+      <SleepSummaryCard />
       <EditEntrySheet
         entry={editing}
         onCancel={() => setEditing(null)}
@@ -652,15 +632,16 @@ const styles = StyleSheet.create({
   completenessText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   mealActions: { flexDirection: 'row', gap: space.sm },
   mealActionsNarrow: { flexDirection: 'row', gap: space.sm, marginTop: space.xs, marginBottom: space.sm },
-  // Thumb-sized. These sat at 30 px, which is below the ~44 px that a thumb
-  // hits reliably, and they are two adjacent targets on one row.
-  iconButton: {
-    width: TOUCH_TARGET,
-    height: TOUCH_TARGET,
+  logMealButton: {
+    minHeight: TOUCH_TARGET,
+    paddingHorizontal: space.md,
+    flexDirection: 'row',
+    gap: space.sm,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logMealLabel: { fontFamily: font.uiStrong, fontSize: 13 },
   entry: {
     flexDirection: 'row',
     alignItems: 'center',

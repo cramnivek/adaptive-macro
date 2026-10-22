@@ -28,7 +28,8 @@ and backups without this optional metadata remain valid. No new model or API cal
 Extend the existing read-only Android integration with optional SleepSession
 permission. Refusing sleep must not break steps or weight. Show a recent nightly
 summary and seven-day view in the diary, with source and missing nights explicit.
-Read and store locally per account. Handle midnight, timezone offsets, duplicate
+Read the recent 30 days of sleep and store locally per account. Bind the sleep
+write to the database selected before native reads begin. Handle midnight, timezone offsets, duplicate
 records, overlapping records, repeat sync, and sessions with missing stages.
 Do not label a session's whole time in bed as measured sleep when stages are
 missing. Preserve sleep through backup/restore and clear it with account-local

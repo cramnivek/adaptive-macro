@@ -200,6 +200,7 @@ export const clearAllData = async (): Promise<void> => {
     await db.runAsync('DELETE FROM log_entries');
     await db.runAsync('DELETE FROM weights');
     await db.runAsync('DELETE FROM foods');
+    await db.runAsync('DELETE FROM sleep_sessions');
   });
   // Nothing is left for a demo clear to undo.
   await writeSetting(SEEDED_DATES_KEY, []);

@@ -98,7 +98,7 @@ describe('describeSync', () => {
 
   it('tells an empty Health Connect from a failed sync', () => {
     const text = describeSync({ ...base, found: { stepDays: 0, weighIns: 0, sources: [], firstDay: null } });
-    expect(text.title).toBe('Health Connect has no steps or weigh-ins yet');
+    expect(text.title).toBe('Health Connect has no records yet');
   });
 
   it('says when everything found was already in the log', () => {

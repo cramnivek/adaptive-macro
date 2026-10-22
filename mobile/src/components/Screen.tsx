@@ -22,6 +22,8 @@ interface ScreenProps {
   tone?: 'loud';
   /** Drawn at the right of the title, e.g. a settings gear. */
   action?: React.ReactNode;
+  /** Native stack headers already reserve the top safe area. */
+  topInset?: boolean;
 }
 
 /**
@@ -31,7 +33,7 @@ interface ScreenProps {
  * card clears the home indicator on a notched phone and is not left under the
  * tab bar on a flat one — measured, not a fixed guess.
  */
-export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action }: ScreenProps) => {
+export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action, topInset = true }: ScreenProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   // Room for the floating workout bar, when this is a tab and the bar is up.
@@ -70,7 +72,7 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
         style={{ backgroundColor: ground }}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxl + barInset },
+          { paddingTop: (topInset ? insets.top : 0) + space.md, paddingBottom: insets.bottom + space.xxl + barInset },
         ]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -108,7 +110,7 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
       {/* Android draws the app under a transparent status bar, so content
           scrolled up ran beneath the clock and icons. A strip of the page's own
           ground there keeps it readable; where the inset is zero it is nothing. */}
-      <View pointerEvents="none" style={[styles.statusStrip, { height: insets.top, backgroundColor: ground }]} />
+      <View pointerEvents="none" style={[styles.statusStrip, { height: topInset ? insets.top : 0, backgroundColor: ground }]} />
     </View>
   );
 };

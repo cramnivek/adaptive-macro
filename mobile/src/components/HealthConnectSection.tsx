@@ -58,7 +58,7 @@ export const HealthConnectSection = () => {
         setBusy(false);
         await sync();
       } else {
-        notify('Not connected', 'Health Connect did not grant access to steps or weight.');
+        notify('Not connected', 'Health Connect did not grant access to steps, weight or sleep.');
       }
     } catch (error) {
       notify('Could not connect', (error as Error).message);
@@ -78,10 +78,10 @@ export const HealthConnectSection = () => {
     <View style={styles.wrap}>
       <Text style={[styles.note, { color: colors.textMuted }]}>
         {state === 'connected'
-          ? 'Reading steps and weigh-ins from Health Connect, where Garmin Connect and other apps share theirs. Syncs by itself when the app opens and every 15 minutes while it is open. Weigh-ins you entered yourself are never replaced.'
+          ? 'Reads the steps, weigh-ins and optional sleep you allow from Health Connect, where Garmin Connect and other apps share theirs. Syncs when the app opens and every 15 minutes while open. Weigh-ins entered yourself are never replaced. Sleep stays on this phone and appears on Today; it does not change your calorie target.'
           : state === 'needs-update'
             ? 'Health Connect needs an update from the Play Store before Ascend can read from it.'
-            : 'Bring in steps and weigh-ins from Health Connect, where Garmin Connect and other apps share theirs. Read only; it stays on this phone.'}
+            : 'Bring in steps, weigh-ins and optional sleep from Health Connect, where Garmin Connect and other apps share theirs. You choose each permission; steps and weight still work without sleep. Read only; it stays on this phone.'}
       </Text>
       {state === 'needs-update' ? (
         <Button
@@ -90,7 +90,10 @@ export const HealthConnectSection = () => {
           onPress={() => void Linking.openURL('market://details?id=com.google.android.apps.healthdata')}
         />
       ) : state === 'connected' ? (
-        <Button label={busy ? 'Syncing…' : 'Sync now'} onPress={() => void sync()} disabled={busy} />
+        <View style={{ gap: space.sm }}>
+          <Button label={busy ? 'Syncing…' : 'Sync now'} onPress={() => void sync()} disabled={busy} />
+          <Button label="Review permissions / add sleep" variant="subtle" onPress={() => void connect()} disabled={busy} />
+        </View>
       ) : (
         <Button label={busy ? 'Connecting…' : 'Connect Health Connect'} onPress={() => void connect()} disabled={busy} />
       )}

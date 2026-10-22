@@ -76,12 +76,14 @@ export interface HealthConnectSyncResult {
   weighIns: number;
   /** Weigh-ins found but left alone, because the day already had one. */
   weighInsKept: number;
+  /** Nights refreshed from source sessions; absent in older sync summaries. */
+  sleepNights?: number;
   /**
    * What Health Connect held, before anything was kept or skipped, and which
    * apps wrote it. A sync that saved nothing reads the same whether Health
    * Connect was empty or everything in it was already logged; these say which.
    */
-  found: { stepDays: number; weighIns: number; sources: string[]; firstDay: string | null };
+  found: { stepDays: number; weighIns: number; sleepNights?: number; sources: string[]; firstDay: string | null };
 }
 
 /**
@@ -91,19 +93,20 @@ export interface HealthConnectSyncResult {
  */
 export const describeSync = (result: HealthConnectSyncResult): { title: string; message: string } => {
   const { found } = result;
-  if (found.stepDays === 0 && found.weighIns === 0) {
+  if (found.stepDays === 0 && found.weighIns === 0 && !(found.sleepNights ?? 0)) {
     // Nothing to read is not a failed sync. The usual cause is outside this
     // app: the source app is not sharing into Health Connect yet.
     return {
-      title: 'Health Connect has no steps or weigh-ins yet',
+      title: 'Health Connect has no records yet',
       message:
-        'Check that Garmin Connect (or your other app) shares steps and weight with Health Connect in its own settings, then sync again.',
+        'Check that Garmin Connect (or your other app) shares steps, weight and sleep with Health Connect in its own settings, then sync again.',
     };
   }
   const from = found.sources.length > 0 ? ` from ${found.sources.join(', ')}` : '';
   const since = found.firstDay ? ` back to ${found.firstDay}` : '';
   const kept = result.weighInsKept > 0 ? ` ${result.weighInsKept} days already had a weigh-in and kept it.` : '';
-  if (result.stepDays === 0 && result.weighIns === 0) {
+  const sleep = result.sleepNights ? ` Refreshed ${result.sleepNights} nights of sleep; see Sleep on Today.` : '';
+  if (result.stepDays === 0 && result.weighIns === 0 && !result.sleepNights) {
     return {
       title: 'Already up to date',
       message: `Found ${found.weighIns} weigh-ins and ${found.stepDays} days of steps${from}, all already in your log.${kept}`,
@@ -114,6 +117,6 @@ export const describeSync = (result: HealthConnectSyncResult): { title: string; 
     message:
       `Found ${found.weighIns} weigh-ins and ${found.stepDays} days of steps${from}${since}. ` +
       `Added ${result.weighIns} weigh-ins and ${result.stepDays} days of steps.${kept} ` +
-      'Steps are on Trends and Today; weigh-ins on the Weight tab.',
+      'Steps are on Trends and Today; weigh-ins on the Weight tab.' + sleep,
   };
 };
