@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { chimeWav, finishSamples, prStingSamples, tickSamples, wavFromSamples } from './chimeSound';
 import type { ChimeChoice } from './chimeSound';
+import { playNativeSound } from './nativeSound';
 
 /**
  * The rest-is-up chime, on the web build.
@@ -12,8 +13,8 @@ import type { ChimeChoice } from './chimeSound';
  * iOS mutes Web Audio with the ring/silent switch, and a chime that a switch
  * nobody remembers flipping turns off is the bug this is meant to fix.
  *
- * Native builds have real haptics and no use for this yet; it does nothing
- * there.
+ * A phone build has no tap rule to work around: there the sounds play through
+ * expo-audio, from nativeSound.ts, and priming does nothing.
  */
 
 const audioCache = new Map<ChimeChoice, HTMLAudioElement>();
@@ -172,6 +173,10 @@ export const primeChime = (choice: ChimeChoice = 'chime'): void => {
 
 /** Plays the chime, if a tap has primed it. Quietly nothing if the browser still says no. */
 export const playChime = (choice: ChimeChoice = 'chime'): void => {
+  if (Platform.OS !== 'web') {
+    playNativeSound(`chime-${choice}`, () => chimeWav(choice));
+    return;
+  }
   // Invalidate any in-flight prime pause callback
   primingToken++;
 
@@ -272,6 +277,10 @@ export const primeEffect = (effect: SoundEffect): void => {
 
 /** Plays the effect if the browser allows it; silently nothing if not. */
 export const playEffect = (effect: SoundEffect): void => {
+  if (Platform.OS !== 'web') {
+    playNativeSound(`effect-${effect}`, () => wavFromSamples(EFFECT_SAMPLES[effect]()));
+    return;
+  }
   const a = effectAudio(effect);
   if (a === null) return;
   try {

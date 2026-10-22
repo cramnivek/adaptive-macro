@@ -6,6 +6,7 @@ import { pushBaselineToCloud, readBaselineFromSession } from '../social/baseline
 import { useSocial } from '../social/session';
 import { useApp } from '../state/AppStore';
 import { useTheme } from '../theme';
+import { AppArrival } from './AppArrival';
 
 /**
  * Keeps the app behind a one-time sign-in, social profile setup, and baseline onboarding.
@@ -131,10 +132,12 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   // loads. Unmounting it, as this used to, makes the router rebuild it from
   // the bare root URL; with a log per account that happens on every sign-in,
   // and the Android build then showed "Unmatched Route" for ascend:///.
+  // The opening fade wraps both, so it plays once, the first time the app is
+  // shown, and is not replayed under the cover on a later change of owner.
   return (
-    <>
+    <AppArrival background={colors.background}>
       {children}
       {hold && <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />}
-    </>
+    </AppArrival>
   );
 };

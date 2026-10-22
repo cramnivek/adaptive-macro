@@ -7,6 +7,7 @@ import { Button } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
 import { UserAvatar } from '../src/components/UserAvatar';
 import { StepLogModal } from '../src/components/StepLogModal';
+import { HealthConnectSection } from '../src/components/HealthConnectSection';
 import { confirm, notify } from '../src/dialog';
 import { deleteAccount, signOut } from '../src/social/api';
 import { removeAllCardImages } from '../src/social/customCard';
@@ -169,6 +170,7 @@ export default function AccountScreen() {
             </Text>
           </View>
         </View>
+        <HealthConnectSection />
         <Button
           label="Sync Steps & Health Data"
           variant="subtle"

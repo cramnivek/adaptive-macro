@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { isAlreadyPosted, messageFor, OFFLINE, type ServerError } from './errors';
 import type { PostRow } from './postPayload';
-import type { ProfileFields } from './profileRules';
+import { missingOnServer, type ProfileFields } from './profileRules';
 import type { Post, Profile } from './types';
 
 /**
@@ -137,6 +137,14 @@ export const myProfile = async (): Promise<Profile | null> => {
   if (!error) {
     if (!data) return null;
     const profile = data as Profile;
+    const unsent = missingOnServer(profile, cachedExtra);
+    if (unsent !== null) {
+      // Best-effort and not awaited: the profile on screen is the same either
+      // way, and the next load tries again if this one does not land.
+      void (async () => {
+        await client().from('profiles').update(unsent).eq('id', id);
+      })().catch(() => undefined);
+    }
     const merged: Profile = {
       ...profile,
       avatar_url: profile.avatar_url ?? cachedExtra?.avatar_url ?? null,
@@ -181,8 +189,10 @@ export const saveProfile = async (fields: ProfileFields & { is_private: boolean 
     training_focus: fields.training_focus ?? null,
     pr_highlight: fields.pr_highlight ?? null,
   };
-  await setCachedProfileExtra(id, extra);
 
+  // Cached only once the server has the profile, or cannot hold these fields.
+  // Caching first let a failed save look like a saved one on this device, while
+  // every other device showed initials: the avatar never reached the server.
   try {
     const { data, error } = await client()
       .from('profiles')
@@ -191,6 +201,7 @@ export const saveProfile = async (fields: ProfileFields & { is_private: boolean 
       .single();
 
     if (!error && data) {
+      await setCachedProfileExtra(id, extra);
       return data as Profile;
     }
 
@@ -218,6 +229,7 @@ export const saveProfile = async (fields: ProfileFields & { is_private: boolean 
     .single();
 
   if (baseError) fail(baseError);
+  await setCachedProfileExtra(id, extra);
 
   return {
     ...(baseData as Profile),

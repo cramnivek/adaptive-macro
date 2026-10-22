@@ -1,7 +1,7 @@
 import type { ISODate, LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Card } from '../../src/components/Card';
@@ -19,6 +19,7 @@ import { NutritionQualityCard } from '../../src/components/NutritionQualityCard'
 import { Screen } from '../../src/components/Screen';
 import { shouldAskAbout } from '../../src/dayStatus';
 import { getDailySteps, lastMealsBefore, type DailyStepRecord, type RecentMeal } from '../../src/db';
+import { onHealthConnectSynced } from '../../src/health/healthConnect';
 import { sameAsLabel } from '../../src/mealRepeat';
 import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
@@ -73,6 +74,16 @@ export default function TodayScreen() {
   useEffect(() => {
     void loadSteps();
   }, [loadSteps]);
+
+  // A tab stays mounted, so steps that arrived while it was out of view
+  // waited for the date to change. Read again on returning to it, and the
+  // moment a Health Connect sync lands.
+  useFocusEffect(
+    useCallback(() => {
+      void loadSteps();
+    }, [loadSteps]),
+  );
+  useEffect(() => onHealthConnectSynced(() => void loadSteps()), [loadSteps]);
 
   const renderMealActions = (meal: Meal, style?: ViewStyle) => (
     <View style={[styles.mealActions, style]}>

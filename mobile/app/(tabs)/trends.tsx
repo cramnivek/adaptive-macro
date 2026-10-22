@@ -1159,6 +1159,7 @@ export default function TrendsScreen() {
                 today={today}
                 byDate={stepsByDate}
                 goal={10000}
+                span={timeframe}
                 onPressDay={(date) => {
                   thud('light');
                   setStepDate(date);
