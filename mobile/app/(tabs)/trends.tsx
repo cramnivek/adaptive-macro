@@ -283,7 +283,10 @@ export default function TrendsScreen() {
     [sets, regions, timeframeFrom, today, windowDays],
   );
 
-  const weeks = useMemo(() => weeklyTotals(sessionTimes, sets, today), [sessionTimes, sets, today]);
+  const weeks = useMemo(
+    () => weeklyTotals(sessionTimes, sets, today, 12, settings.checkInWeekEndsOn),
+    [sessionTimes, sets, today, settings.checkInWeekEndsOn],
+  );
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
 
   // Volume-weighted muscle coverage: weights regions by actual completed working sets in the selected timeframe
