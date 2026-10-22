@@ -21,6 +21,7 @@ business and privacy rules remain in AGENTS.md; visual owners are in DESIGN.md.
 | Weekly perspective | `WeightContextCard.tsx`, Weight tab | Always show the recorded seven-day average and coverage. Missing days are excluded; week-to-week change needs three readings per week. Explain sodium gaps instead of hiding the card. |
 | Sleep permission review | `HealthConnectSection.tsx` | Request SleepSession specifically; do not treat an existing steps grant as success. Show permission state and settings access; refresh on return from Android settings. |
 | Transparent stickers | `TransparentStickerModal.tsx`, `StickerDrawerDom.tsx`, `shareImage.ts` | Android draws in Expo DOM and shares a cache PNG with alpha. Web retains clipboard/export. Ignore stale renders and surface failures; destination app controls import. |
+| Active workout overlay | `FloatingWorkoutBar.tsx`, tab layout | Measure the real tab bar including its inset. The distinct 44-point handle moves vertically within the safe frame, without resuming; accessible increment/decrement moves it too. Keep position across tabs and reset for a new session. |
 
 No model call is needed to open the chooser, repeat a meal, import sleep, or
 compare sodium with weight. An AI estimate is an editable draft and is only saved

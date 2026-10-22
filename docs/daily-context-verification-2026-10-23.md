@@ -76,3 +76,23 @@ does not diagnose causation, measure fat change, or modify engine targets.
   Health Connect settings and refreshes permissions after returning to the app.
   The READ_SLEEP development build is still IN_QUEUE, with no APK available.
   Metro can serve these JavaScript changes but cannot add manifest permissions.
+
+## Movable workout overlay
+
+- Replaced platform bottom constants with the measured Expo tab bar height.
+  A separate 44-point handle moves vertically, bounded above the tab bar and
+  below the top safe area. Position persists across tabs and resets by session.
+- Four bounds tests cover Android tab insets, both drag limits, resize and an
+  oversized overlay. Full tests pass: 252 engine + 1,344 mobile + 155 proxy =
+  **1,751**. All workspace types and Android/web exports pass.
+- Browser verification used a synthetic local workout. At 360 px, dragging
+  moved the bar without navigating, a Weight tab click still worked, the moved
+  position persisted, and dragging down stopped above the tabs. At 320 px, the
+  resting overlay retained readable countdown and 44-point controls; +30s and
+  Skip both worked. Resume still opened the workout. Screenshot artifacts are
+  ignored `.superpowers/workout-overlay-moved.png` and
+  `.superpowers/workout-overlay-rest-320.png`.
+- Review identified narrow rest controls crowding the timer; compact rest-mode
+  Resume and removal of its decorative pulse addressed it. Re-review found no
+  remaining important issues. Actual Android gesture feel remains a device
+  check. No new native dependency or build is needed for this overlay change.

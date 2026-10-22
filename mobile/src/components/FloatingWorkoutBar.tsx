@@ -1,7 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { createContext, useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { createContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { clampWorkoutBarOffset, workoutBarBounds } from '../floatingWorkoutPosition';
 import { thud } from '../platform/haptics';
 import {
   adjustRestCountdown,
@@ -22,11 +24,38 @@ import { Tappable } from './Tappable';
  */
 export const FloatingBarInset = createContext(0);
 
-export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) => void }) => {
+export const FloatingWorkoutBar = ({ onHeight, tabHeight, frameHeight }: {
+  onHeight?: (points: number) => void;
+  tabHeight: number;
+  frameHeight: number;
+}) => {
   const router = useRouter();
   const { colors } = useTheme();
   const [workoutState, setWorkoutState] = useState<ActiveWorkoutState | null>(null);
   const [now, setNow] = useState(Date.now());
+  const insets = useSafeAreaInsets();
+  const [barHeight, setBarHeight] = useState(0);
+  const translateY = useRef(new Animated.Value(0)).current;
+  const offset = useRef(0);
+  const dragStart = useRef(0);
+  const bounds = workoutBarBounds(frameHeight, tabHeight, barHeight, insets.top, space.sm);
+  const minOffset = useRef(bounds.minOffset);
+  minOffset.current = bounds.minOffset;
+  const moveTo = (next: number) => {
+    offset.current = clampWorkoutBarOffset(next, minOffset.current);
+    translateY.setValue(offset.current);
+  };
+  // A separate handle prevents dragging from activating Resume or the rest controls.
+  // Refs and a transform keep React out of the per-frame gesture path.
+  const drag = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { dragStart.current = offset.current; },
+    onPanResponderMove: (_, gesture) => moveTo(dragStart.current + gesture.dy),
+  }), []);
+
+  useEffect(() => { moveTo(offset.current); }, [bounds.minOffset]);
+  useEffect(() => { moveTo(0); }, [workoutState?.sessionId]);
 
   useEffect(() => {
     void syncActiveSessionFromDb();
@@ -89,13 +118,15 @@ export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) =
   const isRestDone = restRemaining === 0;
 
   return (
-    <View
-      style={styles.wrapper}
+    <Animated.View
+      style={[styles.wrapper, { bottom: bounds.bottom, opacity: tabHeight > 0 ? 1 : 0, transform: [{ translateY }] }]}
       // The bar's own height plus the gap it keeps above the tab bar's edge.
-      onLayout={(e) => onHeight?.(e.nativeEvent.layout.height + space.sm)}
+      onLayout={(e) => {
+        setBarHeight(e.nativeEvent.layout.height);
+        onHeight?.(e.nativeEvent.layout.height + space.sm);
+      }}
     >
-      <Pressable
-        onPress={handleResume}
+      <View
         style={[
           styles.container,
           {
@@ -103,19 +134,29 @@ export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) =
             borderColor: isResting ? colors.accent : loud.loud,
           },
         ]}
-        accessibilityRole="button"
-        accessibilityLabel="Active workout bar, tap to resume"
       >
+        <View
+          {...drag.panHandlers}
+          style={styles.dragHandle}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Move workout overlay"
+          accessibilityHint="Drag up or down. Increase moves up; decrease moves down."
+          accessibilityActions={[{ name: 'increment', label: 'Move up' }, { name: 'decrement', label: 'Move down' }]}
+          onAccessibilityAction={(event) => moveTo(offset.current + (event.nativeEvent.actionName === 'increment' ? -60 : 60))}
+        >
+          <Ionicons name="reorder-two-outline" size={24} color={loud.figureMuted} />
+        </View>
         {/* Left side: Live indicator and Workout / Rest metadata */}
-        <View style={styles.left}>
-          <View style={[styles.pulseCircle, { backgroundColor: isResting ? colors.accent + '25' : loud.loud + '25' }]}>
+        <Pressable style={styles.left} onPress={handleResume} accessibilityRole="button" accessibilityLabel="Active workout bar, tap to resume">
+          {!isResting && <View style={[styles.pulseCircle, { backgroundColor: loud.loud + '25' }]}>
             <View
               style={[
                 styles.pulseDot,
                 { backgroundColor: isRestDone ? colors.positive : isResting ? colors.accent : loud.loud },
               ]}
             />
-          </View>
+          </View>}
 
           <View style={styles.metaWrap}>
             <View style={styles.topRow}>
@@ -143,7 +184,7 @@ export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) =
               )}
             </View>
           </View>
-        </View>
+        </Pressable>
 
         {/* Right side: Quick actions or Resume button */}
         <View style={styles.actions}>
@@ -170,16 +211,16 @@ export const FloatingWorkoutBar = ({ onHeight }: { onHeight?: (points: number) =
 
           <Tappable
             onPress={handleResume}
-            style={[styles.resumeBtn, { backgroundColor: loud.loud }]}
+            style={[styles.resumeBtn, isResting && styles.compactResume, { backgroundColor: loud.loud }]}
             scaleTo={0.94}
             accessibilityLabel="Resume workout"
           >
             <Ionicons name="play" size={13} color={loud.onLoud} />
-            <Text style={[styles.resumeText, { color: loud.onLoud }]}>RESUME</Text>
+            {!isResting && <Text style={[styles.resumeText, { color: loud.onLoud }]}>RESUME</Text>}
           </Tappable>
         </View>
-      </Pressable>
-    </View>
+      </View>
+    </Animated.View>
   );
 };
 
@@ -188,15 +229,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: space.sm,
     right: space.sm,
-    bottom: Platform.OS === 'web' ? 58 : 54,
     zIndex: 999,
+  },
+  dragHandle: {
+    width: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    touchAction: 'none',
   },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.sm,
     borderRadius: radius.md,
     borderWidth: 1.5,
     shadowColor: '#000',
@@ -210,6 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
     flex: 1,
+    minHeight: 44,
     marginRight: space.xs,
   },
   pulseCircle: {
@@ -226,6 +274,7 @@ const styles = StyleSheet.create({
   },
   metaWrap: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   topRow: {
@@ -233,6 +282,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sessionName: {
+    flexShrink: 1,
     fontFamily: font.uiStrong,
     fontSize: 13,
   },
@@ -269,6 +319,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   miniBtn: {
+    minWidth: 44,
+    minHeight: 44,
     paddingVertical: 4,
     paddingHorizontal: 7,
     borderRadius: radius.sm,
@@ -282,6 +334,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resumeBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -294,4 +347,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.5,
   },
+  compactResume: { width: 44, paddingHorizontal: 0, justifyContent: 'center' },
 });
