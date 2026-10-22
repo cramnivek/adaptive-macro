@@ -203,6 +203,9 @@ export default function DescribeScreen() {
 
   /** Back to the live camera, with nothing from the discarded frame left over. */
   const retake = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
     setPhoto(null);
     setEstimate(null);
     setDrafts([]);
@@ -399,6 +402,7 @@ export default function DescribeScreen() {
         onCapture={(uri) => void captureFromCamera(uri)}
         onSystemCapture={() => void systemCapture()}
         onRetake={retake}
+        onRetry={() => void run(photo ?? undefined, { fromCamera: true })}
         onClose={() => {
           abortRef.current?.abort();
           abortRef.current = null;

@@ -30,6 +30,7 @@ interface MealCameraSheetProps {
   /** Web only: hand the shot to the phone's camera app and return its result. */
   onSystemCapture: () => void;
   onRetake: () => void;
+  onRetry: () => void;
   onClose: () => void;
 }
 
@@ -60,6 +61,7 @@ export const MealCameraSheet = ({
   onCapture,
   onSystemCapture,
   onRetake,
+  onRetry,
   onClose,
 }: MealCameraSheetProps) => {
   const { colors } = useTheme();
@@ -279,7 +281,10 @@ export const MealCameraSheet = ({
                       <Button label="Shoot again" variant="subtle" onPress={onRetake} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Button label={error ? 'Cancel' : 'Use this'} onPress={onClose} />
+                      <Button
+                        label={busy ? 'Cancel scan' : error ? 'Retry photo' : 'Use this'}
+                        onPress={error && !busy ? onRetry : onClose}
+                      />
                     </View>
                   </View>
                 )}

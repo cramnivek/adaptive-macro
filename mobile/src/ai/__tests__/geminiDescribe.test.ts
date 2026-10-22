@@ -45,9 +45,68 @@ const geminiResponse = (payload: unknown, usage = { promptTokenCount: 310, candi
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('describeMealWithGemini', () => {
+  it.each(['session', 'fetch', 'body'] as const)(
+    'ends a photo timeout even when %s never settles or ignores cancellation',
+    async (stage) => {
+      vi.useFakeTimers();
+      const never = () => new Promise<never>(() => undefined);
+      if (stage === 'session') session.token.mockImplementationOnce(never);
+      vi.stubGlobal('fetch', vi.fn(stage === 'fetch' ? never : async () => {
+        const response = geminiResponse(estimate);
+        if (stage === 'body') response.json = never;
+        return response;
+      }));
+
+      const pending = describeMealWithGemini('', '', { base64: 'QUJD', mimeType: 'image/jpeg' })
+        .catch((error: Error) => error);
+      let settled = false;
+      void pending.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(settled).toBe(true);
+      expect(await pending).toEqual(new Error('The estimate took too long. Try again.'));
+    },
+  );
+
+  it('cancels a stalled session read without sending the photo when it eventually resolves', async () => {
+    let finishSession!: (token: string | null) => void;
+    session.token.mockImplementationOnce(() => new Promise((resolve) => { finishSession = resolve; }));
+    const fetchMock = vi.fn(async () => geminiResponse(estimate));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const pending = describeMealWithGemini('', '', { base64: 'QUJD', mimeType: 'image/jpeg' }, controller.signal)
+      .catch((error: Error) => error);
+
+    await Promise.resolve();
+    controller.abort();
+    finishSession('late-token');
+    await pending;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ends the deadline when an expired session refresh never returns', async () => {
+    vi.useFakeTimers();
+    session.token.mockResolvedValueOnce('expired-token');
+    session.refresh.mockImplementationOnce(() => new Promise(() => undefined));
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 401, headers: { 'x-auth': 'expired' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = describeMealWithGemini('', '', { base64: 'QUJD', mimeType: 'image/jpeg' })
+      .catch((error: Error) => error);
+    let settled = false;
+    void pending.then(() => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(settled).toBe(true);
+    expect(await pending).toEqual(new Error('The estimate took too long. Try again.'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('parses a well-formed estimate and reports token usage', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => geminiResponse(estimate)));
 

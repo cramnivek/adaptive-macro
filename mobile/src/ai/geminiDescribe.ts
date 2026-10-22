@@ -1,4 +1,5 @@
 import { ALLOWANCE_USED_MESSAGE, SIGN_IN_AGAIN_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
+import { withAbort } from '../api/withAbort';
 import { type DescribeResult, type MealEstimate, MealEstimateSchema, type MealPhoto } from './describeMeal';
 import { geminiPartsFor, systemInstructionFor } from './mealRequest';
 
@@ -151,7 +152,7 @@ export const describeMealWithGemini = async (
     if (!response.ok) {
       throw new DescribeResponseError(`The estimate service returned ${response.status}.`);
     }
-    payload = await response.json();
+    payload = await withAbort(() => response.json(), controller.signal);
   } catch (error) {
     if (error instanceof DescribeResponseError) throw error;
     // The timeout exists to bound a slow estimate; saying so is more use than

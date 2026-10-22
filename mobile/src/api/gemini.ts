@@ -1,5 +1,6 @@
 import { type Food, type FoodPortion, per100gFromPortion } from '@adaptive-macros/engine';
 import { currentAccessToken, refreshAccessToken } from '../social/api';
+import { withAbort } from './withAbort';
 import {
   ENRICHMENT_SCHEMA,
   enrichmentPromptFor,
@@ -127,12 +128,15 @@ export const fetchGemini = async (
 ): Promise<{ response: Response; route: GeminiRoute; rejectedSession: boolean }> => {
   const send = async (token: string | null) => {
     const route = routeFor(model, apiKey, token);
-    const response = await fetch(route.url, {
-      method: 'POST',
-      signal: init.signal,
-      headers: route.headers,
-      body: init.body,
-    });
+    const response = await withAbort(
+      () => fetch(route.url, {
+        method: 'POST',
+        signal: init.signal,
+        headers: route.headers,
+        body: init.body,
+      }),
+      init.signal,
+    );
     // A 401 that is not an expiry, on a request that carried a session, means
     // the proxy looked at that session and refused it. Signing in again is the
     // fix, which "add your own key" would not point to.
@@ -146,14 +150,14 @@ export const fetchGemini = async (
 
   // A user's own key goes straight to Google, where a token is never sent, so
   // there is no reason to read the session for it.
-  const first = await send(apiKey.trim() ? null : await currentAccessToken());
+  const first = await send(apiKey.trim() ? null : await withAbort(currentAccessToken, init.signal));
   const expired =
     first.route.viaProxy &&
     first.response.status === 401 &&
     first.response.headers.get('x-auth') === 'expired';
   if (!expired) return first;
 
-  const refreshed = await refreshAccessToken();
+  const refreshed = await withAbort(refreshAccessToken, init.signal);
   return refreshed ? send(refreshed) : first;
 };
 
