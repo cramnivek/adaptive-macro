@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { confirm } from '../dialog';
-import { hasLog, signedOutDatabase } from './accountDatabase';
+import { hasLog, isEmptyLog, signedOutDatabase } from './accountDatabase';
 import { describeBackup, exportBackup, restoreBackup, selectDatabase, type Backup } from './index';
 
 /**
@@ -20,6 +20,8 @@ import { describeBackup, exportBackup, restoreBackup, selectDatabase, type Backu
  * Runs with the account's file selected and leaves it selected.
  */
 
+const PENDING_CLEAR_KEY = 'ascend_move_log_pending_clear';
+
 const declinedKey = (userId: string) => `ascend_move_log_declined_${userId}`;
 
 const EMPTY = (): Backup => ({
@@ -35,7 +37,9 @@ export const offerToMoveLog = async (userId: string, accountDatabase: string): P
   const source = await signedOutDatabase();
   if (source === accountDatabase) return;
   if ((await AsyncStorage.getItem(declinedKey(userId))) !== null) return;
-  if (hasLog(describeBackup(await exportBackup()))) return;
+  // Empty means nothing at all, settings included: the move restores over the
+  // whole log, so an account holding even a custom food is left alone.
+  if (!isEmptyLog(await exportBackup())) return;
 
   await selectDatabase(source);
   let earlier: Backup;
@@ -62,12 +66,27 @@ export const offerToMoveLog = async (userId: string, accountDatabase: string): P
   }
 
   // Into the account first: if anything fails after this, the log exists in
-  // both places, never in neither.
+  // both places, never in neither. The clear still owed is written down
+  // before it is attempted, so a failure is finished on the next launch
+  // instead of leaving the copy on show to anyone signed out.
   await restoreBackup(earlier);
-  await selectDatabase(source);
+  await AsyncStorage.setItem(PENDING_CLEAR_KEY, source);
+  await finishPendingMove(accountDatabase);
+};
+
+/**
+ * Clears the old copy of a moved log, if a move left that owed. Run on every
+ * launch, for whoever is using the app, before any log is shown. Leaves
+ * `current` selected.
+ */
+export const finishPendingMove = async (current: string): Promise<void> => {
+  const pending = await AsyncStorage.getItem(PENDING_CLEAR_KEY);
+  if (pending === null) return;
+  await selectDatabase(pending);
   try {
     await restoreBackup(EMPTY());
+    await AsyncStorage.removeItem(PENDING_CLEAR_KEY);
   } finally {
-    await selectDatabase(accountDatabase);
+    await selectDatabase(current);
   }
 };

@@ -10,7 +10,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-import { LEGACY_DATABASE, SIGNED_OUT, claimDevice, hasLog, signedOutDatabase } from '../accountDatabase';
+import type { Backup } from '../index';
+import { LEGACY_DATABASE, SIGNED_OUT, claimDevice, hasLog, isEmptyLog, signedOutDatabase } from '../accountDatabase';
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -71,5 +72,19 @@ describe('hasLog', () => {
     expect(hasLog({ weights: 0, entries: 0, sessions: 0, measurements: 0 })).toBe(false);
     expect(hasLog({ weights: 0, entries: 0, sessions: 0, measurements: 1 })).toBe(true);
     expect(hasLog({ weights: 10, entries: 0, sessions: 0, measurements: 0 })).toBe(true);
+  });
+});
+
+describe('isEmptyLog', () => {
+  const none = { version: 2, exportedAt: '', settings: [], weights: [], foods: [], entries: [] } as unknown as Backup;
+
+  it('is empty only with nothing anyone put there: no settings, foods, routines or rows of any kind', () => {
+    expect(isEmptyLog(none)).toBe(true);
+    // A move restores over everything; an account holding only custom foods,
+    // a routine or its settings is not empty, and must not be written over.
+    expect(isEmptyLog({ ...none, foods: [{ id: 'f' }] } as unknown as Backup)).toBe(false);
+    expect(isEmptyLog({ ...none, routines: [{ id: 'r' }] } as unknown as Backup)).toBe(false);
+    expect(isEmptyLog({ ...none, settings: [{ key: 'app.settings', value: '{}' }] })).toBe(false);
+    expect(isEmptyLog({ ...none, dailySteps: [{ date: '2026-10-20' }] } as unknown as Backup)).toBe(false);
   });
 });
