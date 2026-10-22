@@ -39,11 +39,9 @@ and import still need device acceptance.
 
 Android internal development build:
 https://expo.dev/accounts/zeldrich/projects/adaptive-macros/builds/152e4045-0da2-4d57-82ff-8e98a0b103a2
-was submitted using existing credentials and was still `IN_QUEUE` at the last
-check. Its native source includes READ_SLEEP; JavaScript updates are served by
-Metro. It is not an available APK or a successful native build yet. Existing
-clients can receive the UI changes, but a client declaring READ_SLEEP must be
-installed before the new permission can work.
+has now finished successfully and provides an APK. Its native source includes
+READ_SLEEP; current JavaScript updates are served by Metro. Install the updated
+client over the current app before requesting the new sleep permission.
 
 Then enable Garmin sleep sharing into Health Connect, review Ascend permissions
 in Account, and sync. Verify a known night against Garmin, deny sleep while
@@ -74,8 +72,8 @@ does not diagnose causation, measure fat change, or modify engine targets.
 - Native sharing into destination apps remains unverified on the phone. The
   new sleep request checks SleepSession specifically, reports refusal, exposes
   Health Connect settings and refreshes permissions after returning to the app.
-  The READ_SLEEP development build is still IN_QUEUE, with no APK available.
-  Metro can serve these JavaScript changes but cannot add manifest permissions.
+  The READ_SLEEP development build was queued during this check and has since
+  finished successfully. Metro cannot add its manifest permission to old clients.
 
 ## Movable workout overlay
 
@@ -112,3 +110,7 @@ The 17 existing body-fat/parser/measurement-schema tests pass, as do workspace
 types and the Android export. The previous full 1,751-test run predates this
 UI-only follow-up. Device retry is requested to obtain the actual error before
 claiming that the underlying save failure has been resolved.
+
+GitHub subsequently caught a native ViewStyle type mismatch for the overlay's
+web-only `touchAction`. Local installed types accepted it. The CSS extension is
+now typed explicitly and applied only on web; workspace types pass locally.

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { createContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { clampWorkoutBarOffset, workoutBarBounds } from '../floatingWorkoutPosition';
 import { thud } from '../platform/haptics';
@@ -15,6 +15,9 @@ import {
 import { font, radius, space, useTheme } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Tappable } from './Tappable';
+
+// React Native Web needs this for touch dragging; native ViewStyle omits CSS properties.
+const webDragStyle: ViewStyle & { touchAction: 'none' } = { touchAction: 'none' };
 
 /**
  * How much of the bottom of a tab the bar covers, in points; 0 while it is
@@ -137,7 +140,7 @@ export const FloatingWorkoutBar = ({ onHeight, tabHeight, frameHeight }: {
       >
         <View
           {...drag.panHandlers}
-          style={styles.dragHandle}
+          style={[styles.dragHandle, Platform.OS === 'web' && webDragStyle]}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel="Move workout overlay"
@@ -236,7 +239,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    touchAction: 'none',
   },
   container: {
     flexDirection: 'row',
