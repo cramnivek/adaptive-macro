@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   cardFileFrom,
@@ -26,6 +26,7 @@ import { session as loud } from '../theme/sessionTheme';
 import { TransparentStickerModal } from './TransparentStickerModal';
 import { CardEditor } from './CardEditor';
 import { Tappable } from './Tappable';
+import CardDrawerDom from './CardDrawerDom';
 import { useBlockGesture } from './useBlockGesture';
 
 interface FinishSheetProps {
@@ -57,6 +58,18 @@ interface FinishSheetProps {
 export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNeedAccount, onDone, onSaveAsRoutine, routineSaved = false }: FinishSheetProps) => {
   const insets = useSafeAreaInsets();
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
+  const [phoneCard, setPhoneCard] = useState<{ summary: ShareCard; url: string } | null>(null);
+  const [renderAttempt, setRenderAttempt] = useState(0);
+  const phoneCardUrl = phoneCard?.summary === summary ? phoneCard?.url : null;
+  const currentSummary = useRef(summary);
+  currentSummary.current = summary;
+  const currentAttempt = useRef(renderAttempt);
+  currentAttempt.current = renderAttempt;
+  const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopRenderTimer = () => {
+    if (renderTimer.current !== null) clearTimeout(renderTimer.current);
+    renderTimer.current = null;
+  };
   const [drawing, setDrawing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
@@ -101,6 +114,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   useEffect(() => {
     if (summary === null) return;
+    if (Platform.OS !== 'web') return;
     // A card over a photograph is composed from its two layers, and the layers
     // are what the preview shows, so the file is made from exactly what was on
     // screen. It waits for the drag to end: nobody needs a megabyte of JPEG
@@ -150,6 +164,18 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       live = false;
     };
   }, [summary, photo, blocks, template, place, dragging, sticker, subject]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || summary === null || hidden || phoneCardUrl) return;
+    setDrawing(true);
+    setNote(null);
+    // A failed WebView load must leave a retry action instead of a permanent blank preview.
+    renderTimer.current = setTimeout(() => {
+      setDrawing(false);
+      setNote('The card took too long to load. Check the development connection and retry.');
+    }, 45000);
+    return stopRenderTimer;
+  }, [summary, hidden, phoneCardUrl, renderAttempt]);
 
   // The picture, graded once. The preview shows this rather than the raw
   // photograph so that what is on screen while you place the block is what the
@@ -234,8 +260,10 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   const share = async () => {
     if (summary === null) return;
-    const outcome = await shareWorkout(summary, card);
+    if (Platform.OS !== 'web' && !phoneCardUrl) return;
+    const outcome = await shareWorkout(summary, phoneCardUrl ? { url: phoneCardUrl } : card);
     if (outcome === 'downloaded') setNote('Saved to your downloads.');
+    if (outcome === 'failed') setNote('The card image could not be shared. Please try again.');
   };
 
   const post = async () => {
@@ -329,7 +357,34 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   return (
     <Modal visible={summary !== null && !hidden} animationType="slide" transparent onRequestClose={leave}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
+        <View style={styles.sheet}>
+          {Platform.OS !== 'web' && summary && !hidden && (
+            <View pointerEvents="none" style={styles.drawer}>
+              <CardDrawerDom
+                key={renderAttempt}
+                summary={summary}
+                onDrawn={async (url) => {
+                  if (currentSummary.current !== summary || currentAttempt.current !== renderAttempt) return;
+                  stopRenderTimer();
+                  setDrawing(false);
+                  if (url) { setPhoneCard({ summary, url }); setNote(null); }
+                  else setNote('The card could not be drawn. Retry the preview.');
+                }}
+                dom={{
+                  style: { width: 1, height: 1 },
+                  containerStyle: { position: 'absolute', width: 1, height: 1 },
+                  scrollEnabled: false,
+                  onError: () => {
+                    if (currentSummary.current !== summary || currentAttempt.current !== renderAttempt) return;
+                    stopRenderTimer();
+                    setDrawing(false);
+                    setNote('The card renderer could not load. Check the development connection and retry.');
+                  },
+                }}
+              />
+            </View>
+          )}
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + space.lg }}>
           <Text style={styles.title}>
             {getEventCopy('workout.completed', {
               personality: settings.personality,
@@ -397,8 +452,8 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                   <Image source={{ uri: subject.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 )}
               </View>
-            ) : card ? (
-              <Image source={{ uri: card.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
+            ) : (phoneCardUrl || card) ? (
+              <Image source={{ uri: phoneCardUrl ?? card!.url }} style={[styles.image, { height }]} resizeMode="contain" accessibilityLabel="The card that will be shared" />
             ) : drawing ? (
               <ActivityIndicator color={loud.loud} />
             ) : null}
@@ -413,8 +468,8 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             </Tappable>
           )}
 
-          {/* A card is only ever drawn on the web, which is also the only place a photo can be picked. */}
-          {card !== null && (
+          {/* Photo composition uses browser image objects; the native preview is a rendered PNG. */}
+          {Platform.OS === 'web' && card !== null && (
             <View style={styles.photoRow}>
               <Tappable onPress={() => void choosePhoto()} accessibilityRole="button" style={styles.photoAction}>
                 <Text style={styles.photoLabel}>{photo ? 'CHANGE PHOTO' : 'ADD A PHOTO'}</Text>
@@ -457,7 +512,12 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               moment a drag ends — the file in hand is the one from before the
               move, so sharing waits the half second rather than sending it. */}
           <Tappable
-            onPress={() => { if (!drawing) void share(); }}
+            onPress={() => {
+              if (drawing) return;
+              if (Platform.OS !== 'web' && !phoneCardUrl) { setRenderAttempt((value) => value + 1); return; }
+              void share();
+            }}
+            disabled={drawing}
             scaleTo={0.97}
             accessibilityRole="button"
             accessibilityState={{ disabled: drawing }}
@@ -474,7 +534,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               ]}
             >
               <Text style={[styles.buttonLabel, { color: postLeads ? loud.figure : loud.onLoud }]}>
-                {drawing ? 'SAVING…' : getEventCopy('social.share_btn', { personality: settings.personality })}
+                {drawing ? 'DRAWING CARD…' : Platform.OS !== 'web' && !phoneCardUrl ? 'RETRY CARD PREVIEW' : getEventCopy('social.share_btn', { personality: settings.personality })}
               </Text>
             </View>
           </Tappable>
@@ -500,6 +560,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               <Text style={[styles.buttonLabel, { color: loud.figure }]}>DONE</Text>
             </View>
           </Tappable>
+          </ScrollView>
         </View>
       </View>
       {/* Over the sheet, on its own screen, sharing every piece of state with
@@ -535,8 +596,10 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 };
 
 const styles = StyleSheet.create({
+  drawer: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
   backdrop: { flex: 1, backgroundColor: 'rgba(10,10,11,0.9)', justifyContent: 'flex-end' },
   sheet: {
+    maxHeight: '95%',
     backgroundColor: loud.ground,
     borderTopLeftRadius: radius['3xl'],
     borderTopRightRadius: radius['3xl'],

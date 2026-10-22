@@ -177,6 +177,11 @@ export const PostCard = ({
   const [phoneCardUrl, setPhoneCardUrl] = useState<string | null | false>(null);
   const displayCardUrl = customCardUrl || card?.url || phoneCardUrl || null;
   const drawOnPhone = Platform.OS !== 'web' && viewMode === 'card' && !displayCardUrl && phoneCardUrl === null;
+  useEffect(() => {
+    if (!drawOnPhone) return;
+    const timer = setTimeout(() => setPhoneCardUrl(false), 45000);
+    return () => clearTimeout(timer);
+  }, [drawOnPhone]);
   // The drawer stays mounted after it has drawn, for as long as its card is
   // the one shown. Unmounting it the moment the PNG arrived took the webview
   // away before it heard back that the PNG was received ("Java object is gone").
@@ -500,11 +505,18 @@ export const PostCard = ({
         /* Visual Story Card Mode */
         <View style={styles.cardPreviewContainer}>
           {phoneSummary && (
+            <View pointerEvents="none" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>
             <CardDrawerDom
               summary={phoneSummary}
               onDrawn={async (url) => setPhoneCardUrl(url ?? false)}
-              dom={{ style: { width: 1, height: 1, opacity: 0 }, scrollEnabled: false }}
+              dom={{
+                style: { width: 1, height: 1 },
+                containerStyle: { position: 'absolute', width: 1, height: 1 },
+                scrollEnabled: false,
+                onError: () => setPhoneCardUrl(false),
+              }}
             />
+            </View>
           )}
           {displayCardUrl ? (
             <Tappable

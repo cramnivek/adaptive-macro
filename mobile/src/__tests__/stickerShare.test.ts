@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const native = vi.hoisted(() => ({
-  available: vi.fn(), write: vi.fn(), share: vi.fn(),
+  available: vi.fn(), write: vi.fn(), share: vi.fn(), textShare: vi.fn(),
 }));
-vi.mock('react-native', () => ({ Platform: { OS: 'android' }, Share: {} }));
+vi.mock('react-native', () => ({ Platform: { OS: 'android' }, Share: { share: native.textShare } }));
 vi.mock('expo-sharing', () => ({ isAvailableAsync: native.available, shareAsync: native.share }));
 vi.mock('expo-file-system/legacy', () => ({
   cacheDirectory: 'file:///cache/', EncodingType: { Base64: 'base64' },
   writeAsStringAsync: native.write,
 }));
 
-import { shareStickerPng } from '../platform/shareImage';
+import { shareStickerPng, shareWorkout } from '../platform/shareImage';
+import type { ShareCard } from '../shareCard';
 
 describe('Android transparent sticker sharing', () => {
   beforeEach(() => {
@@ -45,5 +46,19 @@ describe('Android transparent sticker sharing', () => {
     native.write.mockRejectedValue(new Error('Disk full'));
     expect(await shareStickerPng('Push', { url: 'data:image/png;base64,AAAA', width: 1, height: 1 })).toBe('failed');
     expect(native.share).not.toHaveBeenCalled();
+  });
+
+  it('shares a rendered workout PNG with matching file extension and MIME type', async () => {
+    await shareWorkout({ title: 'Push Day' } as ShareCard, { url: 'data:image/png;base64,AAAA' });
+    expect(native.write).toHaveBeenCalledWith('file:///cache/ascend-workout-card.png', 'AAAA', { encoding: 'base64' });
+    expect(native.share).toHaveBeenCalledWith('file:///cache/ascend-workout-card.png', {
+      mimeType: 'image/png', dialogTitle: 'Push Day', UTI: 'public.png',
+    });
+  });
+
+  it('reports a workout image write failure without silently sharing text instead', async () => {
+    native.write.mockRejectedValue(new Error('Disk full'));
+    expect(await shareWorkout({ title: 'Push Day', exercises: [] } as unknown as ShareCard, { url: 'data:image/png;base64,AAAA' })).toBe('failed');
+    expect(native.textShare).not.toHaveBeenCalled();
   });
 });

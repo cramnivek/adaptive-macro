@@ -7,6 +7,7 @@ import { ALL_BLOCKS } from '../shareCardPlacement';
 import type { TemplateId } from '../shareCardTemplate';
 import { drawNutritionOverlay, drawOverlay, type NativeStickerExport, type StickerTheme } from '../platform/shareImage';
 import { font } from '../theme';
+import { domFontsReady } from '../platform/domFonts';
 
 type Request = {
   theme: StickerTheme;
@@ -34,9 +35,7 @@ export default function StickerDrawerDom({ request, requestKey, onDrawn }: {
     let cancelled = false;
     void (async () => {
       try {
-        await Promise.all(FACES.map(async ([family, source]) => {
-          document.fonts.add(await new FontFace(family, `url(${source})`).load());
-        }));
+        await domFontsReady(FACES);
         const canvas = request.mode === 'nutrition'
           ? drawNutritionOverlay(request.consumed, request.profile, request.theme)
           : drawOverlay(request.summary, ALL_BLOCKS, request.template, request.theme);

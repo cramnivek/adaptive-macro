@@ -114,3 +114,41 @@ the Android phone. The original device-side write failure was not captured.
 GitHub subsequently caught a native ViewStyle type mismatch for the overlay's
 web-only `touchAction`. Local installed types accepted it. The CSS extension is
 now typed explicitly and applied only on web; workspace types pass locally.
+
+## Sticker and finish-card follow-up
+
+The user's Android screenshots still showed a sticker spinner and an empty
+finish preview. Investigation found three concrete defects:
+
+- Identical nutrition props recreated by a parent refresh reset the native
+  sticker to loading, but its DOM child deliberately skipped redrawing identical
+  serialized inputs. A browser fixture using the actual modal reproduced a
+  preview disappearing after 500 ms and remaining on Generating. The parent and
+  child now use the same serialized request key; the preview survives repeated
+  refreshes and a theme change still redraws.
+- Hidden Expo DOM views inherited flex sizing. All three native renderer sites
+  now have absolute, bounded 1-point holders and container styles, avoiding the
+  blank layout space. Font loads are shared, bounded and retryable; unchanged
+  card summaries no longer restart rendering on bridge object updates.
+- FinishSheet called the browser-only shareCardFile function on Android, where
+  it returns null. It now mounts the native drawer, previews its PNG, and shares
+  that image. PNG bytes now use a PNG filename/MIME/UTI instead of JPEG labels.
+  An image share failure reports failure instead of silently sharing text.
+
+Sticker, finish and post-card loads have bounded failure/retry states. The finish
+sheet can scroll so the preview and controls remain reachable. A native-branch
+browser fixture rendered the actual finish PNG; this exercises Android branch
+wiring with mocked native file/share boundaries, not an Android WebView. Files
+are ignored under `.superpowers/finish-native/`. Three font-load tests and two
+native-sharing regressions were observed failing before their fixes. Independent
+review found no important issues. Physical Android renderer/share acceptance
+remains pending; no current device peer was connected at the status check.
+Full local verification passed: 252 engine + 1,349 mobile + 155 proxy = 1,756
+tests, all workspace typechecks, and final Android/web exports.
+
+The Android EAS build is FINISHED, not failed. PR checks at e236a15 passed after
+the prior touchAction type fix. The development outage was separate: Metro had
+no listener on 8081. It was restarted hidden as PID 38880, logs
+`.superpowers/metro-20261023-071327.*`, and /status returns packager-status:running.
+The reason the previous process exited was not established. No reinstall, app
+data clearing, Supabase change or Cloud Run deploy was needed for these fixes.

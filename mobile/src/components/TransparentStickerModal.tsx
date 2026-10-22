@@ -60,6 +60,12 @@ export const TransparentStickerModal = ({
   const [sticker, setSticker] = useState<StickerExport | NativeStickerExport | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [renderAttempt, setRenderAttempt] = useState(0);
+  const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopRenderTimer = () => {
+    if (renderTimer.current !== null) clearTimeout(renderTimer.current);
+    renderTimer.current = null;
+  };
   const request = useMemo(() => {
     if (!visible) return null;
     if (mode === 'nutrition') {
@@ -67,7 +73,7 @@ export const TransparentStickerModal = ({
     }
     return workoutSummary ? { mode, summary: workoutSummary, theme, template } : null;
   }, [visible, mode, nutritionData, workoutSummary, theme, template]);
-  const requestKey = JSON.stringify(request);
+  const requestKey = JSON.stringify({ request, renderAttempt });
   const currentRequest = useRef(requestKey);
   currentRequest.current = requestKey;
 
@@ -79,7 +85,13 @@ export const TransparentStickerModal = ({
     setToast(null);
     setDrawing(request !== null);
     // Phones draw inside the DOM component below, where Canvas and fonts exist.
-    if (Platform.OS !== 'web') return;
+    if (Platform.OS !== 'web') {
+      renderTimer.current = setTimeout(() => {
+        setDrawing(false);
+        setToast('The sticker renderer took too long to load. Check the development connection and retry.');
+      }, 45000);
+      return stopRenderTimer;
+    }
 
     void (async () => {
       await cardFontsReady();
@@ -109,7 +121,9 @@ export const TransparentStickerModal = ({
     return () => {
       alive = false;
     };
-  }, [visible, mode, workoutSummary, nutritionData, theme, template, blocks, request]);
+    // Parent screens recreate data objects; identical inputs must not clear an already drawn preview.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey]);
 
   // Replaced previews release their browser object URL; native previews are data URLs.
   useEffect(() => () => {
@@ -167,26 +181,32 @@ export const TransparentStickerModal = ({
         ]}
       >
         {Platform.OS !== 'web' && request && (
+          <View pointerEvents="none" style={styles.drawer}>
           <StickerDrawerDom
+            key={renderAttempt}
             request={request}
             requestKey={requestKey}
             onDrawn={async (drawnKey, result) => {
               // A theme change or closing the sheet can overtake a bridge response.
               if (currentRequest.current !== drawnKey) return;
+              stopRenderTimer();
               setSticker(result);
               setDrawing(false);
               if (!result) setToast('That sticker could not be drawn; please reopen the studio to try again.');
             }}
             dom={{
-              style: { width: 1, height: 1, opacity: 0 },
+              style: { width: 1, height: 1 },
+              containerStyle: { position: 'absolute', width: 1, height: 1 },
               scrollEnabled: false,
               onError: () => {
                 if (currentRequest.current !== requestKey) return;
+                stopRenderTimer();
                 setDrawing(false);
                 setToast('That sticker could not be drawn; please reopen the studio to try again.');
               },
             }}
           />
+          </View>
         )}
         {/* Header */}
         <View style={styles.header}>
@@ -253,6 +273,11 @@ export const TransparentStickerModal = ({
                     <Text style={styles.toastText}>{toast}</Text>
                   </View>
                 </FadeIn>
+              )}
+              {!drawing && !sticker && (
+                <Tappable onPress={() => setRenderAttempt((value) => value + 1)} accessibilityRole="button" style={styles.retry}>
+                  <Text style={{ color: loud.figure, fontFamily: font.uiStrong }}>Retry sticker</Text>
+                </Tappable>
               )}
             </View>
             <View style={styles.stageFooter}>
@@ -386,6 +411,8 @@ export const TransparentStickerModal = ({
 };
 
 const styles = StyleSheet.create({
+  drawer: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
+  retry: { minHeight: 44, paddingHorizontal: space.md, justifyContent: 'center', alignItems: 'center' },
   root: {
     flex: 1,
   },
