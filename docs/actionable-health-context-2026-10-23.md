@@ -35,16 +35,21 @@ than a low nutrition score and “Needs focus.” No scoring-engine formula chan
 - Regression coverage includes age boundaries, missing/partial coverage, a
   20-second recording gap, recent-date windows, duplicate stage unions, local
   migration and backups. The coverage failures were observed before their fixes.
-- Actual components, real app fonts and a 393-point content width were checked
+- Actual components, real app fonts and 393/320-point content widths were checked
   in the browser for adequate/short/partial/missing sleep, load failure, eligible
-  salt context, missing salt evidence and expanded/collapsed details. Empty
+  salt context, missing salt evidence and expanded/collapsed details, with dark
+  and light themes. Empty
   nutrition has no score. Service and native-storage boundaries were mocked;
   this does not establish physical Android layout or import acceptance.
 - Astra reviewed the changes; its rounded-coverage finding was fixed and the
   re-review has no remaining important findings.
 
-The source is available through the development server. A new standalone APK
-is being prepared; the previously shared APK embeds older JavaScript. Native
+GitHub CI at `62c5d1f` also passes. The source is available through the development
+server. Standalone APK build `5978853e-9eb1-4826-bc34-04ea2ac488cd` is in progress,
+with the matching `62c5d1f` source metadata:
+https://expo.dev/accounts/zeldrich/projects/adaptive-macros/builds/5978853e-9eb1-4826-bc34-04ea2ac488cd
+
+The previously shared APK embeds older JavaScript. Native
 installation and device acceptance remain separate from export verification.
 There is no new production web deployment or main merge for this feature pass.
 
