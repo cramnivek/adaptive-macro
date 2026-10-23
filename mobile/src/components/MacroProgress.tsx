@@ -146,10 +146,10 @@ export const MacroSummary = ({ consumed, target }: MacroSummaryProps) => {
 };
 
 const styles = StyleSheet.create({
-  summary: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
-  bars: { flex: 1, gap: space.md },
+  summary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.lg },
+  bars: { flex: 1, minWidth: 140, gap: space.md },
   barRow: { gap: space.xs },
-  barLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  barLabels: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: space.sm, rowGap: space.xs },
   barLabel: { fontFamily: font.uiStrong, fontSize: 13 },
   barValue: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
   barTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden' },

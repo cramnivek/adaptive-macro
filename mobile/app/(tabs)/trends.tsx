@@ -1148,7 +1148,7 @@ export default function TrendsScreen() {
       {/* PART 1: BODY & ENERGY CHARTS */}
       {(activeTab === 'all' || activeTab === 'body') && (
         <>
-          <Card title="Energy balance & estimated expenditure">
+          <Card variant="featured" icon="pulse-outline" title="Energy balance & estimated expenditure">
             <View style={styles.legend}>
               <Key color={colors.positive} label="ESTIMATED TDEE" />
               <Key color={colors.carbs} label="eaten" dotted />
@@ -1181,7 +1181,7 @@ export default function TrendsScreen() {
             </Text>
           </Card>
 
-          <Card title="True scale trend weight">
+          <Card variant="featured" icon="scale-outline" title="Weight trend">
             <LineChart
               series={weight ? [{ points: weight, color: colors.accent, strokeWidth: 2.5 }] : []}
               includeY={settings.goalWeightKg === null ? [] : [displayWeight(settings.goalWeightKg, settings.units)]}

@@ -137,7 +137,7 @@ export default function TrainScreen() {
   return (
     <Screen title="Train" tone="loud">
       {open ? (
-        <Card loud variant="featured" title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
+        <Card loud variant="featured" icon="barbell-outline" title="Session in progress" subtitle={`Started ${formatDate(open.date)}`}>
           <Text style={[styles.note, { color: loud.figureFaint, marginBottom: space.md }]}>
             {open.sets.length} {open.sets.length === 1 ? 'set' : 'sets'} logged so far.
           </Text>
@@ -151,6 +151,7 @@ export default function TrainScreen() {
         <Card
           loud
           variant="featured"
+          icon="barbell-outline"
           title={getEventCopy('workout.start_title', {
             personality: settings.personality,
             seed: routines.length,
@@ -176,7 +177,7 @@ export default function TrainScreen() {
       )}
 
       {headline.length > 0 && (
-        <Card loud variant="featured" title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
+        <Card loud title="Where you are" subtitle={`${totalSets} ${totalSets === 1 ? 'set' : 'sets'} on record`}>
           <View style={styles.listStack}>
             {headline.map(({ name, last, isRecord }) => (
               <Pressable
@@ -208,7 +209,7 @@ export default function TrainScreen() {
       )}
 
       {recent.length > 0 && (
-        <Card loud variant="featured" title="Recent sessions">
+        <Card loud title="Recent sessions">
           <View style={styles.listStack}>
             {recent.slice(0, 5).map((session) => (
               <Tappable
@@ -277,7 +278,7 @@ export default function TrainScreen() {
       </Card>
 
       {/* Gym Floor Tools */}
-      <Card loud variant="featured" title="Gym Floor Tools">
+      <Card loud title="Gym floor tools">
         <Tappable
           onPress={() => {
             thud('light');

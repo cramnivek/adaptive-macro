@@ -1,6 +1,7 @@
-import React from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import React, { type ComponentProps } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { font, radius, space, useTheme } from '../theme';
+import { font, radius, space, useTheme, type FeatureTone } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 
 interface CardProps {
@@ -11,6 +12,8 @@ interface CardProps {
    * 'featured': A raised, rounded card container with surface fill and border.
    */
   variant?: 'section' | 'featured';
+  tone?: FeatureTone;
+  icon?: ComponentProps<typeof Ionicons>['name'];
   title?: string;
   subtitle?: string;
   right?: React.ReactNode;
@@ -32,9 +35,13 @@ export const Card = ({
   style,
   loud: isLoud = false,
   variant = 'section',
+  tone,
+  icon,
 }: CardProps) => {
   const { colors } = useTheme();
   const isFeatured = variant === 'featured';
+  const feature = tone ? colors.features[tone] : undefined;
+  const headingColor = isLoud ? loud.figure : feature?.accent ?? colors.text;
 
   return (
     <View
@@ -43,7 +50,7 @@ export const Card = ({
         isFeatured && [
           styles.featured,
           {
-            backgroundColor: isLoud ? loud.panel : colors.surfaceRaised,
+            backgroundColor: isLoud ? loud.panel : feature?.surface ?? colors.surface,
             borderColor: isLoud ? loud.rule : colors.border,
           },
         ],
@@ -52,10 +59,11 @@ export const Card = ({
     >
       {(title || right) && (
         <View style={[styles.header, !subtitle && styles.headerGap]}>
+          {icon && <Ionicons name={icon} size={18} color={headingColor} accessible={false} />}
           {title && (
-            <Text style={[styles.title, { color: isLoud ? loud.figure : colors.text }]}>{title}</Text>
+            <Text style={[styles.title, isFeatured && styles.featuredTitle, { color: headingColor }]}>{title}</Text>
           )}
-          <View style={[styles.rule, { backgroundColor: isLoud ? loud.rule : colors.border }]} />
+          <View style={[styles.rule, { backgroundColor: isFeatured ? 'transparent' : isLoud ? loud.rule : colors.border }]} />
           {right}
         </View>
       )}
@@ -76,6 +84,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: space.lg,
   },
+  featuredTitle: { fontFamily: font.uiStrong, fontSize: 14, letterSpacing: 0, textTransform: 'none', flexShrink: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   // With a subtitle the gap belongs below the subtitle, not between it and the rule.
   headerGap: { marginBottom: space.md },

@@ -1,4 +1,5 @@
 import { addDays } from '@adaptive-macros/engine';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { listSleepSessions } from '../db/sleepQueries';
@@ -10,6 +11,7 @@ import { useApp } from '../state/AppStore';
 import { font, space, useTheme } from '../theme';
 import { Button } from './Controls';
 import { Card } from './Card';
+import { AdviceNote } from './AdviceNote';
 
 const duration = (minutes: number) => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 
@@ -47,6 +49,8 @@ export const SleepSummaryCard = () => {
   if (Platform.OS !== 'android' && (!current || nights.length === 0) && status !== 'error') return null;
   const selected = nights.find((night) => night.date === selectedDate);
   const advice = sleepAdvice(selected, nights, settings.profile.age);
+  const days = Array.from({ length: 7 }, (_, index) => addDays(selectedDate, index - 6));
+  const chartMaximum = Math.max(720, ...nights.map((night) => night.sleepMinutes ?? 0));
   const text = { color: colors.textMuted };
   const line = (night: SleepSummary) => night.sleepMinutes === null
     ? `${duration(night.sessionMinutes)} session · sleep duration unavailable`
@@ -57,13 +61,33 @@ export const SleepSummaryCard = () => {
   };
 
   return (
-    <Card title="Sleep" subtitle={`Ending ${formatDayMonth(selectedDate)}`}>
+    <Card variant="featured" tone="sleep" title="Sleep" subtitle={`Ending ${formatDayMonth(selectedDate)}`}>
       {status === 'loading' || (!current && status !== 'error') ? <Text style={[styles.note, text]}>Loading sleep…</Text>
         : status === 'error' ? <Text style={[styles.note, text]}>Sleep could not be loaded. Try syncing again from Account.</Text>
           : <>
+            {selected?.sleepMinutes != null && <View style={styles.durationRow}>
+              <View style={styles.durationText}>
+                <Text style={[styles.duration, { color: colors.text }]}>{duration(selected.sleepMinutes)}</Text>
+                <Text style={[styles.note, text]}>Recorded sleep</Text>
+              </View>
+              <Ionicons name="moon-outline" size={44} color={colors.features.sleep.accent} accessible={false} />
+            </View>}
             <Text style={[styles.assessment, { color: colors.text }]}>{advice.title}</Text>
-            {selected?.sleepMinutes != null && <Text style={[styles.duration, { color: colors.text }]}>{duration(selected.sleepMinutes)} <Text style={styles.recorded}>recorded</Text></Text>}
-            <Text style={[styles.note, { color: colors.text }]}>{advice.action}</Text>
+            {nights.some((night) => night.sleepMinutes !== null) && <>
+              <Text style={[styles.chartCaption, text]}>Recorded time · last 7 days</Text>
+              <View style={styles.chart}>
+                {days.map((date) => {
+                  const minutes = nights.find((night) => night.date === date)?.sleepMinutes;
+                  return <View key={date} style={styles.chartDay} accessible accessibilityLabel={`${formatDayMonth(date)}: ${minutes == null ? 'No sleep duration recorded' : `${duration(minutes)} recorded sleep`}`}>
+                    <View style={styles.barSlot}>
+                      {minutes == null ? <Text style={[styles.dayLabel, text]}>–</Text> : <View style={[styles.bar, { height: minutes > 0 ? Math.max(2, minutes / chartMaximum * 44) : 0, backgroundColor: colors.features.sleep.accent }]} />}
+                    </View>
+                    <Text style={[styles.dayLabel, text, date === selectedDate && { fontFamily: font.uiStrong, color: colors.features.sleep.accent }]}>{new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: 'narrow' })}</Text>
+                  </View>;
+                })}
+              </View>
+            </>}
+            <AdviceNote label={advice.state === 'enough' || advice.state === 'short' ? 'For tonight' : 'Next step'} tone="sleep">{advice.action}</AdviceNote>
             {advice.recent && <Text style={[styles.note, text]}>
               Across {advice.recent.nights} days with sleep data: {duration(advice.recent.averageMinutes)} average.
               {' '}{advice.recent.shortNights} below the {advice.minimumMinutes! / 60}-hour guide.
@@ -82,7 +106,7 @@ export const SleepSummaryCard = () => {
                 {advice.minimumMinutes !== null ? `The general guide for your age is at least ${advice.minimumMinutes / 60} hours. ` : ''}
                 Your tracker estimates time asleep; hours alone cannot tell how well you slept. Gaps in a recording are not counted as lost sleep.
               </Text>
-            {Array.from({ length: 7 }, (_, index) => addDays(selectedDate, index - 6)).map((date) => {
+            {days.map((date) => {
               const night = nights.find((item) => item.date === date);
               return <View key={date} style={styles.night}>
                 <Text style={[styles.note, { color: colors.text }]}>{formatDayMonth(date)} · {night?.sleepMinutes != null ? duration(night.sleepMinutes) : 'No sleep duration recorded'}</Text>
@@ -95,8 +119,15 @@ export const SleepSummaryCard = () => {
 
 const styles = StyleSheet.create({
   assessment: { fontFamily: font.uiStrong, fontSize: 17, lineHeight: 23, marginBottom: space.sm },
-  duration: { fontFamily: font.figure, fontSize: 25, lineHeight: 34, marginBottom: space.sm },
-  recorded: { fontFamily: font.ui, fontSize: 13 },
+  duration: { fontFamily: font.uiStrong, fontSize: 34, lineHeight: 44, fontVariant: ['tabular-nums'] },
+  durationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, marginBottom: space.sm },
+  durationText: { flex: 1 },
+  chartCaption: { fontFamily: font.ui, fontSize: 11, marginTop: space.xs },
+  chart: { flexDirection: 'row', gap: space.sm, marginTop: space.sm, marginBottom: space.xs },
+  chartDay: { flex: 1, alignItems: 'center', gap: space.xs },
+  barSlot: { height: 44, justifyContent: 'flex-end', alignItems: 'center' },
+  bar: { width: 12, borderRadius: 6 },
+  dayLabel: { fontFamily: font.ui, fontSize: 11 },
   note: { fontFamily: font.ui, fontSize: 13, lineHeight: 19, marginBottom: space.sm },
   night: { paddingVertical: space.xs },
 });

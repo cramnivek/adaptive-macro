@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import type { ComponentProps } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -17,9 +19,10 @@ interface ButtonProps {
   disabled?: boolean;
   /** Draws on the training side's palette, so its primary action is the red. */
   tone?: 'loud';
+  icon?: ComponentProps<typeof Ionicons>['name'];
 }
 
-export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: ButtonProps) => {
+export const Button = ({ label, onPress, variant = 'primary', disabled, tone, icon }: ButtonProps) => {
   const { colors } = useTheme();
   const isLoud = tone === 'loud';
   const background = isLoud
@@ -54,7 +57,8 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: 
           { backgroundColor: background },
         ]}
       >
-        <Text style={[styles.buttonLabel, { color: textColor }]}>{label}</Text>
+        {icon && <Ionicons name={icon} size={18} color={textColor} accessible={false} />}
+        <Text style={[styles.buttonLabel, { color: textColor, flexShrink: 1, textAlign: 'center' }]}>{label}</Text>
       </View>
     </Tappable>
   );
@@ -336,6 +340,8 @@ const styles = StyleSheet.create({
   // and a rounded rectangle behind a sheared one shows at the corners.
   button: {
     minHeight: TOUCH_TARGET,
+    flexDirection: 'row',
+    gap: space.sm,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: space.md,
@@ -350,7 +356,7 @@ const styles = StyleSheet.create({
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   labelPressable: { alignSelf: 'flex-start' },
   labelPressed: { opacity: 0.6 },
-  fieldLabel: { fontFamily: font.uiStrong, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },
+  fieldLabel: { fontFamily: font.uiStrong, fontSize: 12 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
