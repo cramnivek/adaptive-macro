@@ -97,7 +97,7 @@ interface AppState {
   removeEntry: (id: string) => Promise<void>;
   editEntry: (entry: LogEntry, grams: number, meal: Meal) => Promise<void>;
   /** Copies a previous day's entries onto the selected day. Returns how many. */
-  copyDay: (from: ISODate, meals?: Meal[]) => Promise<number>;
+  copyDay: (from: ISODate, meals?: Meal[], entryIds?: string[]) => Promise<number>;
 
   /** Each day's logged intake as the estimate sees it, oldest first. */
   observations: DailyObservation[];
@@ -316,8 +316,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   const copyDay = useCallback(
-    async (from: ISODate, meals?: Meal[]) => {
-      const copied = await db.copyEntriesToDay(from, selectedDate, meals);
+    async (from: ISODate, meals?: Meal[], entryIds?: string[]) => {
+      const copied = await db.copyEntriesToDay(from, selectedDate, meals, entryIds);
       await reloadDiary(selectedDate);
       await reloadHistory();
       return copied;

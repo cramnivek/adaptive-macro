@@ -4,13 +4,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SPOTLIGHT_OPTIONS } from '../features/missionFocus';
 import { connectHealthConnect, syncHealthConnect } from '../health/healthConnect';
 import { onboardingSteps, ONBOARDING_VERSION, type OnboardingStep } from '../onboardingSteps';
 import { thud } from '../platform/haptics';
 import { pushBaselineToCloud } from '../social/baselineSync';
 import { useApp } from '../state/AppStore';
-import { withDefaults, type AppPersonality, type DashboardSpotlight, type UnitSystem } from '../state/settings';
+import { withDefaults, type AppPersonality, type UnitSystem } from '../state/settings';
 import { font, radius, space, useTheme } from '../theme';
 import { ease, useReduceMotion } from '../theme/motion';
 import { Button, Field, TOUCH_TARGET } from './Controls';
@@ -47,12 +46,6 @@ const ACTIVITY: { id: ActivityLevel; title: string; line: string; icon: keyof ty
   { id: 'veryActive', title: 'Extremely active', line: 'Hard training twice a day, or heavy manual work.', icon: 'flame-outline' },
 ];
 
-const SPOTLIGHT_ICONS: Record<DashboardSpotlight, keyof typeof Ionicons.glyphMap> = {
-  balanced: 'grid-outline',
-  workouts: 'barbell-outline',
-  nutrition: 'restaurant-outline',
-};
-
 /** A real line in each voice, so the choice is heard rather than described. */
 const VOICES: { id: AppPersonality; title: string; sample: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'classic', title: 'Classic', sample: '"Down 0.4 kg at 1,850 kcal a day. On track; keep it steady."', icon: 'reader-outline' },
@@ -68,7 +61,6 @@ const TITLES: Record<OnboardingStep, { title: string; line: string }> = {
   body: { title: 'A few numbers about you', line: 'Your starting point. After a week or two of logging, your own data takes over.' },
   activity: { title: 'How active is a normal day?', line: 'Outside the gym. Workouts are counted from what you log.' },
   plan: { title: 'Where, and by when?', line: 'A target weight and a date set a pace you can hold. Leave it to go at a steady default.' },
-  focus: { title: 'What should Today lead with?', line: 'The order of your home screen. Everything is still there whichever you pick.' },
   voice: { title: 'How should your coach talk?', line: 'The weekly check-ins and the app’s own words, in the voice you like.' },
   checkin: { title: 'When is your check-in day?', line: 'Your week ends on this day, and your coach reviews it the day after.' },
   health: { title: 'Bring in steps and weigh-ins', line: 'From Health Connect, where Garmin Connect and other apps share theirs. Read only; it stays on this phone.' },
@@ -164,7 +156,6 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lb'>(settings.units === 'imperial' ? 'lb' : 'kg');
   const [activity, setActivity] = useState<ActivityLevel | null>(own ? settings.activity : null);
   const [plan, setPlan] = useState<GoalPlan | null>(null);
-  const [spotlight, setSpotlight] = useState<DashboardSpotlight>(settings.dashboardSpotlight ?? 'balanced');
   const [voice, setVoice] = useState<AppPersonality>(settings.personality);
   const [weekEndsOn, setWeekEndsOn] = useState(settings.checkInWeekEndsOn);
   const [healthNote, setHealthNote] = useState<string | null>(null);
@@ -213,7 +204,7 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
   /** Everything chosen, saved at once as the last question is answered. */
   const commit = async () => {
     const choices = {
-      dashboardSpotlight: spotlight,
+      dashboardSpotlight: settings.dashboardSpotlight ?? 'balanced',
       personality: voice,
       checkInWeekEndsOn: weekEndsOn,
       onboardingVersion: ONBOARDING_VERSION,
@@ -378,17 +369,6 @@ export const OnboardingFlow = ({ onComplete }: { onComplete: () => void }) => {
             onPlan={setPlan}
           />
         );
-      case 'focus':
-        return SPOTLIGHT_OPTIONS.map((o) => (
-          <OptionCard
-            key={o.id}
-            title={o.label}
-            line={o.description}
-            icon={SPOTLIGHT_ICONS[o.id]}
-            selected={spotlight === o.id}
-            onPress={() => setSpotlight(o.id)}
-          />
-        ));
       case 'voice':
         return VOICES.map((v) => (
           <OptionCard

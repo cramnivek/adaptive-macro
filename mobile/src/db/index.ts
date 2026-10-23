@@ -26,7 +26,8 @@ import {
   SEARCH_CATALOGUE,
 } from './catalogueQueries';
 import { DAILY_INTAKE_FOR_ESTIMATE } from './intakeQueries';
-import { LAST_MEALS_BEFORE } from './mealQueries';
+import { LAST_MEALS_BEFORE, LOGGED_DATES_BEFORE } from './mealQueries';
+import { filterEntriesForCopy, insertCopiedEntries } from './copyEntries';
 import { DELETE_ROUTINE_STEPS } from './routineQueries';
 import { STORAGE_LOCK_RETRY_MS, isStorageLockError } from './storageLock';
 import {
@@ -426,16 +427,12 @@ export const updateLogEntry = async (
   );
 };
 
-/** Days that have at least one entry, most recent first, for the repeat picker. */
-export const listLoggedDates = async (limit = 30, excluding?: ISODate): Promise<ISODate[]> => {
+/** Days with entries before `before`, most recent first, for the repeat picker. */
+export const listLoggedDates = async (limit = 30, before?: ISODate): Promise<ISODate[]> => {
   const db = await getDb();
-  const rows = await db.getAllAsync<{ date: string }>(
-    `SELECT DISTINCT date FROM log_entries
-     WHERE date != ?
-     ORDER BY date DESC LIMIT ?`,
-    excluding ?? '',
-    limit,
-  );
+  const rows = before
+    ? await db.getAllAsync<{ date: string }>(LOGGED_DATES_BEFORE, before, limit)
+    : await db.getAllAsync<{ date: string }>('SELECT DISTINCT date FROM log_entries ORDER BY date DESC LIMIT ?', limit);
   return rows.map((row) => row.date);
 };
 
@@ -469,34 +466,13 @@ export const copyEntriesToDay = async (
   from: ISODate,
   to: ISODate,
   meals?: Meal[],
+  entryIds?: string[],
 ): Promise<number> => {
+  if (entryIds !== undefined && entryIds.length === 0) return 0;
   const db = await getDb();
   const source = await listLogEntries(from);
-  const wanted = meals?.length ? source.filter((entry) => meals.includes(entry.meal)) : source;
-
-  await db.withTransactionAsync(async () => {
-    for (const entry of wanted) {
-      await db.runAsync(
-        `INSERT INTO log_entries (id, date, food_id, food_name, grams, meal, kcal, protein_g, carbs_g, fat_g, fiber_g, micronutrients, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        to,
-        entry.foodId,
-        entry.foodName,
-        entry.grams,
-        entry.meal,
-        entry.nutrients.kcal,
-        entry.nutrients.proteinG,
-        entry.nutrients.carbsG,
-        entry.nutrients.fatG,
-        entry.nutrients.fiberG ?? 0,
-        entry.nutrients.micros ? JSON.stringify(entry.nutrients.micros) : null,
-        new Date().toISOString(),
-      );
-    }
-  });
-
-  return wanted.length;
+  const wanted = filterEntriesForCopy(source, from, meals, entryIds);
+  return insertCopiedEntries(db, wanted, to);
 };
 
 export const deleteLogEntry = async (id: string): Promise<void> => {
