@@ -189,7 +189,7 @@ export default function WeightScreen() {
         </View>
       }
     >
-      <Card title="Log today's weight">
+      <Card variant="featured" title="Log today's weight" icon="scale-outline">
         <Stepper
           label={`Weight (${weightUnit(units)})`}
           value={input}

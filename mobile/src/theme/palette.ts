@@ -1,3 +1,5 @@
+export type FeatureTone = 'sleep' | 'food' | 'activity' | 'salt';
+
 export interface Palette {
   background: string;
   surface: string;
@@ -15,6 +17,8 @@ export interface Palette {
   positive: string;
   warning: string;
   danger: string;
+  /** Recognition and atmosphere, independent of whether a reading is good or bad. */
+  features: Record<FeatureTone, { accent: string; surface: string; note: string }>;
 }
 
 export const dark: Palette = {
@@ -33,6 +37,12 @@ export const dark: Palette = {
   positive: '#6FB58A',
   warning: '#C8A45C',
   danger: '#E06C60',
+  features: {
+    sleep: { accent: '#D3C9F4', surface: '#1B1A20', note: '#262130' },
+    food: { accent: '#BAD5BD', surface: '#1C211E', note: '#252F28' },
+    activity: { accent: '#BFD4E3', surface: '#1A2025', note: '#242E35' },
+    salt: { accent: '#EFC9A8', surface: '#211D19', note: '#2C251F' },
+  },
 };
 
 export const light: Palette = {
@@ -51,6 +61,12 @@ export const light: Palette = {
   positive: '#2E7D5B',
   warning: '#8E6E26',
   danger: '#C0392B',
+  features: {
+    sleep: { accent: '#665088', surface: '#F3F0FA', note: '#E9E2F3' },
+    food: { accent: '#3C6244', surface: '#EEF4EE', note: '#E1ECE0' },
+    activity: { accent: '#3F647D', surface: '#EDF3F7', note: '#E0EAF1' },
+    salt: { accent: '#795334', surface: '#FAF1E7', note: '#F3E6D6' },
+  },
 };
 
 /** Shared spacing scale, so padding stays consistent without magic numbers. */

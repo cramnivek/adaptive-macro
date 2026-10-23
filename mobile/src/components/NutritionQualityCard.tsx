@@ -39,7 +39,7 @@ export const NutritionQualityCard = ({
   const consumedFiber = Math.round(consumed.fiberG ?? 0);
 
   if (entries.length === 0) return (
-    <Card title="Nutrition">
+    <Card variant="featured" tone="food" icon="nutrition-outline" title="Nutrition">
       <Text style={[styles.caption, { color: colors.textMuted }]}>Log a meal to see your nutrition summary.</Text>
     </Card>
   );
@@ -55,7 +55,7 @@ export const NutritionQualityCard = ({
 
   return (
     <>
-      <Card>
+      <Card variant="featured" tone="food">
         <Tappable
           onPress={() => {
             thud('light');
@@ -71,10 +71,10 @@ export const NutritionQualityCard = ({
               <View style={[styles.iconCircle, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
                 <Ionicons name="nutrition-outline" size={18} color={gradeColor} />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <View style={styles.badgeRow}>
                   <Text style={[styles.badgeText, { color: gradeColor }]}>
-                    NUTRITION QUALITY · {quality.grade.toUpperCase()}
+                    Nutrition · {quality.grade}
                   </Text>
                 </View>
                 <Text style={[styles.title, { color: colors.text }]}>
@@ -94,14 +94,14 @@ export const NutritionQualityCard = ({
           {/* Quick Vitals Strip */}
           <View style={styles.vitalsRow}>
             <View style={[styles.vitalPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>FIBER</Text>
+              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>Fiber</Text>
               <Text style={[styles.vitalValue, { color: colors.text }]}>
                 {consumedFiber} / {targetFiber} g
               </Text>
             </View>
 
             <View style={[styles.vitalPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>ELECTROLYTES</Text>
+              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>Electrolytes</Text>
               <Text
                 style={[
                   styles.vitalValue,
@@ -113,7 +113,7 @@ export const NutritionQualityCard = ({
             </View>
 
             <View style={[styles.vitalPill, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>FOODS</Text>
+              <Text style={[styles.vitalLabel, { color: colors.textMuted }]}>Foods</Text>
               <Text style={[styles.vitalValue, { color: colors.text }]}>
                 {entries.length > 0 ? `${entries.length} logged` : 'None yet'}
               </Text>
@@ -123,7 +123,7 @@ export const NutritionQualityCard = ({
           {/* Call to action footer */}
           <View style={styles.footer}>
             <Text style={[styles.footerText, { color: colors.accent }]}>
-              Every nutrient, and swaps to fill the gaps
+              Food details & ideas
             </Text>
             <Ionicons name="chevron-forward" size={16} color={colors.accent} />
           </View>
@@ -172,10 +172,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   badgeText: {
-    fontFamily: font.figure,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontFamily: font.ui,
+    fontSize: 11,
+    lineHeight: 16,
   },
   title: {
     fontFamily: font.uiStrong,
@@ -215,10 +214,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   vitalLabel: {
-    fontFamily: font.figure,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontFamily: font.ui,
+    fontSize: 10,
   },
   vitalValue: {
     fontFamily: font.uiStrong,

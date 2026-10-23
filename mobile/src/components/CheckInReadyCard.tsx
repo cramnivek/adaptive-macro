@@ -71,7 +71,7 @@ export const CheckInReadyCard = () => {
 
   return (
     <FadeIn>
-      <Card variant="featured" title={`Your ${noun} is ready`}>
+      <Card variant="featured" tone="activity" icon="chatbubble-ellipses-outline" title={`Your ${noun} is ready`}>
         <Text style={[styles.body, { color: colors.text }]}>
           {formatDayMonth(ready.from)} to {formatDayMonth(ready.to)} has enough logged days for a proper
           check-in: how your training, weight and food fitted together, and what to change.

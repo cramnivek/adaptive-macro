@@ -25,7 +25,6 @@ import { confirm } from '../../src/dialog';
 import { MEAL_LABELS, formatDateLong } from '../../src/format';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
-import { session as loud } from '../../src/theme/sessionTheme';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 import { StepLogModal } from '../../src/components/StepLogModal';
 import { WeightContextCard } from '../../src/components/WeightContextCard';
@@ -167,13 +166,13 @@ export default function TodayScreen() {
       accessibilityLabel="Open workout routines"
     >
       <View style={styles.trainingShortcutLeft}>
-        <View style={[styles.trainingIconBubble, { backgroundColor: loud.loud, borderColor: loud.loud }]}>
-          <Ionicons name="barbell-outline" size={18} color={loud.onLoud} />
+        <View style={[styles.trainingIconBubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Ionicons name="barbell-outline" size={18} color={colors.text} />
         </View>
         <View style={{ gap: 2, flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
-              Workout & Routines
+              Workout & routines
             </Text>
           </View>
           <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
@@ -199,26 +198,26 @@ export default function TodayScreen() {
         style={({ pressed }) => [
           styles.stepsCard,
           {
-            backgroundColor: colors.surfaceRaised,
+            backgroundColor: colors.features.activity.surface,
             borderColor: colors.border,
             opacity: pressed ? 0.85 : 1,
           },
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Daily steps and NEAT activity"
+        accessibilityLabel="Daily steps and activity"
       >
         <View style={styles.stepsCardLeft}>
-          <View style={[styles.stepsIconBubble, { backgroundColor: colors.accent + '22', borderColor: colors.accent + '55' }]}>
-            <Ionicons name="footsteps" size={18} color={colors.accent} />
+          <View style={[styles.stepsIconBubble, { backgroundColor: colors.features.activity.note, borderColor: colors.border }]}>
+            <Ionicons name="footsteps-outline" size={18} color={colors.features.activity.accent} />
           </View>
           <View style={{ gap: 2, flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={[styles.stepsCardTitle, { color: colors.text }]}>
                 {dailySteps
-                  ? `${dailySteps.steps.toLocaleString()} Steps`
+                  ? `${dailySteps.steps.toLocaleString()} steps`
                   : settings.personality === 'gymrat'
                     ? 'Daily Steps & Cardio'
-                    : 'Daily Steps & NEAT'}
+                    : 'Daily steps'}
               </Text>
               {dailySteps && dailySteps.activeKcal ? (
                 <View style={[styles.stepsTag, { backgroundColor: colors.accent + '20' }]}>
@@ -229,7 +228,7 @@ export default function TodayScreen() {
               ) : (
                 <View style={[styles.stepsTag, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.stepsTagText, { color: colors.textMuted }]}>
-                    NOT LOGGED
+                    Not logged
                   </Text>
                 </View>
               )}
@@ -296,7 +295,7 @@ export default function TodayScreen() {
       {spotlight === 'workouts' && trainingShortcut}
 
       {/* Daily Macro Targets Card */}
-      <Card>
+      <Card variant="featured" title="Your food today" icon="restaurant-outline">
         <MacroSummary consumed={totals} target={program.macros} />
         <View style={styles.macroCardFooter}>
           <Text style={[styles.targetLine, { color: colors.textMuted }]}>
@@ -602,6 +601,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   stickerPill: {
+    minHeight: TOUCH_TARGET,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,

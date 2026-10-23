@@ -412,7 +412,7 @@ export default function DescribeScreen() {
         }}
       />
 
-      <Card title="What did you eat?" subtitle="Photograph it, write it, or both.">
+      <Card variant="featured" tone="food" icon="restaurant-outline" title="What did you eat?" subtitle="Photograph it, write it, or both.">
         {photo ? (
           <View style={styles.photoRow}>
             <View style={[styles.photoPreview, { borderColor: colors.border, overflow: 'hidden' }]}>
@@ -508,7 +508,7 @@ export default function DescribeScreen() {
       {estimate && !estimate.notFood && (
         <>
           {estimate.notes.trim().length > 0 && (
-            <Card title="What the estimate assumed">
+            <Card variant="featured" tone="food" icon="information-circle-outline" title="What the estimate assumed">
               <Text style={[styles.body, { color: colors.textMuted }]}>{estimate.notes}</Text>
             </Card>
           )}

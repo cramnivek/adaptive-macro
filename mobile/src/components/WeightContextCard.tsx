@@ -8,6 +8,7 @@ import { useApp } from '../state/AppStore';
 import { font, space, useTheme } from '../theme';
 import { Card } from './Card';
 import { Button } from './Controls';
+import { AdviceNote } from './AdviceNote';
 
 export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
   const { colors } = useTheme();
@@ -56,7 +57,7 @@ export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
               : 'These food and weight records do not show a clear link between salt and this weigh-in.';
 
   return (
-    <Card title="Your weekly weight">
+    <Card variant="featured" title="Your weekly weight" icon="scale-outline">
       <View style={styles.body}>
         <Text selectable style={[styles.average, { color: colors.text }]}>
           {week.current ? formatWeight(week.current.kg, settings.units) : 'No weigh-ins this week'}
@@ -73,16 +74,15 @@ export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
         ) : (
           <Text style={[styles.note, { color: colors.textMuted }]}>Keep a few regular weigh-ins each week to see how your average changes.</Text>
         )}
-        {!context && <><Text style={[styles.label, { color: colors.text }]}>Judge the week, not one weigh-in</Text>
-        <Text style={[styles.text, { color: colors.text }]}>
+        {!context && <AdviceNote label="Judge the week, not one weigh-in">
           Weigh under similar conditions, such as after waking and using the bathroom. Use several weeks of averages to judge progress before changing your plan.
-        </Text></>}
+        </AdviceNote>}
         {context && <>
-          <Text style={[styles.label, { color: colors.text }]}>Saltier food may be affecting this weigh-in</Text>
+          <Text style={[styles.label, { color: colors.features.salt.accent }]}>Saltier food may be affecting this weigh-in</Text>
           <Text style={[styles.text, { color: colors.textMuted }]}>
             Your {formatDayMonth(context.date)} weigh-in was {formatWeight(context.weightKg, settings.units)}, up from {formatWeight(context.previousWeightKg, settings.units)}. Extra salt can hold water and may be part of this rise.
           </Text>
-          <Text style={[styles.text, { color: colors.text }]}>Watch your next few morning readings and your weekly average before cutting calories. One jump does not tell you how much is fat or water.</Text>
+          <AdviceNote label="Next step" tone="salt">Watch your next few morning readings and your weekly average before cutting calories. One jump does not tell you how much is fat or water.</AdviceNote>
         </>}
         <Button label={expanded ? 'Hide weight details' : 'Weight & salt details'} variant="subtle" onPress={() => setExpanded((value) => !value)} />
         {expanded && <>
@@ -113,8 +113,8 @@ export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
 
 const styles = StyleSheet.create({
   body: { gap: space.sm },
-  average: { fontFamily: font.figure, fontSize: 25 },
-  label: { fontFamily: font.uiStrong, fontSize: 13, marginTop: space.sm },
+  average: { fontFamily: font.uiStrong, fontSize: 32, fontVariant: ['tabular-nums'] },
+  label: { fontFamily: font.uiStrong, fontSize: 15, lineHeight: 21, marginTop: space.sm },
   text: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
   note: { fontFamily: font.ui, fontSize: 11, lineHeight: 16 },
 });

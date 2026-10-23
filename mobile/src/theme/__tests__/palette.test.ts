@@ -36,6 +36,15 @@ describe.each([
   ['dark', dark],
   ['light', light],
 ] as const)('%s palette', (_name, palette) => {
+  it.each(['sleep', 'food', 'activity', 'salt'] as const)('%s feature text stays readable on both surfaces', (tone) => {
+    const feature = palette.features[tone];
+    for (const ground of [feature.surface, feature.note]) {
+      for (const text of [palette.text, palette.textMuted, feature.accent]) {
+        expect(contrast(text, ground)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   // Body text. WCAG AA is 4.5:1 below 24px, and nothing in this app's chrome
   // is above 24px except the screen title and the calorie figure.
   it.each(TEXTS.flatMap((text) => GROUNDS.map((ground) => [text, ground] as const)))(
