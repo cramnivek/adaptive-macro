@@ -40,7 +40,7 @@ describe('handleGeminiProxy', () => {
     const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response('{}'));
     vi.stubGlobal('fetch', fetchMock);
     for (const body of [
-      { ...photoBody, generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } },
+      { ...photoBody, generationConfig: { ...photoBody.generationConfig, thinkingConfig: { thinkingLevel: 'high' } } },
       { ...photoBody, tools: [{ google_search: {} }] },
       { ...photoBody, generationConfig: { responseMimeType: 'application/json' } },
     ]) {
