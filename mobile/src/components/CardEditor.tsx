@@ -31,6 +31,8 @@ interface CardEditorProps {
   onDepth: () => void;
   onReset: () => void;
   onClose: () => void;
+  /** The last good layers stay visible while an edited file is being prepared. */
+  previewStatus?: string | null;
 }
 
 /**
@@ -63,6 +65,7 @@ export const CardEditor = ({
   onDepth,
   onReset,
   onClose,
+  previewStatus,
 }: CardEditorProps) => {
   const insets = useSafeAreaInsets();
   // What the card actually has, rather than what is left after arithmetic. The
@@ -142,6 +145,7 @@ export const CardEditor = ({
         </View>
 
         <View style={styles.controls}>
+          {previewStatus && <Text accessibilityLiveRegion="polite" style={styles.about}>{previewStatus}</Text>}
           <Text style={styles.heading}>SHAPE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.strip} contentContainerStyle={styles.row}>
             {TEMPLATE_IDS.map((id) => (
