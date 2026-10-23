@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { chimeWav, finishSamples, prStingSamples, tickSamples, wavFromSamples } from './chimeSound';
 import type { ChimeChoice } from './chimeSound';
 import { playNativeSound } from './nativeSound';
+import { configureWebAudioSession } from './webAudioSession';
 
 /**
  * The rest-is-up chime, on the web build.
@@ -9,9 +10,9 @@ import { playNativeSound } from './nativeSound';
  * Browsers, iOS Safari above all, refuse to play sound that no tap asked for.
  * So the chime is primed on a tap — ticking a set, which is what starts the
  * rest — by playing it silently once, and from then on that same element may
- * play when the rest ends, with no tap in sight. An element, not Web Audio:
- * iOS mutes Web Audio with the ring/silent switch, and a chime that a switch
- * nobody remembers flipping turns off is the bug this is meant to fix.
+ * play when the rest ends, with no tap in sight. The web audio session is
+ * mixable so these short alerts do not replace the listener's background music.
+ * The browser and device's silent-mode policy still controls audibility.
  *
  * A phone build has no tap rule to work around: there the sounds play through
  * expo-audio, from nativeSound.ts, and priming does nothing.
@@ -24,6 +25,7 @@ let audioCtx: any = null;
 
 const getAudioContext = (): any => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  configureWebAudioSession();
   const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
   if (!Ctx) return null;
   if (!audioCtx) {
@@ -131,6 +133,7 @@ const playWebAudioFallback = (choice: ChimeChoice): void => {
 
 const audio = (choice: ChimeChoice): HTMLAudioElement | null => {
   if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
+  configureWebAudioSession();
   let element = audioCache.get(choice);
   if (!element) {
     try {
@@ -217,8 +220,7 @@ export const playChime = (choice: ChimeChoice = 'chime'): void => {
 /**
  * Short sounds for moments rather than alarms: so far, the new-PR sting.
  *
- * The same element-not-Web-Audio rule as the chime, for the same reason (the
- * iOS silent switch mutes Web Audio), and the same priming: the sting plays
+ * The same mixable session and priming as the chime: the sting plays
  * a moment after the Finish tap, once the session is saved, so it is primed
  * on that tap.
  */
@@ -241,6 +243,7 @@ const wanted = new Set<SoundEffect>();
 
 const effectAudio = (effect: SoundEffect): HTMLAudioElement | null => {
   if (Platform.OS !== 'web' || typeof Audio === 'undefined') return null;
+  configureWebAudioSession();
   let element = effects.get(effect);
   if (!element) {
     try {
