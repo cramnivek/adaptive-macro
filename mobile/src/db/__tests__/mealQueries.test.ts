@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { LAST_MEALS_BEFORE } from '../mealQueries';
+import { LAST_MEALS_BEFORE, LOGGED_DATES_BEFORE } from '../mealQueries';
 import { MIGRATIONS } from '../schema';
 
 /*
@@ -62,5 +62,19 @@ describe('last meals before a day', () => {
     eat('2026-10-11', 'snack', 200);
     eat('2026-10-03', 'snack', 300);
     expect(lastMeals()).toEqual([]);
+  });
+});
+
+describe('logged dates before a destination', () => {
+  it('does not let the destination or future dates appear ahead of earlier history', () => {
+    eat('2026-10-10', 'breakfast', 400);
+    eat('2026-10-09', 'lunch', 500);
+    eat('2026-10-11', 'dinner', 600);
+    eat('2026-10-12', 'snack', 700);
+
+    expect(db.prepare(LOGGED_DATES_BEFORE).all('2026-10-11', 30)).toEqual([
+      { date: '2026-10-10' },
+      { date: '2026-10-09' },
+    ]);
   });
 });

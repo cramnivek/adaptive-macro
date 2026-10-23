@@ -12,7 +12,6 @@ import { font, radius, space, useTheme } from '../theme';
 import type { DashboardSpotlight, UserMission } from '../state/settings';
 import {
   MISSION_LIST,
-  SPOTLIGHT_OPTIONS,
   getMissionPraise,
   type MissionDefinition,
 } from '../features/missionFocus';
@@ -37,7 +36,6 @@ export const MissionPicker = ({
   selectedMission,
   selectedSpotlight,
   onChangeMission,
-  onChangeSpotlight,
   onSave,
   isSaving = false,
   saveButtonLabel = 'Save',
@@ -47,7 +45,6 @@ export const MissionPicker = ({
 }: MissionPickerProps) => {
   const { colors } = useTheme();
   const [mission, setMission] = useState<UserMission>(selectedMission);
-  const [spotlight, setSpotlight] = useState<DashboardSpotlight>(selectedSpotlight);
 
   const handleSelectMission = (id: UserMission) => {
     thud('light');
@@ -55,15 +52,9 @@ export const MissionPicker = ({
     onChangeMission(id);
   };
 
-  const handleSelectSpotlight = (id: DashboardSpotlight) => {
-    thud('light');
-    setSpotlight(id);
-    onChangeSpotlight(id);
-  };
-
   const handleSave = () => {
     thud('heavy');
-    onSave?.(mission, spotlight);
+    onSave?.(mission, selectedSpotlight);
   };
 
   const praise = getMissionPraise(mission);
@@ -179,51 +170,6 @@ export const MissionPicker = ({
           );
         })}
       </View>
-
-      {/* Dashboard Spotlight Selector */}
-      {!compact && (
-        <View style={styles.spotlightSection}>
-          <View style={styles.spotlightHeader}>
-            <Text style={[styles.spotlightTitle, { color: colors.text }]}>
-              Home screen
-            </Text>
-            <Text style={[styles.spotlightSubtitle, { color: colors.textMuted }]}>
-              What Today shows first.
-            </Text>
-          </View>
-
-          <View style={styles.spotlightRow}>
-            {SPOTLIGHT_OPTIONS.map((opt) => {
-              const isSelected = spotlight === opt.id;
-              return (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => handleSelectSpotlight(opt.id)}
-                  style={({ pressed }) => [
-                    styles.spotlightPill,
-                    {
-                      backgroundColor: isSelected ? colors.text : colors.surfaceRaised,
-                      borderColor: isSelected ? colors.text : colors.border,
-                      opacity: pressed ? 0.75 : 1,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={opt.label}
-                >
-                  <Text
-                    style={[
-                      styles.spotlightText,
-                      { color: isSelected ? colors.background : colors.text },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
 
       {/* Said plainly because it is the question a picker like this raises:
           does choosing one switch something else off? It does not. */}
@@ -349,39 +295,6 @@ const styles = StyleSheet.create({
     fontFamily: font.ui,
     fontSize: 11,
     lineHeight: 16,
-  },
-  spotlightSection: {
-    marginTop: space.xs,
-    gap: space.xs + 2,
-  },
-  spotlightHeader: {
-    gap: 2,
-  },
-  spotlightTitle: {
-    fontFamily: font.uiStrong,
-    fontSize: 13,
-  },
-  spotlightSubtitle: {
-    fontFamily: font.ui,
-    fontSize: 11,
-  },
-  spotlightRow: {
-    flexDirection: 'row',
-    gap: space.xs,
-  },
-  spotlightPill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: space.sm,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  spotlightText: {
-    fontFamily: font.uiStrong,
-    fontSize: 11,
   },
   guaranteeText: {
     fontFamily: font.ui,

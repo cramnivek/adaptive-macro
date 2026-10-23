@@ -4,7 +4,7 @@ import type { GoalDirection } from '@adaptive-macros/engine';
  * Which screens first run shows, and in what order.
  *
  * First run was one form on one card, and the choices that shape the app —
- * what Today leads with, the coach's voice, the check-in day — lived in
+ * the coach's voice and the check-in day — lived in
  * Settings, where most people never look. Now each is a full screen of its
  * own, asked once, in a flow with no Skip; only Health Connect can be put
  * off, because a permission must always be optional.
@@ -19,7 +19,6 @@ export type OnboardingStep =
   | 'body'
   | 'activity'
   | 'plan'
-  | 'focus'
   | 'voice'
   | 'checkin'
   | 'health'
@@ -51,7 +50,6 @@ export const onboardingSteps = ({
           // Age, height and weight are what the first estimate is built on, so
           // someone set up is asked to confirm them, prefilled, rather than skipped.
           ...(onboarded ? (['body'] as const) : []),
-          'focus',
           'voice',
           'checkin',
           ...(android ? (['health'] as const) : []),

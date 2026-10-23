@@ -1,16 +1,15 @@
-import type { ISODate, LogEntry, Meal } from '@adaptive-macros/engine';
+import type { LogEntry, Meal } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
 import { CheckInCard } from '../../src/components/CheckInCard';
 import { CheckInReadyCard } from '../../src/components/CheckInReadyCard';
 import { FadeIn } from '../../src/components/FadeIn';
 import { Tappable } from '../../src/components/Tappable';
 import { HomeScreenNotice } from '../../src/components/HomeScreenNotice';
-import { ActiveWorkoutBanner } from '../../src/components/ActiveWorkoutBanner';
 import { FirstWeekCalibrationCard } from '../../src/components/FirstWeekCalibrationCard';
 import { TOUCH_TARGET } from '../../src/components/Controls';
 import { EditEntrySheet } from '../../src/components/EditEntrySheet';
@@ -27,7 +26,6 @@ import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme } from '../../src/theme';
 import { TransparentStickerModal } from '../../src/components/TransparentStickerModal';
 import { StepLogModal } from '../../src/components/StepLogModal';
-import { WeightContextCard } from '../../src/components/WeightContextCard';
 import { SleepSummaryCard } from '../../src/components/SleepSummaryCard';
 
 const MEAL_ORDER: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -47,18 +45,13 @@ export default function TodayScreen() {
     observations,
     dayStatus,
     markDay,
-    copyDay,
     settings,
   } = useApp();
 
   const [editing, setEditing] = useState<LogEntry | null>(null);
   const [recentMeals, setRecentMeals] = useState<Map<Meal, RecentMeal>>(new Map());
-  const { width } = useWindowDimensions();
-  const isCompact = width < 360;
-
-  // The meal being copied, so a second tap before the diary reloads cannot
-  // copy it twice.
-  const [repeating, setRepeating] = useState<Meal | null>(null);
+  const [foodDetailsOpen, setFoodDetailsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [showStickerModal, setShowStickerModal] = useState(false);
   const [dailySteps, setDailySteps] = useState<DailyStepRecord | null>(null);
   const [stepModalOpen, setStepModalOpen] = useState(false);
@@ -86,40 +79,32 @@ export default function TodayScreen() {
   );
   useEffect(() => onHealthConnectSynced(() => void loadSteps()), [loadSteps]);
 
-  const renderMealActions = (meal: Meal, style?: ViewStyle) => (
-    <View style={[styles.mealActions, style]}>
+  const renderMealActions = (meal: Meal, kcal?: number) => (
+    <View style={styles.mealActions}>
+      {kcal !== undefined && <Text style={[styles.entryMeta, { color: colors.textMuted }]}>{Math.round(kcal)} kcal</Text>}
       <Tappable
         onPress={() => router.push({ pathname: '/log-meal', params: { meal } })}
         scaleTo={0.97}
-        style={[styles.logMealButton, { backgroundColor: colors.accent }]}
+        style={[styles.logMealButton, { backgroundColor: colors.surface }]}
         accessibilityLabel={`Log a meal for ${MEAL_LABELS[meal]}`}
         accessibilityRole="button"
       >
-        <Ionicons name="sparkles-outline" size={16} color={colors.onFill} />
-        <Text style={[styles.logMealLabel, { color: colors.onFill }]}>Log a meal</Text>
+        <Ionicons name="add" size={18} color={colors.text} />
+        <Text style={[styles.logMealLabel, { color: colors.text }]}>Add</Text>
       </Tappable>
     </View>
   );
 
   useEffect(() => {
     let live = true;
+    setRecentMeals(new Map());
     void lastMealsBefore(selectedDate).then((found) => {
       if (live) setRecentMeals(found);
-    });
+    }).catch(() => { if (live) setRecentMeals(new Map()); });
     return () => {
       live = false;
     };
   }, [selectedDate, entries]);
-
-  const repeatMeal = async (meal: Meal, from: ISODate) => {
-    if (repeating !== null) return;
-    setRepeating(meal);
-    try {
-      await copyDay(from, [meal]);
-    } finally {
-      setRepeating(null);
-    }
-  };
 
   const byMeal = useMemo(() => {
     const groups = new Map<Meal, LogEntry[]>(MEAL_ORDER.map((meal) => [meal, []]));
@@ -147,42 +132,6 @@ export default function TodayScreen() {
     ready && isToday && shouldAskAbout(yesterdayKcal, dayStatus.get(yesterday), program.calories.kcal);
   const leftOut = dayStatus.get(selectedDate) === false;
 
-  // Where Today puts training and the activity cards follows the focus picked
-  // in onboarding or Settings. Balanced and Food first used to lay Today out
-  // identically, so the choice changed nothing anyone could see.
-  const spotlight = settings.dashboardSpotlight ?? 'balanced';
-  const trainingShortcut = (
-    <Pressable
-      onPress={() => router.push('/train')}
-      style={({ pressed }) => [
-        styles.trainingShortcut,
-        {
-          backgroundColor: colors.surfaceRaised,
-          borderColor: colors.border,
-          opacity: pressed ? 0.85 : 1,
-        },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel="Open workout routines"
-    >
-      <View style={styles.trainingShortcutLeft}>
-        <View style={[styles.trainingIconBubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Ionicons name="barbell-outline" size={18} color={colors.text} />
-        </View>
-        <View style={{ gap: 2, flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={[styles.trainingShortcutTitle, { color: colors.text }]}>
-              Workout & routines
-            </Text>
-          </View>
-          <Text style={[styles.trainingShortcutSubtitle, { color: colors.textMuted }]}>
-            Start a workout or pick up a routine.
-          </Text>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-    </Pressable>
-  );
   const activityCards = (
     <>
       {/* Micronutrients from what was logged today, against the reference intakes. */}
@@ -250,7 +199,6 @@ export default function TodayScreen() {
   return (
     <Screen
       title="Today"
-      subtitle={formatDateLong(selectedDate)}
       action={
         <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
           <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
@@ -258,11 +206,10 @@ export default function TodayScreen() {
       }
     >
       <HomeScreenNotice />
-      <ActiveWorkoutBanner />
-      <FirstWeekCalibrationCard />
       <View style={styles.dateNav}>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, -1))}
+          accessibilityRole="button"
           accessibilityLabel="Go to the previous day"
           style={[styles.navButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
@@ -270,10 +217,12 @@ export default function TodayScreen() {
         </Pressable>
         <Pressable
           onPress={() => setSelectedDate(todayISO())}
+          accessibilityRole="button"
+          accessibilityLabel={isToday ? formatDateLong(selectedDate) : `${formatDateLong(selectedDate)}. Jump to today`}
           style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontFamily: font.uiStrong }}>
-            {isToday ? 'Today' : 'Jump to today'}
+            {formatDateLong(selectedDate)}{!isToday && ' · Today'}
           </Text>
         </Pressable>
         <Pressable
@@ -281,6 +230,7 @@ export default function TodayScreen() {
           // Logging into the future would feed the estimator days that have not
           // happened yet, so forward navigation stops at today.
           disabled={isToday}
+          accessibilityRole="button"
           accessibilityLabel="Go to the next day"
           style={[
             styles.navButton,
@@ -291,12 +241,20 @@ export default function TodayScreen() {
         </Pressable>
       </View>
 
-      {/* Workouts first: lead with training. */}
-      {spotlight === 'workouts' && trainingShortcut}
-
-      {/* Daily Macro Targets Card */}
-      <Card variant="featured" title="Your food today" icon="restaurant-outline">
-        <MacroSummary consumed={totals} target={program.macros} />
+      <Card variant="featured" style={styles.foodSummary}>
+        <MacroSummary compact consumed={totals} target={program.macros} />
+        <Pressable
+          onPress={() => setFoodDetailsOpen((open) => !open)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: foodDetailsOpen }}
+          style={styles.disclosure}
+        >
+          <Text style={[styles.disclosureLabel, { color: leftOut ? colors.warning : colors.textMuted }]}>
+            {leftOut ? 'Day excluded · Food details' : 'Food details & sharing'}
+          </Text>
+          <Ionicons name={foodDetailsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </Pressable>
+        {foodDetailsOpen && <>
         <View style={styles.macroCardFooter}>
           <Text style={[styles.targetLine, { color: colors.textMuted }]}>
             Target {program.calories.kcal} kcal
@@ -340,58 +298,35 @@ export default function TodayScreen() {
             </Text>
           </Pressable>
         )}
+        </>}
       </Card>
-
-      {/* Balanced: training sits below the targets. */}
-      {spotlight === 'balanced' && trainingShortcut}
-
-      {spotlight !== 'nutrition' && activityCards}
-
-      {/* Morning Scale Weight & Check-in (Always Active) */}
-      {isToday && <CheckInCard />}
-      {isToday && <CheckInReadyCard />}
-
-      {askAboutYesterday && yesterdayKcal !== undefined && (
-        <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
-          <Text style={[styles.questionTitle, { color: colors.text }]}>
-            Yesterday's log came to {Math.round(yesterdayKcal)} kcal. Was that everything?
-          </Text>
-          <Text style={[styles.bannerText, { color: colors.textMuted }]}>
-            If a meal is missing, leaving the day out stops it from lowering your target.
-          </Text>
-          <View style={styles.questionActions}>
-            <Pressable
-              onPress={() => void markDay(yesterday, true)}
-              style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Yes, logged everything</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void markDay(yesterday, false)}
-              style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.warning }]}
-            >
-              <Text style={[styles.dayActionLabel, { color: colors.text }]}>Exclude from estimate</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-
-
       <View style={styles.dayActions}>
+        <Tappable
+          onPress={() => router.push('/log-meal')}
+          accessibilityRole="button"
+          style={[styles.dayAction, { backgroundColor: colors.accent }]}
+        >
+          <Ionicons name="sparkles-outline" size={17} color={colors.onFill} />
+          <Text style={[styles.dayActionLabel, { color: colors.onFill }]}>Log a meal</Text>
+        </Tappable>
         <Pressable
           onPress={() => router.push({ pathname: '/quick-add', params: { meal: 'snack' } })}
+          accessibilityRole="button"
           style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <Ionicons name="flash-outline" size={16} color={colors.text} />
           <Text style={[styles.dayActionLabel, { color: colors.text }]}>Quick add</Text>
         </Pressable>
+      </View>
+      <View style={styles.diaryHeading}>
+        <Text style={[styles.diaryTitle, { color: colors.text }]}>Your meals</Text>
         <Pressable
           onPress={() => router.push('/repeat')}
-          style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          accessibilityRole="button"
+          style={styles.repeatLink}
         >
           <Ionicons name="repeat-outline" size={16} color={colors.text} />
-          <Text style={[styles.dayActionLabel, { color: colors.text }]}>Repeat a day</Text>
+          <Text style={[styles.repeatLabel, { color: colors.textMuted }]}>Choose previous foods</Text>
         </Pressable>
       </View>
 
@@ -403,10 +338,9 @@ export default function TodayScreen() {
           <Card
             key={meal}
             title={MEAL_LABELS[meal]}
-            subtitle={mealEntries.length ? `${Math.round(mealKcal)} kcal` : 'Ready to log'}
-            right={!isCompact ? renderMealActions(meal) : undefined}
+            right={renderMealActions(meal, mealEntries.length ? mealKcal : undefined)}
+            style={styles.mealSection}
           >
-            {isCompact && renderMealActions(meal, styles.mealActionsNarrow)}
             {/*
               Each entry arrives rather than appearing. The stagger is small and
               capped: a logged food should slide in, but a meal with eight items
@@ -421,7 +355,7 @@ export default function TodayScreen() {
                   style={styles.entry}
                 >
                   <View style={styles.entryText}>
-                    <Text style={[styles.entryName, { color: colors.text }]} numberOfLines={1}>
+                    <Text style={[styles.entryName, { color: colors.text }]} numberOfLines={2}>
                       {entry.foodName}
                     </Text>
                     <Text style={[styles.entryMeta, { color: colors.textFaint }]}>
@@ -437,42 +371,66 @@ export default function TodayScreen() {
             ))}
             {/*
               Most people eat the same breakfast most days. An empty meal offers
-              the last one logged this week in one tap, and only an empty one,
-              so a meal cannot be doubled by accident.
+              the last one logged this week as a selection, so tapping it never
+              logs a whole meal without reviewing the foods.
             */}
             {mealEntries.length === 0 && recentMeals.has(meal) && (() => {
               const recent = recentMeals.get(meal)!;
               const label = sameAsLabel(recent.date, selectedDate);
               return (
                 <Tappable
-                  onPress={() => void repeatMeal(meal, recent.date)}
-                  disabled={repeating !== null}
+                  onPress={() => router.push({ pathname: '/repeat', params: { from: recent.date, meal } })}
                   scaleTo={0.97}
-                  accessibilityLabel={`${label} for ${MEAL_LABELS[meal]}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Choose foods ${label.toLowerCase()} for ${MEAL_LABELS[meal]}`}
                   style={[styles.repeatChip, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
                 >
                   <Ionicons name="repeat-outline" size={15} color={colors.accent} />
-                  <Text style={[styles.repeatLabel, { color: colors.text }]}>{label}</Text>
+                  <Text style={[styles.repeatLabel, { color: colors.text }]}>{label.replace('Same as', 'Choose from')}</Text>
                   <Text style={[styles.repeatMeta, { color: colors.textFaint }]}>
                     {recent.items === 1 ? '1 item' : `${recent.items} items`} · {Math.round(recent.kcal)} kcal
                   </Text>
                 </Tappable>
               );
             })()}
-            {mealEntries.length > 0 && (
-              <Text style={[styles.deleteHint, { color: colors.textFaint }]}>
-                Tap an item to change the amount, hold to remove it
-              </Text>
-            )}
           </Card>
         );
       })}
 
-      {/* Food first: the diary comes straight after the targets, and the rest follows it. */}
-      {spotlight === 'nutrition' && activityCards}
-      {spotlight === 'nutrition' && trainingShortcut}
-      <WeightContextCard />
-      <SleepSummaryCard />
+      {entries.length > 0 && <Text style={[styles.deleteHint, { color: colors.textFaint }]}>Tap a food to edit · Hold to remove</Text>}
+      <Pressable
+        onPress={() => setMoreOpen((open) => !open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: moreOpen }}
+        style={[styles.moreButton, { borderColor: colors.border }]}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.disclosureLabel, { color: colors.text }]}>More for today</Text>
+          <Text style={[styles.entryMeta, { color: colors.textMuted }]}>Sleep, activity & check-ins</Text>
+        </View>
+        <Ionicons name={moreOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+      </Pressable>
+      {moreOpen && <>
+        <FirstWeekCalibrationCard />
+        {activityCards}
+        {isToday && <CheckInCard />}
+        {isToday && <CheckInReadyCard />}
+        {askAboutYesterday && yesterdayKcal !== undefined && (
+          <View style={[styles.banner, styles.question, { backgroundColor: colors.surfaceRaised, borderColor: colors.warning }]}>
+            <Text style={[styles.questionTitle, { color: colors.text }]}>Yesterday's log came to {Math.round(yesterdayKcal)} kcal. Was that everything?</Text>
+            <Text style={[styles.bannerText, { color: colors.textMuted }]}>If a meal is missing, leaving the day out stops it from lowering your target.</Text>
+            <View style={styles.questionActions}>
+              <Pressable onPress={() => void markDay(yesterday, true)} accessibilityRole="button" style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <Text style={[styles.dayActionLabel, { color: colors.text }]}>Logged everything</Text>
+              </Pressable>
+              <Pressable onPress={() => void markDay(yesterday, false)} accessibilityRole="button" style={[styles.dayAction, { backgroundColor: colors.surface, borderColor: colors.warning }]}>
+                <Text style={[styles.dayActionLabel, { color: colors.text }]}>Exclude from estimate</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+        <SleepSummaryCard />
+      </>}
       <EditEntrySheet
         entry={editing}
         onCancel={() => setEditing(null)}
@@ -556,45 +514,22 @@ const styles = StyleSheet.create({
     minHeight: TOUCH_TARGET,
     minWidth: TOUCH_TARGET,
     paddingVertical: space.sm,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.sm,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   navToday: { flex: 1 },
+  foodSummary: { padding: space.md, marginBottom: space.md },
+  disclosure: { minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: space.xs },
+  disclosureLabel: { fontFamily: font.uiStrong, fontSize: 12, flexShrink: 1 },
+  diaryHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: space.sm },
+  diaryTitle: { fontFamily: font.uiStrong, fontSize: 18 },
+  repeatLink: { minHeight: TOUCH_TARGET, flexDirection: 'row', gap: space.xs, alignItems: 'center' },
+  mealSection: { marginBottom: space.md },
+  moreButton: { minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.md, marginBottom: space.md },
   targetLine: { fontFamily: font.ui, fontSize: 12, textAlign: 'center' },
-  trainingShortcut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: space.md,
-    borderRadius: radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: space.md,
-  },
-  trainingShortcutLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    flex: 1,
-  },
-  trainingIconBubble: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trainingShortcutTitle: {
-    fontFamily: font.uiStrong,
-    fontSize: 14,
-  },
-  trainingShortcutSubtitle: {
-    fontFamily: font.ui,
-    fontSize: 11,
-  },
   macroCardFooter: {
     marginTop: space.sm,
     gap: space.xs,
@@ -630,8 +565,7 @@ const styles = StyleSheet.create({
   questionActions: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },
   completeness: { minHeight: TOUCH_TARGET, justifyContent: 'center', marginTop: space.xs },
   completenessText: { fontFamily: font.ui, fontSize: 12, lineHeight: 17, textAlign: 'center' },
-  mealActions: { flexDirection: 'row', gap: space.sm },
-  mealActionsNarrow: { flexDirection: 'row', gap: space.sm, marginTop: space.xs, marginBottom: space.sm },
+  mealActions: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   logMealButton: {
     minHeight: TOUCH_TARGET,
     paddingHorizontal: space.md,
@@ -673,7 +607,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.xs,
-    paddingVertical: space.md,
+    paddingVertical: space.sm,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
   },

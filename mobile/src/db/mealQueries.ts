@@ -14,3 +14,8 @@ export const LAST_MEALS_BEFORE = `SELECT l.meal AS meal, l.date AS date, SUM(l.k
      GROUP BY meal
   ) latest ON latest.meal = l.meal AND latest.date = l.date
   GROUP BY l.meal, l.date`;
+
+/** Dates with food logs strictly before the destination date, newest first. */
+export const LOGGED_DATES_BEFORE = `SELECT DISTINCT date FROM log_entries
+  WHERE date < ?
+  ORDER BY date DESC LIMIT ?`;

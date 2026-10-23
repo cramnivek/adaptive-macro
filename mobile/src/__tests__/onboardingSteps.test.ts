@@ -8,7 +8,6 @@ describe('onboardingSteps', () => {
       'body',
       'activity',
       'plan',
-      'focus',
       'voice',
       'checkin',
       'health',
@@ -21,7 +20,6 @@ describe('onboardingSteps', () => {
       'goal',
       'body',
       'activity',
-      'focus',
       'voice',
       'checkin',
       'ready',
@@ -31,7 +29,6 @@ describe('onboardingSteps', () => {
   it('asks someone already set up what is new, and to confirm their numbers', () => {
     expect(onboardingSteps({ onboarded: true, completedVersion: 0, goal: 'lose', android: true })).toEqual([
       'body',
-      'focus',
       'voice',
       'checkin',
       'health',

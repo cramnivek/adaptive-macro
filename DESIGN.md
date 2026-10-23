@@ -62,8 +62,13 @@ AdviceNote owns the small labelled next-step panel. Use one useful action, with
 salt-related guidance. Small outline icons provide recognition; no bitmap assets,
 extra font families, network image loads or decorative motion are needed.
 
-Today gives its macro summary a neutral featured surface. Its macro bars wrap
-below the calorie ring on narrow layouts. Meal entry groups photo/description
+Today gives its compact macro summary a neutral featured surface: calorie
+balance first, then three short macro columns that wrap for larger text. The
+large ring remains available to other summary callers. Food logging and the
+diary follow immediately; target arithmetic, sharing and completeness sit behind
+Food details, and supporting health/activity cards behind More for today.
+Training routine shortcuts and weight summaries stay in their own tabs.
+Meal entry groups photo/description
 under AI meal estimate and keeps barcode/search secondary. Train home reserves
 the strongest surface for starting/resuming; active workout controls and timers
 retain their high-contrast treatment. Social artwork, settings permissions and
@@ -89,3 +94,8 @@ Sleep's seven-day bars show recorded duration, not sleep quality. Missing days
 have a dash and recorded zero remains zero. Keep data marks opaque in both
 themes; faded lilac fails graphic contrast on the light surface. Dates and exact
 durations remain available to assistive technology and in Details.
+
+Food reuse offers selectable individual items with their previously logged
+amounts. Local usual-food suggestions describe observed logging frequency,
+never a prediction or model-generated recommendation. Keep the list short and
+require an explicit Add; opening a repeat suggestion must not copy a meal.

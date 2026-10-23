@@ -22,6 +22,8 @@ business and privacy rules remain in AGENTS.md; visual owners are in DESIGN.md.
 | Sleep permission review | `HealthConnectSection.tsx` | Request SleepSession specifically; do not treat an existing steps grant as success. Show permission state and settings access; refresh on return from Android settings. |
 | Transparent stickers | `TransparentStickerModal.tsx`, `StickerDrawerDom.tsx`, `shareImage.ts` | Android draws in Expo DOM and shares a cache PNG with alpha. Web retains clipboard/export. Ignore stale renders and surface failures; destination app controls import. |
 | Active workout overlay | `FloatingWorkoutBar.tsx`, tab layout | Measure the real tab bar including its inset. The distinct 44-point handle moves vertically within the safe frame, without resuming; accessible increment/decrement moves it too. Keep position across tabs and reset for a new session. |
+| Today density | `MacroProgress.tsx`, Today tab | Compact calorie/macro figures and logging precede the diary. Food details and More for today disclose secondary content; no smaller touch targets or hidden macro totals. Training routines and weight summaries stay in their own tabs. |
+| Previous and usual foods | Repeat, Log a meal, `usualFoods.ts`, AppStore and SQLite | Select individual source entries, none initially. Copy only explicitly selected IDs into the destination diary with new IDs, preserving portions and nutrients. Usual foods use prior local history for that meal; exclude already logged foods. Guard duplicate taps, stale reads and errors. |
 
 No model call is needed to open the chooser, repeat a meal, import sleep, or
 compare sodium with weight. An AI estimate is an editable draft and is only saved
