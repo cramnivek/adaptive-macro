@@ -5,6 +5,36 @@ import { currentAccessToken } from './api';
 const STORAGE_PREFIX = 'adaptive_card_img_';
 const STATUS_PREFIX = 'adaptive_card_status_';
 
+/** The deadline includes the body: receiving headers must not leave an upload pending forever. */
+const cloudCardRequest = async <T,>(
+  url: string,
+  init: RequestInit,
+  read: (response: Response) => Promise<T>,
+): Promise<T> => {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('Card request timed out; try again.'));
+      controller.abort();
+    }, 20_000);
+  });
+  try {
+    return await Promise.race([fetch(url, { ...init, signal: controller.signal }).then(read), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const uploadCard = (sessionId: string, headers: Record<string, string>, body: ArrayBuffer): Promise<string> =>
+  cloudCardRequest(`${proxyBase()}/api/upload-card?sessionId=${encodeURIComponent(sessionId)}`, {
+    method: 'POST', headers, body,
+  }, async (res) => {
+    const data = await res.json().catch(() => ({ error: 'Upload failed' }));
+    if (res.ok && data.ok && data.url) return data.url;
+    throw new Error(data.error || `HTTP ${res.status}`);
+  });
+
 export interface CardSyncStatus {
   sessionId: string;
   status: 'synced' | 'failed' | 'pending' | 'local_only';
@@ -67,9 +97,9 @@ export const fetchCardImage = async (sessionId?: string | null, authorId?: strin
   if (!token) return null;
   try {
     // cardImagePath already carries the proxy's address on a phone.
-    const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return null;
-    return await showableImage(await res.blob());
+    const blob = await cloudCardRequest(path, { headers: { Authorization: `Bearer ${token}` } },
+      async (res) => res.ok ? res.blob() : null);
+    return blob ? await showableImage(blob) : null;
   } catch {
     return null;
   }
@@ -84,11 +114,10 @@ export const removeCardImage = async (sessionId: string): Promise<boolean> => {
   const token = await currentAccessToken();
   if (!token) return false;
   try {
-    const res = await fetch(`${proxyBase()}/api/card?session=${encodeURIComponent(sanitizeSessionId(sessionId))}`, {
+    return await cloudCardRequest(`${proxyBase()}/api/card?session=${encodeURIComponent(sanitizeSessionId(sessionId))}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
+    }, async (res) => res.ok);
   } catch {
     return false;
   }
@@ -99,8 +128,7 @@ export const removeAllCardImages = async (): Promise<boolean> => {
   const token = await currentAccessToken();
   if (!token) return false;
   try {
-    const res = await fetch(`${proxyBase()}/api/cards`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-    return res.ok;
+    return await cloudCardRequest(`${proxyBase()}/api/cards`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }, async (res) => res.ok);
   } catch {
     return false;
   }
@@ -391,29 +419,17 @@ export const persistCustomCard = async (
         'Authorization': `Bearer ${token}`,
       };
 
-      const res = await fetch(`${proxyBase()}/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
-        method: 'POST',
-        headers,
-        body: arrayBuffer,
-      });
-
-      if (res.ok) {
-        const data = (await res.json()) as { ok: boolean; url: string };
-        if (data.ok && data.url) {
-          await storeItem(
-            `${STATUS_PREFIX}${safeId}`,
-            JSON.stringify({
-              sessionId: safeId,
-              status: 'synced',
-              cloudUrl: data.url,
-              updatedAt: Date.now(),
-            } satisfies CardSyncStatus),
-          );
-          return data.url;
-        }
-      }
-      const errData = await res.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(errData.error || `HTTP ${res.status}`);
+      const cloudUrl = await uploadCard(safeId, headers, arrayBuffer);
+      await storeItem(
+        `${STATUS_PREFIX}${safeId}`,
+        JSON.stringify({
+          sessionId: safeId,
+          status: 'synced',
+          cloudUrl,
+          updatedAt: Date.now(),
+        } satisfies CardSyncStatus),
+      );
+      return cloudUrl;
     }
   } catch (err) {
     await storeItem(
@@ -495,27 +511,17 @@ export const retryCustomCardUpload = async (sessionId: string): Promise<string |
       'Authorization': `Bearer ${token}`,
     };
 
-    const res = await fetch(`${proxyBase()}/api/upload-card?sessionId=${encodeURIComponent(safeId)}`, {
-      method: 'POST',
-      headers,
-      body: arrayBuffer,
-    });
-
-    if (res.ok) {
-      const data = (await res.json()) as { ok: boolean; url: string };
-      if (data.ok && data.url) {
-        await storeItem(
-          `${STATUS_PREFIX}${safeId}`,
-          JSON.stringify({
-            sessionId: safeId,
-            status: 'synced',
-            cloudUrl: data.url,
-            updatedAt: Date.now(),
-          } satisfies CardSyncStatus),
-        );
-        return data.url;
-      }
-    }
+    const cloudUrl = await uploadCard(safeId, headers, arrayBuffer);
+    await storeItem(
+      `${STATUS_PREFIX}${safeId}`,
+      JSON.stringify({
+        sessionId: safeId,
+        status: 'synced',
+        cloudUrl,
+        updatedAt: Date.now(),
+      } satisfies CardSyncStatus),
+    );
+    return cloudUrl;
   } catch (err) {
     await storeItem(
       `${STATUS_PREFIX}${safeId}`,

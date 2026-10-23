@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -189,11 +189,15 @@ export const PostCard = ({
     Platform.OS !== 'web' && viewMode === 'card' && !customCardUrl && !card && phoneCardUrl !== false;
   const phoneSummary = useMemo(() => (keepDrawer ? postViewToShareCard(view) : null), [keepDrawer, view]);
 
+  const autoDrawKey = JSON.stringify(postViewToShareCard(view));
+  const attemptedAutoDraw = useRef<string | null>(null);
   useEffect(() => {
-    if (viewMode === 'card' && !displayCardUrl && !drawing) {
+    // A failed draw must wait for the existing Render button, not restart on every parent update.
+    if (Platform.OS === 'web' && viewMode === 'card' && !displayCardUrl && !drawing && attemptedAutoDraw.current !== autoDrawKey) {
+      attemptedAutoDraw.current = autoDrawKey;
       void generateCard();
     }
-  }, [viewMode, displayCardUrl, drawing, generateCard]);
+  }, [viewMode, displayCardUrl, drawing, generateCard, autoDrawKey]);
 
   const buildShareText = (): string => {
     const parts = [
