@@ -7,12 +7,14 @@ import { dailySodiumObservations, sodiumCoverage, weeklyWeightSummary, weightCon
 import { useApp } from '../state/AppStore';
 import { font, space, useTheme } from '../theme';
 import { Card } from './Card';
+import { Button } from './Controls';
 
 export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
   const { colors } = useTheme();
   const { ready, selectedDate: diaryDate, weights, dayStatus, observations, settings } = useApp();
   const selectedDate = date ?? diaryDate;
   const [failed, setFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState<{
     date: string;
     weights: typeof weights;
@@ -47,38 +49,47 @@ export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
   const coverage = current ? loaded.coverage : null;
   const sodiumMessage = failed ? 'Sodium records could not be loaded. Reopen this screen to try again.'
     : !coverage ? 'Loading sodium context…'
-      : coverage.status === 'incomplete' ? `Finish logging ${formatDayMonth(addDays(selectedDate, -1))} and mark that day complete for a sodium comparison.`
-        : coverage.status === 'unknown-sodium' ? 'Some foods in the previous day have no sodium value. Missing values cannot be counted as zero.'
-          : coverage.status === 'baseline' ? `Building your sodium baseline: ${coverage.baselineDays} of 3 complete comparison days have sodium data.`
+      : coverage.status === 'incomplete' ? `The meal log for ${formatDayMonth(addDays(selectedDate, -1))} is unfinished. Log all meals and mark the day complete to compare its salt intake.`
+        : coverage.status === 'unknown-sodium' ? 'Some foods are missing salt information, so the daily total would be incomplete.'
+          : coverage.status === 'baseline' ? `We have ${coverage.baselineDays} complete days to compare. Three are needed to see what is usual for you.`
             : !weights.some((row) => row.date === selectedDate) ? 'Add a weigh-in for this day to compare it with the food log.'
-              : 'No paired high-sodium and weight-rise signal in the available readings.';
+              : 'These food and weight records do not show a clear link between salt and this weigh-in.';
 
   return (
-    <Card title="Weight over the week">
+    <Card title="Your weekly weight">
       <View style={styles.body}>
         <Text selectable style={[styles.average, { color: colors.text }]}>
           {week.current ? formatWeight(week.current.kg, settings.units) : 'No weigh-ins this week'}
         </Text>
         <Text style={[styles.text, { color: colors.textMuted }]}>
-          Seven-day average · {week.current?.readings ?? 0}/7 days recorded, ending {formatDayMonth(selectedDate)}
+          {week.current?.readings ?? 0} weigh-ins in the last 7 days · average ending {formatDayMonth(selectedDate)}
         </Text>
         {week.changeKg !== null ? (
           <Text style={[styles.text, { color: colors.text }]}>
             {formatWeight(Math.abs(week.changeKg), settings.units) === formatWeight(0, settings.units)
-              ? 'About the same as the previous seven-day average'
-              : `${formatWeight(Math.abs(week.changeKg), settings.units)} ${week.changeKg < 0 ? 'lower' : 'higher'} than the previous seven-day average`}
-            {' '}({week.previous!.readings}/7 days recorded).
+              ? 'About the same as the previous week’s average.'
+              : `${formatWeight(Math.abs(week.changeKg), settings.units)} ${week.changeKg < 0 ? 'lower' : 'higher'} than the previous week’s average.`}
           </Text>
         ) : (
-          <Text style={[styles.note, { color: colors.textMuted }]}>A week-to-week comparison needs at least three weigh-ins in each week. Missing days are left out.</Text>
+          <Text style={[styles.note, { color: colors.textMuted }]}>Keep a few regular weigh-ins each week to see how your average changes.</Text>
         )}
+        {!context && <><Text style={[styles.label, { color: colors.text }]}>Judge the week, not one weigh-in</Text>
+        <Text style={[styles.text, { color: colors.text }]}>
+          Weigh under similar conditions, such as after waking and using the bathroom. Use several weeks of averages to judge progress before changing your plan.
+        </Text></>}
+        {context && <>
+          <Text style={[styles.label, { color: colors.text }]}>Saltier food may be affecting this weigh-in</Text>
+          <Text style={[styles.text, { color: colors.textMuted }]}>
+            Your {formatDayMonth(context.date)} weigh-in was {formatWeight(context.weightKg, settings.units)}, up from {formatWeight(context.previousWeightKg, settings.units)}. Extra salt can hold water and may be part of this rise.
+          </Text>
+          <Text style={[styles.text, { color: colors.text }]}>Watch your next few morning readings and your weekly average before cutting calories. One jump does not tell you how much is fat or water.</Text>
+        </>}
+        <Button label={expanded ? 'Hide weight details' : 'Weight & salt details'} variant="subtle" onPress={() => setExpanded((value) => !value)} />
+        {expanded && <>
         <Text style={[styles.text, { color: colors.textMuted }]}>
-          Daily weight can go up or down with fluid and food. Focus on your weekly average and longer-term trend, rather than a single morning.
+          Meals, salt and fluid can move daily weight up or down. A higher reading does not tell you how much is fat or water.
         </Text>
-        <Text style={[styles.label, { color: colors.text }]}>Sodium context</Text>
-        <Text style={[styles.text, { color: colors.textMuted }]}>
-          Higher sodium may contribute to temporary water retention. Your food log cannot establish the cause of a weight change.
-        </Text>
+        <Text style={[styles.note, { color: colors.textMuted }]}>This average includes {week.current?.readings ?? 0} readings; the preceding week includes {week.previous?.readings ?? 0}. Each needs at least three readings for a comparison. Missing days are left out.</Text>
         {context ? <>
         <Text selectable style={[styles.text, { color: colors.text }]}>
           {formatDayMonth(context.date)}: {formatWeight(context.weightKg, settings.units)}, up from{' '}
@@ -94,6 +105,7 @@ export const WeightContextCard = ({ date }: { date?: ISODate } = {}) => {
           Based on complete food logs with sodium values. Those values may include estimates.
         </Text>
         </> : <Text style={[styles.text, { color: colors.textMuted }]}>{sodiumMessage}</Text>}
+        </>}
       </View>
     </Card>
   );

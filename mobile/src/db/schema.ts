@@ -288,4 +288,8 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE foods ADD COLUMN estimate TEXT;
   `,
+  // v17 — distinguish awake time from missing sleep stages before offering advice.
+  `
+  ALTER TABLE sleep_sessions ADD COLUMN observed TEXT;
+  `,
 ];

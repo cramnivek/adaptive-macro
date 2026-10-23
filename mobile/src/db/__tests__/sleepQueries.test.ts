@@ -4,6 +4,7 @@ import { exportBackup, getDb, restoreBackup, selectDatabase } from '../index';
 import { clearAllData } from '../seed';
 import { normalizeSleep, summarizeSleep } from '../../health/sleep';
 import { saveSleepSessions, listSleepSessions } from '../sleepQueries';
+import { MIGRATIONS } from '../schema';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: async () => {
@@ -27,6 +28,27 @@ afterEach(async () => { await selectDatabase(`closed-sleep-${selection++}.db`); 
 const night = normalizeSleep([{ startTime: '2026-10-20T22:00:00+08:00', endTime: '2026-10-21T06:00:00+08:00', metadata: { id: 'night', dataOrigin: 'Garmin' } }]);
 
 describe('account-local sleep persistence', () => {
+  it('upgrades a v16 log without inventing coverage or changing its sleep data', () => {
+    const db = new DatabaseSync(':memory:');
+    for (const sql of MIGRATIONS.slice(0, 16)) db.exec(sql);
+    db.exec("INSERT INTO sleep_sessions VALUES ('old', '2026-10-21', 'Garmin', 0, 28800000, '[[0,21600000]]')");
+    db.exec(MIGRATIONS[16]);
+    expect(db.prepare('SELECT asleep, observed FROM sleep_sessions').get()).toMatchObject({ asleep: '[[0,21600000]]', observed: null });
+    db.close();
+  });
+  it('preserves coverage through a backup and leaves legacy rows unknown', async () => {
+    const tracked = normalizeSleep([{ startTime: '2026-10-20T22:00:00+08:00', endTime: '2026-10-21T06:00:00+08:00',
+      stages: [{ startTime: '2026-10-20T22:00:00+08:00', endTime: '2026-10-21T06:00:00+08:00', stage: 2 }],
+    }]);
+    await saveSleepSessions(tracked);
+    const backup = await exportBackup();
+    await selectDatabase(`coverage-restored-${selection++}.db`);
+    await restoreBackup(backup);
+    expect(summarizeSleep(await listSleepSessions('2026-10-21', '2026-10-21'))[0].observedMinutes).toBe(480);
+    const legacy = { ...backup, sleepSessions: backup.sleepSessions!.map(({ observed, ...row }) => row) };
+    await restoreBackup(legacy);
+    expect(summarizeSleep(await listSleepSessions('2026-10-21', '2026-10-21'))[0].observedMinutes).toBeNull();
+  });
   it('upserts repeat imports and source corrections without accumulating nights', async () => {
     await saveSleepSessions(night);
     await saveSleepSessions([{ ...night[0], end: night[0].end + 60000 }]);

@@ -52,3 +52,10 @@ handling; add no decorative animations for these features.
 English labels name actions: Log a meal, Take a photo, Describe your meal, Scan a
 barcode, Search foods. Show uncertainty beside estimates and distinguish absent
 health data from a measured zero. Follow the phone's locale for times and numbers.
+
+Health summaries lead with an interpretation and one practical next step.
+Sleep distinguishes recorded duration from sleep quality and missing recording
+detail from too little recorded sleep. Weight leads with its weekly average;
+a daily salt-related observation must name the individual weigh-in it concerns.
+Put import metadata, comparison arithmetic and data requirements behind Details.
+An empty food log offers meal-logging guidance without a nutrition score or grade.
