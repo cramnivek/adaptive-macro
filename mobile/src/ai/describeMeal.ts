@@ -135,7 +135,7 @@ Also estimate available clinical micronutrients in the 'micros' field for each f
 - Minerals & Electrolytes: sodiumMg (mg), potassiumMg (mg), calciumMg (mg), magnesiumMg (mg), ironMg (mg), zincMg (mg)
 - Essential Vitamins: vitaminAMcg (mcg), vitaminCMg (mg), vitaminDIU (IU), vitaminEMg (mg), vitaminKMcg (mcg), B-vitamins (thiaminB1Mg, riboflavinB2Mg, niacinB3Mg, pyridoxineB6Mg, folateB9Mcg, cobalaminB12Mcg), cholineMg (mg)
 - Lipids & Sugars: saturatedFatG (g), transFatG (g), cholesterolMg (mg), sugarG (g), addedSugarG (g)
-Omit or set 0 for nutrients that are negligible or unknown.
+Omit unknown nutrient fields. Use 0 only when the nutrient is known to be absent or negligible; an unknown amount is not zero.
 
 Portion sizes are the main source of error, so be explicit about them. When someone says "a coffee" or "some rice", pick a sensible everyday portion, state it in the assumption field, and mark confidence accordingly. Use the cooked weight where a food is described as cooked.
 

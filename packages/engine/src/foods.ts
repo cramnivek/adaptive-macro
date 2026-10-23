@@ -43,6 +43,8 @@ export interface Food {
    * confirmation.
    */
   sources?: string[];
+  /** The uncertainty shown when a meal estimate was accepted. */
+  estimate?: { confidence: 'low' | 'medium' | 'high'; assumption: string };
 }
 
 export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';

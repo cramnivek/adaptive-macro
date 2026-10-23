@@ -272,4 +272,24 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE body_measurements ADD COLUMN body_fat_source TEXT;
   `,
+  // v15 — source sleep intervals stay local, with stages kept separate from time in bed.
+  `
+  CREATE TABLE sleep_sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    date TEXT NOT NULL,
+    source TEXT NOT NULL,
+    start_time REAL NOT NULL,
+    end_time REAL NOT NULL,
+    asleep TEXT
+  );
+  CREATE INDEX idx_sleep_sessions_date ON sleep_sessions (date);
+  `,
+  // v16 — accepted meal estimates keep the uncertainty shown at confirmation.
+  `
+  ALTER TABLE foods ADD COLUMN estimate TEXT;
+  `,
+  // v17 — distinguish awake time from missing sleep stages before offering advice.
+  `
+  ALTER TABLE sleep_sessions ADD COLUMN observed TEXT;
+  `,
 ];

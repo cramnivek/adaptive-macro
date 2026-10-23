@@ -7,6 +7,7 @@ import { Button, Stepper, TOUCH_TARGET } from '../../src/components/Controls';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
 import { StatTile } from '../../src/components/StatTile';
+import { WeightContextCard } from '../../src/components/WeightContextCard';
 import { confirm, notify } from '../../src/dialog';
 import {
   displayWeight,
@@ -142,7 +143,7 @@ export default function WeightScreen() {
   return (
     <Screen
       title="Weight"
-      subtitle="Daily readings, smoothed into a trend"
+      subtitle="Follow your weekly average and longer-term trend"
       action={
         <View style={styles.unitToggleWrap}>
           <Pressable
@@ -203,6 +204,8 @@ export default function WeightScreen() {
         />
         <Button label={today ? 'Update today’s weigh-in' : 'Save weigh-in'} onPress={() => void save()} />
       </Card>
+
+      <WeightContextCard date={todayISO()} />
 
       <View style={styles.tiles}>
         <StatTile

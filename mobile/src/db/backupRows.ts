@@ -31,4 +31,5 @@ export const rowsToRestore = (backup: Backup): [table: string, rows: Record<stri
   // reading logged on the web did not arrive on the phone.
   ['body_measurements', backup.bodyMeasurements],
   ['daily_steps', backup.dailySteps],
+  ['sleep_sessions', backup.sleepSessions],
 ];

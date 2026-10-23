@@ -211,6 +211,7 @@ interface FoodRow {
   fetched_at: string | null;
   sources: string | null;
   micronutrients: string | null;
+  estimate?: string | null;
 }
 
 const rowToFood = (row: FoodRow): Food => {
@@ -218,6 +219,15 @@ const rowToFood = (row: FoodRow): Food => {
   if (row.micronutrients) {
     try {
       micros = JSON.parse(row.micronutrients);
+    } catch {}
+  }
+  let estimate: Food['estimate'];
+  if (row.estimate) {
+    try {
+      const parsed = JSON.parse(row.estimate);
+      if (parsed && ['low', 'medium', 'high'].includes(parsed.confidence) && typeof parsed.assumption === 'string') {
+        estimate = { confidence: parsed.confidence, assumption: parsed.assumption };
+      }
     } catch {}
   }
   return {
@@ -237,6 +247,7 @@ const rowToFood = (row: FoodRow): Food => {
     portions: JSON.parse(row.portions) as FoodPortion[],
     fetchedAt: row.fetched_at ?? undefined,
     sources: row.sources ? (JSON.parse(row.sources) as string[]) : undefined,
+    estimate,
   };
 };
 
@@ -248,14 +259,14 @@ const rowToFood = (row: FoodRow): Food => {
 export const saveFood = async (food: Food): Promise<void> => {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at, sources, micronutrients)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO foods (id, name, brand, barcode, source, kcal, protein_g, carbs_g, fat_g, fiber_g, portions, fetched_at, sources, micronutrients, estimate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name, brand = excluded.brand, barcode = excluded.barcode,
        kcal = excluded.kcal, protein_g = excluded.protein_g, carbs_g = excluded.carbs_g,
        fat_g = excluded.fat_g, fiber_g = excluded.fiber_g, portions = excluded.portions,
        fetched_at = excluded.fetched_at, sources = excluded.sources,
-       micronutrients = excluded.micronutrients`,
+       micronutrients = excluded.micronutrients, estimate = excluded.estimate`,
     food.id,
     food.name,
     food.brand ?? null,
@@ -270,6 +281,7 @@ export const saveFood = async (food: Food): Promise<void> => {
     food.fetchedAt ?? new Date().toISOString(),
     food.sources?.length ? JSON.stringify(food.sources) : null,
     food.per100g.micros ? JSON.stringify(food.per100g.micros) : null,
+    food.estimate ? JSON.stringify(food.estimate) : null,
   );
 };
 
@@ -615,6 +627,7 @@ export interface Backup {
   dayStatus?: Record<string, unknown>[];
   bodyMeasurements?: Record<string, unknown>[];
   dailySteps?: Record<string, unknown>[];
+  sleepSessions?: Record<string, unknown>[];
 }
 
 /**
@@ -640,6 +653,7 @@ export const exportBackup = async (): Promise<Backup> => {
     dayStatus: await db.getAllAsync('SELECT * FROM day_status'),
     bodyMeasurements: await db.getAllAsync('SELECT * FROM body_measurements'),
     dailySteps: await db.getAllAsync('SELECT * FROM daily_steps'),
+    sleepSessions: await db.getAllAsync('SELECT * FROM sleep_sessions'),
   };
 };
 
@@ -729,6 +743,7 @@ export const restoreBackup = async (backup: Backup): Promise<void> => {
       'day_status',
       'body_measurements',
       'daily_steps',
+      'sleep_sessions',
     ]) {
       await db.runAsync(`DELETE FROM ${table}`);
     }

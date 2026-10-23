@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BottomTabBar } from 'expo-router/tabs';
 import { Tabs } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -9,12 +10,19 @@ import { useHealthConnectAutoSync } from '../../src/health/useHealthConnectAutoS
 export default function TabsLayout() {
   const { colors } = useTheme();
   const [barInset, setBarInset] = useState(0);
+  const [tabHeight, setTabHeight] = useState(0);
+  const [frameHeight, setFrameHeight] = useState(0);
   useHealthConnectAutoSync();
 
   return (
     <FloatingBarInset.Provider value={barInset}>
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onLayout={(event) => setFrameHeight(event.nativeEvent.layout.height)}>
       <Tabs
+        tabBar={(props) => (
+          <View onLayout={(event) => setTabHeight(event.nativeEvent.layout.height)}>
+            <BottomTabBar {...props} />
+          </View>
+        )}
         screenOptions={{
           headerShown: false,
         tabBarActiveTintColor: colors.accent,
@@ -77,7 +85,7 @@ export default function TabsLayout() {
         options={{ title: 'Settings', href: null }}
       />
     </Tabs>
-    <FloatingWorkoutBar onHeight={setBarInset} />
+    <FloatingWorkoutBar onHeight={setBarInset} tabHeight={tabHeight} frameHeight={frameHeight} />
   </View>
     </FloatingBarInset.Provider>
   );

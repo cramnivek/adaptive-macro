@@ -698,7 +698,7 @@ const asText = (summary: ShareCard): string => {
 export const shareWorkout = async (
   summary: ShareCard,
   card: { file?: File | Blob | null; url: string } | null,
-): Promise<'shared' | 'downloaded' | 'cancelled'> => {
+): Promise<'shared' | 'downloaded' | 'cancelled' | 'failed'> => {
   // 1. Native iOS & Android support with expo-sharing
   if (Platform.OS !== 'web') {
     if (card && card.url) {
@@ -706,7 +706,8 @@ export const shareWorkout = async (
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           let localUri = card.url;
-          const targetPath = `${FileSystem.cacheDirectory ?? ''}ascend-workout-card.jpg`;
+          const png = card.url.startsWith('data:image/png;') || card.file?.type === 'image/png' || /\.png(?:$|\?)/i.test(card.url);
+          const targetPath = `${FileSystem.cacheDirectory ?? ''}ascend-workout-card.${png ? 'png' : 'jpg'}`;
 
           if (card.url.startsWith('file:')) {
             localUri = card.url;
@@ -722,15 +723,16 @@ export const shareWorkout = async (
           }
 
           await Sharing.shareAsync(localUri, {
-            mimeType: 'image/jpeg',
+            mimeType: png ? 'image/png' : 'image/jpeg',
             dialogTitle: summary.title,
-            UTI: 'public.jpeg',
+            UTI: png ? 'public.png' : 'public.jpeg',
           });
           return 'shared';
         }
       } catch {
-        // Fall back to text share if native image sharing fails or was cancelled
+        return 'failed';
       }
+      return 'failed';
     }
     await Share.share({ message: asText(summary) });
     return 'shared';
@@ -1348,6 +1350,9 @@ export interface StickerExport {
   height: number;
 }
 
+// Files and Blobs cannot cross the DOM bridge; the native app only needs the PNG and its size.
+export type NativeStickerExport = Pick<StickerExport, 'url' | 'width' | 'height'>;
+
 export const exportStickerCanvas = async (
   canvas: HTMLCanvasElement,
   title: string,
@@ -1377,10 +1382,11 @@ export const copyStickerToClipboard = async (blob: Blob): Promise<boolean> => {
 
 export const shareStickerPng = async (
   title: string,
-  sticker: StickerExport,
-): Promise<'shared' | 'downloaded' | 'cancelled'> => {
+  sticker: StickerExport | NativeStickerExport,
+): Promise<'shared' | 'downloaded' | 'cancelled' | 'failed'> => {
   if (Platform.OS !== 'web') {
     try {
+      if (!(await Sharing.isAvailableAsync()) || !FileSystem.cacheDirectory) return 'failed';
       let localUri = sticker.url;
       const targetPath = `${FileSystem.cacheDirectory ?? ''}${title.replace(/[^\w-]+/g, '-').toLowerCase()}-sticker.png`;
       if (sticker.url.startsWith('data:')) {
@@ -1397,10 +1403,11 @@ export const shareStickerPng = async (
       });
       return 'shared';
     } catch {
-      return 'cancelled';
+      return 'failed';
     }
   }
 
+  if (!('file' in sticker)) return 'failed';
   if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [sticker.file] })) {
     try {
       await navigator.share({

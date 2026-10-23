@@ -81,4 +81,5 @@ export const isEmptyLog = (backup: Backup): boolean =>
     backup.dayStatus,
     backup.bodyMeasurements,
     backup.dailySteps,
+    backup.sleepSessions,
   ].every((rows) => (rows?.length ?? 0) === 0);

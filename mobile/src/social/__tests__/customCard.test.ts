@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../api', () => ({
   currentAccessToken: vi.fn().mockResolvedValue('jwt-mock'),
@@ -44,6 +44,75 @@ describe('customCard persistence & sync', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('gives up on an unanswered cloud image request and aborts its transfer', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    let result: string | null | undefined;
+    const request = fetchCardImage('stalled-image', 'author').then((value) => { result = value; });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(result).toBeNull();
+    await request;
+    expect((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds an upload response body, preserves the local image and can retry', async () => {
+    vi.useFakeTimers();
+    const image = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    let finishBody!: (value: { ok: boolean; url: string }) => void;
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: () => new Promise((resolve) => { finishBody = resolve; }),
+    })));
+    let result: string | null | undefined;
+    const request = persistCustomCard('stalled-upload', { url: image, dataUrl: image })
+      .then((value) => { result = value; });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(result).toBeNull();
+    await request;
+    expect(await getLocalCustomCard('stalled-upload')).toBe(image);
+    expect(await getCustomCardStatus('stalled-upload')).toMatchObject({ status: 'failed', error: expect.stringMatching(/timed out/i) });
+
+    finishBody({ ok: true, url: 'https://example.test/late.jpg' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await getCustomCardStatus('stalled-upload'))?.status).toBe('failed');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, url: 'https://example.test/retried.jpg' }) })));
+    expect(await retryCustomCardUpload('stalled-upload')).toBe('https://example.test/retried.jpg');
+    expect((await getCustomCardStatus('stalled-upload'))?.status).toBe('synced');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('gives up when image headers arrive but the image body stalls', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob: () => new Promise(() => {}) })));
+    let result: string | null | undefined;
+    const request = fetchCardImage('stalled-body', 'author').then((value) => { result = value; });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(result).toBeNull();
+    await request;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    ['one card', () => removeCardImage('stalled-delete')],
+    ['all cards', () => removeAllCardImages()],
+  ] as const)('returns failure instead of waiting forever when removing %s', async (_label, remove) => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
+    let result: boolean | undefined;
+    const request = remove().then((value) => { result = value; });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(result).toBe(false);
+    await request;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('sanitizes session ids to safe characters', () => {
     expect(sanitizeSessionId('session 123/abc?def=1')).toBe('session_123_abc_def_1');
     expect(sanitizeSessionId('clean-id_123')).toBe('clean-id_123');
@@ -78,6 +147,7 @@ describe('customCard persistence & sync', () => {
     vi.unstubAllGlobals();
     expect(fetchMock).toHaveBeenCalledWith('/api/card?author=user-456&session=workout-1', {
       headers: { Authorization: 'Bearer jwt-mock' },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -125,10 +195,12 @@ describe('customCard persistence & sync', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/card?session=workout-1', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer jwt-mock' },
+      signal: expect.any(AbortSignal),
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/cards', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer jwt-mock' },
+      signal: expect.any(AbortSignal),
     });
   });
 

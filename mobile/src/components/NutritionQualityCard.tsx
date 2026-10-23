@@ -38,6 +38,12 @@ export const NutritionQualityCard = ({
   const targetFiber = profile.sex === 'female' ? (profile.age > 50 ? 21 : 25) : profile.age > 50 ? 30 : 38;
   const consumedFiber = Math.round(consumed.fiberG ?? 0);
 
+  if (entries.length === 0) return (
+    <Card title="Nutrition">
+      <Text style={[styles.caption, { color: colors.textMuted }]}>Log a meal to see your nutrition summary.</Text>
+    </Card>
+  );
+
   const gradeColor =
     quality.grade === 'Elite'
       ? colors.positive

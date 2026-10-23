@@ -96,6 +96,22 @@ export const EditEntrySheet = ({ entry, onCancel, onSave, onDelete }: EditEntryS
           <ScrollView keyboardShouldPersistTaps="handled">
             <Text style={[styles.name, { color: colors.text }]}>{entry.foodName}</Text>
 
+            {cachedFood?.id === entry.foodId && cachedFood.estimate && (
+              <View style={styles.evidence}>
+                <Text style={{ fontFamily: font.uiStrong, fontSize: 13, color: colors.text }}>
+                  AI estimate · {cachedFood.estimate.confidence} confidence
+                </Text>
+                {cachedFood.estimate.assumption.trim() ? (
+                  <Text style={{ fontFamily: font.ui, fontSize: 13, lineHeight: 19, color: colors.textMuted }}>
+                    Assumed: {cachedFood.estimate.assumption}
+                  </Text>
+                ) : null}
+                <Text style={{ fontFamily: font.ui, fontSize: 12, color: colors.textMuted }}>
+                  From the original estimate; changing grams scales the numbers.
+                </Text>
+              </View>
+            )}
+
             <Stepper label="Amount" value={grams} onChangeText={setGrams} suffix="g" />
 
             <View style={styles.chips}>
@@ -159,6 +175,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
   },
   name: { fontFamily: font.uiStrong, fontSize: 18, marginBottom: space.md },
+  evidence: { gap: space.xs, marginBottom: space.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.md },
   chip: {
     // Tappable, so it has to clear the comfortable thumb minimum.

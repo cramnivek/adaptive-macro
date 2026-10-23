@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import type { ShareCard } from '../shareCard';
 import { drawShareCard } from '../platform/shareImage';
 import { font } from '../theme';
+import { domFontsReady } from '../platform/domFonts';
 
 /**
  * Draws a post's story card on a phone, with the web build's own code.
@@ -26,14 +27,6 @@ const FACES: [family: string, source: string][] = [
   [font.figure, require('@expo-google-fonts/ibm-plex-mono/500Medium/IBMPlexMono_500Medium.ttf')],
 ];
 
-const loadFaces = () =>
-  Promise.all(
-    FACES.map(async ([family, source]) => {
-      const face = new FontFace(family, `url(${source})`);
-      document.fonts.add(await face.load());
-    }),
-  );
-
 export default function CardDrawerDom({
   summary,
   onDrawn,
@@ -42,11 +35,12 @@ export default function CardDrawerDom({
   onDrawn: (pngDataUrl: string | null) => Promise<void>;
   dom?: import('expo/dom').DOMProps;
 }) {
+  const requestKey = JSON.stringify(summary);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await loadFaces();
+        await domFontsReady(FACES);
         const url = drawShareCard(summary).toDataURL('image/png');
         if (!cancelled) await onDrawn(url);
       } catch {
@@ -58,7 +52,7 @@ export default function CardDrawerDom({
     };
     // Drawn once per summary; onDrawn is a fresh bridge function every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summary]);
+  }, [requestKey]);
 
   return null;
 }

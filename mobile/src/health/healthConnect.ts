@@ -10,8 +10,10 @@ import {
   requestPermission,
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
-import { bulkSaveDailySteps, listWeights, saveWeight } from '../db';
+import { bulkSaveDailySteps, getDb, listWeights, saveWeight } from '../db';
 import { getDailyStepsBetween } from '../db/stepQueries';
+import { saveSleepSessions } from '../db/sleepQueries';
+import { normalizeSleep, summarizeSleep, type SleepInput } from './sleep';
 import { planHealthConnectImport, stepsByDay, weightsByDay, type HealthConnectSyncResult } from './healthConnectRules';
 import { calculateDistanceKm, calculateNeatKcal } from './neat';
 
@@ -30,6 +32,7 @@ export type { HealthConnectSyncResult } from './healthConnectRules';
 const PERMISSIONS = [
   { accessType: 'read', recordType: 'Steps' },
   { accessType: 'read', recordType: 'Weight' },
+  { accessType: 'read', recordType: 'SleepSession' },
   // Without it Health Connect hands over only the 30 days before access was
   // granted, and the expenditure estimate wants months of weigh-ins.
   { accessType: 'read', recordType: 'ReadHealthDataHistory' },
@@ -55,7 +58,7 @@ export const healthConnectState = async (): Promise<HealthConnectState> => {
     await initialize();
     const granted = await getGrantedPermissions();
     const has = (type: string) => granted.some((p) => p.recordType === type && p.accessType === 'read');
-    return has('Steps') || has('Weight') ? 'connected' : 'not-connected';
+    return has('Steps') || has('Weight') || has('SleepSession') ? 'connected' : 'not-connected';
   } catch {
     return 'unsupported';
   }
@@ -65,7 +68,19 @@ export const healthConnectState = async (): Promise<HealthConnectState> => {
 export const connectHealthConnect = async (): Promise<boolean> => {
   await initialize();
   const granted = await requestPermission([...PERMISSIONS]);
-  return granted.some((p) => p.recordType === 'Steps' || p.recordType === 'Weight');
+  return granted.some((p) => p.accessType === 'read' && ['Steps', 'Weight', 'SleepSession'].includes(p.recordType));
+};
+
+export const sleepAccessGranted = async (): Promise<boolean> => {
+  if ((await healthConnectState()) !== 'connected') return false;
+  return (await getGrantedPermissions()).some((p) => p.accessType === 'read' && p.recordType === 'SleepSession');
+};
+
+/** An existing steps grant is not permission to read sleep. */
+export const requestSleepAccess = async (): Promise<boolean> => {
+  await initialize();
+  const granted = await requestPermission([{ accessType: 'read', recordType: 'SleepSession' }]);
+  return granted.some((permission) => permission.accessType === 'read' && permission.recordType === 'SleepSession');
 };
 
 /** Names for the apps people are likely to sync from; anything else shows its package. */
@@ -77,6 +92,8 @@ const APP_NAMES: Record<string, string> = {
   'com.oplus.health': 'OPPO Health',
   'com.fitbit.FitbitMobile': 'Fitbit',
 };
+
+export const healthConnectSourceName = (source: string): string => APP_NAMES[source] ?? source;
 
 /** The last sync, kept so the Account screen can say when and what without syncing again. */
 export interface LastHealthConnectSync {
@@ -140,20 +157,25 @@ export const syncHealthConnect = (now = new Date()): Promise<HealthConnectSyncRe
 
 const runSync = async (now: Date): Promise<HealthConnectSyncResult> => {
   await initialize();
+  const granted = await getGrantedPermissions();
+  const has = (type: string) => granted.some((p) => p.recordType === type && p.accessType === 'read');
+  // Bind the new sleep data before native reads; an account switch must not
+  // redirect a completed import into the next person's database.
+  const sleepDatabase = has('SleepSession') ? await getDb() : undefined;
   const from = new Date(now.getFullYear() - HISTORY_YEARS, now.getMonth(), now.getDate());
   const range = { operator: 'between', startTime: from.toISOString(), endTime: now.toISOString() } as const;
 
-  const stepGroups = await aggregateGroupByPeriod({
+  const stepGroups = has('Steps') ? await aggregateGroupByPeriod({
     recordType: 'Steps',
     timeRangeFilter: range,
     timeRangeSlicer: { period: 'DAYS', length: 1 },
-  });
+  }) : [];
   const steps = stepsByDay(stepGroups.map((g) => ({ startTime: g.startTime, steps: g.result.COUNT_TOTAL ?? 0 })));
   const origins = new Set<string>(stepGroups.flatMap((g) => g.result.dataOrigins ?? []));
 
   const readings: { time: string; kg: number }[] = [];
   let pageToken: string | undefined;
-  do {
+  if (has('Weight')) do {
     const page = await readRecords('Weight', { timeRangeFilter: range, pageSize: 1000, pageToken });
     for (const record of page.records) {
       readings.push({ time: record.time, kg: record.weight.inKilograms });
@@ -162,6 +184,23 @@ const runSync = async (now: Date): Promise<HealthConnectSyncResult> => {
     pageToken = page.pageToken || undefined;
   } while (pageToken);
   const weights = weightsByDay(readings, localDay);
+
+  const sleepReadings: SleepInput[] = [];
+  // The view needs recent nights; re-reading years of stage intervals on
+  // every foreground sync adds native calls without helping that view.
+  const sleepRange = { ...range, startTime: new Date(now.getTime() - 30 * 86400000).toISOString() };
+  pageToken = undefined;
+  if (has('SleepSession')) do {
+    const page: { records: SleepInput[]; pageToken?: string } = await readRecords('SleepSession', { timeRangeFilter: sleepRange, pageSize: 1000, pageToken });
+    for (const record of page.records) {
+      sleepReadings.push(record);
+      if (record.metadata?.dataOrigin) origins.add(record.metadata.dataOrigin);
+    }
+    pageToken = page.pageToken || undefined;
+  } while (pageToken);
+  const sleep = normalizeSleep(sleepReadings);
+  if (sleepDatabase) await saveSleepSessions(sleep, sleepDatabase, { start: Date.parse(sleepRange.startTime), end: now.getTime() });
+  const sleepNights = summarizeSleep(sleep).length;
 
   const fromDay = localDay(from.toISOString()) as ISODate;
   const toDay = localDay(now.toISOString()) as ISODate;
@@ -187,14 +226,16 @@ const runSync = async (now: Date): Promise<HealthConnectSyncResult> => {
     })),
   );
 
-  const days = [...steps.map((d) => d.date), ...weights.map((d) => d.date)].sort();
+  const days = [...steps.map((d) => d.date), ...weights.map((d) => d.date), ...sleep.map((d) => d.date)].sort();
   const result: HealthConnectSyncResult = {
     stepDays: plan.steps.length,
     weighIns: plan.weights.length,
     weighInsKept: weights.length - plan.weights.length,
+    sleepNights,
     found: {
       stepDays: steps.length,
       weighIns: weights.length,
+      sleepNights,
       sources: [...origins].map((pkg) => APP_NAMES[pkg] ?? pkg),
       firstDay: days[0] ?? null,
     },

@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -177,6 +177,11 @@ export const PostCard = ({
   const [phoneCardUrl, setPhoneCardUrl] = useState<string | null | false>(null);
   const displayCardUrl = customCardUrl || card?.url || phoneCardUrl || null;
   const drawOnPhone = Platform.OS !== 'web' && viewMode === 'card' && !displayCardUrl && phoneCardUrl === null;
+  useEffect(() => {
+    if (!drawOnPhone) return;
+    const timer = setTimeout(() => setPhoneCardUrl(false), 45000);
+    return () => clearTimeout(timer);
+  }, [drawOnPhone]);
   // The drawer stays mounted after it has drawn, for as long as its card is
   // the one shown. Unmounting it the moment the PNG arrived took the webview
   // away before it heard back that the PNG was received ("Java object is gone").
@@ -184,11 +189,15 @@ export const PostCard = ({
     Platform.OS !== 'web' && viewMode === 'card' && !customCardUrl && !card && phoneCardUrl !== false;
   const phoneSummary = useMemo(() => (keepDrawer ? postViewToShareCard(view) : null), [keepDrawer, view]);
 
+  const autoDrawKey = JSON.stringify(postViewToShareCard(view));
+  const attemptedAutoDraw = useRef<string | null>(null);
   useEffect(() => {
-    if (viewMode === 'card' && !displayCardUrl && !drawing) {
+    // A failed draw must wait for the existing Render button, not restart on every parent update.
+    if (Platform.OS === 'web' && viewMode === 'card' && !displayCardUrl && !drawing && attemptedAutoDraw.current !== autoDrawKey) {
+      attemptedAutoDraw.current = autoDrawKey;
       void generateCard();
     }
-  }, [viewMode, displayCardUrl, drawing, generateCard]);
+  }, [viewMode, displayCardUrl, drawing, generateCard, autoDrawKey]);
 
   const buildShareText = (): string => {
     const parts = [
@@ -500,11 +509,18 @@ export const PostCard = ({
         /* Visual Story Card Mode */
         <View style={styles.cardPreviewContainer}>
           {phoneSummary && (
+            <View pointerEvents="none" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden' }}>
             <CardDrawerDom
               summary={phoneSummary}
               onDrawn={async (url) => setPhoneCardUrl(url ?? false)}
-              dom={{ style: { width: 1, height: 1, opacity: 0 }, scrollEnabled: false }}
+              dom={{
+                style: { width: 1, height: 1 },
+                containerStyle: { position: 'absolute', width: 1, height: 1 },
+                scrollEnabled: false,
+                onError: () => setPhoneCardUrl(false),
+              }}
             />
+            </View>
           )}
           {displayCardUrl ? (
             <Tappable

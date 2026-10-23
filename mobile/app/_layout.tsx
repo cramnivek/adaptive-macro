@@ -20,9 +20,11 @@ import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
 import { session as loud } from '../src/theme/sessionTheme';
 import { holdSplash } from '../src/platform/splash';
+import { configureWebAudioSession } from '../src/platform/webAudioSession';
 
 // At module load, before the first render, or the launch screen is already gone.
 holdSplash();
+if (Platform.OS === 'web') configureWebAudioSession();
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -121,6 +123,16 @@ export default function RootLayout() {
                   presentation: 'modal',
                   headerShown: true,
                   title: 'Describe a meal',
+                  headerStyle: { backgroundColor: colors.surface },
+                  headerTintColor: colors.text,
+                }}
+              />
+              <Stack.Screen
+                name="log-meal"
+                options={{
+                  presentation: 'modal',
+                  headerShown: true,
+                  title: 'Log a meal',
                   headerStyle: { backgroundColor: colors.surface },
                   headerTintColor: colors.text,
                 }}

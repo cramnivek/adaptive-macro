@@ -46,7 +46,7 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone }: 
     // Consistent with "Calm when tracking. Focused when training. Loud when celebrating",
     // primary action buttons use athletic rounded styling (radius.lg = 16px) across
     // both everyday and training modes, reserving angular cuts strictly for celebrations.
-    <Tappable onPress={onPress} disabled={disabled} style={[styles.buttonSpacing, { opacity: disabled ? 0.4 : 1 }]}>
+    <Tappable accessibilityRole="button" onPress={onPress} disabled={disabled} style={[styles.buttonSpacing, { opacity: disabled ? 0.4 : 1 }]}>
       <View
         style={[
           styles.button,

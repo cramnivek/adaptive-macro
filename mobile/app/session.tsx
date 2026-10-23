@@ -2036,7 +2036,7 @@ export default function SessionScreen() {
 
   if (loading) {
     return (
-      <Screen tone="loud">
+      <Screen tone="loud" topInset={false}>
         {loadProblem !== null ? (
           <LoadProblem
             tone="loud"
@@ -2055,7 +2055,7 @@ export default function SessionScreen() {
 
   if (!session) {
     return (
-      <Screen tone="loud">
+      <Screen tone="loud" topInset={false}>
         <View style={styles.headerRow}>
           <Text style={styles.screenTitle}>WORKOUT</Text>
           {renderControls()}
@@ -2105,7 +2105,7 @@ export default function SessionScreen() {
 
   return (
     <View style={styles.sessionRoot}>
-      <Screen tone="loud">
+      <Screen tone="loud" topInset={false}>
         <View style={styles.headerRow}>
         <Text style={styles.screenTitle} numberOfLines={1}>
           {session.name.toUpperCase()}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { todayISO } from '@adaptive-macros/engine';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,7 +16,6 @@ import type { MealPhoto } from '../ai/describeMeal';
 import { type BodyFatPhotoResult, estimateBodyFatFromPhotos } from '../ai/bodyFatPhoto';
 import { chooseMealPhoto } from '../ai/mealPhoto';
 import { logBodyMeasurement } from '../db';
-import { notify } from '../dialog';
 import { thud } from '../platform/haptics';
 import { useApp } from '../state/AppStore';
 import { font, radius, space } from '../theme';
@@ -55,10 +54,13 @@ export const BodyFatPhotoSheet = ({ open, onClose, onSaved, betterFigure }: Body
   const { settings, latest } = useApp();
   const [photos, setPhotos] = useState<Record<Shot, MealPhoto | null>>({ front: null, side: null });
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [result, setResult] = useState<Extract<BodyFatPhotoResult, { usable: true }> | null>(null);
 
   const close = () => {
+    if (saveInFlight.current) return;
     setPhotos({ front: null, side: null });
     setResult(null);
     setProblem(null);
@@ -108,7 +110,10 @@ export const BodyFatPhotoSheet = ({ open, onClose, onSaved, betterFigure }: Body
   const midpoint = result ? Math.round(((result.lowPct + result.highPct) / 2) * 10) / 10 : null;
 
   const save = async () => {
-    if (!result || midpoint === null) return;
+    if (!result || midpoint === null || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSaving(true);
+    setProblem(null);
     try {
       thud('light');
       await logBodyMeasurement({
@@ -118,9 +123,14 @@ export const BodyFatPhotoSheet = ({ open, onClose, onSaved, betterFigure }: Body
         notes: `Body fat is a visual estimate from photos (${result.lowPct}–${result.highPct}%).`,
       });
       onSaved();
+      saveInFlight.current = false;
       close();
     } catch (e) {
-      notify('Could not save', (e as Error).message);
+      // Root notices sit behind a native Modal, so a failed write must be shown here.
+      setProblem(`Could not save: ${(e as Error).message || 'Please try again.'}`);
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
   };
 
@@ -133,7 +143,7 @@ export const BodyFatPhotoSheet = ({ open, onClose, onSaved, betterFigure }: Body
               <Text style={styles.title}>BODY FAT FROM PHOTOS</Text>
               <Text style={styles.subtitle}>Two mirror selfies, read in about ten seconds.</Text>
             </View>
-            <Tappable onPress={close} scaleTo={0.9} style={styles.closeBtn} accessibilityLabel="Close">
+            <Tappable onPress={close} disabled={saving} scaleTo={0.9} style={styles.closeBtn} accessibilityLabel="Close">
               <Ionicons name="close" size={20} color={loud.figureMuted} />
             </Tappable>
           </View>
@@ -161,10 +171,11 @@ export const BodyFatPhotoSheet = ({ open, onClose, onSaved, betterFigure }: Body
                     ? ` Your logged ${betterFigure.pct.toFixed(1)}% (${betterFigure.source === 'tape' ? 'from a tape' : 'typed in'}) stays the figure the app uses.`
                     : ' If you have had a DXA scan, compare it against that.'}
                 </Text>
-                <Tappable onPress={() => void save()} scaleTo={0.97} style={styles.primary}>
-                  <Text style={styles.primaryText}>SAVE {midpoint}%</Text>
+                {problem && <Text accessibilityRole="alert" style={styles.problemText}>{problem}</Text>}
+                <Tappable onPress={() => void save()} disabled={saving} accessibilityRole="button" accessibilityState={{ busy: saving }} scaleTo={0.97} style={styles.primary}>
+                  <Text style={styles.primaryText}>{saving ? 'SAVING…' : `SAVE ${midpoint}%`}</Text>
                 </Tappable>
-                <Tappable onPress={() => setResult(null)} scaleTo={0.97} style={styles.secondary}>
+                <Tappable onPress={() => { setProblem(null); setResult(null); }} disabled={saving} scaleTo={0.97} style={styles.secondary}>
                   <Text style={styles.secondaryText}>RETAKE</Text>
                 </Tappable>
               </>

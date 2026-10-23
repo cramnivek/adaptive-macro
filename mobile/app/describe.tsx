@@ -317,6 +317,7 @@ export default function DescribeScreen() {
           id: `ai:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: draft.item.name,
           source: 'ai',
+          estimate: { confidence: draft.item.confidence, assumption: draft.item.assumption },
           per100g,
           portions: [
             { label: '100 g', grams: 100 },
