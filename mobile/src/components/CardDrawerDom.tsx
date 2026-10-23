@@ -1,8 +1,8 @@
 'use dom';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ShareCard } from '../shareCard';
-import { drawShareCard } from '../platform/shareImage';
+import { createCardRenderer, type CardComposition, type CardPreview } from '../platform/cardComposition';
 import { font } from '../theme';
 import { domFontsReady } from '../platform/domFonts';
 
@@ -30,21 +30,37 @@ const FACES: [family: string, source: string][] = [
 export default function CardDrawerDom({
   summary,
   onDrawn,
+  composition = null,
+  requestKey: suppliedKey,
+  onComposed,
+  getPhoto,
 }: {
   summary: ShareCard;
-  onDrawn: (pngDataUrl: string | null) => Promise<void>;
+  onDrawn?: (pngDataUrl: string | null) => Promise<void>;
+  composition?: CardComposition | null;
+  requestKey?: string;
+  onComposed?: (requestKey: string, preview: CardPreview | null) => Promise<void>;
+  getPhoto?: (id: string) => Promise<string | null>;
   dom?: import('expo/dom').DOMProps;
 }) {
-  const requestKey = JSON.stringify(summary);
+  const requestKey = suppliedKey ?? JSON.stringify(summary);
+  const render = useRef<ReturnType<typeof createCardRenderer> | null>(null);
+  render.current ??= createCardRenderer();
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         await domFontsReady(FACES);
-        const url = drawShareCard(summary).toDataURL('image/png');
-        if (!cancelled) await onDrawn(url);
+        const preview = await render.current!(summary, composition, getPhoto);
+        if (!cancelled) {
+          await onDrawn?.(preview.url);
+          await onComposed?.(requestKey, preview);
+        }
       } catch {
-        if (!cancelled) await onDrawn(null);
+        if (!cancelled) {
+          await onDrawn?.(null);
+          await onComposed?.(requestKey, null);
+        }
       }
     })();
     return () => {

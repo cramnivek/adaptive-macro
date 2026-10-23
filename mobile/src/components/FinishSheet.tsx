@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -15,6 +15,8 @@ import type { ShareCard } from '../shareCard';
 import { type CardBlock, type Placement, placementOrigin } from '../shareCardPlacement';
 import { blocksFor, TEMPLATES, type TemplateId } from '../shareCardTemplate';
 import { subjectOf } from '../platform/depth';
+import { cardRenderKey, type CardComposition, type CardPreview } from '../platform/cardComposition';
+import { pickNativeCardPhoto } from '../platform/nativeCardPhoto';
 import { useApp } from '../state/AppStore';
 import { getEventCopy } from '../copy/personality';
 
@@ -29,6 +31,9 @@ import { Tappable } from './Tappable';
 import CardDrawerDom from './CardDrawerDom';
 import { useBlockGesture } from './useBlockGesture';
 
+// Native gestures update the preview at finger speed; the DOM renderer only receives settled edits.
+const NativeCardDrawer = memo(CardDrawerDom);
+
 interface FinishSheetProps {
   /** The finished workout, or null when the sheet is closed. */
   summary: ShareCard | null;
@@ -38,7 +43,7 @@ interface FinishSheetProps {
   account: 'unavailable' | 'signed-out' | 'needs-profile' | 'ready';
   /** Lead with POST and an open caption: what this person did last time. */
   postFirst: boolean;
-  onPost: (caption: string, card?: { file: File; url: string } | null) => Promise<void>;
+  onPost: (caption: string, card?: { file?: File; url: string } | null) => Promise<void>;
   onNeedAccount: () => void;
   onDone: (posted: boolean) => void;
   /** Opens the save-as-routine sheet. Omit to hide the button. */
@@ -58,13 +63,10 @@ interface FinishSheetProps {
 export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNeedAccount, onDone, onSaveAsRoutine, routineSaved = false }: FinishSheetProps) => {
   const insets = useSafeAreaInsets();
   const [card, setCard] = useState<{ file: File; url: string } | null>(null);
-  const [phoneCard, setPhoneCard] = useState<{ summary: ShareCard; url: string } | null>(null);
+  const [phoneCard, setPhoneCard] = useState<{ summary: ShareCard; requestKey: string; photoId: string | null; preview: CardPreview } | null>(null);
   const [renderAttempt, setRenderAttempt] = useState(0);
-  const phoneCardUrl = phoneCard?.summary === summary ? phoneCard?.url : null;
   const currentSummary = useRef(summary);
   currentSummary.current = summary;
-  const currentAttempt = useRef(renderAttempt);
-  currentAttempt.current = renderAttempt;
   const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopRenderTimer = () => {
     if (renderTimer.current !== null) clearTimeout(renderTimer.current);
@@ -80,6 +82,9 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   // workout starts on the dark card rather than on someone else's photo.
   const [picked, setPicked] = useState<{ workout: ShareCard; image: HTMLImageElement } | null>(null);
   const photo = picked !== null && picked.workout === summary ? picked.image : null;
+  const [nativePicked, setNativePicked] = useState<{ workout: ShareCard; photo: CardComposition['photo'] } | null>(null);
+  const nativePhoto = nativePicked?.workout === summary ? nativePicked.photo : null;
+  const photoSequence = useRef(0);
 
   const { settings, updateSettings } = useApp();
   const template = settings.cardTemplate;
@@ -101,6 +106,44 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   const [subject, setSubject] = useState<{ canvas: HTMLCanvasElement; uri: string } | null>(null);
   const [cutting, setCutting] = useState(false);
   const depth = settings.cardDepth;
+  const settledPlace = useRef(place);
+  if (!dragging) settledPlace.current = place;
+  const nativeComposition = useMemo<CardComposition | null>(() => nativePhoto ? {
+    photo: { id: nativePhoto.id }, blocks, template, place: settledPlace.current, depth,
+  } : null, [nativePhoto, blocks, template, settledPlace.current, depth]);
+  const readNativePhoto = useCallback(async (id: string) => id === nativePhoto?.id ? nativePhoto.dataUrl ?? null : null, [nativePhoto]);
+  const nativeKey = useMemo(() => cardRenderKey(summary, nativeComposition, renderAttempt), [summary, nativeComposition, renderAttempt]);
+  const currentNativeKey = useRef(nativeKey);
+  currentNativeKey.current = nativeKey;
+  const phoneCardUrl = phoneCard?.summary === summary && phoneCard.requestKey === nativeKey ? phoneCard.preview.url : null;
+  const nativeLayers = phoneCard?.summary === summary && phoneCard.photoId === nativePhoto?.id ? phoneCard.preview : null;
+  const previewGround = Platform.OS === 'web' ? ground : nativeLayers?.ground ?? null;
+  const previewSticker = Platform.OS === 'web' ? sticker : nativeLayers?.sticker ?? null;
+  const previewSubject = Platform.OS === 'web' ? subject?.uri ?? null : nativeLayers?.subject ?? null;
+  const nativePreviewStatus = Platform.OS !== 'web' && nativePhoto !== null && !phoneCardUrl
+    ? drawing ? 'Updating preview…' : 'Preview needs a retry.' : null;
+
+  const receiveNativeCard = useCallback(async (key: string, preview: CardPreview | null) => {
+    if (key !== currentNativeKey.current || summary === null) return;
+    stopRenderTimer();
+    setDrawing(false);
+    if (preview) {
+      setPhoneCard({ summary, requestKey: key, photoId: nativePhoto?.id ?? null, preview });
+      setNote(nativePhoto && depth && !preview.depthApplied ? 'Depth could not be applied; your photo can still be shared.' : null);
+    } else setNote('The card could not be drawn. Retry the preview or remove the photo.');
+  }, [summary, nativePhoto, depth]);
+  const nativeLoadError = useCallback(() => {
+    if (currentNativeKey.current !== nativeKey) return;
+    stopRenderTimer();
+    setDrawing(false);
+    setNote('The card renderer could not load. Check the development connection and retry.');
+  }, [nativeKey]);
+  const nativeDom = useMemo(() => ({
+    style: { width: 1, height: 1 },
+    containerStyle: { position: 'absolute' as const, width: 1, height: 1 },
+    scrollEnabled: false,
+    onError: nativeLoadError,
+  }), [nativeLoadError]);
 
   useEffect(() => {
     if (summary === null) return;
@@ -175,7 +218,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       setNote('The card took too long to load. Check the development connection and retry.');
     }, 45000);
     return stopRenderTimer;
-  }, [summary, hidden, phoneCardUrl, renderAttempt]);
+  }, [summary, hidden, phoneCardUrl, renderAttempt, nativeKey]);
 
   // The picture, graded once. The preview shows this rather than the raw
   // photograph so that what is on screen while you place the block is what the
@@ -244,6 +287,18 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 
   const choosePhoto = async () => {
     if (summary === null) return;
+    if (Platform.OS !== 'web') {
+      try {
+        const dataUrl = await pickNativeCardPhoto();
+        if (!dataUrl || currentSummary.current !== summary) return;
+        setNote(null);
+        setPlace(TEMPLATES[template].place);
+        setNativePicked({ workout: summary, photo: { id: String(++photoSequence.current), dataUrl } });
+      } catch {
+        if (currentSummary.current === summary) setNote('That photo could not be opened. Try another picture.');
+      }
+      return;
+    }
     const picked = await pickCardPhoto();
     if (picked.ok) {
       setNote(null);
@@ -259,7 +314,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
   };
 
   const share = async () => {
-    if (summary === null) return;
+    if (summary === null || drawing || dragging) return;
     if (Platform.OS !== 'web' && !phoneCardUrl) return;
     const outcome = await shareWorkout(summary, phoneCardUrl ? { url: phoneCardUrl } : card);
     if (outcome === 'downloaded') setNote('Saved to your downloads.');
@@ -276,10 +331,14 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       setWriting(true);
       return;
     }
+    if (dragging || (Platform.OS !== 'web' && nativePhoto && !phoneCardUrl)) {
+      setNote('Wait for the card preview or retry it before posting.');
+      return;
+    }
     setPosting(true);
     setNote(null);
     try {
-      await onPost(caption, card);
+      await onPost(caption, Platform.OS === 'web' ? card : nativePhoto && phoneCardUrl ? { url: phoneCardUrl } : null);
       setPosted(true);
     } catch (error) {
       setNote((error as Error).message);
@@ -303,7 +362,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
     frame,
     card: CARD,
     place,
-    sticker,
+    sticker: previewSticker,
     onPlace: setPlace,
     onDragging: setDragging,
   });
@@ -360,27 +419,14 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
         <View style={styles.sheet}>
           {Platform.OS !== 'web' && summary && !hidden && (
             <View pointerEvents="none" style={styles.drawer}>
-              <CardDrawerDom
+              <NativeCardDrawer
                 key={renderAttempt}
                 summary={summary}
-                onDrawn={async (url) => {
-                  if (currentSummary.current !== summary || currentAttempt.current !== renderAttempt) return;
-                  stopRenderTimer();
-                  setDrawing(false);
-                  if (url) { setPhoneCard({ summary, url }); setNote(null); }
-                  else setNote('The card could not be drawn. Retry the preview.');
-                }}
-                dom={{
-                  style: { width: 1, height: 1 },
-                  containerStyle: { position: 'absolute', width: 1, height: 1 },
-                  scrollEnabled: false,
-                  onError: () => {
-                    if (currentSummary.current !== summary || currentAttempt.current !== renderAttempt) return;
-                    stopRenderTimer();
-                    setDrawing(false);
-                    setNote('The card renderer could not load. Check the development connection and retry.');
-                  },
-                }}
+                composition={nativeComposition}
+                requestKey={nativeKey}
+                onComposed={receiveNativeCard}
+                getPhoto={readNativePhoto}
+                dom={nativeDom}
               />
             </View>
           )}
@@ -415,7 +461,7 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           )}
 
           <View style={[styles.preview, { height }]}>
-            {ground !== null ? (
+            {previewGround !== null ? (
               /*
                 Over a photograph the preview is the two layers themselves
                 rather than a picture of them, so moving the block is a
@@ -428,8 +474,8 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                 {...handlers}
                 accessibilityLabel="The card that will be shared. Drag to move it, pinch to resize."
               >
-                <Image source={{ uri: ground }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                {sticker !== null && (
+                <Image source={{ uri: previewGround }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                {previewSticker !== null && (
                   /*
                     Everything here is in the preview's own points. The block is
                     drawn at the card's size, so its place and its size are both
@@ -437,19 +483,19 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
                     scaled the block and left its corner where it was.
                   */
                   <Image
-                    source={{ uri: sticker.uri }}
+                    source={{ uri: previewSticker.uri }}
                     style={{
                       position: 'absolute',
-                      left: placementOrigin(place, sticker, CARD).left * (frame.width / CARD.width),
-                      top: placementOrigin(place, sticker, CARD).top * (frame.height / CARD.height),
-                      width: sticker.width * place.scale * (frame.width / CARD.width),
-                      height: sticker.height * place.scale * (frame.height / CARD.height),
+                      left: placementOrigin(place, previewSticker, CARD).left * (frame.width / CARD.width),
+                      top: placementOrigin(place, previewSticker, CARD).top * (frame.height / CARD.height),
+                      width: previewSticker.width * place.scale * (frame.width / CARD.width),
+                      height: previewSticker.height * place.scale * (frame.height / CARD.height),
                     }}
                   />
                 )}
-                {subject !== null && (
+                {previewSubject !== null && (
                   /* The person, over the type, exactly as the file will have it. */
-                  <Image source={{ uri: subject.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  <Image source={{ uri: previewSubject }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 )}
               </View>
             ) : (phoneCardUrl || card) ? (
@@ -457,25 +503,27 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
             ) : drawing ? (
               <ActivityIndicator color={loud.loud} />
             ) : null}
+            {nativePreviewStatus && previewGround && <View pointerEvents="none" style={styles.previewStatus}>
+              <Text accessibilityLiveRegion="polite" style={styles.previewStatusLabel}>{nativePreviewStatus}</Text>
+            </View>}
           </View>
 
           {/* Composing happens on its own screen. Here there is room for a
               preview and one way in, and the preview still takes a drag for
               anyone who only wants to nudge it. */}
-          {ground !== null && (
+          {previewGround !== null && (
             <Tappable onPress={() => setEditing(true)} accessibilityRole="button" style={styles.editAction}>
               <Text style={styles.editLabel}>EDIT CARD · SHAPE, WHAT SHOWS, DEPTH</Text>
             </Tappable>
           )}
 
-          {/* Photo composition uses browser image objects; the native preview is a rendered PNG. */}
-          {Platform.OS === 'web' && card !== null && (
+          {(Platform.OS !== 'web' || card !== null) && (
             <View style={styles.photoRow}>
               <Tappable onPress={() => void choosePhoto()} accessibilityRole="button" style={styles.photoAction}>
-                <Text style={styles.photoLabel}>{photo ? 'CHANGE PHOTO' : 'ADD A PHOTO'}</Text>
+                <Text style={styles.photoLabel}>{photo || nativePhoto ? 'CHANGE PHOTO' : 'ADD A PHOTO'}</Text>
               </Tappable>
-              {photo !== null && (
-                <Tappable onPress={() => setPicked(null)} accessibilityRole="button" style={styles.photoAction}>
+              {(photo !== null || nativePhoto !== null) && (
+                <Tappable onPress={() => { setPicked(null); setNativePicked(null); }} accessibilityRole="button" style={styles.photoAction}>
                   <Text style={styles.photoLabel}>REMOVE</Text>
                 </Tappable>
               )}
@@ -513,14 +561,14 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
               move, so sharing waits the half second rather than sending it. */}
           <Tappable
             onPress={() => {
-              if (drawing) return;
+              if (drawing || dragging) return;
               if (Platform.OS !== 'web' && !phoneCardUrl) { setRenderAttempt((value) => value + 1); return; }
               void share();
             }}
-            disabled={drawing}
+            disabled={drawing || dragging}
             scaleTo={0.97}
             accessibilityRole="button"
-            accessibilityState={{ disabled: drawing }}
+            accessibilityState={{ disabled: drawing || dragging }}
             style={[styles.action, drawing && styles.spent]}
           >
             <View
@@ -565,12 +613,12 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
       </View>
       {/* Over the sheet, on its own screen, sharing every piece of state with
           it: what you leave the editor with is what gets drawn and posted. */}
-      {ground !== null && (
+      {previewGround !== null && (
         <CardEditor
           open={editing}
-          ground={ground}
-          sticker={sticker}
-          subject={subject?.uri ?? null}
+          ground={previewGround}
+          sticker={previewSticker}
+          subject={previewSubject}
           place={place}
           onPlace={setPlace}
           onDragging={setDragging}
@@ -579,10 +627,11 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
           blocks={blocks}
           onBlock={toggleBlock}
           depth={depth}
-          cutting={cutting}
+          cutting={Platform.OS === 'web' ? cutting : drawing && depth}
           onDepth={() => void updateSettings({ cardDepth: !depth })}
           onReset={() => setPlace(TEMPLATES[template].place)}
           onClose={() => setEditing(false)}
+          previewStatus={nativePreviewStatus ? drawing ? nativePreviewStatus : 'Close the editor and retry the preview.' : null}
         />
       )}
       <TransparentStickerModal
@@ -596,6 +645,8 @@ export const FinishSheet = ({ summary, hidden, account, postFirst, onPost, onNee
 };
 
 const styles = StyleSheet.create({
+  previewStatus: { position: 'absolute', bottom: space.sm, backgroundColor: loud.panel, padding: space.sm, borderRadius: radius.sm },
+  previewStatusLabel: { fontFamily: font.ui, fontSize: 12, color: loud.figure },
   drawer: { position: 'absolute', width: 1, height: 1, overflow: 'hidden' },
   backdrop: { flex: 1, backgroundColor: 'rgba(10,10,11,0.9)', justifyContent: 'flex-end' },
   sheet: {
