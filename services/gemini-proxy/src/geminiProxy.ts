@@ -2,7 +2,8 @@
  * Server-side Gemini passthrough.
  *
  * The app sends the request body it would otherwise have sent to Google; this
- * attaches the key and forwards it. Deliberately dumb: the grounding gate, the
+ * attaches the key and forwards it with a bounded deadline and a fast default
+ * for meal photos. The grounding gate, the
  * `found` check and the zero-macro floor all stay in `src/api/gemini.ts`, where
  * they are tested. Duplicating them here would leave those tests pointing at a
  * copy that no longer runs.
@@ -54,23 +55,56 @@ export const handleGeminiProxy = async (
     return Response.json({ error: 'Model not allowed' }, { status: 400 });
   }
 
-  const body = await request.text();
-  const upstream = await fetch(
-    `${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(env.geminiApiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      // Carries the client's cancellation through, so abandoning a lookup
-      // actually stops the charge rather than only hiding the clock.
-      signal: request.signal,
-    },
-  );
+  let body = await request.text();
+  let payload;
+  try { payload = JSON.parse(body); }
+  catch { return Response.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  const image = Array.isArray(payload?.contents) && payload.contents.some((content: any) =>
+    Array.isArray(content?.parts) && content.parts.some((part: any) =>
+      typeof part?.inlineData?.mimeType === 'string' && part.inlineData.mimeType.startsWith('image/')));
+  const config = payload?.generationConfig;
+  const meal = image && config?.responseSchema?.properties?.notFood && config?.responseSchema?.properties?.items;
+  // Installed clients need the same fast meal policy as the new web bundle.
+  // Other image tasks and grounded searches retain their reasoning settings.
+  if (meal && !payload.tools?.length && !config.thinkingConfig) {
+    payload.generationConfig = { ...config, thinkingConfig: { thinkingLevel: 'low' } };
+    body = JSON.stringify(payload);
+  }
 
-  // Status passes through untouched so the client's existing error mapping —
-  // 429 to quota, 400/403 to a key problem — keeps describing what happened.
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const controller = new AbortController();
+  const abandon = () => controller.abort();
+  request.signal.addEventListener('abort', abandon, { once: true });
+  if (request.signal.aborted) controller.abort();
+  const started = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // Cloud Run does not reliably propagate an end-user disconnect to the
+    // container. Bound both response headers and its body here, before its 120s
+    // platform timeout. Racing also bounds a transport that ignores abort.
+    const deadline = new Promise<Response>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(Response.json({ error: 'Estimate timed out. Try again or describe the meal.' }, {
+          status: 504, headers: { 'x-estimate-timeout': '1' },
+        }));
+        controller.abort();
+      }, image ? 45_000 : 110_000);
+    });
+    const relay = async () => {
+      const upstream = await fetch(
+        `${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(env.geminiApiKey)}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal },
+      );
+      // The adapter already buffers this response. Reading here keeps a stalled
+      // body inside the deadline rather than returning an unbounded stream.
+      return new Response(await upstream.arrayBuffer(), {
+        status: upstream.status, headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const response = await Promise.race([deadline, relay()]);
+    console.info(JSON.stringify({ message: 'gemini_request', model, image, status: response.status, elapsedMs: Date.now() - started }));
+    return response;
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener('abort', abandon);
+  }
 };

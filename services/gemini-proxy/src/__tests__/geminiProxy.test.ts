@@ -17,9 +17,88 @@ const validHeaders = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('handleGeminiProxy', () => {
+  const photoBody = {
+    contents: [{ parts: [{ inlineData: { mimeType: 'image/jpeg', data: 'test-image' } }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: { properties: { items: { type: 'array' }, notFood: { type: 'boolean' } } } },
+  };
+
+  it('gives older image clients a low-thinking default while preserving their schema', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    await handleGeminiProxy(request(validHeaders, photoBody), env);
+    const forwarded = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(forwarded.generationConfig).toEqual({ ...photoBody.generationConfig, thinkingConfig: { thinkingLevel: 'low' } });
+    expect(forwarded.contents).toEqual(photoBody.contents);
+  });
+
+  it('preserves an explicit image thinking configuration and grounded requests', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    for (const body of [
+      { ...photoBody, generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } },
+      { ...photoBody, tools: [{ google_search: {} }] },
+      { ...photoBody, generationConfig: { responseMimeType: 'application/json' } },
+    ]) {
+      await handleGeminiProxy(request(validHeaders, body), env);
+      expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).toEqual(body);
+    }
+  });
+
+  it.each(['fetch', 'body'] as const)('bounds stalled image %s even if it ignores cancellation', async (stage) => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      signal = init.signal;
+      if (stage === 'fetch') return new Promise(() => {});
+      const response = new Response('{}');
+      response.arrayBuffer = () => new Promise(() => {});
+      return response;
+    }));
+    const pending = handleGeminiProxy(request(validHeaders, photoBody), env);
+    await vi.advanceTimersByTimeAsync(45_000);
+    const response = await pending;
+    expect(response.status).toBe(504);
+    expect(response.headers.get('x-estimate-timeout')).toBe('1');
+    expect(await response.json()).toEqual({ error: 'Estimate timed out. Try again or describe the meal.' });
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('bounds other Gemini calls below the Cloud Run deadline too', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    const pending = handleGeminiProxy(request(validHeaders), env);
+    await vi.advanceTimersByTimeAsync(110_000);
+    expect((await pending).status).toBe(504);
+  });
+
+  it('returns the deadline response when the upstream transport rejects on abort', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    })));
+    const pending = handleGeminiProxy(request(validHeaders, photoBody), env);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect((await pending).status).toBe(504);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('cleans up its deadline after a successful response', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+    expect((await handleGeminiProxy(request(validHeaders, photoBody), env)).status).toBe(200);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('rejects a missing token without calling Google', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
