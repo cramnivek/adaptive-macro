@@ -27,6 +27,54 @@ describe('handleGeminiProxy', () => {
     generationConfig: { responseMimeType: 'application/json', responseSchema: { properties: { items: { type: 'array' }, notFood: { type: 'boolean' } } } },
   };
 
+  const textBody = {
+    contents: [{ parts: [{ text: 'two eggs and toast' }] }],
+    generationConfig: photoBody.generationConfig,
+  };
+
+  it('gives installed text-meal clients low reasoning and a bounded fallback', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(() => {}))
+      .mockResolvedValueOnce(Response.json({ modelVersion: 'gemini-3.5-flash-lite' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = handleGeminiProxy(request(validHeaders, textBody), env);
+    await vi.advanceTimersByTimeAsync(15_000);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const forwarded = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(forwarded.contents).toEqual(textBody.contents);
+    expect(forwarded.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(fetchMock.mock.calls[1][0]).toContain('/gemini-3.5-flash-lite:generateContent');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds two stalled text-meal attempts below the client deadline', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = handleGeminiProxy(request(validHeaders, textBody), env);
+    await vi.advanceTimersByTimeAsync(27_000);
+    expect((await pending).status).toBe(504);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('leaves grounded text, higher reasoning and other structured text tasks unchanged', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    for (const body of [
+      { ...textBody, tools: [{ google_search: {} }] },
+      { ...textBody, generationConfig: { ...textBody.generationConfig, thinkingConfig: { thinkingLevel: 'high' } } },
+      { ...textBody, generationConfig: { responseSchema: { properties: { items: { type: 'array' } } } } },
+    ]) {
+      expect((await handleGeminiProxy(request(validHeaders, body), env)).status).toBe(503);
+      expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).toEqual(body);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it.each(['fetch', 'body'] as const)('uses one fast fallback after 15 seconds of stalled %s', async (stage) => {
     vi.useFakeTimers();
     const signals: AbortSignal[] = [];

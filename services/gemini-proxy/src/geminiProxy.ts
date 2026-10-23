@@ -3,7 +3,7 @@
  *
  * The app sends the request body it would otherwise have sent to Google; this
  * attaches the key and forwards it with a bounded deadline and a fast default
- * for meal photos. The grounding gate, the
+ * for meal estimates. The grounding gate, the
  * `found` check and the zero-macro floor all stay in `src/api/gemini.ts`, where
  * they are tested. Duplicating them here would leave those tests pointing at a
  * copy that no longer runs.
@@ -63,8 +63,8 @@ export const handleGeminiProxy = async (
     Array.isArray(content?.parts) && content.parts.some((part: any) =>
       typeof part?.inlineData?.mimeType === 'string' && part.inlineData.mimeType.startsWith('image/')));
   const config = payload?.generationConfig;
-  const meal = image && config?.responseSchema?.properties?.notFood && config?.responseSchema?.properties?.items;
-  // Installed clients need the same fast meal policy as the new web bundle.
+  const meal = config?.responseSchema?.properties?.notFood && config?.responseSchema?.properties?.items;
+  // Installed clients need the same fast policy for typed meals and photos.
   // Other image tasks and grounded searches retain their reasoning settings.
   if (meal && !payload.tools?.length && !config.thinkingConfig) {
     payload.generationConfig = { ...config, thinkingConfig: { thinkingLevel: 'low' } };
@@ -119,8 +119,8 @@ export const handleGeminiProxy = async (
   };
   const primary = await attempt(model, fastMeal ? 15_000 : image ? 45_000 : 110_000);
   // Some Flash responses stall even with low reasoning. Give interactive meal
-  // photos one bounded alternative, keeping both attempts below older clients'
-  // 30-second camera retry. Never retry quota/auth errors or explicit high effort.
+  // estimates one bounded alternative, keeping processing below the typed-meal
+  // client's 30-second limit. Never retry quota/auth errors or explicit high effort.
   if (fastMeal && !request.signal.aborted && [502, 503, 504].includes(primary.status)) {
     return attempt('gemini-3.5-flash-lite', 12_000);
   }
