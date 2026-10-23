@@ -138,6 +138,9 @@ export const describeMealWithGemini = async (
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: MEAL_RESPONSE_SCHEMA,
+          // Food identification needs a quick draft, with uncertainty shown to
+          // the person, rather than an unbounded default reasoning pass.
+          ...(photo ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
         },
       }),
     });
@@ -149,6 +152,9 @@ export const describeMealWithGemini = async (
       throw new DescribeResponseError(SIGN_IN_AGAIN_MESSAGE);
     }
     if (isPersonalLimit(response, route)) throw new DescribeResponseError(ALLOWANCE_USED_MESSAGE);
+    if (response.status === 504) {
+      throw new DescribeResponseError('The estimate took too long. Try again, or describe the meal.');
+    }
     if (!response.ok) {
       throw new DescribeResponseError(`The estimate service returned ${response.status}.`);
     }

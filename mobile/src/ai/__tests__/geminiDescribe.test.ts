@@ -49,6 +49,22 @@ afterEach(() => {
 });
 
 describe('describeMealWithGemini', () => {
+  it('uses low thinking for a photo estimate without changing text-only reasoning', async () => {
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => geminiResponse(estimate));
+    vi.stubGlobal('fetch', fetchMock);
+    await describeMealWithGemini('', '', { base64: 'QUJD', mimeType: 'image/jpeg' });
+    await describeMealWithGemini('two eggs', '');
+    const config = (index: number) => JSON.parse(fetchMock.mock.calls[index][1]!.body as string).generationConfig;
+    expect(config(0).thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(config(1).thinkingConfig).toBeUndefined();
+    expect(config(0).responseSchema).toEqual(config(1).responseSchema);
+  });
+
+  it('turns a server deadline into a useful retry message', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 504 })));
+    await expect(describeMealWithGemini('', '', { base64: 'QUJD', mimeType: 'image/jpeg' }))
+      .rejects.toThrow('The estimate took too long. Try again, or describe the meal.');
+  });
   it.each(['session', 'fetch', 'body'] as const)(
     'ends a photo timeout even when %s never settles or ignores cancellation',
     async (stage) => {
