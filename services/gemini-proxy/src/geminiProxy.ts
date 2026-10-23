@@ -71,40 +71,58 @@ export const handleGeminiProxy = async (
     body = JSON.stringify(payload);
   }
 
-  const controller = new AbortController();
-  const abandon = () => controller.abort();
-  request.signal.addEventListener('abort', abandon, { once: true });
-  if (request.signal.aborted) controller.abort();
   const started = Date.now();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // Cloud Run does not reliably propagate an end-user disconnect to the
-    // container. Bound both response headers and its body here, before its 120s
-    // platform timeout. Racing also bounds a transport that ignores abort.
-    const deadline = new Promise<Response>((resolve) => {
-      timer = setTimeout(() => {
-        resolve(Response.json({ error: 'Estimate timed out. Try again or describe the meal.' }, {
-          status: 504, headers: { 'x-estimate-timeout': '1' },
-        }));
+  const fastMeal = meal && !payload.tools?.length &&
+    (!config.thinkingConfig || config.thinkingConfig.thinkingLevel === 'low');
+  const attempt = async (selectedModel: string, budgetMs: number): Promise<Response> => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abandon: () => void = () => {};
+    const canceled = new Promise<Response>((_resolve, reject) => {
+      abandon = () => {
+        reject(new DOMException('Request canceled', 'AbortError'));
         controller.abort();
-      }, image ? 45_000 : 110_000);
+      };
+      request.signal.addEventListener('abort', abandon, { once: true });
+      if (request.signal.aborted) abandon();
     });
-    const relay = async () => {
-      const upstream = await fetch(
-        `${ENDPOINT}/${model}:generateContent?key=${encodeURIComponent(env.geminiApiKey)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal },
-      );
-      // The adapter already buffers this response. Reading here keeps a stalled
-      // body inside the deadline rather than returning an unbounded stream.
-      return new Response(await upstream.arrayBuffer(), {
-        status: upstream.status, headers: { 'Content-Type': 'application/json' },
+    try {
+      // Cloud Run does not reliably propagate an end-user disconnect to the
+      // container. Bound both response headers and its body here, before its 120s
+      // platform timeout. Racing also bounds a transport that ignores abort.
+      const deadline = new Promise<Response>((resolve) => {
+        timer = setTimeout(() => {
+          resolve(Response.json({ error: 'Estimate timed out. Try again or describe the meal.' }, {
+            status: 504, headers: { 'x-estimate-timeout': '1' },
+          }));
+          controller.abort();
+        }, budgetMs);
       });
-    };
-    const response = await Promise.race([deadline, relay()]);
-    console.info(JSON.stringify({ message: 'gemini_request', model, image, status: response.status, elapsedMs: Date.now() - started }));
-    return response;
-  } finally {
-    clearTimeout(timer);
-    request.signal.removeEventListener('abort', abandon);
+      const relay = async () => {
+        const upstream = await fetch(
+          `${ENDPOINT}/${selectedModel}:generateContent?key=${encodeURIComponent(env.geminiApiKey)}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal },
+        );
+        // The adapter already buffers this response. Reading here keeps a stalled
+        // body inside the deadline rather than returning an unbounded stream.
+        return new Response(await upstream.arrayBuffer(), {
+          status: upstream.status, headers: { 'Content-Type': 'application/json' },
+        });
+      };
+      const response = await Promise.race([canceled, deadline, relay()]);
+      console.info(JSON.stringify({ message: 'gemini_request', model: selectedModel, image, status: response.status, elapsedMs: Date.now() - started }));
+      return response;
+    } finally {
+      clearTimeout(timer);
+      request.signal.removeEventListener('abort', abandon);
+    }
+  };
+  const primary = await attempt(model, fastMeal ? 15_000 : image ? 45_000 : 110_000);
+  // Some Flash responses stall even with low reasoning. Give interactive meal
+  // photos one bounded alternative, keeping both attempts below older clients'
+  // 30-second camera retry. Never retry quota/auth errors or explicit high effort.
+  if (fastMeal && !request.signal.aborted && [502, 503, 504].includes(primary.status)) {
+    return attempt('gemini-3.5-flash-lite', 12_000);
   }
+  return primary;
 };

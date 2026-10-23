@@ -27,3 +27,17 @@ Unit tests exercise stalled headers and response bodies that ignore abort, confi
 After revision `gemini-proxy-00173-9v2` deployed, two legacy-shaped meal-photo calls (no reasoning setting) completed in 4.984 and 4.987 seconds, and a current-client call in 6.362 seconds. All returned validated estimates of the three visible foods. In a browser fixture using the actual Describe screen and a mocked 34-second camera/provider boundary, the revised flow completed with one provider call and enabled Add to diary. This verifies the duplicate-retry removal, not physical camera behavior.
 
 Sources: [Gemini 3.5 automatic migration](https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5), [thinking controls](https://ai.google.dev/gemini-api/docs/thinking).
+
+## Intermittent failure and fallback
+
+Repeating the same public-photo check later hit the new deadline after 45.3 seconds. Low reasoning improved typical latency but did not resolve the intermittent failure. The initial three fast responses were insufficient evidence of recovery.
+
+Two direct checks of stable `gemini-3.5-flash-lite` with the same actual prompt, image, schema and parser completed in 3.126 and 2.237 seconds. Both identified toast, avocado and egg and passed schema validation. This qualifies basic compatibility, not portion accuracy or a broad nutritional benchmark.
+
+Structured meal photos with default or explicit low reasoning now get 15 seconds on the primary model, then one Flash-Lite attempt with a 12-second deadline if the primary times out or returns 502/503/504. Both header and body waits count. Other image tasks, grounded requests and explicit higher reasoning keep their existing policy. Authentication, quota and invalid-request failures are never retried. Caller cancellation aborts the active request without starting a fallback. The server-side model switch requires no replacement Android APK.
+
+The primary and fallback can both incur usage. Aborting the primary bounds the server wait but does not prove Google's billing or computation stops immediately. Timing logs identify which model served each attempt without recording health content. The 27-second processing budget excludes the initial upload and network transit; it cannot promise every installed client's older 30-second camera timer will be avoided.
+
+A controlled run of the actual proxy handler deliberately stalled the primary transport and let the fallback call the real Google endpoint using the public breakfast image and production meal schema. It made exactly two attempts, returned 200 in 17.538 seconds, and the app's schema validated toast, avocado and egg. All 174 proxy tests and workspace typechecks passed. Fake-timer tests cover stalled headers/body, failed fallback without a third attempt, cancellation, excluded request types, and quota/auth status preservation.
+
+Model capability reference: [Gemini 3.5 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite).

@@ -27,6 +27,78 @@ describe('handleGeminiProxy', () => {
     generationConfig: { responseMimeType: 'application/json', responseSchema: { properties: { items: { type: 'array' }, notFood: { type: 'boolean' } } } },
   };
 
+  it.each(['fetch', 'body'] as const)('uses one fast fallback after 15 seconds of stalled %s', async (stage) => {
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      if (signals.length === 2) return Response.json({ modelVersion: 'gemini-3.5-flash-lite', candidates: [] });
+      if (stage === 'fetch') return new Promise<Response>(() => {});
+      const response = new Response('{}');
+      response.arrayBuffer = () => new Promise(() => {});
+      return response;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = handleGeminiProxy(request(validHeaders, photoBody), env);
+    await vi.advanceTimersByTimeAsync(15_000);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect((await response.json()).modelVersion).toBe('gemini-3.5-flash-lite');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain('/gemini-3.5-flash-lite:generateContent');
+    expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+    expect(signals[0].aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([502, 503, 504])('falls back once on provider status %s', async (status) => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('{}', { status })).mockResolvedValueOnce(new Response('{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    const body = { ...photoBody, generationConfig: { ...photoBody.generationConfig, thinkingConfig: { thinkingLevel: 'low' } } };
+    expect((await handleGeminiProxy(request(validHeaders, body), env)).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns a failed fallback without a third attempt', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await handleGeminiProxy(request(validHeaders, photoBody), env)).status).toBe(503);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([400, 401, 403, 429])('does not retry provider status %s', async (status) => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await handleGeminiProxy(request(validHeaders, photoBody), env)).status).toBe(status);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a fallback after the caller cancels', async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    const original = request(validHeaders, photoBody);
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = handleGeminiProxy(new Request(original, { signal: caller.signal }), env);
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(1);
+    caller.abort();
+    await rejected;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('preserves other image tasks and explicit high reasoning without a fallback', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    for (const body of [
+      { ...photoBody, generationConfig: { ...photoBody.generationConfig, thinkingConfig: { thinkingLevel: 'high' } } },
+      { ...photoBody, tools: [{ google_search: {} }] },
+      { ...photoBody, generationConfig: { responseMimeType: 'application/json' } },
+    ]) expect((await handleGeminiProxy(request(validHeaders, body), env)).status).toBe(503);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('gives older image clients a low-thinking default while preserving their schema', async () => {
     const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response('{}'));
     vi.stubGlobal('fetch', fetchMock);
@@ -62,12 +134,14 @@ describe('handleGeminiProxy', () => {
       return response;
     }));
     const pending = handleGeminiProxy(request(validHeaders, photoBody), env);
-    await vi.advanceTimersByTimeAsync(45_000);
+    await vi.advanceTimersByTimeAsync(27_000);
     const response = await pending;
     expect(response.status).toBe(504);
     expect(response.headers.get('x-estimate-timeout')).toBe('1');
     expect(await response.json()).toEqual({ error: 'Estimate timed out. Try again or describe the meal.' });
     expect(signal?.aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('bounds other Gemini calls below the Cloud Run deadline too', async () => {
