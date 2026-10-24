@@ -117,11 +117,24 @@ Featured meal, sleep, steps, weight and training marks use the bundled SVG
 BrandGlyph family: simple instrument-like outlines with a restrained red detail.
 Keep ordinary navigation icons familiar and avoid network-loaded illustrations.
 
-The approved Trends hierarchy is period, factual summary, three compact figures,
-one main chart and check-in action. Overview, Body, Food and Training are views of
-the selected period. Put existing deep reports behind explicit disclosures; keep
-saved check-ins and methods accessible. Missing history gets a useful logging
-step rather than invented comparisons or a zero. Weight movement stays neutral.
+The approved Trends hierarchy is compact period/range controls, solid red focus
+tabs, then the selected report immediately. Changing focus returns to those
+controls. Overview uses bold factual type, an aligned recorded-days map for food,
+weight and training, three compact period facts and check-ins. Keep the weight
+chart on Body, energy on Food and training bars on Training. Show gaps explicitly;
+partial food logs use an outline and never become zero intake. Longer periods
+group actual recorded days; historical arrows stay inside fetched history.
+Secondary Body reports and calculation notes use disclosures. Saved check-ins
+remain accessible. Weight movement stays neutral.
+
+Check-ins open a full-screen manual recap with five chapters: period, food,
+body, training and the next step from the review. Bold Space Grotesk figures
+carry the expression; use the shared BrandLockup. Keep progress, Skip to summary,
+Close and Back/Next visible, without autoplay. The full summary retains review
+generation, eligibility, science, prior reviews and explicit adjustment preview
+and Apply. Bind saved advice and applied state to their period key. Recorded
+weight averages use actual weigh-ins; estimates must say they are estimates.
+Use full years in saved recap dates and let large text scroll without clipping.
 
 Use existing native-driver press/entrance motion, around 90-220 ms, without
 delaying actions or data writes. New diary rows settle into place; chart-view

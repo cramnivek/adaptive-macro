@@ -9,8 +9,8 @@ import {
 } from '@adaptive-macros/engine';
 import type { DatedSet, LogEntry, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../../src/components/Card';
@@ -29,6 +29,9 @@ import { Tappable } from '../../src/components/Tappable';
 import { VolumeLandmarksCard } from '../../src/components/VolumeLandmarksCard';
 import { WeeklyBars } from '../../src/components/WeeklyBars';
 import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
+import { TrendsOverview } from '../../src/components/TrendsOverview';
+import { buildPeriodMap, periodWindow } from '../../src/trendsOverview';
+import { patchPeriodReview, reviewStateFor, type PeriodReviews } from '../../src/periodReviewState';
 import {
   catalogueRegionsByExerciseName,
   dailyIntakeBetween,
@@ -115,10 +118,17 @@ export default function TrendsScreen() {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
-  const [openDetails, setOpenDetails] = useState({ body: false, food: false, training: false });
+  const [bodyDetailsOpen, setBodyDetailsOpen] = useState(false);
+  const [foodDetailsOpen, setFoodDetailsOpen] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const focusTab = (tab: TrendTab) => {
+    setActiveTab(tab);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
   // A week first: it is the period people check most often, and the one a new
   // user has data for soonest.
   const [timeframe, setTimeframe] = useState<Timeframe>('week');
+  const [periodOffset, setPeriodOffset] = useState(0);
   // Arriving from Today's "your week is ready" opens that check-in directly.
   const { checkin } = useLocalSearchParams<{ checkin?: string }>();
   const router = useRouter();
@@ -144,20 +154,13 @@ export default function TrendsScreen() {
   useEffect(() => {
     if (checkin !== 'weekly' && checkin !== 'monthly' && checkin !== 'quarterly') return;
     setTimeframe(checkin === 'weekly' ? 'week' : checkin === 'monthly' ? 'month' : 'year');
+    setPeriodOffset(0);
     setCoachingModalOpen(true);
     // Cleared so coming back to the tab later does not reopen it.
     router.setParams({ checkin: undefined });
   }, [checkin, router]);
-  const [coachingReview, setCoachingReview] = useState<WeeklyReviewResult | null>(null);
-  const [coachingLoading, setCoachingLoading] = useState(false);
-  const [coachingError, setCoachingError] = useState<string | null>(null);
-  const [coachingApplied, setCoachingApplied] = useState(false);
-
-  // Coaching review state (monthly)
-  const [monthlyReview, setMonthlyReview] = useState<MonthlyReviewResult | null>(null);
-  const [monthlyLoading, setMonthlyLoading] = useState(false);
-  const [monthlyError, setMonthlyError] = useState<string | null>(null);
-  const [monthlyApplied, setMonthlyApplied] = useState(false);
+  const [coachingStates, setCoachingStates] = useState<PeriodReviews<WeeklyReviewResult>>({});
+  const [monthlyStates, setMonthlyStates] = useState<PeriodReviews<MonthlyReviewResult>>({});
 
   // Daily Steps and Activity Sync State
   const [stepsHistory, setStepsHistory] = useState<DailyStepRecord[]>([]);
@@ -219,22 +222,24 @@ export default function TrendsScreen() {
 
   // Windows
   const windowDays = TIMEFRAME_DAYS[timeframe];
-  const timeframeFrom = addDays(today, -(windowDays - 1));
+  const selectedWindow = periodWindow(today, windowDays, periodOffset);
+  const timeframeFrom = selectedWindow.from;
+  const periodTo = selectedWindow.to;
   const weekFrom = addDays(today, -6);
 
   // The quality card read Today's diary, so on a day with nothing logged yet
   // every vitamin said 0 whatever the week held. It is the period's average
   // logged day now, like every other number on this screen.
   const periodEntries = useMemo(
-    () => loggedEntries.filter((entry) => entry.date >= timeframeFrom && entry.date <= today),
-    [loggedEntries, timeframeFrom, today],
+    () => loggedEntries.filter((entry) => entry.date >= timeframeFrom && entry.date <= periodTo),
+    [loggedEntries, timeframeFrom, periodTo],
   );
   const periodAverage = useMemo(() => averageLoggedDay(periodEntries), [periodEntries]);
   const monthFrom = addDays(today, -27); // 4 full 7-day weeks = 28 days
 
   const timeframeSteps = useMemo(() => {
-    return stepsHistory.filter((s) => s.date >= timeframeFrom && s.date <= today);
-  }, [stepsHistory, timeframeFrom, today]);
+    return stepsHistory.filter((s) => s.date >= timeframeFrom && s.date <= periodTo);
+  }, [stepsHistory, timeframeFrom, periodTo]);
 
   const stepsByDate = useMemo(
     () => new Map(stepsHistory.map((s) => [s.date, s.steps] as const)),
@@ -245,11 +250,14 @@ export default function TrendsScreen() {
     const totalSteps = timeframeSteps.reduce((acc, s) => acc + s.steps, 0);
     const count = timeframeSteps.length;
     const avgSteps = count > 0 ? Math.round(totalSteps / count) : 0;
-    const totalNeatKcal = timeframeSteps.reduce(
-      (acc, s) => acc + (s.activeKcal ?? calculateNeatKcal(s.steps, latest?.trendWeightKg ?? 75)),
-      0,
-    );
-    const avgNeatKcal = count > 0 ? Math.round(totalNeatKcal / count) : 0;
+    // A historical walking estimate needs that day's weight, not today's.
+    const stepWeights = bodyweightForDates(series, timeframeSteps.map((s) => s.date), { extend: false });
+    const walkingKcal = timeframeSteps.map((s) => s.activeKcal ?? (
+      stepWeights.has(s.date) ? calculateNeatKcal(s.steps, stepWeights.get(s.date)!) : null
+    ));
+    const totalNeatKcal = walkingKcal.reduce<number>((sum, kcal) => sum + (kcal ?? 0), 0);
+    const avgNeatKcal = count > 0 && walkingKcal.every((kcal) => kcal !== null)
+      ? Math.round(totalNeatKcal / count) : null;
     const totalDistanceKm = timeframeSteps.reduce((acc, s) => acc + (s.distanceKm ?? 0), 0);
     return {
       totalSteps,
@@ -259,7 +267,7 @@ export default function TrendsScreen() {
       totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
       daysLogged: count,
     };
-  }, [timeframeSteps, latest?.trendWeightKg]);
+  }, [timeframeSteps, series]);
 
   const bodyweightByDate = useMemo(
     () => bodyweightForDates(series, sets.map((s) => s.date), { extend: true }),
@@ -267,8 +275,8 @@ export default function TrendsScreen() {
   );
 
   const summaryPeriod: PeriodSummary = useMemo(
-    () => summarisePeriod(sets, bodyweightByDate, timeframeFrom, today),
-    [sets, bodyweightByDate, timeframeFrom, today],
+    () => summarisePeriod(sets, bodyweightByDate, timeframeFrom, periodTo),
+    [sets, bodyweightByDate, timeframeFrom, periodTo],
   );
 
   const diagnosticsPeriod: VolumeDiagnostics = useMemo(
@@ -277,10 +285,10 @@ export default function TrendsScreen() {
         sets,
         exerciseRegions: regions,
         from: timeframeFrom,
-        to: today,
+        to: periodTo,
         periodDays: windowDays,
       }),
-    [sets, regions, timeframeFrom, today, windowDays],
+    [sets, regions, timeframeFrom, periodTo, windowDays],
   );
 
   const weeks = useMemo(
@@ -288,8 +296,8 @@ export default function TrendsScreen() {
     [sessionTimes, sets, today, settings.checkInWeekEndsOn],
   );
   const chartWeeks = useMemo(
-    () => weeklyTotalsForPeriod(sessionTimes, sets, timeframeFrom, today, settings.checkInWeekEndsOn),
-    [sessionTimes, sets, timeframeFrom, today, settings.checkInWeekEndsOn],
+    () => weeklyTotalsForPeriod(sessionTimes, sets, timeframeFrom, periodTo, settings.checkInWeekEndsOn),
+    [sessionTimes, sets, timeframeFrom, periodTo, settings.checkInWeekEndsOn],
   );
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
 
@@ -300,7 +308,7 @@ export default function TrendsScreen() {
     let cataloguedSetsInWindow = 0;
 
     for (const s of sets) {
-      if (s.date < timeframeFrom || s.date > today) continue;
+      if (s.date < timeframeFrom || s.date > periodTo) continue;
       if (s.set.reps === null || s.set.reps <= 0) continue;
       totalSetsInWindow++;
 
@@ -327,7 +335,7 @@ export default function TrendsScreen() {
       uncataloguedPct,
       totalSets: totalSetsInWindow,
     };
-  }, [sets, regions, timeframeFrom, today]);
+  }, [sets, regions, timeframeFrom, periodTo]);
 
   // Which finished periods have earned a check-in (see checkInSchedule). A
   // check-in is always about a finished week, month or quarter, so it no longer
@@ -371,6 +379,16 @@ export default function TrendsScreen() {
     pastPeriod && pastPeriod.kind !== 'weekly'
       ? pastPeriod
       : (longStatus?.last?.period ?? longStatus?.current.period ?? null);
+  // One saved review per period, under that period's own key. It is never
+  // thrown away by later logging: it is a record of how that period went.
+  const coachingCacheKey = weeklyPeriod ? checkInStorageKey(weeklyPeriod) : null;
+  const coachingAppliedKey = weeklyPeriod ? checkInAppliedKey(weeklyPeriod) : null;
+  const monthlyCacheKey = longPeriod ? checkInStorageKey(longPeriod) : null;
+  const monthlyAppliedKey = longPeriod ? checkInAppliedKey(longPeriod) : null;
+
+  const { review: coachingReview, applied: coachingApplied, loading: coachingLoading, error: coachingError } = reviewStateFor(coachingStates, coachingCacheKey);
+  const { review: monthlyReview, applied: monthlyApplied, loading: monthlyLoading, error: monthlyError } = reviewStateFor(monthlyStates, monthlyCacheKey);
+
   const NOTHING_YET = 'Log a weigh-in and your food to start earning check-ins.';
   // A past check-in was earned by definition: it has a saved review.
   const weeklyLockedNote = pastPeriod ? null : weeklyStatus ? checkInLockedNote(weeklyStatus) : NOTHING_YET;
@@ -515,59 +533,39 @@ export default function TrendsScreen() {
     ],
   );
 
-  // One saved review per period, under that period's own key. It is never
-  // thrown away by later logging: it is a record of how that period went.
-  const coachingCacheKey = weeklyPeriod ? checkInStorageKey(weeklyPeriod) : null;
-  const coachingAppliedKey = weeklyPeriod ? checkInAppliedKey(weeklyPeriod) : null;
-  const monthlyCacheKey = longPeriod ? checkInStorageKey(longPeriod) : null;
-  const monthlyAppliedKey = longPeriod ? checkInAppliedKey(longPeriod) : null;
-
   useEffect(() => {
     let alive = true;
-    if (!coachingCacheKey || !coachingAppliedKey) {
-      setCoachingReview(null);
-      setCoachingApplied(false);
-      return;
-    }
+    if (!coachingCacheKey || !coachingAppliedKey) return;
     void Promise.all([AsyncStorage.getItem(coachingCacheKey), AsyncStorage.getItem(coachingAppliedKey)])
       .then(([saved, applied]) => {
         if (!alive) return;
-        setCoachingReview(saved ? (JSON.parse(saved) as { review: WeeklyReviewResult }).review : null);
-        setCoachingApplied(Boolean(applied));
+        const review = saved ? (JSON.parse(saved) as { review: WeeklyReviewResult }).review : null;
+        setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { review, applied: Boolean(applied), loading: false, error: null }));
       })
       .catch(() => {
-        if (alive) setCoachingReview(null);
+        if (alive) setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { review: null, loading: false }));
       });
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [coachingCacheKey, coachingAppliedKey]);
 
   useEffect(() => {
     let alive = true;
-    if (!monthlyCacheKey || !monthlyAppliedKey) {
-      setMonthlyReview(null);
-      setMonthlyApplied(false);
-      return;
-    }
+    if (!monthlyCacheKey || !monthlyAppliedKey) return;
     void Promise.all([AsyncStorage.getItem(monthlyCacheKey), AsyncStorage.getItem(monthlyAppliedKey)])
       .then(([saved, applied]) => {
         if (!alive) return;
-        setMonthlyReview(saved ? (JSON.parse(saved) as { review: MonthlyReviewResult }).review : null);
-        setMonthlyApplied(Boolean(applied));
+        const review = saved ? (JSON.parse(saved) as { review: MonthlyReviewResult }).review : null;
+        setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { review, applied: Boolean(applied), loading: false, error: null }));
       })
       .catch(() => {
-        if (alive) setMonthlyReview(null);
+        if (alive) setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { review: null, loading: false }));
       });
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [monthlyCacheKey, monthlyAppliedKey]);
 
   const handleGenerateCoaching = useCallback(async () => {
     if (weeklyLockedNote || !coachingCacheKey) return;
-    setCoachingLoading(true);
-    setCoachingError(null);
+    setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { loading: true, error: null }));
     try {
       thud('light');
       const result = await requestWeeklyReview(
@@ -576,24 +574,22 @@ export default function TrendsScreen() {
         settings.goal?.direction,
         settings.personality,
       );
-      setCoachingReview(result);
-      setCoachingApplied(false);
       await AsyncStorage.setItem(coachingCacheKey, JSON.stringify({ review: result, savedAt: Date.now() }));
+      setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { review: result, applied: false }));
       thud('heavy');
       notify('Review ready', 'Your weekly coaching review is ready.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to generate coaching review';
-      setCoachingError(msg);
+      setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { error: msg }));
       notify('Coaching Review', msg);
     } finally {
-      setCoachingLoading(false);
+      setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { loading: false }));
     }
   }, [coachingMetrics, settings.goal?.direction, settings.personality, coachingCacheKey, weeklyLockedNote]);
 
   const handleGenerateMonthlyCoaching = useCallback(async () => {
     if (longLockedNote || !monthlyCacheKey) return;
-    setMonthlyLoading(true);
-    setMonthlyError(null);
+    setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { loading: true, error: null }));
     try {
       thud('light');
       const result = await requestMonthlyReview(
@@ -602,9 +598,8 @@ export default function TrendsScreen() {
         settings.goal,
         settings.personality,
       );
-      setMonthlyReview(result);
-      setMonthlyApplied(false);
       await AsyncStorage.setItem(monthlyCacheKey, JSON.stringify({ review: result, savedAt: Date.now() }));
+      setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { review: result, applied: false }));
       thud('heavy');
       notify(
         longKind === 'quarterly' ? 'Quarterly review ready' : 'Monthly review ready',
@@ -612,15 +607,15 @@ export default function TrendsScreen() {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to generate monthly review';
-      setMonthlyError(msg);
+      setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { error: msg }));
       notify('Monthly Review', msg);
     } finally {
-      setMonthlyLoading(false);
+      setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { loading: false }));
     }
   }, [monthlyMetrics, settings.goal, settings.personality, monthlyCacheKey, longLockedNote, longKind]);
 
   const handleApplyCoachingAdjustment = useCallback(async () => {
-    if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied || !coachingAppliedKey) return;
+    if (!coachingReview?.suggestedAdjustment?.hasAdjustment || coachingApplied || !coachingAppliedKey || !coachingCacheKey) return;
     thud('heavy');
     const adj = coachingReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
@@ -646,16 +641,16 @@ export default function TrendsScreen() {
           proposedGoal: result.proposedGoal,
         }),
       );
-      setCoachingApplied(true);
+      setCoachingStates((state) => patchPeriodReview(state, coachingCacheKey, { applied: true }));
       notify(
         'Adjustment Applied',
         `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
       );
     }
-  }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, coachingAppliedKey]);
+  }, [coachingReview, coachingApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, coachingAppliedKey, coachingCacheKey]);
 
   const handleApplyMonthlyAdjustment = useCallback(async () => {
-    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || monthlyApplied || !monthlyAppliedKey) return;
+    if (!monthlyReview?.suggestedAdjustment?.hasAdjustment || monthlyApplied || !monthlyAppliedKey || !monthlyCacheKey) return;
     thud('heavy');
     const adj = monthlyReview.suggestedAdjustment;
     if (adj.deltaKcal && program?.calories?.kcal && settings.goal) {
@@ -680,18 +675,18 @@ export default function TrendsScreen() {
           proposedGoal: result.proposedGoal,
         }),
       );
-      setMonthlyApplied(true);
+      setMonthlyStates((state) => patchPeriodReview(state, monthlyCacheKey, { applied: true }));
       notify(
         'Monthly Adjustment Applied',
         `Goal updated to ${result.rateChangeDescription} (${Math.round(result.achievableKcal)} kcal/day)`,
       );
     }
-  }, [monthlyReview, monthlyApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, monthlyAppliedKey]);
+  }, [monthlyReview, monthlyApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, monthlyAppliedKey, monthlyCacheKey]);
 
   // Dynamic timeframe-sliced charts calculations
   const window = useMemo(
-    () => series.filter((point) => point.date >= timeframeFrom && point.date <= today),
-    [series, timeframeFrom, today],
+    () => series.filter((point) => point.date >= timeframeFrom && point.date <= periodTo),
+    [series, timeframeFrom, periodTo],
   );
   const origin = window[0]?.date ?? null;
 
@@ -708,23 +703,23 @@ export default function TrendsScreen() {
         hi: point.expenditureKcal + point.expenditureSdKcal,
       })),
       intake: intake
-        .filter((row) => row.date >= timeframeFrom && row.date <= today && dayStatus.get(row.date) !== false)
+        .filter((row) => row.date >= timeframeFrom && row.date <= periodTo && dayStatus.get(row.date) !== false)
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
       leftOut: intake
-        .filter((row) => row.date >= timeframeFrom && row.date <= today && dayStatus.get(row.date) === false)
+        .filter((row) => row.date >= timeframeFrom && row.date <= periodTo && dayStatus.get(row.date) === false)
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
     };
-  }, [window, origin, intake, dayStatus, timeframeFrom, today]);
+  }, [window, origin, intake, dayStatus, timeframeFrom, periodTo]);
 
   const strip = useMemo(
     () =>
       loggingStrip(
-        today,
+        periodTo,
         new Set(intake.map((row) => row.date)),
         new Set(weights.map((row) => row.date)),
         dayStatus,
       ),
-    [today, intake, weights, dayStatus],
+    [periodTo, intake, weights, dayStatus],
   );
 
   const weight = useMemo(() => {
@@ -752,41 +747,52 @@ export default function TrendsScreen() {
   const dayLabel = (x: number) =>
     origin === null ? '' : formatDayMonth(addDays(origin, x));
 
-  const timeframeLabel =
-    timeframe === 'week' ? 'past 7 days' : timeframe === 'month' ? 'past 30 days' : 'past year';
+  const timeframeLabel = periodOffset === 0
+    ? timeframe === 'week' ? 'past 7 days' : timeframe === 'month' ? 'past 30 days' : 'past year'
+    : timeframe === 'week' ? 'these 7 days' : 'these 30 days';
   const comparison = volumeComparison(summaryPeriod.volumeKg);
 
   // The overview tiles and the coverage line follow the selected period.
   const dataCoverage = useMemo(
-    () => periodCoverage(windowDays, today, firstPeriodData),
-    [windowDays, today, firstPeriodData],
+    () => periodCoverage(windowDays, periodTo, firstPeriodData),
+    [windowDays, periodTo, firstPeriodData],
   );
-  const periodChange = useMemo(() => trendChange(series, dataCoverage.from), [series, dataCoverage.from]);
+  const periodChange = useMemo(() => trendChange(window, dataCoverage.from), [window, dataCoverage.from]);
   const periodIntake = useMemo(
-    () => intakeSummary(intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal ?? null),
-    [intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal],
+    () => intakeSummary(intake, dayStatus, dataCoverage.from, periodTo, program?.calories?.kcal ?? null),
+    [intake, dayStatus, dataCoverage.from, periodTo, program?.calories?.kcal],
   );
-  const periodWeightCount = weights.filter((row) => row.date >= timeframeFrom && row.date <= today).length;
+  const periodWeights = weights.filter((row) => row.date >= timeframeFrom && row.date <= periodTo);
+  const periodWeightCount = periodWeights.length;
+  const periodAverageWeight = periodWeightCount > 0
+    ? periodWeights.reduce((sum, row) => sum + row.kg, 0) / periodWeightCount : null;
+  const periodMap = useMemo(() => buildPeriodMap({
+    from: timeframeFrom, to: periodTo,
+    foodDates: intake.filter((row) => row.kcal > 0 && dayStatus.get(row.date) !== false).map((row) => row.date),
+    leftOutFoodDates: intake.filter((row) => row.kcal > 0 && dayStatus.get(row.date) === false).map((row) => row.date),
+    weightDates: weights.map((row) => row.date),
+    trainingDates: sessionTimes.map((row) => row.date),
+    maxColumns: timeframe === 'week' ? 7 : timeframe === 'month' ? 5 : 7,
+  }), [timeframeFrom, periodTo, intake, dayStatus, weights, sessionTimes, timeframe]);
   const hasPeriodTraining = summaryPeriod.sessions > 0 || summaryPeriod.workingSets > 0;
   const hasPeriodFood = periodIntake.countedDays > 0;
   const hasPeriodWeight = periodWeightCount > 0;
   const periodHeadline = !hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
-    ? 'Log food, weight, or a workout to start your trends.'
+    ? 'YOUR STORY STARTS HERE.'
     : hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
-      ? `Food logged on ${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}.`
+      ? `${periodIntake.countedDays} DAYS OF FOOD LOGS.`
       : hasPeriodTraining
-        ? `${summaryPeriod.sessions} workout${summaryPeriod.sessions === 1 ? '' : 's'} · ${summaryPeriod.records} new best${summaryPeriod.records === 1 ? '' : 's'}`
+        ? `${summaryPeriod.sessions} WORKOUT${summaryPeriod.sessions === 1 ? '' : 'S'}.\n${summaryPeriod.records} NEW BEST${summaryPeriod.records === 1 ? '' : 'S'}.`
         : hasPeriodWeight
-          ? 'Weight trend recorded.'
+          ? `${periodWeightCount} WEIGH-IN${periodWeightCount === 1 ? '' : 'S'}.\nA BIGGER PICTURE.`
           : `Food logged on ${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}.`;
   const periodHeadlineNote = !hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
     ? 'A weigh-in, food log, or workout will give you a useful starting point.'
     : hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
       ? 'Add a weigh-in or workout to broaden your trends.'
       : 'See what changed. Keep the bigger picture in view.';
-  const periodRangeLabel = dataCoverage.dataDays === 0
-    ? 'No data recorded yet'
-    : `${formatDayMonth(dataCoverage.from)}${dataCoverage.from.slice(0, 4) !== today.slice(0, 4) ? ` ${dataCoverage.from.slice(0, 4)}` : ''} – ${formatDayMonth(today)}${dataCoverage.from.slice(0, 4) !== today.slice(0, 4) ? ` ${today.slice(0, 4)}` : ''}`;
+  const crossesYear = timeframeFrom.slice(0, 4) !== periodTo.slice(0, 4);
+  const periodRangeLabel = `${formatDayMonth(timeframeFrom)}${crossesYear ? ` ${timeframeFrom.slice(0, 4)}` : ''} – ${formatDayMonth(periodTo)}${crossesYear || periodTo.slice(0, 4) !== today.slice(0, 4) ? ` ${periodTo.slice(0, 4)}` : ''}`;
 
   // What the check-in card says for the selected view: the weekly check-in on
   // Week, the monthly one on Month, the quarterly one on Year. Until a period
@@ -851,6 +857,7 @@ export default function TrendsScreen() {
       }
       onRefresh={() => void handleRefresh()}
       refreshing={refreshing}
+      scrollRef={scrollRef}
     >
       {/* The selected window drives the summary and every chart below. */}
       <View style={styles.timeframeRow}>
@@ -874,11 +881,12 @@ export default function TrendsScreen() {
                 onPress={() => {
                   thud('light');
                   setTimeframe(tf.key);
+                  setPeriodOffset(0);
                 }}
                 scaleTo={0.96}
                 style={[
                   styles.timeframePill,
-                  active && [styles.timeframePillActive, { borderBottomColor: colors.brand.fill }],
+                  active && { backgroundColor: colors.brand.fill },
                 ]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
@@ -886,7 +894,7 @@ export default function TrendsScreen() {
                 <Text
                   style={[
                     styles.timeframePillText,
-                    { color: active ? colors.text : colors.textMuted },
+                    { color: active ? colors.brand.onFill : colors.textMuted },
                     active && { fontFamily: font.uiStrong },
                   ]}
                 >
@@ -899,56 +907,23 @@ export default function TrendsScreen() {
       </View>
 
       <View style={styles.coverageRow}>
-        <Text style={[styles.coverage, { color: colors.text }]}>
-          {periodRangeLabel}
-        </Text>
-        <Text style={[styles.coverage, { color: colors.textMuted }]}>
-          {dataCoverage.dataDays > 0 && dataCoverage.dataDays < dataCoverage.windowDays
-            ? `Showing ${dataCoverage.dataDays} of ${dataCoverage.windowDays} days`
-            : timeframeLabel[0].toUpperCase() + timeframeLabel.slice(1)}
-        </Text>
+        <Tappable accessibilityRole="button" accessibilityLabel="Previous period" disabled={selectedWindow.offset >= selectedWindow.maxOffset}
+          style={[styles.periodArrow, { opacity: selectedWindow.offset >= selectedWindow.maxOffset ? 0.3 : 1 }]}
+          onPress={() => setPeriodOffset(selectedWindow.offset + 1)}>
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Tappable>
+        <View style={styles.periodRange}>
+          <Text style={[styles.coverage, { color: colors.text }]}>{periodRangeLabel}</Text>
+          <Text style={[styles.rangeNote, { color: colors.textMuted }]}>{timeframeLabel}</Text>
+        </View>
+        <Tappable accessibilityRole="button" accessibilityLabel="Next period" disabled={selectedWindow.offset === 0}
+          style={[styles.periodArrow, { opacity: selectedWindow.offset === 0 ? 0.3 : 1 }]}
+          onPress={() => setPeriodOffset(selectedWindow.offset - 1)}>
+          <Ionicons name="chevron-forward" size={18} color={colors.text} />
+        </Tappable>
       </View>
 
-      <Text style={[styles.periodSummary, { color: colors.text }]}>
-        {periodHeadline}
-      </Text>
-      <Text style={[styles.periodSummaryNote, { color: colors.textMuted }]}>
-        {periodHeadlineNote}
-      </Text>
-
-      <View style={styles.atAGlanceGrid}>
-        <GlanceTile
-          label="WEIGHT TREND"
-          value={
-            periodChange
-              ? `${periodChange.changeKg < 0 ? '−' : '+'}${formatWeight(Math.abs(periodChange.changeKg), settings.units)}`
-              : '—'
-          }
-          sub={periodChange ? `over ${periodChange.days} days` : 'needs two weigh-ins'}
-          colors={colors}
-        />
-        <GlanceTile
-          label="AVG FOOD"
-          value={
-            periodIntake.averageKcal !== null ? (
-              <>
-                {Math.round(periodIntake.averageKcal).toLocaleString('en-US')}
-                <Text style={[styles.glanceUnit, { color: colors.textMuted }]}> kcal</Text>
-              </>
-            ) : '—'
-          }
-          sub={periodIntake.countedDays > 0 ? `${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}` : 'no food logged'}
-          colors={colors}
-        />
-        <GlanceTile
-          label="WORKOUTS"
-          value={summaryPeriod.sessions}
-          sub={`${timeframeLabel} · ${summaryPeriod.sessions === 1 ? 'session' : 'sessions'}`}
-          colors={colors}
-        />
-      </View>
-
-      {/* Focus the chart while keeping the period summary in view. */}
+      {/* Each focus starts at the same controls, never below another report. */}
       <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
         {(
           [
@@ -964,20 +939,18 @@ export default function TrendsScreen() {
               key={tab.key}
               onPress={() => {
                 thud('light');
-                setActiveTab(tab.key);
+                focusTab(tab.key);
               }}
               scaleTo={0.97}
               style={[
                 styles.tabItem,
-                active && [styles.tabItemActive, { borderBottomColor: colors.brand.fill }],
+                active && { backgroundColor: colors.brand.fill },
               ]}
-              accessibilityRole="button"
+              accessibilityRole="tab"
               accessibilityState={{ selected: active }}
             >
               <Text
-                style={[styles.tabItemText, { color: active ? colors.text : colors.textMuted }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
+                style={[styles.tabItemText, { color: active ? colors.brand.onFill : colors.textMuted }]}
               >
                 {tab.label}
               </Text>
@@ -986,8 +959,15 @@ export default function TrendsScreen() {
         })}
       </View>
 
-      <FadeIn key={`${timeframe}:${activeTab}`}>
-        {activeTab === 'workouts' ? (
+      <FadeIn key={`${timeframe}:${periodTo}:${activeTab}`}>
+        {activeTab === 'all' ? (
+          <TrendsOverview buckets={periodMap} title={periodHeadline} note={periodHeadlineNote} onFocus={focusTab}
+            facts={[
+              { label: 'AVG WEIGHT', value: periodAverageWeight === null ? '—' : formatWeight(periodAverageWeight, settings.units), note: `${periodWeightCount} weigh-in${periodWeightCount === 1 ? '' : 's'}` },
+              { label: 'AVG FOOD', value: periodIntake.averageKcal === null ? '—' : `${Math.round(periodIntake.averageKcal).toLocaleString('en-US')}`, note: periodIntake.countedDays ? `kcal · ${periodIntake.countedDays} counted days` : 'No counted food days' },
+              { label: 'TRAINING', value: String(summaryPeriod.sessions), note: `${summaryPeriod.workingSets} working sets` },
+            ]} />
+        ) : activeTab === 'workouts' ? (
           <Card variant="featured" icon="barbell-outline" title={`Training · ${timeframeLabel}`}>
             {summaryPeriod.sessions > 0 || summaryPeriod.workingSets > 0 ? (
               <WeeklyBars weeks={chartWeeks} units={settings.units} />
@@ -1000,7 +980,7 @@ export default function TrendsScreen() {
             <View style={styles.legend}>
               <Key color={colors.positive} label="ESTIMATED TDEE" />
               <Key color={colors.carbs} label="EATEN" dotted />
-              <Key color={colors.accent} label="TARGET" dashed />
+              <Key color={colors.accent} label="CURRENT TARGET" dashed />
             </View>
             <LineChart
               series={energy ? [{ points: energy.expenditure, color: colors.positive, strokeWidth: 2.5 }] : []}
@@ -1015,14 +995,21 @@ export default function TrendsScreen() {
               height={190}
             />
             <Text style={[styles.chartNote, { color: colors.textMuted }]}>Only counted food days contribute to the average.</Text>
-            <Text style={[styles.chartNote, { color: colors.textMuted }]}>
+            <DetailDisclosure title="How to read these numbers" expanded={foodDetailsOpen} onPress={() => setFoodDetailsOpen((open) => !open)} colors={colors} />
+            {foodDetailsOpen && <Text style={[styles.chartNote, { color: colors.textMuted }]}>
               Assumes a kilo of weight change holds about{' '}
               {(Math.round(energyDensity.kcalPerKg / 50) * 50).toLocaleString('en-US')} kcal, from{' '}
               {BODY_FAT_BASIS[energyDensity.source ?? 'guess'](energyDensity.bodyFatPct.toFixed(0))}.
-            </Text>
+            </Text>}
           </Card>
         ) : (
           <Card variant="featured" icon="scale-outline" title="Weight trend">
+            <Text style={[styles.bodyAverage, { color: colors.text }]}>
+              {periodAverageWeight === null ? '—' : formatWeight(periodAverageWeight, settings.units)}
+            </Text>
+            <Text style={[styles.chartNote, { color: colors.textMuted }]}>
+              {timeframe === 'week' ? 'Seven-day average' : 'Average recorded weight'} · {periodWeightCount} weigh-in{periodWeightCount === 1 ? '' : 's'}
+            </Text>
             <LineChart
               series={weight ? [{ points: weight, color: colors.textMuted, strokeWidth: 2.5 }] : []}
               includeY={settings.goalWeightKg === null ? [] : [displayWeight(settings.goalWeightKg, settings.units)]}
@@ -1035,10 +1022,22 @@ export default function TrendsScreen() {
             <Text style={[styles.chartNote, { color: colors.textMuted }]}>
               {periodChange ? `${periodWeightCount} weigh-ins · smoothed trend` : 'Log another weigh-in to compare trend change.'}
             </Text>
+            <Text style={[styles.chartNote, { color: colors.textMuted }]}>
+              Daily weight moves with fluid and food. Compare weekly averages and the longer trend before changing your plan.
+            </Text>
+            <Tappable onPress={() => router.push('/(tabs)/weight')} style={styles.subjectAction} accessibilityRole="button">
+              <Text style={[styles.subjectActionText, { color: colors.brand.text }]}>Log weight or view measurements</Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.brand.text} />
+            </Tappable>
           </Card>
         )}
       </FadeIn>
 
+      {activeTab === 'body' && (
+        <DetailDisclosure title="Steps, goal & logging details" expanded={bodyDetailsOpen} onPress={() => setBodyDetailsOpen((open) => !open)} colors={colors} />
+      )}
+
+      {activeTab === 'all' && (<>
       <FadeIn>
         <Tappable
           onPress={() => {
@@ -1050,7 +1049,7 @@ export default function TrendsScreen() {
           accessibilityLabel={`Open the ${card.noun} check-in: ${card.pill}. ${card.headline}`}
         >
           <Ionicons name="clipboard-outline" size={18} color={colors.brand.onFill} />
-          <Text style={[styles.checkInActionText, { color: colors.brand.onFill }]}>Open check-ins</Text>
+          <Text style={[styles.checkInActionText, { color: colors.brand.onFill }]}>Latest {card.noun} check-in</Text>
         </Tappable>
         <Text style={[styles.checkInStatus, { color: colors.textMuted }]}>{card.pill}{card.headline ? ` · ${card.headline}` : ''}</Text>
       </FadeIn>
@@ -1096,58 +1095,17 @@ export default function TrendsScreen() {
         </View>
       )}
 
-      {activeTab === 'all' && (
-        <View style={styles.disclosures}>
-          <DetailDisclosure title="Food & energy" expanded={openDetails.food} onPress={() => setOpenDetails((value) => ({ ...value, food: !value.food }))} colors={colors} />
-          <DetailDisclosure title="Body & weight" expanded={openDetails.body} onPress={() => setOpenDetails((value) => ({ ...value, body: !value.body }))} colors={colors} />
-          <DetailDisclosure title="Training & muscles" expanded={openDetails.training} onPress={() => setOpenDetails((value) => ({ ...value, training: !value.training }))} colors={colors} />
-        </View>
-      )}
+      </>)}
 
-      {/* Detailed reports open from the overview disclosures or their focus tab. */}
+      {/* Detailed reports belong to their focus tab, so Overview stays short. */}
       <>
-        {activeTab === 'all' && openDetails.food && (
-          <Card variant="featured" icon="pulse-outline" title="Energy balance & estimated expenditure">
-            <View style={styles.legend}>
-              <Key color={colors.positive} label="ESTIMATED TDEE" />
-              <Key color={colors.carbs} label="eaten" dotted />
-              <Key color={colors.accent} label="target" dashed />
-            </View>
-            <LineChart
-              series={energy ? [{ points: energy.expenditure, color: colors.positive, strokeWidth: 2.5 }] : []}
-              band={energy ? { points: energy.band, color: colors.positive } : undefined}
-              scatter={
-                energy
-                  ? [
-                      { points: energy.intake, color: colors.carbs, radius: 2.5, opacity: 0.8 },
-                      { points: energy.leftOut, color: colors.carbs, radius: 2.5, opacity: 0.25 },
-                    ]
-                  : undefined
-              }
-              referenceY={{ value: program.calories.kcal, color: colors.accent }}
-              formatX={dayLabel}
-              emptyMessage="Log weight and food for a couple of weeks"
-              height={190}
-            />
-            {/* The assumption the whole estimate scales with, stated rather
-                than hidden: what a kilo of weight change is worth depends on
-                body fat, and an estimated body fat is only a starting point. */}
-            <Text style={styles.note}>
-              Assumes a kilo of weight change holds about{' '}
-              {(Math.round(energyDensity.kcalPerKg / 50) * 50).toLocaleString('en-US')} kcal, from{' '}
-              {BODY_FAT_BASIS[energyDensity.source ?? 'guess'](energyDensity.bodyFatPct.toFixed(0))}
-              .
-            </Text>
-          </Card>
-        )}
-
-        {(activeTab === 'body' || (activeTab === 'all' && openDetails.body)) && (
+        {activeTab === 'body' && bodyDetailsOpen && (
           <>
           {/* Daily steps & NEAT expenditure */}
           <Card title={settings.personality === 'gymrat' ? 'Daily steps & NEAT burn 🔥' : 'Daily steps & NEAT activity'}>
             <View style={styles.stepsCardContent}>
               <StepBars
-                today={today}
+                today={periodTo}
                 byDate={stepsByDate}
                 goal={10000}
                 span={timeframe}
@@ -1163,7 +1121,7 @@ export default function TrendsScreen() {
                   steps" and say walking fed the energy estimate, which it does not. */}
               <Text style={[styles.stepsExplainer, { color: colors.textMuted }]}>
                 {stepsSummary.daysLogged > 0
-                  ? `Average ${stepsSummary.avgSteps.toLocaleString()} steps on the ${stepsSummary.daysLogged} of ${dataCoverage.dataDays || windowDays} days with a count, about ${stepsSummary.avgNeatKcal} kcal of walking a day. Today: ${stepsByDate.has(today) ? `${stepsByDate.get(today)!.toLocaleString()} steps` : 'not logged'}.`
+                  ? `Average ${stepsSummary.avgSteps.toLocaleString()} steps on the ${stepsSummary.daysLogged} of ${windowDays} days with a count.${stepsSummary.avgNeatKcal === null ? '' : ` About ${stepsSummary.avgNeatKcal} kcal of walking per recorded day.`} Today: ${stepsByDate.has(today) ? `${stepsByDate.get(today)!.toLocaleString()} steps` : 'not logged'}.`
                   : 'No steps logged for this period yet.'}{' '}
                 Steps are for your own record; the burn estimate comes from your weight and food.
               </Text>
@@ -1187,7 +1145,7 @@ export default function TrendsScreen() {
             </View>
           </Card>
 
-          <Card title="Goal timeline">
+          <Card title="Current goal timeline">
             <View style={styles.tiles}>
               <StatTile
                 label="Expenditure"
@@ -1221,7 +1179,7 @@ export default function TrendsScreen() {
           </>
         )}
 
-        {(activeTab === 'food' || (activeTab === 'all' && openDetails.food)) && (
+        {activeTab === 'food' && (
           <NutritionQualityCard
             consumed={periodAverage.nutrients}
             entries={periodEntries}
@@ -1236,7 +1194,7 @@ export default function TrendsScreen() {
       </>
 
       {/* PART 2: WORKOUTS & MUSCLES */}
-      {(activeTab === 'workouts' || (activeTab === 'all' && openDetails.training)) && (
+      {activeTab === 'workouts' && (
         <>
           <FadeIn>
             <Card loud title={`You moved (${timeframeLabel})`}>
@@ -1252,12 +1210,12 @@ export default function TrendsScreen() {
             </Card>
           </FadeIn>
 
-          {(timeframe === 'month' && monthlyMetrics.training.progressions.length > 0
+          {periodOffset === 0 && (timeframe === 'month' && monthlyMetrics.training.progressions.length > 0
             ? monthlyMetrics.training.progressions
             : coachingMetrics.training.progressions
           ).length > 0 && (
             <FadeIn delay={40}>
-              <Card loud title="Strength Highlights (Overload)">
+              <Card loud title="Last check-in · strength highlights">
                 <View style={styles.progressionList}>
                   {(timeframe === 'month' && monthlyMetrics.training.progressions.length > 0
                     ? monthlyMetrics.training.progressions
@@ -1354,7 +1312,7 @@ export default function TrendsScreen() {
             </Card>
           </FadeIn>
 
-          {anyWeekTrained && (
+          {periodOffset === 0 && anyWeekTrained && (
             <FadeIn delay={140}>
               <Card loud title="Week by week volume">
                 <WeeklyBars weeks={weeks} units={settings.units} />
@@ -1365,14 +1323,14 @@ export default function TrendsScreen() {
       )}
 
       {/* Method & Calculation Explanation */}
-      <Tappable onPress={() => setMethod(true)} scaleTo={0.98}>
+      {activeTab === 'food' && <Tappable onPress={() => setMethod(true)} scaleTo={0.98}>
         <View style={[styles.method, { borderColor: colors.border }]}>
           <Text style={[styles.methodLabel, { color: colors.textMuted }]}>
             How the adaptive algorithm calculates expenditure
           </Text>
           <Text style={{ color: colors.textFaint, fontFamily: font.ui }}>›</Text>
         </View>
-      </Tappable>
+      </Tappable>}
 
       <MethodSheet open={method} onClose={() => setMethod(false)} />
       <Text style={[styles.unitNote, { color: colors.textFaint }]}>Weights in {unit}.</Text>
@@ -1405,6 +1363,7 @@ export default function TrendsScreen() {
           pastPeriod ? (pastPeriod.kind === 'weekly' ? 'weekly' : 'monthly') : timeframe === 'week' ? 'weekly' : 'monthly'
         }
         units={settings.units}
+        weightReadings={weights}
         weeklyLockedNote={coachingReview ? null : weeklyLockedNote}
         monthlyLockedNote={monthlyReview ? null : longLockedNote}
         previousWeekly={previousWeekly}
@@ -1467,26 +1426,6 @@ const DetailDisclosure = ({
     <Text style={[styles.disclosureTitle, { color: colors.text }]}>{title}</Text>
     <Ionicons name={expanded ? 'remove' : 'add'} size={18} color={colors.textMuted} accessible={false} />
   </Tappable>
-);
-
-const GlanceTile = ({
-  label,
-  value,
-  sub,
-  highlight = false,
-  colors,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub: string;
-  highlight?: boolean;
-  colors: Palette;
-}) => (
-  <View style={[styles.glanceTile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-    <Text style={[styles.glanceTileLabel, { color: colors.textMuted }]}>{label}</Text>
-    <Text style={[styles.glanceTileValue, { color: highlight ? loud.loud : colors.text }]}>{value}</Text>
-    <Text style={[styles.glanceTileSub, { color: colors.textFaint }]}>{sub}</Text>
-  </View>
 );
 
 /**
@@ -1597,19 +1536,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: space.sm,
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
-  periodSummary: {
-    fontFamily: font.uiStrong,
-    fontSize: 17,
-    marginTop: space.sm,
-  },
-  periodSummaryNote: {
-    fontFamily: font.ui,
-    fontSize: 12,
-    marginTop: 2,
-    marginBottom: space.md,
-  },
+  periodArrow: { minWidth: TOUCH_TARGET, minHeight: TOUCH_TARGET, alignItems: 'center', justifyContent: 'center' },
+  periodRange: { flex: 1, alignItems: 'center' },
+  rangeNote: { fontFamily: font.ui, fontSize: 10, marginTop: 2 },
+  bodyAverage: { fontFamily: font.display, fontSize: 34, letterSpacing: -1 },
+  subjectAction: { minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: space.sm },
+  subjectActionText: { fontFamily: font.uiStrong, fontSize: 13, flex: 1 },
   checkInAction: {
     minHeight: TOUCH_TARGET + 4,
     flexDirection: 'row',
@@ -1621,7 +1555,6 @@ const styles = StyleSheet.create({
   },
   checkInActionText: { fontFamily: font.uiStrong, fontSize: 15 },
   checkInStatus: { fontFamily: font.ui, fontSize: 11, textAlign: 'center', marginBottom: space.md },
-  disclosures: { marginBottom: space.md },
   disclosure: {
     minHeight: TOUCH_TARGET,
     flexDirection: 'row',
@@ -1642,9 +1575,9 @@ const styles = StyleSheet.create({
   timeframeRow: {
     marginBottom: space.sm,
     flexDirection: 'row',
-    justifyContent: 'center',
   },
   timeframePillContainer: {
+    flex: 1,
     flexDirection: 'row',
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
@@ -1652,16 +1585,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   timeframePill: {
+    flex: 1,
     minHeight: TOUCH_TARGET,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  timeframePillActive: {
-    borderRadius: radius.md,
   },
   timeframePillText: {
     fontFamily: font.uiStrong,
@@ -1686,54 +1615,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: radius.pill,
   },
-  tabItemActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
   tabItemText: {
     fontFamily: font.uiStrong,
-    fontSize: 10.5,
-    letterSpacing: 0.6,
+    fontSize: 12,
     textAlign: 'center',
   },
 
-  atAGlanceGrid: {
-    flexDirection: 'row',
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  glanceTile: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: radius.md,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.xs,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  glanceTileLabel: {
-    fontFamily: font.uiStrong,
-    fontSize: 9.5,
-    letterSpacing: 0.3,
-    marginBottom: 3,
-  },
-  glanceTileValue: {
-    fontFamily: font.figure,
-    fontSize: 16,
-    fontVariant: ['tabular-nums'],
-  },
-  glanceUnit: {
-    fontFamily: font.ui,
-    fontSize: 11,
-  },
-  glanceTileSub: {
-    fontFamily: font.ui,
-    fontSize: 10.5,
-    marginTop: 2,
-  },
 
   tiles: { flexDirection: 'row', gap: space.md, marginBottom: space.sm },
   body: { fontFamily: font.ui, fontSize: 13, lineHeight: 19 },
-  legend: { flexDirection: 'row', gap: space.md, marginBottom: space.sm },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, marginBottom: space.sm },
   key: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   keyLine: { width: 14, height: 2, borderRadius: 1 },
   keyDot: { width: 6, height: 6, borderRadius: 3 },

@@ -22,6 +22,8 @@ import { calculateCoachingGoalAdjustment } from '../ai/coachingAdjustment';
 import type { AppPersonality, UnitSystem } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
 import { displayWeight, formatDayMonth, formatWeight, weightUnit } from '../format';
+import { useReduceMotion } from '../theme/motion';
+import { CheckInRecap } from './CheckInRecap';
 import type { CheckInPeriod } from '../checkInSchedule';
 import type { SavedCheckIn } from '../previousCheckIn';
 
@@ -61,6 +63,7 @@ interface WeeklyReviewModalProps {
    */
   previousWeekly?: SavedCheckIn | null;
   onOpenPrevious?: (period: CheckInPeriod) => void;
+  weightReadings?: readonly { date: string; kg: number }[];
 }
 
 const CONFIDENCE_COLORS = {
@@ -95,10 +98,13 @@ export const WeeklyReviewModal = ({
   monthlyLockedNote = null,
   previousWeekly = null,
   onOpenPrevious,
+  weightReadings,
 }: WeeklyReviewModalProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
   const [reviewMode, setReviewMode] = useState<'weekly' | 'monthly'>(initialMode);
+  const [presentation, setPresentation] = useState<'recap' | 'summary'>('summary');
   const [showScience, setShowScience] = useState(false);
   const [showMonthlyScience, setShowMonthlyScience] = useState(false);
 
@@ -107,6 +113,28 @@ export const WeeklyReviewModal = ({
       setReviewMode(initialMode);
     }
   }, [open, initialMode]);
+
+  const weeklyRecapReady = Boolean(review && !loading && !error && !weeklyLockedNote);
+  const monthlyRecapReady = Boolean(monthlyReview && monthlyMetrics && !monthlyLoading && !monthlyError && !monthlyLockedNote);
+  const recapReady = reviewMode === 'weekly' ? weeklyRecapReady : monthlyRecapReady;
+
+  useEffect(() => {
+    if (open) setPresentation(recapReady ? 'recap' : 'summary');
+  }, [open, reviewMode, recapReady, metrics.period.from, metrics.period.to, monthlyMetrics?.period.from, monthlyMetrics?.period.to]);
+
+  const showRecap = open && presentation === 'recap' && recapReady;
+  const recapMetrics = reviewMode === 'weekly' ? metrics : monthlyMetrics;
+  const weeklyNextStep =
+    review?.suggestedAdjustment?.title?.trim() ||
+    review?.nutritionInsight?.trim() ||
+    review?.plainSummary?.trim() ||
+    review?.synthesis?.trim() || '';
+  const monthlyNextStep =
+    monthlyReview?.suggestedAdjustment?.title?.trim() ||
+    monthlyReview?.nutritionInsight?.trim() ||
+    monthlyReview?.plainSummary?.trim() ||
+    monthlyReview?.synthesis?.trim() || '';
+  const recapNextStep = reviewMode === 'weekly' ? weeklyNextStep : monthlyNextStep;
 
   const hasMonthlySupport = Boolean(monthlyMetrics && onGenerateMonthly);
   // The long review is a month (4 weeks) or a quarter (13): its labels say
@@ -166,19 +194,38 @@ export const WeeklyReviewModal = ({
   const unit = weightUnit(units);
 
   return (
-    <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={open} animationType={reduceMotion ? 'none' : 'slide'} transparent={false} onRequestClose={onClose}>
       <View
         style={[
           styles.sheet,
           {
-            backgroundColor: colors.surface,
+            backgroundColor: showRecap ? loud.ground : colors.surface,
             borderColor: colors.border,
-            paddingTop: space.md,
-            paddingBottom: insets.bottom + space.lg,
+            paddingTop: showRecap ? 0 : insets.top + space.md,
+            paddingBottom: showRecap ? 0 : insets.bottom + space.lg,
           },
         ]}
       >
+        {showRecap && recapMetrics ? (
+          <CheckInRecap
+            key={`${reviewMode}-${recapMetrics.period.from}-${recapMetrics.period.to}`}
+            metrics={recapMetrics}
+            units={units}
+            mode={reviewMode}
+            showModeSwitch={hasMonthlySupport}
+            longDays={longDays}
+            longName={longName}
+            nextStep={recapNextStep}
+            weightReadings={weightReadings}
+            onModeChange={(mode) => {
+              thud('light');
+              setReviewMode(mode);
+            }}
+            onSummary={() => setPresentation('summary')}
+            onClose={onClose}
+          />
+        ) : (
+          <>
         {/* Header Bar */}
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
@@ -200,7 +247,6 @@ export const WeeklyReviewModal = ({
           </View>
 
           <Pressable
-            hitSlop={12}
             onPress={onClose}
             style={[styles.closeButton, { backgroundColor: colors.surfaceRaised }]}
             accessibilityRole="button"
@@ -220,7 +266,7 @@ export const WeeklyReviewModal = ({
               }}
               style={[
                 styles.modeTab,
-                reviewMode === 'weekly' && [styles.modeTabActive, { backgroundColor: colors.surface }],
+                reviewMode === 'weekly' && [styles.modeTabActive, { backgroundColor: colors.brand.fill }],
               ]}
               accessibilityRole="button"
               accessibilityState={{ selected: reviewMode === 'weekly' }}
@@ -228,12 +274,12 @@ export const WeeklyReviewModal = ({
               <Ionicons
                 name="calendar-outline"
                 size={13}
-                color={reviewMode === 'weekly' ? colors.accent : colors.textMuted}
+                color={reviewMode === 'weekly' ? colors.brand.onFill : colors.textMuted}
               />
               <Text
                 style={[
                   styles.modeTabText,
-                  { color: reviewMode === 'weekly' ? colors.text : colors.textMuted },
+                  { color: reviewMode === 'weekly' ? colors.brand.onFill : colors.textMuted },
                 ]}
               >
                 WEEKLY RECAP (7D)
@@ -247,7 +293,7 @@ export const WeeklyReviewModal = ({
               }}
               style={[
                 styles.modeTab,
-                reviewMode === 'monthly' && [styles.modeTabActive, { backgroundColor: colors.surface }],
+                reviewMode === 'monthly' && [styles.modeTabActive, { backgroundColor: colors.brand.fill }],
               ]}
               accessibilityRole="button"
               accessibilityState={{ selected: reviewMode === 'monthly' }}
@@ -255,12 +301,12 @@ export const WeeklyReviewModal = ({
               <Ionicons
                 name="sparkles"
                 size={13}
-                color={reviewMode === 'monthly' ? colors.accent : colors.textMuted}
+                color={reviewMode === 'monthly' ? colors.brand.onFill : colors.textMuted}
               />
               <Text
                 style={[
                   styles.modeTabText,
-                  { color: reviewMode === 'monthly' ? colors.text : colors.textMuted },
+                  { color: reviewMode === 'monthly' ? colors.brand.onFill : colors.textMuted },
                 ]}
               >
                 {`${longName.toUpperCase()} REVIEW (${longDays}D)`}
@@ -274,6 +320,17 @@ export const WeeklyReviewModal = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {recapReady && (
+            <Pressable
+              onPress={() => setPresentation('recap')}
+              style={[styles.replayButton, { borderColor: colors.border, backgroundColor: colors.surfaceRaised }]}
+              accessibilityRole="button"
+              accessibilityLabel="Play check-in recap again"
+            >
+              <Ionicons name="play" size={16} color={colors.brand.text} />
+              <Text style={[styles.replayText, { color: colors.brand.text }]}>PLAY YOUR RECAP</Text>
+            </Pressable>
+          )}
           {/* ========================================================= */}
           {/* 1. WEEKLY REVIEW MODE                                    */}
           {/* ========================================================= */}
@@ -492,6 +549,7 @@ export const WeeklyReviewModal = ({
                           ) : (
                             <Tappable
                               onPress={onApplyAdjustment}
+                              accessibilityRole="button"
                               scaleTo={0.97}
                               style={[styles.applyBtn, { backgroundColor: colors.accent }]}
                             >
@@ -978,6 +1036,7 @@ export const WeeklyReviewModal = ({
                           ) : (
                             <Tappable
                               onPress={onApplyMonthlyAdjustment}
+                              accessibilityRole="button"
                               scaleTo={0.97}
                               style={[styles.applyBtn, { backgroundColor: colors.accent }]}
                             >
@@ -1037,30 +1096,23 @@ export const WeeklyReviewModal = ({
             </>
           )}
         </ScrollView>
+          </>
+        )}
       </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-  },
   sheet: {
     position: 'absolute',
+    top: 0,
     bottom: 0,
     left: 0,
     right: 0,
-    height: '92%',
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderWidth: 1,
-    borderBottomWidth: 0,
+    maxHeight: '100%',
+    borderRadius: 0,
+    borderWidth: 0,
   },
   header: {
     flexDirection: 'row',
@@ -1070,6 +1122,9 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: space.sm,
     gap: 2,
   },
   badgeRow: {
@@ -1087,9 +1142,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1104,6 +1159,7 @@ const styles = StyleSheet.create({
   },
   modeTab: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1125,11 +1181,27 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     flex: 1,
+    minHeight: 0,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: space.lg,
     paddingBottom: space.xxl,
     gap: space.md,
+  },
+  replayButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  replayText: {
+    fontFamily: font.uiStrong,
+    fontSize: 12,
+    letterSpacing: 0.8,
   },
   confBanner: {
     flexDirection: 'row',
@@ -1357,6 +1429,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   applyBtn: {
+    minHeight: 44,
     paddingVertical: space.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
