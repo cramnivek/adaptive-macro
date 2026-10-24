@@ -24,6 +24,8 @@ interface ScreenProps {
   action?: React.ReactNode;
   /** Native stack headers already reserve the top safe area. */
   topInset?: boolean;
+  /** A focused report can return to its controls without remounting its data. */
+  scrollRef?: React.RefObject<ScrollView | null>;
 }
 
 /**
@@ -33,7 +35,7 @@ interface ScreenProps {
  * card clears the home indicator on a notched phone and is not left under the
  * tab bar on a flat one — measured, not a fixed guess.
  */
-export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action, topInset = true }: ScreenProps) => {
+export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone, action, topInset = true, scrollRef }: ScreenProps) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   // Room for the floating workout bar, when this is a tab and the bar is up.
@@ -81,6 +83,7 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
   return (
     <View style={styles.frame}>
       <ScrollView
+        ref={scrollRef}
         style={{ backgroundColor: ground }}
         contentContainerStyle={[
           styles.content,
