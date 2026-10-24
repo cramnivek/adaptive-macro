@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,7 +14,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import { BrandLockup } from '../src/components/BrandLockup';
 import { Tappable } from '../src/components/Tappable';
+import { BRAND } from '../src/brand';
 import { sendCode, verifyCode } from '../src/social/api';
 import { useSocial } from '../src/social/session';
 import { useApp } from '../src/state/AppStore';
@@ -27,7 +28,6 @@ import {
 } from '../src/social/socialSignIn';
 import { TOUCH_TARGET } from '../src/components/Controls';
 import { font, radius, space, useTheme } from '../src/theme';
-import { session as loud } from '../src/theme/sessionTheme';
 
 /** Official 4-color Google 'G' brand mark */
 function GoogleLogo({ size = 20 }: { size?: number }) {
@@ -58,8 +58,8 @@ function GoogleLogo({ size = 20 }: { size?: number }) {
  *
  * Built to the house rule — calm when tracking, focused when training, loud
  * when celebrating. Signing in is none of the loud moments, so the screen is
- * the quiet palette with exactly one hit of red: the three strokes after the
- * wordmark, drawn the way every share card draws them. The skewed slab and the
+ * the quiet palette with exactly one hit of red: the Ä inside the vector
+ * wordmark, drawn the way every share card draws it. The skewed slab and the
  * red ring that used to sit here are the celebration's shapes, and spending
  * them on a login form left nothing for the PR that earns them.
  *
@@ -174,17 +174,8 @@ export default function SignInScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.inner}>
-          {/*
-            The mark, smaller than it was. At 68 px plus a two-line motto the
-            header took a third of the screen, and on a small phone the keyboard
-            then covered the field you had just tapped.
-          */}
           <View style={styles.brand}>
-            <Image source={require('../assets/icon.png')} style={styles.brandLogo} resizeMode="contain" />
-            <View style={styles.wordmarkRow} accessibilityRole="header" accessibilityLabel="Ascend">
-              <Text style={[styles.wordmark, { color: colors.text }]}>ASCEND</Text>
-              <Text style={[styles.wordmark, styles.slashes, { color: loud.loud }]}>///</Text>
-            </View>
+            <BrandLockup markColor={colors.brand.text} textColor={colors.text} size={30} />
             <Text style={[styles.descriptor, { color: colors.textFaint }]}>ADAPTIVE NUTRITION & TRAINING</Text>
           </View>
 
@@ -392,9 +383,9 @@ export default function SignInScreen() {
               disabled={busy}
               style={styles.skip}
               accessibilityRole="button"
-              accessibilityLabel="Use Ascend without an account"
+              accessibilityLabel={`Use ${BRAND.name} without an account`}
             >
-              <Text style={[styles.skipLabel, { color: colors.text }]}>Use Ascend without an account</Text>
+              <Text style={[styles.skipLabel, { color: colors.text }]}>Use {BRAND.name} without an account</Text>
               <Text style={[styles.skipNote, { color: colors.textFaint }]}>
                 You can sign in later from Settings or the Social tab.
               </Text>
@@ -502,26 +493,6 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: 'center',
     marginBottom: space.lg,
-  },
-  brandLogo: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.md,
-    marginBottom: space.md,
-  },
-  wordmarkRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  wordmark: {
-    fontFamily: font.display,
-    fontSize: 30,
-    letterSpacing: 3,
-  },
-  // The same 0.4em gap the share card leaves before the strokes.
-  slashes: {
-    marginLeft: 12,
-    letterSpacing: 1,
   },
   descriptor: {
     fontFamily: font.figure,

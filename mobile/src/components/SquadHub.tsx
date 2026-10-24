@@ -25,6 +25,7 @@ import { FadeIn } from './FadeIn';
 import { Tappable } from './Tappable';
 import { useApp } from '../state/AppStore';
 import { getEventCopy } from '../copy/personality';
+import { BRAND } from '../brand';
 
 import { UserAvatar } from './UserAvatar';
 
@@ -73,7 +74,7 @@ export const SquadHub = ({ user }: SquadHubProps) => {
     thud('light');
     try {
       await Share.share({
-        message: `Join my Ascend training squad "${squad.name}"! Use squad invite code: ${squad.inviteCode}`,
+        message: `Join my ${BRAND.name} training squad "${squad.name}"! Use squad invite code: ${squad.inviteCode}`,
       });
     } catch {
       handleCopyCode();
@@ -171,7 +172,7 @@ export const SquadHub = ({ user }: SquadHubProps) => {
               <View style={styles.squadBadge}>
                 <Ionicons name="shield-checkmark" size={13} color="#00E5FF" />
                 <Text style={styles.squadBadgeText}>
-                  {squad.inviteCode === 'IRON26' ? 'SQUAD (DEMO PREVIEW)' : 'ASCEND / SQUAD CHALLENGE'}
+                  {squad.inviteCode === 'IRON26' ? 'SQUAD (DEMO PREVIEW)' : `${BRAND.wordmark} / SQUAD CHALLENGE`}
                 </Text>
               </View>
               <Pressable onPress={handleCopyCode} style={styles.invitePill}>

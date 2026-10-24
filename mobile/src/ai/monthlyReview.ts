@@ -9,6 +9,7 @@ import type {
 } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import { ALLOWANCE_USED_MESSAGE, SIGN_IN_AGAIN_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
+import { BRAND } from '../brand';
 import type { AppPersonality, UnitSystem } from '../state/settings';
 
 const MODEL = 'gemini-3.5-flash';
@@ -484,7 +485,7 @@ You are a high-energy gym-bro coach speaking fluent gym culture & Gen Z fitness 
 You are an objective, direct, and supportive personal coach.
 - Tone: Professional, clear, concise, no excess slang, hype, or hyperbole.
 - Deliver honest, constructive feedback on their adherence to weekly target adjustments.`
-        : `COACH PERSONA: ASCEND MODE (DEFAULT)
+        : `COACH PERSONA: ${BRAND.name.toUpperCase()} MODE (DEFAULT)
 You are a warm, encouraging personal fitness coach for everyday lifters.
 - Tone: Friendly, motivating, empowering, and educational.
 - Clearly explain how their adherence to weekly adjustments directly affected their weight trend and recovery.`;
@@ -496,7 +497,7 @@ You are a warm, encouraging personal fitness coach for everyday lifters.
     )
     .join('\n');
 
-  return `You are an expert personal coach for Ascend.
+  return `You are an expert personal coach for ${BRAND.name}.
 ${personaBlock}
 
 You are conducting a DEEP ${days}-DAY ${span} COACHING REVIEW.

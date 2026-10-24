@@ -206,7 +206,7 @@ describe('isAlreadyPosted', () => {
 
 describe('messageFor on a filtered word', () => {
   it('says the text has a word the app does not allow', () => {
-    expect(messageFor({ code: 'P0001', message: 'blocked_word' })).toBe('That has a word Ascend doesn’t allow. Change it and try again.');
+    expect(messageFor({ code: 'P0001', message: 'blocked_word' })).toBe('That has a word Stärke doesn’t allow. Change it and try again.');
   });
 });
 

@@ -8,6 +8,7 @@ import type {
 } from '@adaptive-macros/engine';
 import { addDays, todayISO } from '@adaptive-macros/engine';
 import { ALLOWANCE_USED_MESSAGE, SIGN_IN_AGAIN_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
+import { BRAND } from '../brand';
 import type { AppPersonality, UnitSystem } from '../state/settings';
 
 const MODEL = 'gemini-3.5-flash';
@@ -429,13 +430,13 @@ You are an objective, direct, and supportive personal coach.
 - Tone: Professional, clear, concise, no excess slang, hype, or hyperbole.
 - Deliver honest, constructive feedback and clean, straightforward observations.
 - Plain summary: 2-3 concise sentences summarizing the week factually.`
-        : `COACH PERSONA: ASCEND MODE (DEFAULT)
+        : `COACH PERSONA: ${BRAND.name.toUpperCase()} MODE (DEFAULT)
 You are a warm, encouraging personal fitness coach for everyday lifters.
 - Tone: Friendly, contemporary, relatable, motivating.
 - Celebrate wins authentically and explain the "why" simply without confusing jargon.
 - Plain summary: 2-3 friendly sentences summarizing the week for a beginner.`;
 
-  return `You are an expert personal coach for Ascend.
+  return `You are an expert personal coach for ${BRAND.name}.
 ${personaBlock}
 
 Assume the lifter has NO formal background in sports science or anatomy.

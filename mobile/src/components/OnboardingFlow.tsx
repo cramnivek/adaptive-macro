@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BRAND } from '../brand';
 import { connectHealthConnect, syncHealthConnect } from '../health/healthConnect';
 import { onboardingSteps, ONBOARDING_VERSION, type OnboardingStep } from '../onboardingSteps';
 import { thud } from '../platform/haptics';
@@ -49,7 +50,7 @@ const ACTIVITY: { id: ActivityLevel; title: string; line: string; icon: keyof ty
 /** A real line in each voice, so the choice is heard rather than described. */
 const VOICES: { id: AppPersonality; title: string; sample: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { id: 'classic', title: 'Classic', sample: '"Down 0.4 kg at 1,850 kcal a day. On track; keep it steady."', icon: 'reader-outline' },
-  { id: 'ascend', title: 'Ascend', sample: '"Nice week! Down 0.4 kg, right where we want you. Keep it going."', icon: 'sparkles-outline' },
+  { id: 'ascend', title: BRAND.name, sample: '"Nice week! Down 0.4 kg, right where we want you. Keep it going."', icon: 'sparkles-outline' },
   { id: 'gymrat', title: 'Gym rat', sample: '"We are SO back 🔥 −0.4 kg and the bench is climbing. Locked in."', icon: 'flame-outline' },
 ];
 

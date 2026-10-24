@@ -1,3 +1,5 @@
+import { BRAND } from '../brand';
+
 /**
  * Supabase failures in words someone can act on.
  *
@@ -22,7 +24,7 @@ export const messageFor = (error: ServerError): string => {
   if (error.code === '23505' && error.message?.includes('profiles_username_key')) return 'That username is taken.';
   // The database's word filter raises P0001 with exactly this message.
   if (error.code === 'P0001' && error.message === 'blocked_word') {
-    return 'That has a word Ascend doesn’t allow. Change it and try again.';
+    return `That has a word ${BRAND.name} doesn’t allow. Change it and try again.`;
   }
   if (error.code === 'otp_expired') return 'That code is wrong or has expired. Check it, or send a new one.';
   if (error.code === 'over_email_send_rate_limit' || error.status === 429) {

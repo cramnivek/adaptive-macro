@@ -11,6 +11,7 @@ import {
   evaluateElectrolytes,
 } from '@adaptive-macros/engine';
 import { ALLOWANCE_USED_MESSAGE, SIGN_IN_AGAIN_MESSAGE, fetchGemini, isPersonalLimit } from '../api/gemini';
+import { BRAND } from '../brand';
 import type { AppPersonality } from '../state/settings';
 
 const MODEL = 'gemini-3.5-flash';
@@ -178,7 +179,7 @@ export const requestAiNutritionReview = async (params: {
   const { consumed, entries, profile, goal, personality = 'ascend', apiKey = '' } = params;
   const diagnostics = runLocalNutritionDiagnostics(params);
 
-  const prompt = `You are Ascend's Chief Clinical Sports Nutritionist and Evidence-Based Dietitian.
+  const prompt = `You are ${BRAND.name}'s Chief Clinical Sports Nutritionist and Evidence-Based Dietitian.
 Analyze this user's nutritional intake for today, identifying micronutrient deficiencies, electrolyte balance, protein pacing, and food quality.
 
 User Profile:

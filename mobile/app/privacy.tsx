@@ -2,6 +2,7 @@ import { useRouter, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../src/components/Screen';
+import { BRAND } from '../src/brand';
 import { Tappable } from '../src/components/Tappable';
 import { font, radius, space, useTheme } from '../src/theme';
 
@@ -12,7 +13,7 @@ export default function PrivacyPolicyScreen() {
   return (
     <Screen
       title="PRIVACY POLICY"
-      subtitle="Ascend • Transparent, Local-First"
+      subtitle={`${BRAND.name} • Transparent, Local-First`}
       action={
         <Tappable
           onPress={() => router.back()}
@@ -54,7 +55,7 @@ export default function PrivacyPolicyScreen() {
             Your entire historical log—including meals, macros, daily weight readings, body circumferences, custom routines, exercise history, and personal preferences—is stored locally in an embedded SQLite database on your device (or in your browser's private local storage on web).
           </Text>
           <Text style={[styles.paragraph, { color: colors.textMuted }]}>
-            On Android, if you connect Health Connect, Ascend reads your steps and scale weigh-ins from it (including data shared there by apps such as Garmin Connect) and saves them into this same on-device log. It only reads: nothing is written to Health Connect, and nothing read from it is sent to us or anyone else. You can revoke access at any time in Android's Health Connect settings.
+            On Android, if you connect Health Connect, {BRAND.name} reads your steps and scale weigh-ins from it (including data shared there by apps such as Garmin Connect) and saves them into this same on-device log. It only reads: nothing is written to Health Connect, and nothing read from it is sent to us or anyone else. You can revoke access at any time in Android's Health Connect settings.
           </Text>
           <Text style={[styles.paragraph, { color: colors.textMuted }]}>
             We have no access to this database. You can export a full JSON backup of your data at any time from Settings → Your Data. Clearing app data or browser cache without a backup will erase this information.
@@ -85,7 +86,7 @@ export default function PrivacyPolicyScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>3. External Services & AI</Text>
           <Text style={[styles.paragraph, { color: colors.textMuted }]}>
-            Ascend integrates with trusted third-party providers strictly on-demand when you explicitly invoke specific tools:
+            {BRAND.name} integrates with trusted third-party providers strictly on-demand when you explicitly invoke specific tools:
           </Text>
           <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.tableRow}>
@@ -119,7 +120,7 @@ export default function PrivacyPolicyScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>4. Device Permissions</Text>
           <Text style={[styles.paragraph, { color: colors.textMuted }]}>
-            Ascend requests only essential device permissions:
+            {BRAND.name} requests only essential device permissions:
           </Text>
           <Text style={[styles.subBullet, { color: colors.textMuted }]}>
             • <Text style={styles.bold}>Camera:</Text> Required only when scanning food barcodes or capturing meal photos.

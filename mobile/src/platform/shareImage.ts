@@ -15,6 +15,8 @@ import {
 import { DEFAULT_TEMPLATE, type TemplateId } from '../shareCardTemplate';
 import { font } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+import { BRAND } from '../brand';
+import { brandWordmarkWidth, drawBrandWordmark } from './brandCanvas';
 
 export type StickerTheme = 'glass' | 'hud' | 'solid' | 'prism';
 
@@ -119,16 +121,9 @@ const roundRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 };
 
-/** ASCEND and its three strokes: the one mark that is on every card. */
+/** The approved vector wordmark is drawn directly on every card and sticker. */
 const wordmark = (ctx: CanvasRenderingContext2D, x: number, y: number, px: number) => {
-  ctx.font = `700 ${px}px ${font.display}`;
-  track(ctx, px * 0.1);
-  ctx.fillStyle = loud.figure;
-  ctx.fillText('ASCEND', x, y);
-  const after = x + ctx.measureText('ASCEND').width + px * 0.4;
-  ctx.fillStyle = loud.loud;
-  ctx.fillText('///', after, y);
-  track(ctx, 0);
+  drawBrandWordmark(ctx, x, y, px, { foreground: loud.figure, accent: loud.loud });
 };
 
 /**
@@ -290,7 +285,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   // The lean is there to give an empty black card some structure. A photo has
   // its own, and a hard red line ruled across a picture of someone is the
   // opposite of what a photo is for — so over a picture the card goes without
-  // it, and the slashes on the wordmark carry the mark instead.
+  // it, and the wordmark carries the branding instead.
   if (!photo) {
     ctx.save();
     ctx.fillStyle = loud.loud;
@@ -503,7 +498,7 @@ export const drawShareCard = (summary: ShareCard, photo: HTMLImageElement | null
   ctx.font = `600 28px ${font.uiStrong}`;
   track(ctx, 10);
   ctx.fillStyle = faint;
-  ctx.fillText('KEEP ASCENDING.', W - PAD, H - 68);
+  ctx.fillText(BRAND.tagline.toUpperCase(), W - PAD, H - 68);
   track(ctx, 0);
   ctx.textAlign = 'left';
 
@@ -707,7 +702,7 @@ export const shareWorkout = async (
         if (canShare) {
           let localUri = card.url;
           const png = card.url.startsWith('data:image/png;') || card.file?.type === 'image/png' || /\.png(?:$|\?)/i.test(card.url);
-          const targetPath = `${FileSystem.cacheDirectory ?? ''}ascend-workout-card.${png ? 'png' : 'jpg'}`;
+          const targetPath = `${FileSystem.cacheDirectory ?? ''}starke-workout-card.${png ? 'png' : 'jpg'}`;
 
           if (card.url.startsWith('file:')) {
             localUri = card.url;
@@ -764,7 +759,7 @@ export const shareWorkout = async (
 
   const link = document.createElement('a');
   link.href = card.url;
-  link.download = card.file && 'name' in card.file ? (card.file as File).name : 'ascend-workout-card.jpg';
+  link.download = card.file && 'name' in card.file ? (card.file as File).name : 'starke-workout-card.jpg';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -855,11 +850,7 @@ const statRow = (
 
 /** How wide the wordmark comes out, for the layouts that hang it off the right. */
 const wordmarkWidth = (ctx: CanvasRenderingContext2D, px: number): number => {
-  ctx.font = `700 ${px}px ${font.display}`;
-  track(ctx, px * 0.1);
-  const width = ctx.measureText('ASCEND').width + px * 0.4 + ctx.measureText('///').width;
-  track(ctx, 0);
-  return width;
+  return brandWordmarkWidth(px);
 };
 
 /**
@@ -1359,7 +1350,7 @@ export const exportStickerCanvas = async (
 ): Promise<StickerExport | null> => {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   if (!blob) return null;
-  const stem = title.replace(/[^\w-]+/g, '-').toLowerCase() || 'ascend-sticker';
+  const stem = title.replace(/[^\w-]+/g, '-').toLowerCase() || 'starke-sticker';
   const name = `${stem}-sticker.png`;
   const file = new File([blob], name, { type: 'image/png' });
   const url = URL.createObjectURL(blob);

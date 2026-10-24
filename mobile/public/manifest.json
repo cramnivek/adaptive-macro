@@ -1,6 +1,6 @@
 {
-  "name": "Ascend",
-  "short_name": "Ascend",
+  "name": "Starke Fitness",
+  "short_name": "Stärke",
   "description": "Local-first nutrition tracker with an adaptive TDEE engine",
   "start_url": "/",
   "scope": "/",

@@ -28,16 +28,38 @@ components:
     variant: "section"
 ---
 
-# Ascend design context
+# Stärke design context
 
-Ascend is a local-first food and lifting log, used on a phone during meals and
+Stärke is a local-first food and lifting log, used on a phone during meals and
 between sets. Preserve the existing product identity: calm, rule-led nutrition
 sections and a darker, louder training palette with a large readable timer.
 Expression belongs in training figures; routine logging should stay compact.
 The 24 October brand revision uses red consistently across all tabs: primary
-actions and active navigation belong to one Ascend identity. Training increases
+actions and active navigation belong to one Stärke identity. Training increases
 contrast and figure size rather than introducing a separate brand palette.
 Avoid a marketing dashboard, decorative health scores, or inferred precision.
+
+The approved public identity is Starke Fitness for installation, Stärke in
+ordinary prose, STÄRKE in the wordmark, and Keep building. as the tagline.
+The approved artwork is the upright STÄRKE wordmark with a red open Ä, round
+umlaut dots and an inner upward arrow (option A). The Ä alone is the install icon.
+Keep the other letters upright; do not restore the rejected SF/ST monograms,
+italic sliced lettering, star, or weight equipment. The palette stays red, black
+and off-white. Before presenting or releasing a changed logo, compare its
+silhouette, lettering, stroke treatment and overall impression with current
+official fitness-brand artwork, including RP Strength, and relevant competitors
+such as Hevy, Strong, MacroFactor, Strava, Gymshark and adidas. Record the actual
+comparison set and concerns; visual screening does not establish trademark
+availability or legal clearance. Repeat the comparison when the mark changes.
+`mobile/src/brand.ts` owns the names;
+`mobile/assets/brand/artwork.json` owns the mark and wordmark geometry. BrandLockup
+renders the same paths as canvas exports and `tools/make-icons.py`.
+The generated SVG and PNGs are outputs, not independent designs. Use the existing
+red, black and off-white palette: app icons are off-white Ä on brand.mark red;
+in-app lockups follow theme foreground and accessible red roles in either mode.
+Do not rename persisted keys, app identifiers, OAuth schemes or the EAS project
+when changing public branding. No other screen layout or font changes follow
+from this rebrand.
 
 The canonical runtime owners are `mobile/src/theme/palette.ts`,
 `mobile/src/theme/sessionTheme.ts`, and `mobile/src/theme/motion.ts`. This file
@@ -88,7 +110,7 @@ data-management actions retain their established behavior.
 Keep real controls at least 44 points, retain readable numbers at arm's length,
 and reserve safe areas exactly once. Screen's default top inset applies to
 headerless pages; a native stack header already reserves it. Keep the workout
-Finish action above the bottom safe area. Today has a small `ASCEND ///` wordmark
+Finish action above the bottom safe area. Today has a small `STÄRKE` vector wordmark
 beside its existing header controls, without another row or a system-status-bar
 overlay. Other tabs keep their descriptive titles; shared cards keep branding.
 Featured meal, sleep, steps, weight and training marks use the bundled SVG

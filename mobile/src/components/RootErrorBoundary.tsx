@@ -50,7 +50,7 @@ export class RootErrorBoundary extends React.Component<
       const backup = await exportBackup();
       const stamp = new Date().toISOString().slice(0, 10);
       const how = await saveTextFile(
-        `ascend-backup-${stamp}.json`,
+        `starke-backup-${stamp}.json`,
         JSON.stringify(backup, null, 2),
       );
       if (how === 'downloaded' || how === 'written') {
