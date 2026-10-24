@@ -52,15 +52,21 @@ describe('expo-sqlite web OPFS patches', () => {
   const require = createRequire(import.meta.url);
   const expoSqliteDir = dirname(require.resolve('expo-sqlite/package.json'));
 
-  it('keeps maybeInitAsync atomic and resets state on failure so retries do not brick with Invalid VFS state', () => {
+  it('keeps maybeInitAsync atomic, sets mxPathname=512, and resets state on failure so retries do not brick with Invalid VFS state', () => {
     const workerSource = readFileSync(join(expoSqliteDir, 'web/worker.ts'), 'utf8');
-    expect(workerSource).toContain('// Ascend: atomic VFS init with lock handoff and retry reset.');
+    expect(workerSource).toContain(
+      '// Ascend: atomic VFS init with 512-byte mxPathname, lock handoff, and retry reset.',
+    );
+    expect(workerSource).toContain('vfs.mxPathname = 512;');
     expect(workerSource).toContain("new BroadcastChannel('ascend-expo-sqlite-opfs')");
   });
 
-  it('releases already-acquired OPFS handles if a file in the pool is locked during startup', () => {
+  it('sets mxPathname=HEADER_MAX_PATH_SIZE (512) and releases already-acquired OPFS handles if a file is locked', () => {
     const vfsSource = readFileSync(join(expoSqliteDir, 'web/wa-sqlite/AccessHandlePoolVFS.js'), 'utf8');
-    expect(vfsSource).toContain('// Ascend: release any handles acquired before a lock error so retries can succeed.');
+    expect(vfsSource).toContain('mxPathname = HEADER_MAX_PATH_SIZE;');
+    expect(vfsSource).toContain(
+      '// Ascend: release any handles acquired before a lock error so retries can succeed.',
+    );
     expect(vfsSource).toContain('this.#releaseAccessHandles();');
   });
 });
