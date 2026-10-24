@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Pressable,
@@ -7,7 +7,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { duration, ease } from '../theme/motion';
+import { duration, ease, useReduceMotion } from '../theme/motion';
 
 /**
  * The transform goes on the Pressable itself rather than on a wrapper, so a
@@ -37,14 +37,25 @@ interface TappableProps extends Omit<PressableProps, 'style'> {
  */
 export const Tappable = ({ style, children, scaleTo = 0.97, onPressIn, onPressOut, ...rest }: TappableProps) => {
   const scale = useRef(new Animated.Value(1)).current;
+  const reduceMotion = useReduceMotion();
+  useEffect(() => {
+    if (reduceMotion) {
+      scale.stopAnimation();
+      scale.setValue(1);
+    }
+    return () => scale.stopAnimation();
+  }, [reduceMotion, scale]);
 
-  const springTo = (value: number) =>
+  const springTo = (value: number) => {
+    if (reduceMotion) return;
+    scale.stopAnimation();
     Animated.timing(scale, {
       toValue: value,
       duration: duration.press,
       easing: ease,
       useNativeDriver: true,
     }).start();
+  };
 
   return (
     <AnimatedPressable

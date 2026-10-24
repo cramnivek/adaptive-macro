@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Animated, Easing } from 'react-native';
+import { createMotionPreference } from './motionPreference';
 
 /**
  * Shared motion vocabulary.
@@ -21,13 +22,8 @@ export const duration = {
   enter: 220,
   /** A panel crossing a row. */
   sweep: 300,
-  /**
-   * A chart drawing itself in. The one long duration here, and deliberately
-   * so: it runs once when a screen of data arrives, you are reading rather
-   * than operating, and a trend line that snaps into place reads as a picture
-   * where one that draws reads as a measurement being taken.
-   */
-  draw: 650,
+  /** Charts settle as quickly as the surrounding interface. */
+  draw: 220,
 } as const;
 
 /** Decelerates into place. For anything arriving or settling. */
@@ -54,10 +50,15 @@ export const impact = Easing.bezier(0.34, 1.56, 0.64, 1);
  * to load rather than lively.
  */
 export const useEntrance = (delay = 0) => {
-  const progress = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReduceMotion();
+  const progress = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   useEffect(() => {
+    if (reduceMotion) {
+      progress.stopAnimation();
+      progress.setValue(1);
+      return;
+    }
     const animation = Animated.timing(progress, {
       toValue: 1,
       duration: duration.enter,
@@ -67,9 +68,8 @@ export const useEntrance = (delay = 0) => {
     });
     animation.start();
     return () => animation.stop();
-  }, [progress, delay]);
+  }, [progress, delay, reduceMotion]);
 
-  // With reduce motion on, the fade stays and the lift goes.
   return {
     opacity: progress,
     transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [reduceMotion ? 0 : 10, 0] }) }],
@@ -77,27 +77,19 @@ export const useEntrance = (delay = 0) => {
 };
 
 /**
- * Whether the person has asked their phone for less motion. Anything bigger
- * than a fade checks this and settles for a fade when it is on: a burst of
- * shards or a card swinging in is exactly what that setting is for.
+ * A single platform subscription serves every animated component. Until the
+ * first read finishes, show content immediately rather than risk moving it
+ * for someone who has explicitly asked for less motion.
  */
-export const useReduceMotion = (): boolean => {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((value) => {
-        if (alive) setReduce(value);
-      })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
-    return () => {
-      alive = false;
-      subscription.remove();
-    };
-  }, []);
-  return reduce;
-};
+const motionPreference = createMotionPreference(
+  () => AccessibilityInfo.isReduceMotionEnabled(),
+  (changed) => {
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', changed);
+    return () => subscription.remove();
+  },
+);
+export const useReduceMotion = (): boolean =>
+  useSyncExternalStore(motionPreference.subscribe, motionPreference.getSnapshot, () => true);
 
 /**
  * Drives a value towards a target whenever it changes, rather than snapping.
@@ -109,8 +101,14 @@ export const useReduceMotion = (): boolean => {
  */
 export const useAnimatedTo = (target: number): Animated.Value => {
   const value = useRef(new Animated.Value(target)).current;
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      value.stopAnimation();
+      value.setValue(target);
+      return;
+    }
     const animation = Animated.timing(value, {
       toValue: target,
       duration: duration.enter,
@@ -119,7 +117,7 @@ export const useAnimatedTo = (target: number): Animated.Value => {
     });
     animation.start();
     return () => animation.stop();
-  }, [value, target]);
+  }, [value, target, reduceMotion]);
 
   return value;
 };

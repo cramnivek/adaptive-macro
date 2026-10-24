@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dark, light, type Palette } from '../palette';
+import { session } from '../sessionTheme';
 
 /** WCAG 2.1 relative luminance of an #RRGGBB colour. */
 const luminance = (hex: string): number => {
@@ -36,6 +37,18 @@ describe.each([
   ['dark', dark],
   ['light', light],
 ] as const)('%s palette', (_name, palette) => {
+  it('keeps brand-action labels readable and shares their red with training', () => {
+    expect(contrast(palette.brand.onFill, palette.brand.fill)).toBeGreaterThanOrEqual(4.5);
+    expect(palette.brand.fill).toBe(session.loud);
+    expect(palette.brand.onFill).toBe(session.onLoud);
+  });
+
+  it('keeps the red navigation and text accent readable across neutral and tinted surfaces', () => {
+    for (const ground of [...GROUNDS.map((key) => palette[key]), palette.brand.surface]) {
+      expect(contrast(palette.brand.text, ground)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it.each(['sleep', 'food', 'activity', 'salt'] as const)('%s feature text stays readable on both surfaces', (tone) => {
     const feature = palette.features[tone];
     for (const ground of [feature.surface, feature.note]) {

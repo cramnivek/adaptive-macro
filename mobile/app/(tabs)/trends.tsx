@@ -50,7 +50,6 @@ import {
   displayWeight,
   formatDateLong,
   formatDayMonth,
-  formatRate,
   formatWeight,
   weightUnit,
 } from '../../src/format';
@@ -58,9 +57,9 @@ import { loggingStrip } from '../../src/loggingStrip';
 import { useApp } from '../../src/state/AppStore';
 import { font, radius, space, useTheme, type Palette } from '../../src/theme';
 import { session as loud } from '../../src/theme/sessionTheme';
-import { intakeSummary, ON_TARGET_SHARE, periodCoverage, trendChange } from '../../src/trendsPeriod';
+import { intakeSummary, periodCoverage, trendChange } from '../../src/trendsPeriod';
 import { volumeComparison } from '../../src/volume';
-import { weeklyTotals, type SessionTimes } from '../../src/weeklyTraining';
+import { weeklyTotals, weeklyTotalsForPeriod, type SessionTimes } from '../../src/weeklyTraining';
 import {
   extractWeeklyMetrics,
   requestWeeklyReview,
@@ -97,7 +96,7 @@ export const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   year: 365,
 };
 
-type TrendTab = 'all' | 'body' | 'workouts';
+type TrendTab = 'all' | 'body' | 'food' | 'workouts';
 
 export default function TrendsScreen() {
   const { colors } = useTheme();
@@ -116,6 +115,7 @@ export default function TrendsScreen() {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<TrendTab>('all');
+  const [openDetails, setOpenDetails] = useState({ body: false, food: false, training: false });
   // A week first: it is the period people check most often, and the one a new
   // user has data for soonest.
   const [timeframe, setTimeframe] = useState<Timeframe>('week');
@@ -287,6 +287,10 @@ export default function TrendsScreen() {
     () => weeklyTotals(sessionTimes, sets, today, 12, settings.checkInWeekEndsOn),
     [sessionTimes, sets, today, settings.checkInWeekEndsOn],
   );
+  const chartWeeks = useMemo(
+    () => weeklyTotalsForPeriod(sessionTimes, sets, timeframeFrom, today, settings.checkInWeekEndsOn),
+    [sessionTimes, sets, timeframeFrom, today, settings.checkInWeekEndsOn],
+  );
   const anyWeekTrained = weeks.some((week) => week.sets > 0 || week.minutes > 0);
 
   // Volume-weighted muscle coverage: weights regions by actual completed working sets in the selected timeframe
@@ -331,6 +335,16 @@ export default function TrendsScreen() {
   const logged = useMemo(() => loggedDays(observations, dayStatus), [observations, dayStatus]);
   const weekEndsOn = settings.checkInWeekEndsOn;
   const firstLogged = useMemo(() => firstLoggedDate(observations), [observations]);
+  const firstPeriodData = useMemo(() => {
+    const dates = [
+      firstLogged,
+      ...intake.map((row) => row.date),
+      ...sets.map((item) => item.date),
+      ...sessionTimes.map((item) => item.date),
+      ...stepsHistory.map((item) => item.date),
+    ].filter((date): date is string => date !== null && date <= today);
+    return dates.length === 0 ? null : dates.reduce((earliest, date) => date < earliest ? date : earliest);
+  }, [firstLogged, intake, sets, sessionTimes, stepsHistory, today]);
   const weeklyStatus = useMemo(
     () => checkInStatus('weekly', firstLogged, today, logged, weekEndsOn),
     [firstLogged, today, logged, weekEndsOn],
@@ -675,7 +689,10 @@ export default function TrendsScreen() {
   }, [monthlyReview, monthlyApplied, program, settings.goal, latest?.expenditureKcal, updateSettings, monthlyAppliedKey]);
 
   // Dynamic timeframe-sliced charts calculations
-  const window = useMemo(() => series.slice(-windowDays), [series, windowDays]);
+  const window = useMemo(
+    () => series.filter((point) => point.date >= timeframeFrom && point.date <= today),
+    [series, timeframeFrom, today],
+  );
   const origin = window[0]?.date ?? null;
 
   const energy = useMemo(() => {
@@ -691,13 +708,13 @@ export default function TrendsScreen() {
         hi: point.expenditureKcal + point.expenditureSdKcal,
       })),
       intake: intake
-        .filter((row) => row.date >= origin && dayStatus.get(row.date) !== false)
+        .filter((row) => row.date >= timeframeFrom && row.date <= today && dayStatus.get(row.date) !== false)
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
       leftOut: intake
-        .filter((row) => row.date >= origin && dayStatus.get(row.date) === false)
+        .filter((row) => row.date >= timeframeFrom && row.date <= today && dayStatus.get(row.date) === false)
         .map((row) => ({ x: diffDays(origin, row.date), y: row.kcal })),
     };
-  }, [window, origin, intake, dayStatus]);
+  }, [window, origin, intake, dayStatus, timeframeFrom, today]);
 
   const strip = useMemo(
     () =>
@@ -741,14 +758,35 @@ export default function TrendsScreen() {
 
   // The overview tiles and the coverage line follow the selected period.
   const dataCoverage = useMemo(
-    () => periodCoverage(windowDays, today, firstLogged),
-    [windowDays, today, firstLogged],
+    () => periodCoverage(windowDays, today, firstPeriodData),
+    [windowDays, today, firstPeriodData],
   );
   const periodChange = useMemo(() => trendChange(series, dataCoverage.from), [series, dataCoverage.from]);
   const periodIntake = useMemo(
     () => intakeSummary(intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal ?? null),
     [intake, dayStatus, dataCoverage.from, today, program?.calories?.kcal],
   );
+  const periodWeightCount = weights.filter((row) => row.date >= timeframeFrom && row.date <= today).length;
+  const hasPeriodTraining = summaryPeriod.sessions > 0 || summaryPeriod.workingSets > 0;
+  const hasPeriodFood = periodIntake.countedDays > 0;
+  const hasPeriodWeight = periodWeightCount > 0;
+  const periodHeadline = !hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
+    ? 'Log food, weight, or a workout to start your trends.'
+    : hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
+      ? `Food logged on ${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}.`
+      : hasPeriodTraining
+        ? `${summaryPeriod.sessions} workout${summaryPeriod.sessions === 1 ? '' : 's'} · ${summaryPeriod.records} new best${summaryPeriod.records === 1 ? '' : 's'}`
+        : hasPeriodWeight
+          ? 'Weight trend recorded.'
+          : `Food logged on ${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}.`;
+  const periodHeadlineNote = !hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
+    ? 'A weigh-in, food log, or workout will give you a useful starting point.'
+    : hasPeriodFood && !hasPeriodWeight && !hasPeriodTraining
+      ? 'Add a weigh-in or workout to broaden your trends.'
+      : 'See what changed. Keep the bigger picture in view.';
+  const periodRangeLabel = dataCoverage.dataDays === 0
+    ? 'No data recorded yet'
+    : `${formatDayMonth(dataCoverage.from)}${dataCoverage.from.slice(0, 4) !== today.slice(0, 4) ? ` ${dataCoverage.from.slice(0, 4)}` : ''} – ${formatDayMonth(today)}${dataCoverage.from.slice(0, 4) !== today.slice(0, 4) ? ` ${today.slice(0, 4)}` : ''}`;
 
   // What the check-in card says for the selected view: the weekly check-in on
   // Week, the monthly one on Month, the quarterly one on Year. Until a period
@@ -799,7 +837,7 @@ export default function TrendsScreen() {
 
   return (
     <Screen
-      title="Trends & Progress"
+      title="Trends"
       action={
         <Tappable
           onPress={() => void handleRefresh()}
@@ -814,7 +852,7 @@ export default function TrendsScreen() {
       onRefresh={() => void handleRefresh()}
       refreshing={refreshing}
     >
-      {/* Top Prominent Timeframe Selector (Week / Month / Year) */}
+      {/* The selected window drives the summary and every chart below. */}
       <View style={styles.timeframeRow}>
         <View
           style={[
@@ -824,9 +862,9 @@ export default function TrendsScreen() {
         >
           {(
             [
-              { key: 'week', label: 'Week (7D)' },
-              { key: 'month', label: 'Month (30D)' },
-              { key: 'year', label: 'Year (1Y)' },
+              { key: 'week', label: 'Week' },
+              { key: 'month', label: 'Month' },
+              { key: 'year', label: 'Year' },
             ] as const
           ).map((tf) => {
             const active = timeframe === tf.key;
@@ -840,7 +878,7 @@ export default function TrendsScreen() {
                 scaleTo={0.96}
                 style={[
                   styles.timeframePill,
-                  active && [styles.timeframePillActive, { backgroundColor: colors.surface }],
+                  active && [styles.timeframePillActive, { borderBottomColor: colors.brand.fill }],
                 ]}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
@@ -849,7 +887,7 @@ export default function TrendsScreen() {
                   style={[
                     styles.timeframePillText,
                     { color: active ? colors.text : colors.textMuted },
-                    active && { color: colors.text, fontFamily: font.uiStrong },
+                    active && { fontFamily: font.uiStrong },
                   ]}
                 >
                   {tf.label}
@@ -860,82 +898,164 @@ export default function TrendsScreen() {
         </View>
       </View>
 
-      {/* Said only when the view has less data than it covers: with twenty
-          days logged, Month and Year draw the same twenty days. */}
-      {dataCoverage.dataDays > 0 && dataCoverage.dataDays < dataCoverage.windowDays && (
-        <Text style={[styles.coverage, { color: colors.textMuted }]}>
-          Showing {dataCoverage.dataDays} day{dataCoverage.dataDays === 1 ? '' : 's'}, all the data so far (since{' '}
-          {formatDayMonth(dataCoverage.from)}).
+      <View style={styles.coverageRow}>
+        <Text style={[styles.coverage, { color: colors.text }]}>
+          {periodRangeLabel}
         </Text>
-      )}
+        <Text style={[styles.coverage, { color: colors.textMuted }]}>
+          {dataCoverage.dataDays > 0 && dataCoverage.dataDays < dataCoverage.windowDays
+            ? `Showing ${dataCoverage.dataDays} of ${dataCoverage.windowDays} days`
+            : timeframeLabel[0].toUpperCase() + timeframeLabel.slice(1)}
+        </Text>
+      </View>
 
-      {/* High-Visibility Coaching Banner */}
+      <Text style={[styles.periodSummary, { color: colors.text }]}>
+        {periodHeadline}
+      </Text>
+      <Text style={[styles.periodSummaryNote, { color: colors.textMuted }]}>
+        {periodHeadlineNote}
+      </Text>
+
+      <View style={styles.atAGlanceGrid}>
+        <GlanceTile
+          label="WEIGHT TREND"
+          value={
+            periodChange
+              ? `${periodChange.changeKg < 0 ? '−' : '+'}${formatWeight(Math.abs(periodChange.changeKg), settings.units)}`
+              : '—'
+          }
+          sub={periodChange ? `over ${periodChange.days} days` : 'needs two weigh-ins'}
+          colors={colors}
+        />
+        <GlanceTile
+          label="AVG FOOD"
+          value={
+            periodIntake.averageKcal !== null ? (
+              <>
+                {Math.round(periodIntake.averageKcal).toLocaleString('en-US')}
+                <Text style={[styles.glanceUnit, { color: colors.textMuted }]}> kcal</Text>
+              </>
+            ) : '—'
+          }
+          sub={periodIntake.countedDays > 0 ? `${periodIntake.countedDays} counted day${periodIntake.countedDays === 1 ? '' : 's'}` : 'no food logged'}
+          colors={colors}
+        />
+        <GlanceTile
+          label="WORKOUTS"
+          value={summaryPeriod.sessions}
+          sub={`${timeframeLabel} · ${summaryPeriod.sessions === 1 ? 'session' : 'sessions'}`}
+          colors={colors}
+        />
+      </View>
+
+      {/* Focus the chart while keeping the period summary in view. */}
+      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
+        {(
+          [
+            { key: 'all', label: 'Overview' },
+            { key: 'body', label: 'Body' },
+            { key: 'food', label: 'Food' },
+            { key: 'workouts', label: 'Training' },
+          ] as const
+        ).map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <Tappable
+              key={tab.key}
+              onPress={() => {
+                thud('light');
+                setActiveTab(tab.key);
+              }}
+              scaleTo={0.97}
+              style={[
+                styles.tabItem,
+                active && [styles.tabItemActive, { borderBottomColor: colors.brand.fill }],
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text
+                style={[styles.tabItemText, { color: active ? colors.text : colors.textMuted }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {tab.label}
+              </Text>
+            </Tappable>
+          );
+        })}
+      </View>
+
+      <FadeIn key={`${timeframe}:${activeTab}`}>
+        {activeTab === 'workouts' ? (
+          <Card variant="featured" icon="barbell-outline" title={`Training · ${timeframeLabel}`}>
+            {summaryPeriod.sessions > 0 || summaryPeriod.workingSets > 0 ? (
+              <WeeklyBars weeks={chartWeeks} units={settings.units} />
+            ) : (
+              <Text style={[styles.chartNote, { color: colors.textMuted }]}>No workouts logged in this period yet.</Text>
+            )}
+          </Card>
+        ) : activeTab === 'food' ? (
+          <Card variant="featured" icon="nutrition-outline" title="Food & energy">
+            <View style={styles.legend}>
+              <Key color={colors.positive} label="ESTIMATED TDEE" />
+              <Key color={colors.carbs} label="EATEN" dotted />
+              <Key color={colors.accent} label="TARGET" dashed />
+            </View>
+            <LineChart
+              series={energy ? [{ points: energy.expenditure, color: colors.positive, strokeWidth: 2.5 }] : []}
+              band={energy ? { points: energy.band, color: colors.positive } : undefined}
+              scatter={energy ? [
+                { points: energy.intake, color: colors.carbs, radius: 2.5, opacity: 0.8 },
+                { points: energy.leftOut, color: colors.carbs, radius: 2.5, opacity: 0.25 },
+              ] : undefined}
+              referenceY={{ value: program.calories.kcal, color: colors.accent }}
+              formatX={dayLabel}
+              emptyMessage="Log weight and food for a couple of weeks"
+              height={190}
+            />
+            <Text style={[styles.chartNote, { color: colors.textMuted }]}>Only counted food days contribute to the average.</Text>
+            <Text style={[styles.chartNote, { color: colors.textMuted }]}>
+              Assumes a kilo of weight change holds about{' '}
+              {(Math.round(energyDensity.kcalPerKg / 50) * 50).toLocaleString('en-US')} kcal, from{' '}
+              {BODY_FAT_BASIS[energyDensity.source ?? 'guess'](energyDensity.bodyFatPct.toFixed(0))}.
+            </Text>
+          </Card>
+        ) : (
+          <Card variant="featured" icon="scale-outline" title="Weight trend">
+            <LineChart
+              series={weight ? [{ points: weight, color: colors.textMuted, strokeWidth: 2.5 }] : []}
+              includeY={settings.goalWeightKg === null ? [] : [displayWeight(settings.goalWeightKg, settings.units)]}
+              referenceY={settings.goalWeightKg === null ? undefined : { value: displayWeight(settings.goalWeightKg, settings.units), color: colors.protein }}
+              formatY={(value) => value.toFixed(weightDecimals)}
+              formatX={dayLabel}
+              emptyMessage="Weigh in for a couple of weeks"
+              height={170}
+            />
+            <Text style={[styles.chartNote, { color: colors.textMuted }]}>
+              {periodChange ? `${periodWeightCount} weigh-ins · smoothed trend` : 'Log another weigh-in to compare trend change.'}
+            </Text>
+          </Card>
+        )}
+      </FadeIn>
+
       <FadeIn>
         <Tappable
           onPress={() => {
             thud('light');
             setCoachingModalOpen(true);
           }}
-          style={[
-            styles.coachingBanner,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
-          ]}
+          style={[styles.checkInAction, { backgroundColor: colors.brand.fill }]}
           accessibilityRole="button"
-          accessibilityLabel={`Open the ${card.noun} check-in`}
+          accessibilityLabel={`Open the ${card.noun} check-in: ${card.pill}. ${card.headline}`}
         >
-          <View style={styles.coachingBannerLeft}>
-            <View
-              style={[
-                styles.coachingIconCircle,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-            >
-              <Ionicons
-                name={timeframe === 'week' ? 'sparkles' : 'calendar'}
-                size={18}
-                color={colors.accent}
-              />
-            </View>
-            <View style={styles.coachingBannerContent}>
-              <View style={styles.coachingTagRow}>
-                <Text style={[styles.coachingTag, { color: colors.textMuted }]} numberOfLines={1}>
-                  {card.tag}
-                </Text>
-                <View
-                  style={[
-                    styles.readyPill,
-                    card.review
-                      ? { backgroundColor: colors.positive + '20', borderColor: colors.positive }
-                      : card.locked
-                        ? { backgroundColor: colors.surface, borderColor: colors.border }
-                        : { backgroundColor: colors.warning + '20', borderColor: colors.warning },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.readyPillText,
-                      {
-                        color: card.review ? colors.positive : card.locked ? colors.textMuted : colors.warning,
-                      },
-                    ]}
-                  >
-                    {card.pill}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.coachingHeadline, { color: colors.text }]} numberOfLines={2}>
-                {card.headline}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.coachingArrowWrap}>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </View>
+          <Ionicons name="clipboard-outline" size={18} color={colors.brand.onFill} />
+          <Text style={[styles.checkInActionText, { color: colors.brand.onFill }]}>Open check-ins</Text>
         </Tappable>
+        <Text style={[styles.checkInStatus, { color: colors.textMuted }]}>{card.pill}{card.headline ? ` · ${card.headline}` : ''}</Text>
       </FadeIn>
 
-      {/* Past check-ins: each is kept for the period it covers, so they can be
-          read again rather than vanishing when the next one is written. */}
+      {/* Each saved check-in remains available for the period it covers. */}
       {history.length > 0 && (
         <View style={styles.history}>
           <Tappable
@@ -976,178 +1096,17 @@ export default function TrendsScreen() {
         </View>
       )}
 
-      {/* Unified Tab Switcher */}
-      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}>
-        {(
-          [
-            { key: 'all', label: 'OVERVIEW' },
-            { key: 'body', label: 'BODY & ENERGY' },
-            { key: 'workouts', label: 'TRAINING & MUSCLES' },
-          ] as const
-        ).map((tab) => {
-          const active = activeTab === tab.key;
-          return (
-            <Tappable
-              key={tab.key}
-              onPress={() => {
-                thud('light');
-                setActiveTab(tab.key);
-              }}
-              scaleTo={0.97}
-              style={[
-                styles.tabItem,
-                active && [styles.tabItemActive, { backgroundColor: colors.surface }],
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text
-                style={[
-                  styles.tabItemText,
-                  { color: active ? colors.text : colors.textMuted },
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                {tab.label}
-              </Text>
-            </Tappable>
-          );
-        })}
-      </View>
+      {activeTab === 'all' && (
+        <View style={styles.disclosures}>
+          <DetailDisclosure title="Food & energy" expanded={openDetails.food} onPress={() => setOpenDetails((value) => ({ ...value, food: !value.food }))} colors={colors} />
+          <DetailDisclosure title="Body & weight" expanded={openDetails.body} onPress={() => setOpenDetails((value) => ({ ...value, body: !value.body }))} colors={colors} />
+          <DetailDisclosure title="Training & muscles" expanded={openDetails.training} onPress={() => setOpenDetails((value) => ({ ...value, training: !value.training }))} colors={colors} />
+        </View>
+      )}
 
-      {/* Contextual Summary Tiles */}
-      <View style={styles.atAGlanceGrid}>
-        {activeTab === 'all' && (
-          <>
-            {/* What the trend did over the period, then where it is now. */}
-            <GlanceTile
-              label="WEIGHT CHANGE"
-              value={
-                periodChange
-                  ? `${periodChange.changeKg < 0 ? '−' : '+'}${formatWeight(Math.abs(periodChange.changeKg), settings.units)}`
-                  : '—'
-              }
-              sub={
-                periodChange && latest
-                  ? `over ${periodChange.days} days · now ${formatWeight(latest.trendWeightKg, settings.units)}`
-                  : 'needs two weigh-ins'
-              }
-              colors={colors}
-            />
-            {/* Average eaten on the period's counted days, against the target. */}
-            <GlanceTile
-              label="AVG EATEN"
-              value={
-                periodIntake.averageKcal !== null
-                  ? `${Math.round(periodIntake.averageKcal).toLocaleString('en-US')} kcal`
-                  : '—'
-              }
-              sub={
-                periodIntake.countedDays === 0
-                  ? 'no food logged yet'
-                  : periodIntake.onTargetDays !== null && program?.calories?.kcal
-                    ? `${periodIntake.onTargetDays} of ${periodIntake.countedDays} days within ${ON_TARGET_SHARE * 100}% of ${Math.round(program.calories.kcal).toLocaleString('en-US')}`
-                    : `over ${periodIntake.countedDays} logged days`
-              }
-              colors={colors}
-            />
-            <GlanceTile
-              label="WORKOUTS"
-              value={`${summaryPeriod.sessions} session${summaryPeriod.sessions === 1 ? '' : 's'}`}
-              sub={timeframeLabel}
-              colors={colors}
-            />
-            <GlanceTile
-              label="RECORDS (PRS)"
-              value={summaryPeriod.records}
-              sub={`${summaryPeriod.workingSets} working sets`}
-              highlight={summaryPeriod.records > 0}
-              colors={colors}
-            />
-          </>
-        )}
-
-        {activeTab === 'body' && (
-          <>
-            <GlanceTile
-              label="TREND WEIGHT"
-              value={latest ? formatWeight(latest.trendWeightKg, settings.units) : '—'}
-              sub="smoothed trend"
-              colors={colors}
-            />
-            <GlanceTile
-              label="RATE OF CHANGE"
-              value={trend ? formatRate(trend.rateKgPerWeek, settings.units) : '—'}
-              sub="per week"
-              colors={colors}
-            />
-            <GlanceTile
-              label="CALORIE PLAN"
-              value={
-                program.calories.adjustmentKcal === 0
-                  ? 'Maintenance'
-                  : `${program.calories.adjustmentKcal > 0 ? '+' : ''}${program.calories.adjustmentKcal} kcal`
-              }
-              sub="daily delta"
-              colors={colors}
-            />
-            <GlanceTile
-              label="ESTIMATED TDEE"
-              value={
-                latest ? (
-                  <>
-                    {Math.round(latest.expenditureKcal)}{' '}
-                    <Text style={[styles.glanceUnit, { color: colors.textMuted }]}>kcal</Text>
-                  </>
-                ) : (
-                  '—'
-                )
-              }
-              sub="daily expenditure"
-              colors={colors}
-            />
-          </>
-        )}
-
-        {activeTab === 'workouts' && (
-          <>
-            <GlanceTile
-              label="WORKOUTS"
-              value={`${summaryPeriod.sessions} session${summaryPeriod.sessions === 1 ? '' : 's'}`}
-              sub={timeframeLabel}
-              colors={colors}
-            />
-            <GlanceTile
-              label="WORKING SETS"
-              value={summaryPeriod.workingSets}
-              sub="total completed"
-              colors={colors}
-            />
-            <GlanceTile
-              label="NEW BESTS (PRS)"
-              value={summaryPeriod.records}
-              sub="milestone lifts"
-              highlight={summaryPeriod.records > 0}
-              colors={colors}
-            />
-            <GlanceTile
-              label="GROWTH RANGE"
-              value={
-                <Text style={{ color: colors.positive }}>
-                  {diagnosticsPeriod.optimalMusclesCount} / {diagnosticsPeriod.muscleVolumes.length}
-                </Text>
-              }
-              sub="muscles in range"
-              colors={colors}
-            />
-          </>
-        )}
-      </View>
-
-      {/* PART 1: BODY & ENERGY CHARTS */}
-      {(activeTab === 'all' || activeTab === 'body') && (
-        <>
+      {/* Detailed reports open from the overview disclosures or their focus tab. */}
+      <>
+        {activeTab === 'all' && openDetails.food && (
           <Card variant="featured" icon="pulse-outline" title="Energy balance & estimated expenditure">
             <View style={styles.legend}>
               <Key color={colors.positive} label="ESTIMATED TDEE" />
@@ -1180,23 +1139,10 @@ export default function TrendsScreen() {
               .
             </Text>
           </Card>
+        )}
 
-          <Card variant="featured" icon="scale-outline" title="Weight trend">
-            <LineChart
-              series={weight ? [{ points: weight, color: colors.accent, strokeWidth: 2.5 }] : []}
-              includeY={settings.goalWeightKg === null ? [] : [displayWeight(settings.goalWeightKg, settings.units)]}
-              referenceY={
-                settings.goalWeightKg === null
-                  ? undefined
-                  : { value: displayWeight(settings.goalWeightKg, settings.units), color: colors.protein }
-              }
-              formatY={(value) => value.toFixed(weightDecimals)}
-              formatX={dayLabel}
-              emptyMessage="Weigh in for a couple of weeks"
-              height={170}
-            />
-          </Card>
-
+        {(activeTab === 'body' || (activeTab === 'all' && openDetails.body)) && (
+          <>
           {/* Daily steps & NEAT expenditure */}
           <Card title={settings.personality === 'gymrat' ? 'Daily steps & NEAT burn 🔥' : 'Daily steps & NEAT activity'}>
             <View style={styles.stepsCardContent}>
@@ -1272,7 +1218,10 @@ export default function TrendsScreen() {
           <Card title="Logging streak (last 14 days)">
             <LoggingStrip days={strip} />
           </Card>
+          </>
+        )}
 
+        {(activeTab === 'food' || (activeTab === 'all' && openDetails.food)) && (
           <NutritionQualityCard
             consumed={periodAverage.nutrients}
             entries={periodEntries}
@@ -1283,11 +1232,11 @@ export default function TrendsScreen() {
             }
             profile={settings.profile}
           />
-        </>
-      )}
+        )}
+      </>
 
       {/* PART 2: WORKOUTS & MUSCLES */}
-      {(activeTab === 'all' || activeTab === 'workouts') && (
+      {(activeTab === 'workouts' || (activeTab === 'all' && openDetails.training)) && (
         <>
           <FadeIn>
             <Card loud title={`You moved (${timeframeLabel})`}>
@@ -1498,6 +1447,28 @@ const Key = ({
   </View>
 );
 
+const DetailDisclosure = ({
+  title,
+  expanded,
+  onPress,
+  colors,
+}: {
+  title: string;
+  expanded: boolean;
+  onPress: () => void;
+  colors: Palette;
+}) => (
+  <Tappable
+    onPress={onPress}
+    style={[styles.disclosure, { borderBottomColor: colors.border }]}
+    accessibilityRole="button"
+    accessibilityState={{ expanded }}
+  >
+    <Text style={[styles.disclosureTitle, { color: colors.text }]}>{title}</Text>
+    <Ionicons name={expanded ? 'remove' : 'add'} size={18} color={colors.textMuted} accessible={false} />
+  </Tappable>
+);
+
 const GlanceTile = ({
   label,
   value,
@@ -1620,10 +1591,46 @@ const styles = StyleSheet.create({
     fontFamily: font.ui,
     fontSize: 12,
     lineHeight: 17,
-    marginTop: -space.xs,
-    marginBottom: space.sm,
-    textAlign: 'center',
   },
+  coverageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  periodSummary: {
+    fontFamily: font.uiStrong,
+    fontSize: 17,
+    marginTop: space.sm,
+  },
+  periodSummaryNote: {
+    fontFamily: font.ui,
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: space.md,
+  },
+  checkInAction: {
+    minHeight: TOUCH_TARGET + 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: space.sm,
+    borderRadius: radius.lg,
+    marginBottom: space.xs,
+  },
+  checkInActionText: { fontFamily: font.uiStrong, fontSize: 15 },
+  checkInStatus: { fontFamily: font.ui, fontSize: 11, textAlign: 'center', marginBottom: space.md },
+  disclosures: { marginBottom: space.md },
+  disclosure: {
+    minHeight: TOUCH_TARGET,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  disclosureTitle: { fontFamily: font.uiStrong, fontSize: 13 },
+  chartNote: { fontFamily: font.ui, fontSize: 11, lineHeight: 16, marginTop: space.sm },
   coachingHeadline: {
     fontFamily: font.ui,
     fontSize: 13,
@@ -1645,18 +1652,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   timeframePill: {
-    paddingVertical: 5,
+    minHeight: TOUCH_TARGET,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   timeframePillActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 1,
-    elevation: 1,
+    borderRadius: radius.md,
   },
   timeframePillText: {
     fontFamily: font.uiStrong,
@@ -1682,11 +1687,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   tabItemActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   tabItemText: {
     fontFamily: font.uiStrong,
@@ -1697,26 +1699,26 @@ const styles = StyleSheet.create({
 
   atAGlanceGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: space.sm,
     marginBottom: space.md,
   },
   glanceTile: {
     flex: 1,
-    minWidth: '47%',
-    borderRadius: radius.lg,
-    padding: space.md,
+    minWidth: 0,
+    borderRadius: radius.md,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
     borderWidth: StyleSheet.hairlineWidth,
   },
   glanceTileLabel: {
     fontFamily: font.uiStrong,
-    fontSize: 11,
-    letterSpacing: 0.8,
+    fontSize: 9.5,
+    letterSpacing: 0.3,
     marginBottom: 3,
   },
   glanceTileValue: {
     fontFamily: font.figure,
-    fontSize: 18,
+    fontSize: 16,
     fontVariant: ['tabular-nums'],
   },
   glanceUnit: {
@@ -1725,7 +1727,7 @@ const styles = StyleSheet.create({
   },
   glanceTileSub: {
     fontFamily: font.ui,
-    fontSize: 11.5,
+    fontSize: 10.5,
     marginTop: 2,
   },
 

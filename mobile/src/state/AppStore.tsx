@@ -36,6 +36,7 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState as NativeAppState } from 'react-native';
 import * as db from '../db';
 import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
 import { finishPendingMove, offerToMoveLog } from '../db/moveLog';
@@ -47,6 +48,7 @@ import { SQUAD_STORAGE_KEY } from '../social/squads';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
 import { chooseBodyFat } from './bodyFatChoice';
+import { followLocalDay, observeLocalDay } from './localDay';
 
 /**
  * Rescales an entry's stored totals to a new portion.
@@ -169,12 +171,34 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(withDefaults(null));
-  const [selectedDate, setSelectedDate] = useState<ISODate>(todayISO());
+  const [localDay, setLocalDay] = useState<ISODate>(todayISO);
+  const [selectedDate, setSelectedDate] = useState<ISODate>(localDay);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weights, setWeights] = useState<db.WeightRow[]>([]);
   const [loggedBodyFat, setLoggedBodyFat] = useState<{ pct: number; source: db.BodyFatSource } | null>(null);
   const [observations, setObservations] = useState<DailyObservation[]>([]);
   const [dayStatus, setDayStatus] = useState<Map<ISODate, boolean>>(new Map());
+
+  useEffect(() => {
+    const clock = observeLocalDay(localDay, (previous, current) => {
+      setLocalDay(current);
+      setSelectedDate((selected) => followLocalDay(selected, previous, current));
+    });
+    const activation = NativeAppState.addEventListener('change', (state) => {
+      if (state === 'active') clock.check();
+    });
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') clock.check();
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    if (typeof window !== 'undefined') window.addEventListener('focus', clock.check);
+    return () => {
+      clock.stop();
+      activation.remove();
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+      if (typeof window !== 'undefined') window.removeEventListener('focus', clock.check);
+    };
+  }, [localDay]);
 
   const reloadDiary = useCallback(async (date: ISODate) => {
     setEntries(await db.listLogEntries(date));
@@ -434,7 +458,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       usingSeedEstimate
         ? null
         : weeklyCheckIn({
-            today: todayISO(),
+            today: localDay,
             observations,
             series,
             filtered,
@@ -443,7 +467,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             options: targetOptions,
             weekEndsOn: settings.checkInWeekEndsOn,
           }),
-    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
+    [localDay, usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
   );
 
   const program = useMemo(() => {

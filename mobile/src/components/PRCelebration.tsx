@@ -6,6 +6,7 @@ import { thud } from '../platform/haptics';
 import type { UnitSystem, AppPersonality } from '../state/settings';
 import { getEventCopy } from '../copy/personality';
 import { SKEW, font, radius } from '../theme';
+import { duration, ease, useReduceMotion } from '../theme/motion';
 
 export interface PRCelebrationData {
   exerciseName: string;
@@ -33,7 +34,7 @@ const PARTICLE_COLORS = [
   '#FEF08A', // Bright Flare
 ];
 
-const NUM_PARTICLES = 30;
+const NUM_PARTICLES = 12;
 
 export const PRCelebration = ({
   data,
@@ -43,6 +44,7 @@ export const PRCelebration = ({
   onDone,
 }: PRCelebrationProps) => {
   const { width, height } = useWindowDimensions();
+  const reduceMotion = useReduceMotion();
   const animProgress = useRef(new Animated.Value(0)).current;
   const bannerScale = useRef(new Animated.Value(0.5)).current;
   const bannerOpacity = useRef(new Animated.Value(0)).current;
@@ -77,33 +79,41 @@ export const PRCelebration = ({
     });
   }, []);
 
-  useEffect(() => {
-    // Double pulse for triumphant PR impact
-    thud('heavy');
-    const timer = setTimeout(() => {
-      thud('heavy');
-    }, 130);
+  useEffect(() => { thud('light'); }, []);
 
+  useEffect(() => {
+    if (reduceMotion) {
+      animProgress.setValue(1);
+      bannerScale.setValue(1);
+      bannerOpacity.setValue(1);
+      bannerExit.setValue(1);
+      const timer = setTimeout(() => onDoneRef.current(), 1800);
+      return () => clearTimeout(timer);
+    }
+    animProgress.setValue(0);
+    bannerScale.setValue(0.98);
+    bannerOpacity.setValue(0);
+    bannerExit.setValue(1);
     const animation = Animated.sequence([
       Animated.parallel([
         // Particle explosion outward
         Animated.timing(animProgress, {
           toValue: 1,
-          duration: 1600,
+          duration: 600,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         // Banner spring entry
         Animated.parallel([
-          Animated.spring(bannerScale, {
+          Animated.timing(bannerScale, {
             toValue: 1,
-            friction: 5,
-            tension: 70,
+            duration: duration.enter,
+            easing: ease,
             useNativeDriver: true,
           }),
           Animated.timing(bannerOpacity, {
             toValue: 1,
-            duration: 200,
+            duration: duration.enter,
             useNativeDriver: true,
           }),
         ]),
@@ -113,13 +123,13 @@ export const PRCelebration = ({
       Animated.parallel([
         Animated.timing(bannerExit, {
           toValue: 0,
-          duration: 280,
-          easing: Easing.in(Easing.cubic),
+          duration: duration.enter,
+          easing: ease,
           useNativeDriver: true,
         }),
         Animated.timing(bannerScale, {
-          toValue: 1.08,
-          duration: 280,
+          toValue: 1,
+          duration: duration.enter,
           useNativeDriver: true,
         }),
       ]),
@@ -132,10 +142,9 @@ export const PRCelebration = ({
     });
 
     return () => {
-      clearTimeout(timer);
       animation.stop();
     };
-  }, [animProgress, bannerScale, bannerOpacity, bannerExit]);
+  }, [animProgress, bannerScale, bannerOpacity, bannerExit, reduceMotion]);
 
   const unitLabel = units === 'metric' ? 'KG' : 'LB';
   const e1rmFormatted = displayWeight(data.e1rm, units).toFixed(1);
@@ -145,7 +154,7 @@ export const PRCelebration = ({
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Particle Shards Burst (Centered around upper-middle screen) */}
       <View style={[styles.originCenter, { top: height * 0.38, left: width * 0.5 }]}>
-        {particles.map((p, idx) => {
+        {!reduceMotion && particles.map((p, idx) => {
           const translateX = animProgress.interpolate({
             inputRange: [0, 1],
             outputRange: [0, p.targetX],
