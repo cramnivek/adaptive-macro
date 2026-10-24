@@ -2,6 +2,7 @@ import { addDays } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import { BRAND } from '../brand';
 import { listSleepSessions } from '../db/sleepQueries';
 import { healthConnectSourceName, onHealthConnectSynced, sleepAccessGranted } from '../health/healthConnect';
 import { summarizeSleep, type SleepSummary } from '../health/sleep';
@@ -93,7 +94,7 @@ export const SleepSummaryCard = () => {
               {' '}{advice.recent.shortNights} below the {advice.minimumMinutes! / 60}-hour guide.
             </Text>}
             {!access && <Text style={[styles.note, text]}>{Platform.OS === 'android'
-              ? 'Sleep access is not allowed. Request it in Account → Health Connect. If Sleep is missing from Ascend permissions, install the updated Android build.'
+              ? `Sleep access is not allowed. Request it in Account → Health Connect. If Sleep is missing from ${BRAND.fullName} permissions, install the updated Android build.`
               : 'Sleep import requires Android Health Connect. Saved sleep is still available here.'}</Text>}
             {access && !selected && <Text style={[styles.note, text]}>Check that Garmin Connect shares sleep with Health Connect, then sync from Account.</Text>}
             <Button label={expanded ? 'Hide sleep details' : 'Sleep details & history'} variant="subtle" onPress={() => setExpanded((value) => !value)} />

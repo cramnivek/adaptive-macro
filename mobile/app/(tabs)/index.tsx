@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { BrandLockup } from '../../src/components/BrandLockup';
 import { BrandGlyph } from '../../src/components/BrandGlyph';
 import { CheckInCard } from '../../src/components/CheckInCard';
 import { CheckInReadyCard } from '../../src/components/CheckInReadyCard';
@@ -203,9 +204,7 @@ export default function TodayScreen() {
       title="Today"
       action={
         <View style={styles.headerActions}>
-          <Text accessibilityLabel="Ascend" numberOfLines={1} style={[styles.wordmark, { color: colors.text }]}>
-            ASCEND <Text style={{ color: colors.brand.text }}>///</Text>
-          </Text>
+          <BrandLockup markColor={colors.brand.text} textColor={colors.text} size={16} style={{ flexShrink: 1 }} />
           <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
             <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
           </Tappable>
@@ -476,7 +475,6 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1, minWidth: 0, marginLeft: space.sm },
-  wordmark: { fontFamily: font.uiStrong, fontSize: 10, letterSpacing: 1.4, flexShrink: 1 },
   stepsCard: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -308,7 +308,7 @@ describe('weeklyReview metrics extractor and schema', () => {
     expect(classicPrompt).toContain('objective, direct');
 
     const ascendPrompt = buildCoachingPrompt(dummyMetrics, 'lose', 'ascend');
-    expect(ascendPrompt).toContain('ASCEND MODE');
+    expect(ascendPrompt).toContain('STÄRKE MODE');
     expect(ascendPrompt).toContain('warm, encouraging');
   });
 });

@@ -50,8 +50,8 @@ describe('Android transparent sticker sharing', () => {
 
   it('shares a rendered workout PNG with matching file extension and MIME type', async () => {
     await shareWorkout({ title: 'Push Day' } as ShareCard, { url: 'data:image/png;base64,AAAA' });
-    expect(native.write).toHaveBeenCalledWith('file:///cache/ascend-workout-card.png', 'AAAA', { encoding: 'base64' });
-    expect(native.share).toHaveBeenCalledWith('file:///cache/ascend-workout-card.png', {
+    expect(native.write).toHaveBeenCalledWith('file:///cache/starke-workout-card.png', 'AAAA', { encoding: 'base64' });
+    expect(native.share).toHaveBeenCalledWith('file:///cache/starke-workout-card.png', {
       mimeType: 'image/png', dialogTitle: 'Push Day', UTI: 'public.png',
     });
   });

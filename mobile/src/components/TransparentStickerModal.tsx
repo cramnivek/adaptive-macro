@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Nutrients, UserProfile } from '@adaptive-macros/engine';
+import { BRAND } from '../brand';
 import { thud } from '../platform/haptics';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
@@ -141,7 +142,7 @@ export const TransparentStickerModal = ({
     } else {
       // If direct clipboard write is blocked by browser permission, fallback to share/save
       const outcome = await shareStickerPng(
-        mode === 'nutrition' ? 'Nutrition Quality' : (workoutSummary?.title ?? 'Ascend Workout'),
+        mode === 'nutrition' ? 'Nutrition Quality' : (workoutSummary?.title ?? `${BRAND.name} Workout`),
         sticker,
       );
       if (outcome === 'downloaded') {
@@ -157,7 +158,7 @@ export const TransparentStickerModal = ({
     if (!sticker || drawing) return;
     thud('light');
     const outcome = await shareStickerPng(
-      mode === 'nutrition' ? 'Nutrition Quality' : (workoutSummary?.title ?? 'Ascend Workout'),
+        mode === 'nutrition' ? 'Nutrition Quality' : (workoutSummary?.title ?? `${BRAND.name} Workout`),
       sticker,
     );
     if (outcome === 'downloaded') {

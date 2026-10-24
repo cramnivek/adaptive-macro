@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Ascend",
+    "name": "Starke Fitness",
     "slug": "adaptive-macros",
     "owner": "zeldrich",
     "scheme": "ascend",
@@ -20,7 +20,7 @@
     "android": {
       "package": "com.cramnivek.ascend",
       "adaptiveIcon": {
-        "backgroundColor": "#0A0A0B",
+        "backgroundColor": "#E8352A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

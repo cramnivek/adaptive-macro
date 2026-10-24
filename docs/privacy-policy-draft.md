@@ -1,4 +1,4 @@
-# Ascend — privacy policy (draft)
+# Stärke — privacy policy (draft)
 
 > **Draft for the owner to review, written 2026-10-12.** It describes what the code
 > does as of commit `1448f0d` on `overnight/2026-10-12`. It is not legal advice.
@@ -12,7 +12,7 @@
 
 **Last updated:** [date of publishing]
 
-Ascend is a nutrition and training log made by [owner's name or trading name]. This
+Stärke is a nutrition and training log made by [owner's name or trading name]. This
 policy explains what information the app handles, where it goes, and what you can
 do about it.
 
@@ -98,7 +98,7 @@ permission.
 
 ## Children
 
-Ascend is not meant for children under [13 / 16 — choose per the countries you
+Stärke is not meant for children under [13 / 16 — choose per the countries you
 offer it in] and does not knowingly collect their information.
 
 ## Changes

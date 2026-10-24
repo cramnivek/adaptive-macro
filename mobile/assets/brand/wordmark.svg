@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 684 132">
+  <path d="M100 0H28Q0 0 0 28V38Q0 62 28 62H65Q70 62 70 68V72Q70 77 65 77H0V100H72Q100 100 100 72V62Q100 38 72 38H35Q30 38 30 32V28Q30 23 35 23H100Z" transform="translate(0 32)" fill="currentColor" fill-rule="evenodd" />
+  <path d="M0 0H100V28H64V100H36V28H0Z" transform="translate(112 32)" fill="currentColor" fill-rule="evenodd" />
+  <path d="M0 100L38 0H74L112 100H83L56 38L29 100Z" transform="translate(224 32)" fill="#E8352A" fill-rule="evenodd" />
+  <path d="M37 88L56 56L75 88L56 76Z" transform="translate(224 32)" fill="#E8352A" fill-rule="evenodd" />
+  <path d="M0 10C0 4.477 4.477 0 10 0C15.523 0 20 4.477 20 10C20 15.523 15.523 20 10 20C4.477 20 0 15.523 0 10Z" transform="translate(254 0)" fill="#E8352A" fill-rule="evenodd" />
+  <path d="M0 10C0 4.477 4.477 0 10 0C15.523 0 20 4.477 20 10C20 15.523 15.523 20 10 20C4.477 20 0 15.523 0 10Z" transform="translate(286 0)" fill="#E8352A" fill-rule="evenodd" />
+  <path d="M0 0H70Q100 0 100 28V42Q100 64 75 64L104 100H68L42 66H32V100H0ZM32 24V44H64Q68 44 68 40V28Q68 24 64 24Z" transform="translate(348 32)" fill="currentColor" fill-rule="evenodd" />
+  <path d="M0 0H32V42L66 0H106L60 50L108 100H68L32 60V100H0Z" transform="translate(464 32)" fill="currentColor" fill-rule="evenodd" />
+  <path d="M0 0H100V25H32V38H91V62H32V75H100V100H0Z" transform="translate(584 32)" fill="currentColor" fill-rule="evenodd" />
+</svg>

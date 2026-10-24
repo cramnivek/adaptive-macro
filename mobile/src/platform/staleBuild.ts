@@ -9,6 +9,8 @@
  * which is what anyone would do by hand once they knew to.
  */
 
+import { BRAND } from '../brand';
+
 const RELOADED_AT = 'ascend.staleBuildReloadAt';
 /** Within this long of the last reload, a second failure is real, not staleness. */
 const RELOAD_WINDOW_MS = 60_000;
@@ -54,7 +56,7 @@ export const loadFresh = async <T>(load: () => Promise<T>): Promise<T> => {
       // The page is going away; nothing should act on this promise.
       return new Promise<T>(() => undefined);
     }
-    throw new Error('Ascend was updated. Close the app completely and open it again.');
+    throw new Error(`${BRAND.name} was updated. Close the app completely and open it again.`);
   }
 };
 

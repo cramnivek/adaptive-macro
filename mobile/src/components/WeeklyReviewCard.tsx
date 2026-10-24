@@ -8,6 +8,7 @@ import type {
   DatedSet,
   VolumeDiagnostics,
 } from '@adaptive-macros/engine';
+import { BRAND } from '../brand';
 import { font, radius, space } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
 import { Card } from './Card';
@@ -343,7 +344,7 @@ export const WeeklyReviewCard = ({
               <View style={styles.scienceBody}>
                 <Text style={styles.scienceText}>
                   {review.scienceExplanation ??
-                    'Ascend evaluates your progressive overload against exercise physiology volume landmarks (Israetel et al., 2020) and energy availability kinetics (Helms et al., 2014) to maintain lean mass and prevent fatigue accumulation.'}
+                    `${BRAND.name} evaluates your progressive overload against exercise physiology volume landmarks (Israetel et al., 2020) and energy availability kinetics (Helms et al., 2014) to maintain lean mass and prevent fatigue accumulation.`}
                 </Text>
                 <Text style={styles.scienceCitation}>
                   • Schoenfeld, B. J. et al. (2017). Dose-response volume in muscle hypertrophy. J Sports Sci.

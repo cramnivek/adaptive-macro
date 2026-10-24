@@ -15,6 +15,7 @@ import { clearAllData, clearDemoData, seedDemoData } from '../../src/db/seed';
 import { Card } from '../../src/components/Card';
 import { Button, Field, Segmented, TOUCH_TARGET } from '../../src/components/Controls';
 import { Screen } from '../../src/components/Screen';
+import { BRAND } from '../../src/brand';
 import { confirm, notify } from '../../src/dialog';
 import { weightUnit } from '../../src/format';
 import { proteinExplanation } from '../../src/proteinCopy';
@@ -167,7 +168,7 @@ export default function SettingsScreen() {
       const stamp = new Date().toISOString().slice(0, 10);
 
       const how = await saveTextFile(
-        `ascend-backup-${stamp}.json`,
+        `starke-backup-${stamp}.json`,
         JSON.stringify(backup, null, 2),
       );
 
@@ -410,14 +411,14 @@ export default function SettingsScreen() {
 
       {isPersonalityV2Enabled() && (
         <Section title="App Personality">
-          <Card subtitle="How much gym energy should Ascend bring?">
+          <Card subtitle={`How much gym energy should ${BRAND.name} bring?`}>
             <Segmented<AppPersonality>
               label="Tone"
               value={settings.personality ?? 'ascend'}
               onChange={(personality) => void updateSettings({ personality })}
               options={[
                 { value: 'classic', label: 'Classic' },
-                { value: 'ascend', label: 'Ascend' },
+                { value: 'ascend', label: BRAND.name },
                 { value: 'gymrat', label: 'Gymrat' },
               ]}
             />
@@ -426,7 +427,7 @@ export default function SettingsScreen() {
                 ? 'Classic — Keep it clean, straightforward & quiet.'
                 : settings.personality === 'gymrat'
                   ? 'Gymrat — FULL GYM ARC ENERGY. Big hype, unhinged celebrations & maximum encouragement.'
-                  : 'Ascend (Recommended) — A little hype, a lot of personality. Modern, encouraging, and sharp.'}
+                  : `${BRAND.name} (Recommended) — A little hype, a lot of personality. Modern, encouraging, and sharp.`}
             </Text>
 
           </Card>

@@ -5,6 +5,7 @@ import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-nativ
 import { Card } from '../src/components/Card';
 import { Button } from '../src/components/Controls';
 import { Screen } from '../src/components/Screen';
+import { BRAND } from '../src/brand';
 import { UserAvatar } from '../src/components/UserAvatar';
 import { StepLogModal } from '../src/components/StepLogModal';
 import { HealthConnectSection } from '../src/components/HealthConnectSection';
@@ -74,7 +75,7 @@ export default function AccountScreen() {
       } catch {}
       window.location.reload();
     } else {
-      notify('App up to date', 'You are running the latest version of Ascend.');
+      notify('App up to date', `You are running the latest version of ${BRAND.name}.`);
     }
   };
 
@@ -182,7 +183,7 @@ export default function AccountScreen() {
       <Card>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>App & Updates</Text>
         <Text style={[styles.note, { color: colors.textMuted }]}>
-          Ascend v0.1.0 · Build 2026.10.18 · Cloud Run Active
+          {BRAND.name} v0.1.0 · Build 2026.10.18 · Cloud Run Active
         </Text>
         <Button
           label="Check for Updates / Reload App"

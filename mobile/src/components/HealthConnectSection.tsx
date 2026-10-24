@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { openHealthConnectSettings } from 'react-native-health-connect';
+import { BRAND } from '../brand';
 import { notify } from '../dialog';
 import {
   connectHealthConnect,
@@ -88,10 +89,10 @@ export const HealthConnectSection = () => {
         await sync();
       } else {
         setSleepAccess('not-allowed');
-        notify('Sleep not enabled', 'Sleep permission was not granted. Open Health Connect settings; if Sleep is missing for Ascend, install the updated Android build.');
+        notify('Sleep not enabled', `Sleep permission was not granted. Open Health Connect settings; if Sleep is missing for ${BRAND.fullName}, install the updated Android build.`);
       }
     } catch {
-      notify('Sleep not enabled', 'The installed Android build must include sleep permission. Open Health Connect settings; if Sleep is missing for Ascend, update the app.');
+      notify('Sleep not enabled', `The installed Android build must include sleep permission. Open Health Connect settings; if Sleep is missing for ${BRAND.fullName}, update the app.`);
     } finally {
       setBusy(false);
     }
@@ -110,7 +111,7 @@ export const HealthConnectSection = () => {
         {state === 'connected'
           ? 'Reads the steps, weigh-ins and optional sleep you allow from Health Connect, where Garmin Connect and other apps share theirs. Syncs when the app opens and every 15 minutes while open. Weigh-ins entered yourself are never replaced. Sleep stays on this phone and appears on Today; it does not change your calorie target.'
           : state === 'needs-update'
-            ? 'Health Connect needs an update from the Play Store before Ascend can read from it.'
+            ? `Health Connect needs an update from the Play Store before ${BRAND.fullName} can read from it.`
             : 'Bring in steps, weigh-ins and optional sleep from Health Connect, where Garmin Connect and other apps share theirs. You choose each permission; steps and weight still work without sleep. Read only; it stays on this phone.'}
       </Text>
       <Text style={[styles.last, { color: colors.text }]}>
@@ -121,7 +122,7 @@ export const HealthConnectSection = () => {
       </Text>
       {sleepAccess !== 'allowed' && sleepAccess !== 'checking' && (
         <Text style={[styles.note, { color: colors.textMuted }]}>
-          Sleep needs an Android build that includes its permission. If Sleep is not listed for Ascend in Health Connect, update Ascend first. Garmin must also share sleep into Health Connect.
+          Sleep needs an Android build that includes its permission. If Sleep is not listed for {BRAND.fullName} in Health Connect, update {BRAND.fullName} first. Garmin must also share sleep into Health Connect.
         </Text>
       )}
       {state === 'needs-update' ? (
@@ -136,7 +137,7 @@ export const HealthConnectSection = () => {
           {sleepAccess !== 'allowed' && <Button label="Request sleep access" variant="subtle" onPress={() => void enableSleep()} disabled={busy} />}
           <Button label="Open Health Connect settings" variant="subtle" onPress={() => {
             try { openHealthConnectSettings(); }
-            catch { notify('Could not open settings', 'Open Health Connect from Android Settings to review Ascend permissions.'); }
+            catch { notify('Could not open settings', `Open Health Connect from Android Settings to review ${BRAND.fullName} permissions.`); }
           }} disabled={busy} />
         </View>
       ) : (
