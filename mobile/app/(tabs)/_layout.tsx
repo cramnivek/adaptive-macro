@@ -25,7 +25,7 @@ export default function TabsLayout() {
         )}
         screenOptions={{
           headerShown: false,
-        tabBarActiveTintColor: colors.accent,
+        tabBarActiveTintColor: colors.brand.text,
         tabBarInactiveTintColor: colors.textFaint,
         // React Navigation styles its own label, so the typeface pass over our
         // style sheets never reached it and the tab bar stayed in the system

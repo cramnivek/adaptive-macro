@@ -34,16 +34,27 @@ Ascend is a local-first food and lifting log, used on a phone during meals and
 between sets. Preserve the existing product identity: calm, rule-led nutrition
 sections and a darker, louder training palette with a large readable timer.
 Expression belongs in training figures; routine logging should stay compact.
+The 24 October brand revision uses red consistently across all tabs: primary
+actions and active navigation belong to one Ascend identity. Training increases
+contrast and figure size rather than introducing a separate brand palette.
 Avoid a marketing dashboard, decorative health scores, or inferred precision.
 
 The canonical runtime owners are `mobile/src/theme/palette.ts`,
 `mobile/src/theme/sessionTheme.ts`, and `mobile/src/theme/motion.ts`. This file
 describes those existing tokens; it does not generate a competing token system.
+`palette.ts` owns `brand.red` (`#D92D22`) and white `brand.onRed`, shared by
+ordinary primary Buttons and the session palette. The slightly brighter
+`brand.mark` (`#E8352A`) remains available for artwork. Theme-specific
+`colors.brand.text` is `#F28278` in dark mode and `#B72D25` in light mode, with
+`brand.surface` at `#28191A` and `#FCECE9`. These roles preserve contrast for
+small labels and icons; do not reuse a red text accent as a white-label fill.
+Neutral `accent` remains for existing neutral controls, and nutrient, warning
+and error colors retain their data meanings.
 Use `useTheme` for light/dark colors. Do not hard-code the dark values above into
 new components. Existing shared Button, Card, Screen and native router modals own
 the new meal and health views. The approved quiet daily companion direction keeps
-these fonts and the dark foundation, with restrained feature colors rather than
-a palette or typography rebrand.
+these fonts and the dark foundation, with restrained feature colors alongside the shared red actions. The existing
+typography stays unchanged.
 
 Featured cards use sentence-case 14-point semibold headings, optional 18-point
 Ionicons, a soft surface and a quiet border. Ordinary history/list sections keep
@@ -77,8 +88,24 @@ data-management actions retain their established behavior.
 Keep real controls at least 44 points, retain readable numbers at arm's length,
 and reserve safe areas exactly once. Screen's default top inset applies to
 headerless pages; a native stack header already reserves it. Keep the workout
-Finish action above the bottom safe area. Use existing motion/reduced-motion
-handling; add no decorative animations for these features.
+Finish action above the bottom safe area. Today has a small `ASCEND ///` wordmark
+beside its existing header controls, without another row or a system-status-bar
+overlay. Other tabs keep their descriptive titles; shared cards keep branding.
+Featured meal, sleep, steps, weight and training marks use the bundled SVG
+BrandGlyph family: simple instrument-like outlines with a restrained red detail.
+Keep ordinary navigation icons familiar and avoid network-loaded illustrations.
+
+The approved Trends hierarchy is period, factual summary, three compact figures,
+one main chart and check-in action. Overview, Body, Food and Training are views of
+the selected period. Put existing deep reports behind explicit disclosures; keep
+saved check-ins and methods accessible. Missing history gets a useful logging
+step rather than invented comparisons or a zero. Weight movement stays neutral.
+
+Use existing native-driver press/entrance motion, around 90-220 ms, without
+delaying actions or data writes. New diary rows settle into place; chart-view
+changes briefly transition and personal records get a short flourish. Share one
+platform Reduce Motion subscription. When enabled, stop movement, reveal content
+and values immediately, and omit celebration particles. Add no sounds or loops.
 
 English labels name actions: Log a meal, Take a photo, Describe your meal, Scan a
 barcode, Search foods. Show uncertainty beside estimates and distinguish absent

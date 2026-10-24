@@ -36,9 +36,11 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState as NativeAppState } from 'react-native';
 import * as db from '../db';
 import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
 import { finishPendingMove, offerToMoveLog } from '../db/moveLog';
+import { isStorageLockError } from '../db/storageLock';
 import { notify } from '../dialog';
 import { LATEST_ACTIVE_DRAFT_KEY } from '../sessionDraft';
 import { pushBaselineToCloud } from '../social/baselineSync';
@@ -47,6 +49,7 @@ import { SQUAD_STORAGE_KEY } from '../social/squads';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
 import { chooseBodyFat } from './bodyFatChoice';
+import { followLocalDay, listenForWebWake, observeLocalDay } from './localDay';
 
 /**
  * Rescales an entry's stored totals to a new portion.
@@ -87,6 +90,8 @@ interface AppState {
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 
+  /** Current local calendar date, updated automatically across midnight and on wake. */
+  localDay: ISODate;
   /** The day the diary is showing. */
   selectedDate: ISODate;
   setSelectedDate: (date: ISODate) => void;
@@ -169,12 +174,29 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [settings, setSettings] = useState<AppSettings>(withDefaults(null));
-  const [selectedDate, setSelectedDate] = useState<ISODate>(todayISO());
+  const [localDay, setLocalDay] = useState<ISODate>(todayISO);
+  const [selectedDate, setSelectedDate] = useState<ISODate>(localDay);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [weights, setWeights] = useState<db.WeightRow[]>([]);
   const [loggedBodyFat, setLoggedBodyFat] = useState<{ pct: number; source: db.BodyFatSource } | null>(null);
   const [observations, setObservations] = useState<DailyObservation[]>([]);
   const [dayStatus, setDayStatus] = useState<Map<ISODate, boolean>>(new Map());
+
+  useEffect(() => {
+    const clock = observeLocalDay(localDay, (previous, current) => {
+      setLocalDay(current);
+      setSelectedDate((selected) => followLocalDay(selected, previous, current));
+    });
+    const activation = NativeAppState.addEventListener('change', (state) => {
+      if (state === 'active') clock.check();
+    });
+    const stopWebWake = listenForWebWake(clock.check);
+    return () => {
+      clock.stop();
+      activation.remove();
+      stopWebWake();
+    };
+  }, [localDay]);
 
   const reloadDiary = useCallback(async (date: ISODate) => {
     setEntries(await db.listLogEntries(date));
@@ -212,20 +234,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           // squad as last seen, and a pointer to the workout in progress.
           if (ownerChanged) await AsyncStorage.multiRemove([SQUAD_STORAGE_KEY, LATEST_ACTIVE_DRAFT_KEY]);
           await db.selectDatabase(database);
-          // Before the log is read: an account opening to an empty log is
-          // offered the one kept here without an account (moveLog.ts).
-          // A move that fails must not keep the account's own log from
-          // opening; it is ordered so the log is never in neither place. A
-          // clear left owed by an earlier move is finished first, for anyone,
-          // so a moved log is never left on show signed out. Either failure is
-          // said, not swallowed.
-          await finishPendingMove(database).catch(() => {
-            void db.selectDatabase(database);
+          // Open the owner's database before attempting any log move so a
+          // storage lock failure goes straight to StorageGate instead of
+          // being misreported as a failed log move.
+          await db.getDb();
+          await finishPendingMove(database).catch(async (error) => {
+            await db.selectDatabase(database);
+            if (isStorageLockError(error)) throw error;
             notify('Could not finish moving your log', 'It is in your account; the old copy is cleared next time.');
           });
           if (owner !== SIGNED_OUT) {
-            await offerToMoveLog(owner, database).catch(() => {
-              void db.selectDatabase(database);
+            await offerToMoveLog(owner, database).catch(async (error) => {
+              await db.selectDatabase(database);
+              if (isStorageLockError(error)) throw error;
               notify('Could not move your log', 'Nothing was lost. You can try again with a backup and restore.');
             });
           }
@@ -434,7 +455,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       usingSeedEstimate
         ? null
         : weeklyCheckIn({
-            today: todayISO(),
+            today: localDay,
             observations,
             series,
             filtered,
@@ -443,7 +464,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             options: targetOptions,
             weekEndsOn: settings.checkInWeekEndsOn,
           }),
-    [usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
+    [localDay, usingSeedEstimate, observations, series, filtered, latest, settings.goal, targetOptions, settings.checkInWeekEndsOn],
   );
 
   const program = useMemo(() => {
@@ -461,6 +482,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     retryLoad,
     settings,
     updateSettings,
+    localDay,
     selectedDate,
     setSelectedDate,
     entries,

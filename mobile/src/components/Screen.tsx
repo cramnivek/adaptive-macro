@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useContext, useRef } from 'react';
+import React, { useCallback, useContext, useEffect, useRef } from 'react';
 import { Animated, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { font, space, useTheme } from '../theme';
@@ -46,8 +46,20 @@ export const Screen = ({ title, subtitle, children, onRefresh, refreshing, tone,
   // tab tap, and a fade alone with reduce motion on.
   const arrival = useRef(new Animated.Value(1)).current;
   const reduceMotion = useReduceMotion();
+  const reduceMotionRef = useRef(reduceMotion);
+  reduceMotionRef.current = reduceMotion;
+  useEffect(() => {
+    if (reduceMotion) {
+      arrival.stopAnimation();
+      arrival.setValue(1);
+    }
+  }, [arrival, reduceMotion]);
   useFocusEffect(
     useCallback(() => {
+      if (reduceMotionRef.current) {
+        arrival.setValue(1);
+        return;
+      }
       arrival.setValue(0);
       const animation = Animated.timing(arrival, {
         toValue: 1,
@@ -121,9 +133,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg },
   header: { marginBottom: space.lg },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  // Display weight: the quiet screens keep their palette but not their timid
-  // headings — this is the typographic half of the logger's identity, which
-  // carries everywhere without bringing the red with it.
+  // The shared type scale carries the identity without adding header height.
   title: { fontFamily: font.display, fontSize: 28, letterSpacing: -0.6 },
   subtitle: { fontFamily: font.ui, fontSize: 14, marginTop: 2 },
 });

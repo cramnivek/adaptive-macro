@@ -153,11 +153,11 @@ export const MacroSummary = ({ consumed, target, compact = false }: MacroSummary
             ['Fat', consumed.fatG, target.fatG, colors.fat],
           ] as const).map(([label, value, goal, color]) => (
             <View key={label} style={styles.compactMacro}>
-              <Text style={[styles.barLabel, { color: colors.text }]}>{label}</Text>
+              <Text style={[styles.barLabel, styles.compactLabel, { color: colors.text }]}>{label}</Text>
               <Text style={[styles.compactValue, { color: value > goal ? colors.danger : colors.textMuted }]}>
                 {Math.round(value)} / {Math.round(goal)} g
               </Text>
-              <View style={[styles.barTrack, { backgroundColor: colors.surfaceRaised }]}>
+              <View style={[styles.barTrack, styles.compactTrack, { backgroundColor: colors.surfaceRaised }]}>
                 <View style={[styles.barFill, { width: `${goal > 0 ? Math.min(100, Math.max(0, value / goal * 100)) : 0}%`, backgroundColor: value > goal ? colors.danger : color }]} />
               </View>
             </View>
@@ -179,14 +179,16 @@ export const MacroSummary = ({ consumed, target, compact = false }: MacroSummary
 };
 
 const styles = StyleSheet.create({
-  compactSummary: { gap: space.md },
+  compactSummary: { gap: space.sm },
   calorieLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', columnGap: space.sm, rowGap: space.xs },
   calorieValue: { fontFamily: font.figure, fontSize: 28, fontVariant: ['tabular-nums'], letterSpacing: -1 },
   calorieLabel: { fontFamily: font.ui, fontSize: 13, letterSpacing: 0 },
   calorieMeta: { fontFamily: font.ui, fontSize: 11 },
   compactBars: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
-  compactMacro: { flex: 1, minWidth: 68, gap: space.xs },
-  compactValue: { fontFamily: font.figure, fontSize: 12, fontVariant: ['tabular-nums'] },
+  compactMacro: { flex: 1, minWidth: 68, gap: 2 },
+  compactLabel: { lineHeight: 18, includeFontPadding: false },
+  compactValue: { fontFamily: font.figure, fontSize: 12, lineHeight: 16, includeFontPadding: false, fontVariant: ['tabular-nums'] },
+  compactTrack: { height: 6 },
   summary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.lg },
   bars: { flex: 1, minWidth: 140, gap: space.md },
   barRow: { gap: space.xs },

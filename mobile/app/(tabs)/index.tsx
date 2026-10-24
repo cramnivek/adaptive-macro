@@ -1,10 +1,11 @@
 import type { LogEntry, Meal } from '@adaptive-macros/engine';
-import { addDays, todayISO } from '@adaptive-macros/engine';
+import { addDays } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../../src/components/Card';
+import { BrandGlyph } from '../../src/components/BrandGlyph';
 import { CheckInCard } from '../../src/components/CheckInCard';
 import { CheckInReadyCard } from '../../src/components/CheckInReadyCard';
 import { FadeIn } from '../../src/components/FadeIn';
@@ -34,6 +35,7 @@ export default function TodayScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const {
+    localDay,
     selectedDate,
     setSelectedDate,
     entries,
@@ -122,11 +124,11 @@ export default function TodayScreen() {
     if (ok) await removeEntry(entry.id);
   };
 
-  const isToday = selectedDate === todayISO();
+  const isToday = selectedDate === localDay;
 
   // Asked on today's screen about yesterday, because that is where people are:
   // almost nobody goes back through past days to tidy them.
-  const yesterday = addDays(todayISO(), -1);
+  const yesterday = addDays(localDay, -1);
   const yesterdayKcal = observations.find((o) => o.date === yesterday)?.intakeKcal;
   const askAboutYesterday =
     ready && isToday && shouldAskAbout(yesterdayKcal, dayStatus.get(yesterday), program.calories.kcal);
@@ -157,7 +159,7 @@ export default function TodayScreen() {
       >
         <View style={styles.stepsCardLeft}>
           <View style={[styles.stepsIconBubble, { backgroundColor: colors.features.activity.note, borderColor: colors.border }]}>
-            <Ionicons name="footsteps-outline" size={18} color={colors.features.activity.accent} />
+            <BrandGlyph kind="steps" size={22} color={colors.features.activity.accent} accent={colors.brand.text} />
           </View>
           <View style={{ gap: 2, flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -200,9 +202,14 @@ export default function TodayScreen() {
     <Screen
       title="Today"
       action={
-        <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
-          <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
-        </Tappable>
+        <View style={styles.headerActions}>
+          <Text accessibilityLabel="Ascend" numberOfLines={1} style={[styles.wordmark, { color: colors.text }]}>
+            ASCEND <Text style={{ color: colors.brand.text }}>///</Text>
+          </Text>
+          <Tappable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings" style={styles.gear}>
+            <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
+          </Tappable>
+        </View>
       }
     >
       <HomeScreenNotice />
@@ -216,14 +223,15 @@ export default function TodayScreen() {
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
         <Pressable
-          onPress={() => setSelectedDate(todayISO())}
+          onPress={() => setSelectedDate(localDay)}
           accessibilityRole="button"
           accessibilityLabel={isToday ? formatDateLong(selectedDate) : `${formatDateLong(selectedDate)}. Jump to today`}
           style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
         >
           <Text style={{ color: isToday ? colors.textFaint : colors.accent, fontFamily: font.uiStrong }}>
-            {formatDateLong(selectedDate)}{!isToday && ' · Today'}
+            {formatDateLong(selectedDate)}{isToday && ' · Today'}
           </Text>
+          {!isToday && <Text style={{ color: colors.accent, fontFamily: font.ui, fontSize: 11 }}>Go to today</Text>}
         </Pressable>
         <Pressable
           onPress={() => setSelectedDate(addDays(selectedDate, 1))}
@@ -304,10 +312,10 @@ export default function TodayScreen() {
         <Tappable
           onPress={() => router.push('/log-meal')}
           accessibilityRole="button"
-          style={[styles.dayAction, { backgroundColor: colors.accent }]}
+          style={[styles.dayAction, { backgroundColor: colors.brand.fill }]}
         >
-          <Ionicons name="sparkles-outline" size={17} color={colors.onFill} />
-          <Text style={[styles.dayActionLabel, { color: colors.onFill }]}>Log a meal</Text>
+          <BrandGlyph kind="meal" size={22} color={colors.brand.onFill} />
+          <Text style={[styles.dayActionLabel, { color: colors.brand.onFill }]}>Log a meal</Text>
         </Tappable>
         <Pressable
           onPress={() => router.push({ pathname: '/quick-add', params: { meal: 'snack' } })}
@@ -467,6 +475,8 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1, minWidth: 0, marginLeft: space.sm },
+  wordmark: { fontFamily: font.uiStrong, fontSize: 10, letterSpacing: 1.4, flexShrink: 1 },
   stepsCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -521,7 +531,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navToday: { flex: 1 },
-  foodSummary: { padding: space.md, marginBottom: space.md },
+  foodSummary: { paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md },
   disclosure: { minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: space.xs },
   disclosureLabel: { fontFamily: font.uiStrong, fontSize: 12, flexShrink: 1 },
   diaryHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: space.sm },

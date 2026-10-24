@@ -17,7 +17,7 @@ interface ButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'subtle' | 'danger';
   disabled?: boolean;
-  /** Draws on the training side's palette, so its primary action is the red. */
+  /** Uses training's darker surfaces; primary actions share the app's red. */
   tone?: 'loud';
   icon?: ComponentProps<typeof Ionicons>['name'];
 }
@@ -32,7 +32,7 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone, ic
         ? colors.danger
         : loud.panel
     : variant === 'primary'
-      ? colors.accent
+      ? colors.brand.fill
       : variant === 'danger'
         ? colors.danger
         : colors.surfaceRaised;
@@ -40,9 +40,11 @@ export const Button = ({ label, onPress, variant = 'primary', disabled, tone, ic
     ? variant === 'subtle'
       ? loud.figure
       : loud.onLoud
-    : variant === 'subtle'
-      ? colors.text
-      : colors.onFill;
+    : variant === 'primary'
+      ? colors.brand.onFill
+      : variant === 'subtle'
+        ? colors.text
+        : colors.onFill;
 
   return (
     // `Tappable` rather than `Pressable`: the press sinks now.

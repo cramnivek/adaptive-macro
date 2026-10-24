@@ -61,7 +61,7 @@ export const SleepSummaryCard = () => {
   };
 
   return (
-    <Card variant="featured" tone="sleep" title="Sleep" subtitle={`Ending ${formatDayMonth(selectedDate)}`}>
+    <Card variant="featured" tone="sleep" icon="moon-outline" title="Sleep" subtitle={`Ending ${formatDayMonth(selectedDate)}`}>
       {status === 'loading' || (!current && status !== 'error') ? <Text style={[styles.note, text]}>Loading sleep…</Text>
         : status === 'error' ? <Text style={[styles.note, text]}>Sleep could not be loaded. Try syncing again from Account.</Text>
           : <>

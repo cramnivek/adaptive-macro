@@ -1,5 +1,8 @@
 export type FeatureTone = 'sleep' | 'food' | 'activity' | 'salt';
 
+/** One action red across the app; slightly deeper than the artwork mark for white-label contrast. */
+export const brand = { red: '#D92D22', onRed: '#FFFFFF', mark: '#E8352A' } as const;
+
 export interface Palette {
   background: string;
   surface: string;
@@ -17,6 +20,8 @@ export interface Palette {
   positive: string;
   warning: string;
   danger: string;
+  /** Brand actions and selection are separate from nutrient and error colors. */
+  brand: { fill: string; onFill: string; text: string; surface: string };
   /** Recognition and atmosphere, independent of whether a reading is good or bad. */
   features: Record<FeatureTone, { accent: string; surface: string; note: string }>;
 }
@@ -37,6 +42,7 @@ export const dark: Palette = {
   positive: '#6FB58A',
   warning: '#C8A45C',
   danger: '#E06C60',
+  brand: { fill: brand.red, onFill: brand.onRed, text: '#F28278', surface: '#28191A' },
   features: {
     sleep: { accent: '#D3C9F4', surface: '#1B1A20', note: '#262130' },
     food: { accent: '#BAD5BD', surface: '#1C211E', note: '#252F28' },
@@ -61,6 +67,7 @@ export const light: Palette = {
   positive: '#2E7D5B',
   warning: '#8E6E26',
   danger: '#C0392B',
+  brand: { fill: brand.red, onFill: brand.onRed, text: '#B72D25', surface: '#FCECE9' },
   features: {
     sleep: { accent: '#665088', surface: '#F3F0FA', note: '#E9E2F3' },
     food: { accent: '#3C6244', surface: '#EEF4EE', note: '#E1ECE0' },

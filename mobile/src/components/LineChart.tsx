@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import { font, space, useTheme } from '../theme';
-import { duration, ease } from '../theme/motion';
+import { duration, ease, useReduceMotion } from '../theme/motion';
 import { polylineLength } from './chartPath';
 
 /*
@@ -97,6 +97,7 @@ export const LineChart = ({
   const { colors } = useTheme();
   const [width, setWidth] = useState(0);
   const draw = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
 
   const allY = [
     ...series.flatMap((s) => s.points.map((p) => p.y)),
@@ -138,6 +139,11 @@ export const LineChart = ({
   */
   useEffect(() => {
     if (width === 0 || !hasData) return;
+    if (reduceMotion) {
+      draw.stopAnimation();
+      draw.setValue(1);
+      return;
+    }
     draw.setValue(0);
     const run = Animated.timing(draw, {
       toValue: 1,
@@ -147,7 +153,7 @@ export const LineChart = ({
     });
     run.start();
     return () => run.stop();
-  }, [width, hasData, draw]);
+  }, [width, hasData, draw, reduceMotion]);
 
   const plotWidth = Math.max(width - gutterLeft - space.sm, 1);
   const plotHeight = Math.max(height - gutterBottom - space.sm, 1);

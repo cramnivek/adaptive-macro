@@ -1,6 +1,6 @@
 import type { DatedSet, ISODate, SetType } from '@adaptive-macros/engine';
 import { describe, expect, it } from 'vitest';
-import { weeklyTotals } from '../weeklyTraining';
+import { weeklyTotals, weeklyTotalsForPeriod } from '../weeklyTraining';
 import type { SessionTimes } from '../weeklyTraining';
 
 // 2026-10-12 is a Monday, so the week it ends is the one that began on it.
@@ -96,5 +96,45 @@ describe('weeklyTotals', () => {
   it('ignores data older than the window', () => {
     const weeks = weeklyTotals([session('2026-07-26', 60)], [set('2026-07-26', 100, 5)], TODAY);
     expect(weeks.every((w) => w.minutes === 0 && w.volumeKg === 0 && w.sets === 0)).toBe(true);
+  });
+});
+
+describe('weeklyTotalsForPeriod', () => {
+  it('uses one check-in-aligned bin for a complete seven-day window', () => {
+    const weeks = weeklyTotalsForPeriod(
+      [session('2026-10-06', 40)],
+      [set('2026-10-07', 100, 5)],
+      '2026-10-05',
+      '2026-10-11',
+    );
+
+    expect(weeks).toEqual([{ weekStart: '2026-10-05', minutes: 40, volumeKg: 500, sets: 1 }]);
+  });
+
+  it('uses one bin when a short period fits inside a partial check-in week', () => {
+    const weeks = weeklyTotalsForPeriod([], [set('2026-10-08', 60, 5)], '2026-10-07', '2026-10-11');
+
+    expect(weeks).toEqual([{ weekStart: '2026-10-05', minutes: 0, volumeKg: 300, sets: 1 }]);
+  });
+
+  it('uses only the five aligned weeks that intersect a thirty-day window', () => {
+    const weeks = weeklyTotalsForPeriod([], [], '2026-09-25', '2026-10-24');
+
+    expect(weeks).toHaveLength(5);
+    expect(weeks[0]?.weekStart).toBe('2026-09-21');
+    expect(weeks[4]?.weekStart).toBe('2026-10-19');
+  });
+
+  it('excludes sessions and sets outside the selected dates', () => {
+    const weeks = weeklyTotalsForPeriod(
+      [session('2026-09-24', 20), session('2026-09-25', 30), session('2026-10-24', 40), session('2026-10-25', 50)],
+      [set('2026-09-24', 100, 1), set('2026-09-25', 100, 2), set('2026-10-24', 100, 3), set('2026-10-25', 100, 4)],
+      '2026-09-25',
+      '2026-10-24',
+    );
+
+    expect(weeks.reduce((sum, week) => sum + week.minutes, 0)).toBe(70);
+    expect(weeks.reduce((sum, week) => sum + week.sets, 0)).toBe(2);
+    expect(weeks.reduce((sum, week) => sum + week.volumeKg, 0)).toBe(500);
   });
 });

@@ -3,6 +3,14 @@ import React, { type ComponentProps } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { font, radius, space, useTheme, type FeatureTone } from '../theme';
 import { session as loud } from '../theme/sessionTheme';
+import { BrandGlyph, type BrandGlyphKind } from './BrandGlyph';
+
+const featuredGlyphs: Partial<Record<ComponentProps<typeof Ionicons>['name'], BrandGlyphKind>> = {
+  'nutrition-outline': 'meal',
+  'moon-outline': 'sleep',
+  'scale-outline': 'weight',
+  'barbell-outline': 'training',
+};
 
 interface CardProps {
   /** Draws on the training side's palette rather than the app's quiet one. */
@@ -42,6 +50,7 @@ export const Card = ({
   const isFeatured = variant === 'featured';
   const feature = tone ? colors.features[tone] : undefined;
   const headingColor = isLoud ? loud.figure : feature?.accent ?? colors.text;
+  const glyph = isFeatured && icon ? featuredGlyphs[icon] : undefined;
 
   return (
     <View
@@ -59,7 +68,8 @@ export const Card = ({
     >
       {(title || right) && (
         <View style={[styles.header, !subtitle && styles.headerGap]}>
-          {icon && <Ionicons name={icon} size={18} color={headingColor} accessible={false} />}
+          {glyph ? <BrandGlyph kind={glyph} size={20} color={headingColor} accent={isLoud ? loud.loud : colors.brand.text} />
+            : icon && <Ionicons name={icon} size={18} color={headingColor} accessible={false} />}
           {title && (
             <Text style={[styles.title, isFeatured && styles.featuredTitle, { color: headingColor }]}>{title}</Text>
           )}

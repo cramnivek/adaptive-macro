@@ -1,4 +1,4 @@
-import { addDays, checkInWeekFor, isWorkingSet } from '@adaptive-macros/engine';
+import { addDays, checkInWeekFor, diffDays, isWorkingSet } from '@adaptive-macros/engine';
 import type { DatedSet, ISODate } from '@adaptive-macros/engine';
 
 export interface SessionTimes {
@@ -71,4 +71,24 @@ export const weeklyTotals = (
   }
 
   return totals;
+};
+
+/** Weekly totals clipped to the aligned check-in weeks intersecting a date period. */
+export const weeklyTotalsForPeriod = (
+  sessions: SessionTimes[],
+  sets: DatedSet[],
+  from: ISODate,
+  to: ISODate,
+  weekEndsOn = 0,
+): WeekTotal[] => {
+  const firstWeek = weekStartOf(from, weekEndsOn);
+  const lastWeek = weekStartOf(to, weekEndsOn);
+  const weeks = Math.floor(diffDays(firstWeek, lastWeek) / 7) + 1;
+  return weeklyTotals(
+    sessions.filter((item) => item.date >= from && item.date <= to),
+    sets.filter((item) => item.date >= from && item.date <= to),
+    to,
+    weeks,
+    weekEndsOn,
+  );
 };
