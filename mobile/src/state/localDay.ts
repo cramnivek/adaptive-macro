@@ -38,3 +38,29 @@ export const observeLocalDay = (
     },
   };
 };
+
+/**
+ * React Native defines `global.window = global` without DOM `EventTarget`
+ * methods (`window.addEventListener` is `undefined` on Android and iOS).
+ * Guard both the global and `addEventListener` so native startup never throws.
+ */
+export const listenForWebWake = (onWake: () => void): (() => void) => {
+  const onVisibility = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') onWake();
+  };
+  const hasDoc =
+    typeof document !== 'undefined' && typeof document.addEventListener === 'function';
+  const hasWin =
+    typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+  if (hasDoc) document.addEventListener('visibilitychange', onVisibility);
+  if (hasWin) window.addEventListener('focus', onWake);
+  return () => {
+    if (hasDoc && typeof document.removeEventListener === 'function') {
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
+    if (hasWin && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('focus', onWake);
+    }
+  };
+};
+

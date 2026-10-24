@@ -48,7 +48,7 @@ import { SQUAD_STORAGE_KEY } from '../social/squads';
 
 import { type AppSettings, SETTINGS_KEY, withDefaults } from './settings';
 import { chooseBodyFat } from './bodyFatChoice';
-import { followLocalDay, observeLocalDay } from './localDay';
+import { followLocalDay, listenForWebWake, observeLocalDay } from './localDay';
 
 /**
  * Rescales an entry's stored totals to a new portion.
@@ -187,16 +187,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const activation = NativeAppState.addEventListener('change', (state) => {
       if (state === 'active') clock.check();
     });
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') clock.check();
-    };
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
-    if (typeof window !== 'undefined') window.addEventListener('focus', clock.check);
+    const stopWebWake = listenForWebWake(clock.check);
     return () => {
       clock.stop();
       activation.remove();
-      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
-      if (typeof window !== 'undefined') window.removeEventListener('focus', clock.check);
+      stopWebWake();
     };
   }, [localDay]);
 

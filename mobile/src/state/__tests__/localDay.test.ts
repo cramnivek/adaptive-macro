@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { followLocalDay, observeLocalDay } from '../localDay';
+import { followLocalDay, listenForWebWake, observeLocalDay } from '../localDay';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -89,3 +89,39 @@ describe('following today while preserving intentional diary navigation', () => 
     expect(followLocalDay(selected, previous, current)).toBe(expected);
   });
 });
+
+describe('listenForWebWake on React Native vs Web globals', () => {
+  it('does not throw on React Native Android where global.window exists without addEventListener', () => {
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('document', undefined);
+    const wake = vi.fn();
+    const stop = listenForWebWake(wake);
+    expect(() => stop()).not.toThrow();
+    expect(wake).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('subscribes and unsubscribes on web where window and document have addEventListener', () => {
+    const winListeners = new Map<string, () => void>();
+    const docListeners = new Map<string, () => void>();
+    vi.stubGlobal('window', {
+      addEventListener: vi.fn((event: string, cb: () => void) => winListeners.set(event, cb)),
+      removeEventListener: vi.fn((event: string) => winListeners.delete(event)),
+    });
+    vi.stubGlobal('document', {
+      visibilityState: 'visible',
+      addEventListener: vi.fn((event: string, cb: () => void) => docListeners.set(event, cb)),
+      removeEventListener: vi.fn((event: string) => docListeners.delete(event)),
+    });
+    const wake = vi.fn();
+    const stop = listenForWebWake(wake);
+    winListeners.get('focus')?.();
+    docListeners.get('visibilitychange')?.();
+    expect(wake).toHaveBeenCalledTimes(2);
+    stop();
+    expect(winListeners.size).toBe(0);
+    expect(docListeners.size).toBe(0);
+    vi.unstubAllGlobals();
+  });
+});
+
