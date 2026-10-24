@@ -40,6 +40,7 @@ import { AppState as NativeAppState } from 'react-native';
 import * as db from '../db';
 import { LEGACY_DATABASE, SIGNED_OUT, claimDevice } from '../db/accountDatabase';
 import { finishPendingMove, offerToMoveLog } from '../db/moveLog';
+import { isStorageLockError } from '../db/storageLock';
 import { notify } from '../dialog';
 import { LATEST_ACTIVE_DRAFT_KEY } from '../sessionDraft';
 import { pushBaselineToCloud } from '../social/baselineSync';
@@ -89,6 +90,8 @@ interface AppState {
   settings: AppSettings;
   updateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 
+  /** Current local calendar date, updated automatically across midnight and on wake. */
+  localDay: ISODate;
   /** The day the diary is showing. */
   selectedDate: ISODate;
   setSelectedDate: (date: ISODate) => void;
@@ -231,20 +234,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           // squad as last seen, and a pointer to the workout in progress.
           if (ownerChanged) await AsyncStorage.multiRemove([SQUAD_STORAGE_KEY, LATEST_ACTIVE_DRAFT_KEY]);
           await db.selectDatabase(database);
-          // Before the log is read: an account opening to an empty log is
-          // offered the one kept here without an account (moveLog.ts).
-          // A move that fails must not keep the account's own log from
-          // opening; it is ordered so the log is never in neither place. A
-          // clear left owed by an earlier move is finished first, for anyone,
-          // so a moved log is never left on show signed out. Either failure is
-          // said, not swallowed.
-          await finishPendingMove(database).catch(() => {
-            void db.selectDatabase(database);
+          // Open the owner's database before attempting any log move so a
+          // storage lock failure goes straight to StorageGate instead of
+          // being misreported as a failed log move.
+          await db.getDb();
+          await finishPendingMove(database).catch(async (error) => {
+            await db.selectDatabase(database);
+            if (isStorageLockError(error)) throw error;
             notify('Could not finish moving your log', 'It is in your account; the old copy is cleared next time.');
           });
           if (owner !== SIGNED_OUT) {
-            await offerToMoveLog(owner, database).catch(() => {
-              void db.selectDatabase(database);
+            await offerToMoveLog(owner, database).catch(async (error) => {
+              await db.selectDatabase(database);
+              if (isStorageLockError(error)) throw error;
               notify('Could not move your log', 'Nothing was lost. You can try again with a backup and restore.');
             });
           }
@@ -480,6 +482,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     retryLoad,
     settings,
     updateSettings,
+    localDay,
     selectedDate,
     setSelectedDate,
     entries,

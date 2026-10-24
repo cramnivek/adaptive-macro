@@ -15,6 +15,7 @@ import { Toaster } from '../src/components/Toaster';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { StorageGate } from '../src/components/StorageGate';
 import { AuthGate } from '../src/components/AuthGate';
+import { RootErrorBoundary } from '../src/components/RootErrorBoundary';
 import { SocialProvider } from '../src/social/session';
 import { AppProvider } from '../src/state/AppStore';
 import { font, useTheme } from '../src/theme';
@@ -66,6 +67,7 @@ export default function RootLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <RootErrorBoundary>
     <SafeAreaProvider>
       {/* Outside AppProvider, because the store opens the log of whoever is signed in. */}
       <SocialProvider>
@@ -343,6 +345,7 @@ export default function RootLayout() {
         </AppProvider>
       </SocialProvider>
     </SafeAreaProvider>
+    </RootErrorBoundary>
     </View>
   );
 }

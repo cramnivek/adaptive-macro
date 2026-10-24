@@ -6,7 +6,6 @@ import {
   diffDays,
   projectedDate,
   summarisePeriod,
-  todayISO,
 } from '@adaptive-macros/engine';
 import type { DatedSet, LogEntry, PeriodSummary, VolumeDiagnostics } from '@adaptive-macros/engine';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -101,6 +100,7 @@ type TrendTab = 'all' | 'body' | 'food' | 'workouts';
 export default function TrendsScreen() {
   const { colors } = useTheme();
   const {
+    localDay,
     settings,
     series,
     latest,
@@ -164,11 +164,11 @@ export default function TrendsScreen() {
   const [stepModalOpen, setStepModalOpen] = useState(false);
   // The day the step sheet is for: today from the button, any of the last
   // seven from the bars.
-  const [stepDate, setStepDate] = useState<string>(todayISO());
+  const [stepDate, setStepDate] = useState<string>(localDay);
   const [refreshing, setRefreshing] = useState(false);
 
   const unit = weightUnit(settings.units);
-  const today = todayISO();
+  const today = localDay;
   // Fetch up to 365 days of data so switching between Week, Month, and Year is instantaneous
   const maxHistoryFrom = addDays(today, -365);
 

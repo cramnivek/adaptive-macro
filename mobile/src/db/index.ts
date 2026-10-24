@@ -52,6 +52,15 @@ import {
  */
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+if (typeof BroadcastChannel !== 'undefined') {
+  const opfsChannel = new BroadcastChannel('ascend-expo-sqlite-opfs');
+  opfsChannel.onmessage = (event: MessageEvent) => {
+    if (event.data === 'yield-opfs') {
+      databasePromise = null;
+    }
+  };
+}
+
 /**
  * The file of whoever is using the app, or null until that is known.
  *

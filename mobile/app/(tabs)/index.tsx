@@ -1,5 +1,5 @@
 import type { LogEntry, Meal } from '@adaptive-macros/engine';
-import { addDays, todayISO } from '@adaptive-macros/engine';
+import { addDays } from '@adaptive-macros/engine';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -35,6 +35,7 @@ export default function TodayScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const {
+    localDay,
     selectedDate,
     setSelectedDate,
     entries,
@@ -123,11 +124,11 @@ export default function TodayScreen() {
     if (ok) await removeEntry(entry.id);
   };
 
-  const isToday = selectedDate === todayISO();
+  const isToday = selectedDate === localDay;
 
   // Asked on today's screen about yesterday, because that is where people are:
   // almost nobody goes back through past days to tidy them.
-  const yesterday = addDays(todayISO(), -1);
+  const yesterday = addDays(localDay, -1);
   const yesterdayKcal = observations.find((o) => o.date === yesterday)?.intakeKcal;
   const askAboutYesterday =
     ready && isToday && shouldAskAbout(yesterdayKcal, dayStatus.get(yesterday), program.calories.kcal);
@@ -222,7 +223,7 @@ export default function TodayScreen() {
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
         <Pressable
-          onPress={() => setSelectedDate(todayISO())}
+          onPress={() => setSelectedDate(localDay)}
           accessibilityRole="button"
           accessibilityLabel={isToday ? formatDateLong(selectedDate) : `${formatDateLong(selectedDate)}. Jump to today`}
           style={[styles.navButton, styles.navToday, { backgroundColor: colors.surface, borderColor: colors.border }]}
